@@ -1,0 +1,4 @@
+tav-tx-east=JdekUcQ4NZBdE25pw
+tav-tx-west=KD49MXipQmFUEiIRc
+tav-tx-south=6yk59JRahCfbTy2h8
+tav-ok=0qdlWHsaojVZxEb1s

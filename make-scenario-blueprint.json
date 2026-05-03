@@ -1,0 +1,118 @@
+{
+  "name": "TAV-FB-Marketplace-Pipeline",
+  "flow": [
+    {
+      "id": 1,
+      "module": "apify:WatchActorRuns",
+      "version": 1,
+      "parameters": {
+        "actorId": "raidr-api~facebook-marketplace-vehicle-scraper",
+        "status": "SUCCEEDED"
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 }
+      }
+    },
+    {
+      "id": 2,
+      "module": "apify:GetDatasetItems",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "datasetId": "{{1.defaultDatasetId}}",
+        "limit": "1000"
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 }
+      }
+    },
+    {
+      "id": 3,
+      "module": "builtin:BasicIterator",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "array": "{{2.items}}"
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 }
+      }
+    },
+    {
+      "id": 4,
+      "module": "builtin:BasicFilter",
+      "version": 1,
+      "parameters": {
+        "label": "is_live and not sold",
+        "condition": {
+          "a": "{{3.is_live}}",
+          "b": "true",
+          "o": "equal",
+          "next": {
+            "a": "{{3.is_sold}}",
+            "b": "false",
+            "o": "equal"
+          }
+        }
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 900, "y": 0 }
+      }
+    },
+    {
+      "id": 5,
+      "module": "google-sheets:addRow",
+      "version": 2,
+      "parameters": {
+        "spreadsheetId": "1MEvUmqVSVYR5fAy_cNySctSInbe_ljv7oZbnzfHYRe8",
+        "sheetName": "Listings",
+        "includesHeaders": true
+      },
+      "mapper": {
+        "values": {
+          "listing_id": "{{3.id}}",
+          "title": "{{3.marketplace_listing_title}}",
+          "price": "{{3.listing_price.amount}}",
+          "year": "{{substring(3.marketplace_listing_title; 0; 4)}}",
+          "make": "{{3.extraListingData.vehicle_make_display_name}}",
+          "model": "{{3.extraListingData.vehicle_model_display_name}}",
+          "mileage": "{{3.extraListingData.vehicle_odometer_data.value}}",
+          "location_city": "{{3.location.reverse_geocode.city}}",
+          "location_state": "{{3.location.reverse_geocode.state}}",
+          "seller_name": "N/A",
+          "listing_url": "{{3.extraListingData.share_uri}}",
+          "photo_url": "{{3.primary_listing_photo.image.uri}}",
+          "listed_at": "{{formatDate(toDate(multiply(3.creation_time; 1000)); \"YYYY-MM-DD HH:mm:ss\"; \"America/Chicago\")}}",
+          "scraped_at": "{{formatDate(now; \"YYYY-MM-DD HH:mm:ss\"; \"America/Chicago\")}}",
+          "source_task": "{{1.actorTaskId}}",
+          "is_live": "{{3.is_live}}",
+          "is_sold": "{{3.is_sold}}"
+        }
+      },
+      "metadata": {
+        "designer": { "x": 1200, "y": 0 }
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 1,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us1.make.com"
+  }
+}

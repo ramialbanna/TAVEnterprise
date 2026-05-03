@@ -1,0 +1,18 @@
+{
+  "location": "Lubbock, TX",
+  "radius": 500000,
+  "vehicleType": "car_truck",
+  "minYear": 2012,
+  "maxYear": 2024,
+  "minMileage": 0,
+  "maxMileage": 175000,
+  "priceMin": 3000,
+  "priceMax": 25000,
+  "fetchDetailedItems": true,
+  "fetchListingMedia": false,
+  "maxListingAge": 1800,
+  "maxResults": 100,
+  "enableDeduplication": false,
+  "discordNotifyOnlyNew": true,
+  "keywords": []
+}

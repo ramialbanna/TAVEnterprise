@@ -1,0 +1,64 @@
+# =============================================================================
+# tav-marketplace .gitignore
+# =============================================================================
+
+# --- Secrets (NEVER commit) -------------------------------------------------
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Node / npm -------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Cloudflare Workers / Wrangler ------------------------------------------
+.wrangler/
+**/.wrangler/
+.dev.vars.preview
+worker-configuration.d.ts
+.miniflare/
+
+# --- Claude Code / claude-flow tooling --------------------------------------
+# Contains machine-local settings, hooks, and an auto-generated agent library.
+# Skip the whole directory; if you ever want to share team hooks, allowlist
+# specific files explicitly (e.g. !.claude/settings.json).
+.claude/
+.claude-flow/
+.hive-mind/
+.swarm/
+
+# --- macOS / OS junk --------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Editor / IDE -----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Build / coverage / logs ------------------------------------------------
+dist/
+build/
+out/
+coverage/
+*.log
+logs/
+
+# --- Local scratch ----------------------------------------------------------
+*.local
+*.tmp
+tmp/
+scratch/

@@ -1,0 +1,16 @@
+name = "tav-manheim-enrichment-worker"
+main = "scripts/enrichment-worker.js"
+compatibility_date = "2026-05-01"
+
+[[kv_namespaces]]
+binding = "MANHEIM_KV"
+id = "e023ca49ec304424b7c8bccb29c3ecc8"
+preview_id = "YOUR_PREVIEW_KV_ID"
+
+
+[vars]
+MANHEIM_TOKEN_URL = "YOUR_MANHEIM_TOKEN_URL"
+MANHEIM_API_BASE_URL = "YOUR_MANHEIM_API_BASE_URL"
+SUPABASE_URL = "https://cotczqpmpbzguepogzfd.supabase.co"
+
+
