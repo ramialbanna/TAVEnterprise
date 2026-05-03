@@ -1,0 +1,47 @@
+name: PR Review (Claude reviewer subagents)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude-review:
+    name: Parallel reviewer subagents (TAV layer-aware)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Anthropic's Claude Code Action runs the parallel reviewer pattern
+      # described in .claude/commands/review.md.
+      # Requires repo secret CLAUDE_CODE_OAUTH_TOKEN (created via the GitHub app
+      # connector or `claude /install-github-app`).
+      - name: Run /review via Claude Code Action
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            /review
+
+            You are reviewing PR #${{ github.event.pull_request.number }} on TAV-VAIP.
+            Read CLAUDE.md, docs/identity.md, docs/voice.md, and the relevant sections
+            of docs/architecture.md before reviewing.
+
+            Partition reviewers by TAV layer per .claude/commands/review.md and post
+            the aggregated review as a single PR comment. Treat any of the following
+            as BLOCKERS (not nits):
+              - Facebook adapter requiring VIN
+              - Conflation of Raw / Normalized / Vehicle Candidate / Lead
+              - Silent drops (no reason_code)
+              - Service-role key, HMAC secret, Manheim creds, or Twilio creds in source
+              - Stale-suppression regression
+              - Missing required indexes from docs/architecture.md §12
+              - v_active_inbox losing its filter semantics

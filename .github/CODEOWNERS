@@ -1,0 +1,18 @@
+# Default owner — TAV-VAIP COO / lead engineer
+*                       @ramialbanna
+
+# Architecture & data model: any change here pulls the architect and data-modeler in.
+/CLAUDE.md              @ramialbanna
+/docs/architecture.md   @ramialbanna
+/docs/identity.md       @ramialbanna
+/docs/voice.md          @ramialbanna
+/docs/adr/              @ramialbanna
+/supabase/              @ramialbanna
+
+# Source adapters — every new platform requires lead review.
+/src/sources/           @ramialbanna
+
+# CI / deploy / hooks — security-sensitive.
+/.github/               @ramialbanna
+/.claude/               @ramialbanna
+/scripts/               @ramialbanna

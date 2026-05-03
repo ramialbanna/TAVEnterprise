@@ -1,0 +1,57 @@
+name: Deploy (staging)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Wrangler deploy
+    runs-on: ubuntu-latest
+    environment: staging       # configure required reviewers in repo Settings → Environments
+    timeout-minutes: 15
+    needs: []
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      # Re-run verification loop in CI before deploy, even though CI already ran on the PR.
+      # This is the merge → deploy gate from docs/verification/loop.md.
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --run
+
+      - name: Wrangler deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Worker secrets must already be set via `wrangler secret put` — they are NOT injected here.
+          # See docs/architecture.md §17.
+          command: deploy --env staging
+
+      - name: Post-deploy /health check
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS "${{ vars.STAGING_HEALTH_URL }}" | grep -q '"ok":true'; then
+              echo "health: ok"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::/health did not return ok within 25s"
+          exit 1
