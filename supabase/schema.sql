@@ -409,3 +409,32 @@ SELECT DISTINCT ON (source, region)
   error_message
 FROM tav.source_runs
 ORDER BY source, region, scraped_at DESC;
+
+-- =============================================================================
+-- Role grants
+-- PREREQUISITE: add "tav" to Supabase Dashboard → Settings → API →
+-- "Exposed schemas" so PostgREST will accept Accept-Profile/Content-Profile: tav.
+-- =============================================================================
+
+GRANT USAGE ON SCHEMA tav TO service_role, authenticated, anon;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON ALL TABLES IN SCHEMA tav
+  TO service_role;
+
+GRANT USAGE, SELECT
+  ON ALL SEQUENCES IN SCHEMA tav
+  TO service_role;
+
+GRANT SELECT
+  ON ALL TABLES IN SCHEMA tav
+  TO authenticated, anon;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA tav
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA tav
+  GRANT USAGE, SELECT ON SEQUENCES TO service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA tav
+  GRANT SELECT ON TABLES TO authenticated, anon;
