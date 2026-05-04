@@ -20,6 +20,32 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+// Produces a plain object suitable for JSON.stringify logging.
+// Handles standard Error instances, Supabase PostgrestError objects
+// (code / message / details / hint), and unknown fallbacks.
+function serializeError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    const e = err as Error & Record<string, unknown>;
+    const out: Record<string, unknown> = { name: e.name, message: e.message };
+    if (e["stack"] !== undefined) out["stack"] = e["stack"];
+    if (e["code"] !== undefined) out["code"] = e["code"];
+    if (e["details"] !== undefined) out["details"] = e["details"];
+    if (e["hint"] !== undefined) out["hint"] = e["hint"];
+    return out;
+  }
+  if (err !== null && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    if (e["code"] !== undefined) out["code"] = e["code"];
+    if (e["message"] !== undefined) out["message"] = e["message"];
+    if (e["details"] !== undefined) out["details"] = e["details"];
+    if (e["hint"] !== undefined) out["hint"] = e["hint"];
+    if (Object.keys(out).length > 0) return out;
+    try { return { raw: JSON.stringify(err) }; } catch { return { raw: String(err) }; }
+  }
+  try { return { raw: JSON.stringify(err) }; } catch { return { raw: String(err) }; }
+}
+
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
   // 1. Fast-path size guard via Content-Length header (before reading body).
   //    Checked before HMAC to prevent buffering unbounded payloads.
@@ -77,7 +103,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     run = await upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.error", reason: "source_run_failed", error: String(err) }));
+    console.log(JSON.stringify({ event: "ingest.error", reason: "source_run_failed", error: serializeError(err) }));
     return json({ ok: false, error: "service_unavailable" }, 503);
   }
 
@@ -194,7 +220,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     );
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.run_complete_failed", source, run_id, error: String(err) }));
+    console.log(JSON.stringify({ event: "ingest.run_complete_failed", source, run_id, error: serializeError(err) }));
   }
 
   // eslint-disable-next-line no-console
