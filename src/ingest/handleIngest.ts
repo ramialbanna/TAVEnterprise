@@ -1,6 +1,11 @@
 import type { Env } from "../types/env";
 import { verifyHmac } from "../auth/hmac";
 import { IngestRequestSchema } from "../validate";
+import { getSupabaseClient } from "../persistence/supabase";
+import { withRetry } from "../persistence/retry";
+import { upsertSourceRun, completeSourceRun } from "../persistence/sourceRuns";
+import { insertRawListing } from "../persistence/rawListings";
+import { writeDeadLetter } from "../persistence/deadLetter";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -54,16 +59,83 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     return json({ ok: false, error: "invalid_payload", details: parsed.error.flatten() }, 400);
   }
 
-  const { source, run_id, region, items } = parsed.data;
+  const { source, run_id, region, scraped_at, items } = parsed.data;
 
   // eslint-disable-next-line no-console
   console.log(JSON.stringify({ event: "ingest.started", source, run_id, region, item_count: items.length }));
 
-  // Phase 3B: source_run upsert + idempotency gate + raw_listing writes go here.
-  const summary = { ok: true, source, run_id, processed: 0, rejected: 0, created_leads: 0 };
+  const db = getSupabaseClient(env);
+
+  // 7. Upsert source_run. Failure here is fatal for the request.
+  let run;
+  try {
+    run = await withRetry(() =>
+      upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length }),
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event: "ingest.error", reason: "source_run_failed", error: String(err) }));
+    return json({ ok: false, error: "service_unavailable" }, 503);
+  }
+
+  // 8. Idempotency gate — return stored counters for a completed run.
+  if (run.status === "completed") {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event: "ingest.idempotent_return", source, run_id }));
+    return json({
+      ok: true,
+      source,
+      run_id,
+      processed: run.processed,
+      rejected: run.rejected,
+      created_leads: run.created_leads,
+    }, 200);
+  }
+
+  // 9. Batch loop — insert each item as a raw_listing.
+  //    Item failures go to dead_letters; the batch always runs to completion.
+  let processed = 0;
+  let rejected = 0;
+
+  let itemIndex = 0;
+  for (const item of items) {
+    const i = itemIndex++;
+    try {
+      await withRetry(() =>
+        insertRawListing(db, {
+          source,
+          source_run_id: run.id,
+          raw_item: item,
+          received_at: new Date().toISOString(),
+        }),
+      );
+      processed++;
+    } catch (err) {
+      await writeDeadLetter(db, env, {
+        source,
+        region,
+        run_id,
+        item_index: i,
+        reason_code: "raw_insert_failed",
+        payload: item,
+        error_message: err instanceof Error ? err.message : String(err),
+      });
+      rejected++;
+    }
+  }
+
+  // 10. Mark run complete. Non-fatal if this fails — response still returns.
+  try {
+    await withRetry(() =>
+      completeSourceRun(db, run.id, { processed, rejected, created_leads: 0 }),
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event: "ingest.run_complete_failed", source, run_id, error: String(err) }));
+  }
 
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "ingest.complete", source, run_id, processed: 0, rejected: 0, created_leads: 0 }));
+  console.log(JSON.stringify({ event: "ingest.complete", source, run_id, processed, rejected, created_leads: 0 }));
 
-  return json(summary, 200);
+  return json({ ok: true, source, run_id, processed, rejected, created_leads: 0 }, 200);
 }

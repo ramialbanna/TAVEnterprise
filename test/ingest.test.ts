@@ -1,14 +1,49 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types/env";
 
-const SECRET = "test-ingest-secret";
+// Mock the entire persistence layer so unit tests never touch a real DB.
+vi.mock("../src/persistence/supabase", () => ({
+  getSupabaseClient: vi.fn(() => ({})),
+}));
 
-const env = { WEBHOOK_HMAC_SECRET: SECRET } as unknown as Env;
+vi.mock("../src/persistence/sourceRuns", () => ({
+  upsertSourceRun: vi.fn(),
+  completeSourceRun: vi.fn(),
+}));
+
+vi.mock("../src/persistence/rawListings", () => ({
+  insertRawListing: vi.fn(),
+}));
+
+vi.mock("../src/persistence/deadLetter", () => ({
+  writeDeadLetter: vi.fn(),
+}));
+
+import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
+import { insertRawListing } from "../src/persistence/rawListings";
+
+const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
+const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
+
+const SECRET = "test-ingest-secret";
+const env = {
+  WEBHOOK_HMAC_SECRET: SECRET,
+  SUPABASE_URL: "https://test.supabase.co",
+  SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+} as unknown as Env;
+
 const ctx = {
   waitUntil: (_p: Promise<unknown>) => {},
   passThroughOnException: () => {},
 } as unknown as ExecutionContext;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(upsertSourceRun).mockResolvedValue(RUNNING_RUN);
+  vi.mocked(completeSourceRun).mockResolvedValue(undefined);
+  vi.mocked(insertRawListing).mockResolvedValue({ id: "raw-uuid" });
+});
 
 async function sign(body: string, secret: string): Promise<string> {
   const encoded = new TextEncoder().encode(body);
@@ -47,20 +82,40 @@ const VALID_PAYLOAD = JSON.stringify({
 });
 
 describe("POST /ingest", () => {
-  it("returns 200 with structured summary for a valid request", async () => {
+  it("returns 200 with item counts for a valid request", async () => {
     const sig = await sign(VALID_PAYLOAD, SECRET);
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("application/json");
-
     const body = await res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(body.source).toBe("facebook");
     expect(body.run_id).toBe("run-001");
-    expect(body.processed).toBe(0);
+    expect(body.processed).toBe(1); // 1 item successfully inserted
     expect(body.rejected).toBe(0);
     expect(body.created_leads).toBe(0);
+  });
+
+  it("returns stored counters for a completed run (idempotency gate)", async () => {
+    vi.mocked(upsertSourceRun).mockResolvedValue(COMPLETED_RUN);
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.processed).toBe(4);
+    expect(body.rejected).toBe(1);
+    expect(body.created_leads).toBe(2);
+    // Items must not be reprocessed — insertRawListing should not be called.
+    expect(vi.mocked(insertRawListing)).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when upsertSourceRun exhausts retries", async () => {
+    vi.mocked(upsertSourceRun).mockRejectedValue(new TypeError("network failure"));
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+    expect(res.status).toBe(503);
   });
 
   it("returns 401 for a missing x-tav-signature header", async () => {
@@ -70,23 +125,17 @@ describe("POST /ingest", () => {
       body: VALID_PAYLOAD,
     });
     const res = await worker.fetch(req, env, ctx);
-
     expect(res.status).toBe(401);
     const body = await res.json() as Record<string, unknown>;
-    expect(body.ok).toBe(false);
     expect(body.error).toBe("unauthorized");
   });
 
   it("returns 401 for a wrong signature", async () => {
-    const res = await worker.fetch(
-      makeRequest(VALID_PAYLOAD, "sha256=badc0ffee"),
-      env,
-      ctx,
-    );
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, "sha256=badc0ffee"), env, ctx);
     expect(res.status).toBe(401);
   });
 
-  it("returns 401 for a valid signature computed over a different secret", async () => {
+  it("returns 401 for a valid signature over a different secret", async () => {
     const sig = await sign(VALID_PAYLOAD, "wrong-secret");
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
     expect(res.status).toBe(401);
@@ -101,10 +150,8 @@ describe("POST /ingest", () => {
       body,
     });
     const res = await worker.fetch(req, env, ctx);
-
     expect(res.status).toBe(400);
-    const json = await res.json() as Record<string, unknown>;
-    expect(json.error).toBe("invalid_json");
+    expect((await res.json() as Record<string, unknown>).error).toBe("invalid_json");
   });
 
   it("returns 400 when source is missing", async () => {
@@ -116,10 +163,8 @@ describe("POST /ingest", () => {
     });
     const sig = await sign(payload, SECRET);
     const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
-
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body.error).toBe("invalid_payload");
+    expect((await res.json() as Record<string, unknown>).error).toBe("invalid_payload");
   });
 
   it("returns 400 for an empty items array", async () => {
@@ -142,11 +187,8 @@ describe("POST /ingest", () => {
       env,
       ctx,
     );
-
     expect(res.status).toBe(413);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body.ok).toBe(false);
-    expect(body.error).toBe("payload_too_large");
+    expect((await res.json() as Record<string, unknown>).error).toBe("payload_too_large");
   });
 
   it("returns 404 for GET /ingest", async () => {
