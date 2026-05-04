@@ -1,0 +1,11 @@
+# Copy to .dev.vars for local development only.
+# Keep every placeholder as replace_me in the example file.
+
+CLAUDE_CODE_OAUTH_TOKEN=replace_me
+CLAUDE_CODE_OAUTH_SCOPES=replace_me
+
+# Add every variable from architecture.md §17 below, all set to replace_me
+# Example pattern:
+API_BASE_URL=replace_me
+APP_ENV=replace_me
+LOG_LEVEL=replace_me
