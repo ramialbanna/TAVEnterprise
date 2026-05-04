@@ -28,6 +28,17 @@ export interface RawListingPayload {
   receivedAt: string;
 }
 
+// ── Region keys ───────────────────────────────────────────────────────────────
+// Closed set — add new regions here only via an ADR.
+
+export const REGION_KEYS = [
+  "dallas_tx",
+  "houston_tx",
+  "austin_tx",
+  "san_antonio_tx",
+] as const;
+export type RegionKey = (typeof REGION_KEYS)[number];
+
 // ── Concept 2: Normalized Listing ─────────────────────────────────────────────
 // Produced exclusively by src/sources/<platform>.ts.
 // VIN is ALWAYS optional — Facebook does not expose it. This is not a gap.
@@ -47,7 +58,7 @@ export interface NormalizedListingInput {
   mileage?: number; // integer miles — adapters parse "82k" → 82000
   city?: string;
   state?: string; // 2-letter uppercase code, e.g. "TX"
-  region?: string; // TAV region key, e.g. "dallas_tx"
+  region?: RegionKey; // TAV region key — validated against REGION_KEYS
   sellerName?: string;
   sellerUrl?: string;
   images?: string[];
@@ -68,7 +79,9 @@ export type FreshnessStatus =
 // Fuzzy duplicates GROUP here — they are never permanently merged.
 
 export interface VehicleCandidateKey {
-  identityKey: string; // "year|make|model|trim|mileage_band|city|state"
+  // Format: "year|make|model|trim|mileage_bucket_floor|region"
+  // city, state, sellerUrl, image hash are confidence signals only — not in key
+  identityKey: string;
   year?: number;
   make?: string;
   model?: string;
@@ -80,6 +93,8 @@ export type DedupeResult =
   | { type: "exact_duplicate"; normalizedListingId: string }
   | { type: "fuzzy_group"; vehicleCandidateId: string; confidence: number }
   | { type: "new_listing" };
+
+export type ValuationConfidence = "high" | "medium" | "low" | "none";
 
 // ── Concept 4: Lead ───────────────────────────────────────────────────────────
 // The buyer-facing work item. Created only after scoring, stale-check, and
@@ -109,6 +124,9 @@ export interface ScoredLead {
   finalScore: number; // 0–100, weighted composite
   grade: LeadGrade; // 85–100 excellent · 70–84 good · 55–69 fair · 0–54 pass
   reasonCodes: string[]; // populated from src/scoring/reasonCodes.ts constants
+  matchedRuleId?: string;
+  matchedRuleVersion?: number;
+  valuationConfidence?: ValuationConfidence;
 }
 
 // ── Source adapter result contract ────────────────────────────────────────────
