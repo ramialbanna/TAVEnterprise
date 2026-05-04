@@ -20,8 +20,17 @@ vi.mock("../src/persistence/deadLetter", () => ({
   writeDeadLetter: vi.fn(),
 }));
 
+vi.mock("../src/persistence/filteredOut", () => ({
+  writeFilteredOut: vi.fn(),
+}));
+
+vi.mock("../src/persistence/normalizedListings", () => ({
+  upsertNormalizedListing: vi.fn(),
+}));
+
 import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
+import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -43,6 +52,7 @@ beforeEach(() => {
   vi.mocked(upsertSourceRun).mockResolvedValue(RUNNING_RUN);
   vi.mocked(completeSourceRun).mockResolvedValue(undefined);
   vi.mocked(insertRawListing).mockResolvedValue({ id: "raw-uuid" });
+  vi.mocked(upsertNormalizedListing).mockResolvedValue({ id: "norm-uuid" });
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -78,7 +88,7 @@ const VALID_PAYLOAD = JSON.stringify({
   run_id: "run-001",
   region: "dallas_tx",
   scraped_at: new Date().toISOString(),
-  items: [{ title: "2020 Toyota Camry SE, 62k miles, $18,500" }],
+  items: [{ url: "https://fb.com/item/123", title: "2020 Toyota Camry SE, 62k miles, $18,500" }],
 });
 
 describe("POST /ingest", () => {

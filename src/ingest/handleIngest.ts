@@ -6,6 +6,10 @@ import { withRetry } from "../persistence/retry";
 import { upsertSourceRun, completeSourceRun } from "../persistence/sourceRuns";
 import { insertRawListing } from "../persistence/rawListings";
 import { writeDeadLetter } from "../persistence/deadLetter";
+import { writeFilteredOut } from "../persistence/filteredOut";
+import { upsertNormalizedListing } from "../persistence/normalizedListings";
+import { parseFacebookItem } from "../sources/facebook";
+import type { AdapterContext } from "../sources/facebook";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -91,12 +95,14 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     }, 200);
   }
 
-  // 9. Batch loop — insert each item as a raw_listing.
+  // 9. Batch loop — raw insert → adapter → normalized_listing or filtered_out.
   //    Aborts after 25 s to stay within CF Worker CPU budget.
   //    Item failures go to dead_letters; the batch always runs to completion.
   const BATCH_TIMEOUT_MS = 25_000;
   const controller = new AbortController();
   const batchTimer = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
+
+  const adapterCtx: AdapterContext = { region, scrapedAt: scraped_at, sourceRunId: run.id };
 
   let rawInserted = 0;
   let rejected = 0;
@@ -105,6 +111,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   try {
     for (const item of items) {
       const i = itemIndex++;
+
       if (controller.signal.aborted) {
         try {
           await writeDeadLetter(db, env, {
@@ -112,12 +119,15 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
             reason_code: "batch_timeout", payload: item,
             error_message: "batch loop aborted: timeout exceeded",
           });
-        } catch { /* writeDeadLetter contract: never throws */ }
+        } catch { /* never throws */ }
         rejected++;
         continue;
       }
+
+      // Step A: persist raw listing (audit trail, always first).
+      let rawId: string | undefined;
       try {
-        await withRetry(() =>
+        const raw = await withRetry(() =>
           insertRawListing(db, {
             source,
             source_run_id: run.id,
@@ -125,7 +135,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
             received_at: new Date().toISOString(),
           }),
         );
-        rawInserted++;
+        rawId = raw.id;
       } catch (err) {
         try {
           await writeDeadLetter(db, env, {
@@ -133,7 +143,43 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
             reason_code: "raw_insert_failed", payload: item,
             error_message: err instanceof Error ? err.message : String(err),
           });
-        } catch { /* writeDeadLetter contract: never throws */ }
+        } catch { /* never throws */ }
+        rejected++;
+        continue;
+      }
+
+      // Step B: run source adapter (pure, no I/O).
+      const adapterResult = source === "facebook"
+        ? parseFacebookItem(item, adapterCtx)
+        : { ok: false as const, reason: "unsupported_source", details: { source } };
+
+      if (!adapterResult.ok) {
+        await writeFilteredOut(db, env, {
+          source,
+          source_run_id: run_id,
+          reason_code: adapterResult.reason,
+          details: { reason: adapterResult.reason, detail: adapterResult.details, item },
+          raw_listing_id: rawId,
+        });
+        rejected++;
+        continue;
+      }
+
+      // Step C: upsert normalized listing.
+      try {
+        await withRetry(() =>
+          upsertNormalizedListing(db, adapterResult.listing, run.id),
+        );
+        rawInserted++;
+      } catch (err) {
+        await writeFilteredOut(db, env, {
+          source,
+          source_run_id: run_id,
+          listing_url: adapterResult.listing.url,
+          reason_code: "normalized_upsert_failed",
+          details: { error: err instanceof Error ? err.message : String(err) },
+          raw_listing_id: rawId,
+        });
         rejected++;
       }
     }
