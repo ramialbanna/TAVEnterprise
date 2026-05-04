@@ -17,7 +17,6 @@ concurrency:
 
 jobs:
   verify:
-    if: ${{ hashFiles('package.json') != '' && hashFiles('package-lock.json') != '' }}
     name: Verification Loop (lint → typecheck → vitest → integration)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -27,7 +26,17 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Check for Node project
+        id: node_project
+        run: |
+          if [[ -f package.json && -f package-lock.json ]]; then
+            echo "has_node_project=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_node_project=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Node
+        if: steps.node_project.outputs.has_node_project == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -35,18 +44,23 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install
+        if: steps.node_project.outputs.has_node_project == 'true'
         run: npm ci
 
       - name: Lint
+        if: steps.node_project.outputs.has_node_project == 'true'
         run: npm run lint
 
       - name: Typecheck
+        if: steps.node_project.outputs.has_node_project == 'true'
         run: npm run typecheck
 
       - name: Vitest (unit)
+        if: steps.node_project.outputs.has_node_project == 'true'
         run: npm test -- --run --reporter=default
 
       - name: Detect integration trigger paths
+        if: steps.node_project.outputs.has_node_project == 'true'
         id: trigger
         run: |
           if git diff --name-only HEAD~1 HEAD 2>/dev/null | \
@@ -57,7 +71,7 @@ jobs:
           fi
 
       - name: Integration tests
-        if: steps.trigger.outputs.needs_integ == 'true'
+        if: steps.node_project.outputs.has_node_project == 'true' && steps.trigger.outputs.needs_integ == 'true'
         run: npm run test:int
 
   secret-scan:
@@ -92,4 +106,41 @@ jobs:
 
   tav-gates:
     name: TAV gates (no-VIN, reason-codes, stale intact)
-    
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Facebook adapter must tolerate missing VIN
+        run: |
+          if [[ -f src/sources/facebook.ts ]]; then
+            if grep -nE 'throw .*VIN|require.*vin|!vin' src/sources/facebook.ts; then
+              echo "::error::Facebook adapter appears to require VIN. See CLAUDE.md §2."
+              exit 1
+            fi
+          fi
+
+      - name: v_active_inbox semantics intact
+        run: |
+          if [[ -f supabase/schema.sql ]]; then
+            if grep -nE 'v_active_inbox' supabase/schema.sql >/dev/null; then
+              grep -A 30 'v_active_inbox' supabase/schema.sql | grep -E "stale_confirmed" >/dev/null || {
+                echo "::error::v_active_inbox no longer references stale_confirmed. See docs/architecture.md §12."
+                exit 1
+              }
+              grep -A 30 'v_active_inbox' supabase/schema.sql | grep -E "last_seen_at" >/dev/null || {
+                echo "::error::v_active_inbox no longer filters by last_seen_at. See docs/architecture.md §12."
+                exit 1
+              }
+            fi
+          fi
+
+      - name: Reason-code centralization
+        run: |
+          if [[ -f src/scoring/reasonCodes.ts ]]; then
+            STRAY=$(git grep -nE "'(missing_price|missing_mileage|missing_ymm|no_vin|mmr_failed|stale_suspected|stale_confirmed|buy_box_match|excellent_price_to_mmr|duplicate)'" -- 'src/' ':!src/scoring/reasonCodes.ts' || true)
+            if [[ -n "$STRAY" ]]; then
+              echo "::warning::reason-code string literals found outside src/scoring/reasonCodes.ts:"
+              echo "$STRAY"
+            fi
+          fi
