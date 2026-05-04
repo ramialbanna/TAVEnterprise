@@ -14,11 +14,16 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ hashFiles('package.json') != '' && hashFiles('package-lock.json') != '' }}
     name: Wrangler deploy
     runs-on: ubuntu-latest
-    environment: staging       # configure required reviewers in repo Settings → Environments
+    environment: staging
     timeout-minutes: 15
     needs: []
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_HEALTH_URL: ${{ vars.STAGING_HEALTH_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,28 +31,50 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - run: npm ci
 
-      # Re-run verification loop in CI before deploy, even though CI already ran on the PR.
-      # This is the merge → deploy gate from docs/verification/loop.md.
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --run
 
+      - name: Verify deploy prerequisites
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "::notice::Skipping deploy: CLOUDFLARE_API_TOKEN is not configured"
+            echo "should_deploy=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo "::notice::Skipping deploy: CLOUDFLARE_ACCOUNT_ID is not configured"
+            echo "should_deploy=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ -z "$STAGING_HEALTH_URL" ]]; then
+            echo "::notice::Skipping health check: STAGING_HEALTH_URL is not configured"
+            echo "should_healthcheck=false" >> "$GITHUB_ENV"
+          else
+            echo "should_healthcheck=true" >> "$GITHUB_ENV"
+          fi
+
+          echo "should_deploy=true" >> "$GITHUB_ENV"
+
       - name: Wrangler deploy
+        if: env.should_deploy == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # Worker secrets must already be set via `wrangler secret put` — they are NOT injected here.
-          # See docs/architecture.md §17.
           command: deploy --env staging
 
       - name: Post-deploy /health check
+        if: env.should_deploy == 'true' && env.should_healthcheck == 'true'
         run: |
           for i in 1 2 3 4 5; do
-            if curl -fsS "${{ vars.STAGING_HEALTH_URL }}" | grep -q '"ok":true'; then
+            if curl -fsS "$STAGING_HEALTH_URL" | grep -q '"ok":true'; then
               echo "health: ok"
               exit 0
             fi
