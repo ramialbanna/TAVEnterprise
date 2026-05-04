@@ -1,5 +1,8 @@
 import type { Env } from "./types/env";
 import { handleIngest } from "./ingest/handleIngest";
+import { getSupabaseClient } from "./persistence/supabase";
+import { runStaleSweep } from "./stale/engine";
+import { log } from "./logging/logger";
 
 const VERSION = "0.1.0";
 
@@ -19,6 +22,12 @@ export default {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });
+  },
+
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    log("cron.stale_sweep.started");
+    const db = getSupabaseClient(env);
+    await runStaleSweep(db);
   },
 };
 

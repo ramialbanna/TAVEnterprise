@@ -12,6 +12,10 @@ binding = "TAV_KV"
 id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 preview_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
+# Daily stale sweep at 06:00 UTC
+[triggers]
+crons = ["0 6 * * *"]
+
 [env.staging]
 name = "tav-aip-staging"
 [[env.staging.kv_namespaces]]

@@ -1,4 +1,5 @@
 import type { Env } from "../types/env";
+import type { BuyBoxRule, ScoredLead } from "../types/domain";
 import { verifyHmac } from "../auth/hmac";
 import { IngestRequestSchema } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
@@ -8,10 +9,22 @@ import { insertRawListing } from "../persistence/rawListings";
 import { writeDeadLetter } from "../persistence/deadLetter";
 import { writeFilteredOut } from "../persistence/filteredOut";
 import { upsertNormalizedListing } from "../persistence/normalizedListings";
+import { upsertVehicleCandidate } from "../persistence/vehicleCandidates";
+import { linkNormalizedListingToCandidate } from "../persistence/duplicateGroups";
+import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
+import { upsertLead } from "../persistence/leads";
 import { parseFacebookItem } from "../sources/facebook";
 import type { AdapterContext } from "../sources/facebook";
+import { computeIdentityKey } from "../dedupe/fingerprint";
+import { computeStaleScore } from "../stale/scorer";
+import { computeDealScore } from "../scoring/deal";
+import { matchBuyBox } from "../scoring/buybox";
+import { computeFreshnessScore, computeSourceConfidenceScore, computeFinalScore } from "../scoring/lead";
+import { log, logError } from "../logging/logger";
+import type { LogContext } from "../logging/logger";
 
-const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const BATCH_TIMEOUT_MS = 25_000;
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -20,62 +33,27 @@ function json(body: unknown, status: number): Response {
   });
 }
 
-// Produces a plain object suitable for JSON.stringify logging.
-// Handles standard Error instances, Supabase PostgrestError objects
-// (code / message / details / hint), and unknown fallbacks.
-function serializeError(err: unknown): Record<string, unknown> {
-  if (err instanceof Error) {
-    const e = err as Error & Record<string, unknown>;
-    const out: Record<string, unknown> = { name: e.name, message: e.message };
-    if (e["stack"] !== undefined) out["stack"] = e["stack"];
-    if (e["code"] !== undefined) out["code"] = e["code"];
-    if (e["details"] !== undefined) out["details"] = e["details"];
-    if (e["hint"] !== undefined) out["hint"] = e["hint"];
-    return out;
-  }
-  if (err !== null && typeof err === "object") {
-    const e = err as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    if (e["code"] !== undefined) out["code"] = e["code"];
-    if (e["message"] !== undefined) out["message"] = e["message"];
-    if (e["details"] !== undefined) out["details"] = e["details"];
-    if (e["hint"] !== undefined) out["hint"] = e["hint"];
-    if (Object.keys(out).length > 0) return out;
-    try { return { raw: JSON.stringify(err) }; } catch { return { raw: String(err) }; }
-  }
-  try { return { raw: JSON.stringify(err) }; } catch { return { raw: String(err) }; }
-}
-
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
-  // 1. Fast-path size guard via Content-Length header (before reading body).
-  //    Checked before HMAC to prevent buffering unbounded payloads.
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (declaredLength > MAX_BODY_BYTES) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.rejected", reason: "payload_too_large", declared_bytes: declaredLength }));
+    log("ingest.rejected", { reason: "payload_too_large", declared_bytes: declaredLength });
     return json({ ok: false, error: "payload_too_large" }, 413);
   }
 
-  // 2. Read body once — reused for both HMAC and JSON parse.
   const bodyBytes = await request.arrayBuffer();
 
-  // 3. Actual size guard (Content-Length may be absent or spoofed).
   if (bodyBytes.byteLength > MAX_BODY_BYTES) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.rejected", reason: "payload_too_large", actual_bytes: bodyBytes.byteLength }));
+    log("ingest.rejected", { reason: "payload_too_large", actual_bytes: bodyBytes.byteLength });
     return json({ ok: false, error: "payload_too_large" }, 413);
   }
 
-  // 4. HMAC verification — timing-safe, before any data is parsed or written.
   const signature = request.headers.get("x-tav-signature") ?? "";
   const authorized = await verifyHmac(bodyBytes, signature, env.WEBHOOK_HMAC_SECRET);
   if (!authorized) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.rejected", reason: "unauthorized" }));
+    log("ingest.rejected", { reason: "unauthorized" });
     return json({ ok: false, error: "unauthorized" }, 401);
   }
 
-  // 5. JSON parse.
   let rawPayload: unknown;
   try {
     rawPayload = JSON.parse(new TextDecoder().decode(bodyBytes));
@@ -83,148 +61,171 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     return json({ ok: false, error: "invalid_json" }, 400);
   }
 
-  // 6. Wrapper schema validation.
   const parsed = IngestRequestSchema.safeParse(rawPayload);
   if (!parsed.success) {
     return json({ ok: false, error: "invalid_payload", details: parsed.error.flatten() }, 400);
   }
 
   const { source, run_id, region, scraped_at, items } = parsed.data;
+  const ctx: LogContext = { runId: run_id, source, region };
 
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "ingest.started", source, run_id, region, item_count: items.length }));
+  log("ingest.started", { item_count: items.length }, ctx);
 
   const db = getSupabaseClient(env);
 
-  // 7. Upsert source_run. Failure here is fatal for the request. No retry —
-  //    the SELECT+upsert pair is not idempotent-safe to retry blindly.
   let run;
   try {
     run = await upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.error", reason: "source_run_failed", error: serializeError(err) }));
+    logError("persistence", "ingest.source_run_failed", err, ctx);
     return json({ ok: false, error: "service_unavailable" }, 503);
   }
 
-  // 8. Idempotency gate — return stored counters for a completed run.
   if (run.status === "completed") {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.idempotent_return", source, run_id }));
-    return json({
-      ok: true,
-      source,
-      run_id,
-      processed: run.processed,
-      rejected: run.rejected,
-      created_leads: run.created_leads,
-    }, 200);
+    log("ingest.idempotent_return", {}, ctx);
+    return json({ ok: true, source, run_id, processed: run.processed, rejected: run.rejected, created_leads: run.created_leads }, 200);
   }
 
-  // 9. Batch loop — raw insert → adapter → normalized_listing or filtered_out.
-  //    Aborts after 25 s to stay within CF Worker CPU budget.
-  //    Item failures go to dead_letters; the batch always runs to completion.
-  const BATCH_TIMEOUT_MS = 25_000;
   const controller = new AbortController();
   const batchTimer = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
 
   const adapterCtx: AdapterContext = { region, scrapedAt: scraped_at, sourceRunId: run.id };
 
+  // Buy-box rules cached for this run
+  let cachedRules: BuyBoxRule[] | undefined;
+
   let rawInserted = 0;
   let rejected = 0;
-
+  let createdLeads = 0;
   let itemIndex = 0;
+
   try {
     for (const item of items) {
       const i = itemIndex++;
+      const itemCtx: LogContext = { ...ctx, itemIndex: i };
 
       if (controller.signal.aborted) {
         try {
-          await writeDeadLetter(db, env, {
-            source, region, run_id, item_index: i,
-            reason_code: "batch_timeout", payload: item,
-            error_message: "batch loop aborted: timeout exceeded",
-          });
+          await writeDeadLetter(db, env, { source, region, run_id, item_index: i, reason_code: "batch_timeout", payload: item, error_message: "batch loop aborted: timeout exceeded" });
         } catch { /* never throws */ }
         rejected++;
         continue;
       }
 
-      // Step A: persist raw listing (audit trail, always first).
+      // A: raw insert
       let rawId: string | undefined;
       try {
         const raw = await withRetry(() =>
-          insertRawListing(db, {
-            source,
-            source_run_id: run.id,
-            raw_item: item,
-            received_at: new Date().toISOString(),
-          }),
+          insertRawListing(db, { source, source_run_id: run.id, raw_item: item, received_at: new Date().toISOString() }),
         );
         rawId = raw.id;
       } catch (err) {
-        try {
-          await writeDeadLetter(db, env, {
-            source, region, run_id, item_index: i,
-            reason_code: "raw_insert_failed", payload: item,
-            error_message: err instanceof Error ? err.message : String(err),
-          });
-        } catch { /* never throws */ }
+        logError("persistence", "ingest.raw_insert_failed", err, itemCtx);
+        try { await writeDeadLetter(db, env, { source, region, run_id, item_index: i, reason_code: "raw_insert_failed", payload: item, error_message: err instanceof Error ? err.message : String(err) }); } catch { /* never throws */ }
         rejected++;
         continue;
       }
 
-      // Step B: run source adapter (pure, no I/O).
+      // B: adapter
       const adapterResult = source === "facebook"
         ? parseFacebookItem(item, adapterCtx)
         : { ok: false as const, reason: "unsupported_source", details: { source } };
 
       if (!adapterResult.ok) {
-        await writeFilteredOut(db, env, {
-          source,
-          source_run_id: run_id,
-          reason_code: adapterResult.reason,
-          details: { reason: adapterResult.reason, detail: adapterResult.details, item },
-          raw_listing_id: rawId,
-        });
+        await writeFilteredOut(db, env, { source, source_run_id: run_id, reason_code: adapterResult.reason, details: { reason: adapterResult.reason, detail: adapterResult.details, item }, raw_listing_id: rawId });
         rejected++;
         continue;
       }
 
-      // Step C: upsert normalized listing.
+      const { listing } = adapterResult;
+      const listingCtx: LogContext = { ...itemCtx, listingUrl: listing.url };
+
+      // C: normalized listing upsert (atomic RPC)
+      let normResult: { id: string; isNew: boolean; priceChanged: boolean; mileageChanged: boolean };
       try {
-        await withRetry(() =>
-          upsertNormalizedListing(db, adapterResult.listing, run.id),
-        );
-        rawInserted++;
+        normResult = await withRetry(() => upsertNormalizedListing(db, listing, run.id, rawId));
       } catch (err) {
-        await writeFilteredOut(db, env, {
-          source,
-          source_run_id: run_id,
-          listing_url: adapterResult.listing.url,
-          reason_code: "normalized_upsert_failed",
-          details: { error: err instanceof Error ? err.message : String(err) },
-          raw_listing_id: rawId,
-        });
+        logError("persistence", "ingest.normalized_upsert_failed", err, listingCtx);
+        await writeFilteredOut(db, env, { source, source_run_id: run_id, listing_url: listing.url, reason_code: "normalized_upsert_failed", details: { error: err instanceof Error ? err.message : String(err) }, raw_listing_id: rawId });
         rejected++;
+        continue;
       }
+
+      // D: dedupe — link to vehicle_candidate
+      let vcId: string | undefined;
+      try {
+        const identityKey = computeIdentityKey(listing);
+        const vc = await withRetry(() => upsertVehicleCandidate(db, identityKey, listing));
+        vcId = vc.id;
+        await withRetry(() =>
+          linkNormalizedListingToCandidate(db, vc.id, normResult.id, "exact", 1.0, vc.isNew),
+        );
+        log("dedupe.linked", { identity_key: identityKey, is_new: vc.isNew, kpi: true }, listingCtx);
+      } catch (err) {
+        logError("dedupe", "ingest.dedupe_failed", err, listingCtx);
+        // Non-fatal: listing is still normalized even without dedupe
+      }
+
+      // E: scoring
+      const staleResult = computeStaleScore(new Date(listing.scrapedAt));
+      const freshnessScore = computeFreshnessScore(staleResult.score);
+      const sourceConfidenceScore = computeSourceConfidenceScore(listing.source);
+      const dealScore = computeDealScore(listing.price, undefined); // MMR not yet available
+
+      if (!cachedRules) {
+        try { cachedRules = await fetchActiveBuyBoxRules(db); }
+        catch { cachedRules = []; }
+      }
+
+      const buyBoxMatch = matchBuyBox(listing, cachedRules);
+      const buyBoxScore = buyBoxMatch?.score ?? 0;
+
+      const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore, freshnessScore, sourceConfidenceScore });
+
+      const scored: ScoredLead = {
+        dealScore,
+        buyBoxScore,
+        freshnessScore,
+        regionScore: 100,
+        sourceConfidenceScore,
+        finalScore,
+        grade,
+        reasonCodes: [],
+        matchedRuleId: buyBoxMatch?.ruleId,
+        matchedRuleVersion: buyBoxMatch?.ruleVersion,
+        valuationConfidence: "none",
+      };
+
+      // F: lead upsert (skip pass-grade listings)
+      if (grade !== "pass") {
+        try {
+          const lead = await withRetry(() =>
+            upsertLead(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, scored, matchedRuleDbId: buyBoxMatch?.ruleDbId }),
+          );
+          if (lead.created) {
+            createdLeads++;
+            log("lead.created", { lead_id: lead.id, grade, final_score: finalScore, matched_rule: buyBoxMatch?.ruleId, kpi: true }, listingCtx);
+          }
+        } catch (err) {
+          logError("lead", "ingest.lead_upsert_failed", err, listingCtx);
+          // Non-fatal: listing is normalized even if lead write fails
+        }
+      }
+
+      rawInserted++;
     }
   } finally {
     clearTimeout(batchTimer);
   }
 
-  // 10. Mark run complete. Non-fatal if this fails — response still returns.
   try {
-    await withRetry(() =>
-      completeSourceRun(db, run.id, { processed: rawInserted, rejected, created_leads: 0 }),
-    );
+    await withRetry(() => completeSourceRun(db, run.id, { processed: rawInserted, rejected, created_leads: createdLeads }));
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "ingest.run_complete_failed", source, run_id, error: serializeError(err) }));
+    logError("persistence", "ingest.run_complete_failed", err, ctx);
   }
 
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "ingest.complete", source, run_id, processed: rawInserted, rejected, created_leads: 0 }));
+  log("ingest.complete", { processed: rawInserted, rejected, created_leads: createdLeads, kpi: true }, ctx);
 
-  return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: 0 }, 200);
+  return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: createdLeads }, 200);
 }
+

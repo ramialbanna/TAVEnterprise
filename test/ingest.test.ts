@@ -28,9 +28,29 @@ vi.mock("../src/persistence/normalizedListings", () => ({
   upsertNormalizedListing: vi.fn(),
 }));
 
+vi.mock("../src/persistence/vehicleCandidates", () => ({
+  upsertVehicleCandidate: vi.fn(),
+}));
+
+vi.mock("../src/persistence/duplicateGroups", () => ({
+  linkNormalizedListingToCandidate: vi.fn(),
+}));
+
+vi.mock("../src/persistence/buyBoxRules", () => ({
+  fetchActiveBuyBoxRules: vi.fn(),
+}));
+
+vi.mock("../src/persistence/leads", () => ({
+  upsertLead: vi.fn(),
+}));
+
 import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
 import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
+import { upsertVehicleCandidate } from "../src/persistence/vehicleCandidates";
+import { linkNormalizedListingToCandidate } from "../src/persistence/duplicateGroups";
+import { fetchActiveBuyBoxRules } from "../src/persistence/buyBoxRules";
+import { upsertLead } from "../src/persistence/leads";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -52,7 +72,11 @@ beforeEach(() => {
   vi.mocked(upsertSourceRun).mockResolvedValue(RUNNING_RUN);
   vi.mocked(completeSourceRun).mockResolvedValue(undefined);
   vi.mocked(insertRawListing).mockResolvedValue({ id: "raw-uuid" });
-  vi.mocked(upsertNormalizedListing).mockResolvedValue({ id: "norm-uuid" });
+  vi.mocked(upsertNormalizedListing).mockResolvedValue({ id: "norm-uuid", isNew: true, priceChanged: false, mileageChanged: false });
+  vi.mocked(upsertVehicleCandidate).mockResolvedValue({ id: "vc-uuid", isNew: true });
+  vi.mocked(linkNormalizedListingToCandidate).mockResolvedValue(undefined);
+  vi.mocked(fetchActiveBuyBoxRules).mockResolvedValue([]);
+  vi.mocked(upsertLead).mockResolvedValue({ id: "lead-uuid", created: true });
 });
 
 async function sign(body: string, secret: string): Promise<string> {

@@ -129,6 +129,41 @@ export interface ScoredLead {
   valuationConfidence?: ValuationConfidence;
 }
 
+// ── Buy-box rule (mirrors tav.buy_box_rules) ──────────────────────────────────
+
+export interface BuyBoxRule {
+  id: string;
+  ruleId: string;
+  version: number;
+  make: string | null;        // comma-separated makes, or null = any
+  model: string | null;
+  yearMin: number | null;
+  yearMax: number | null;
+  maxMileage: number | null;
+  minMileage: number | null;
+  targetPricePctOfMmr: number | null;
+  regions: string[] | null;
+  sources: string[] | null;
+  priorityScore: number | null;
+  isActive: boolean;
+}
+
+export interface BuyBoxMatch {
+  ruleId: string;
+  ruleVersion: number;
+  ruleDbId: string;
+  score: number; // 0–100
+}
+
+// ── Normalized listing upsert result ─────────────────────────────────────────
+
+export interface NormalizedListingUpsertResult {
+  id: string;
+  isNew: boolean;
+  priceChanged: boolean;
+  mileageChanged: boolean;
+}
+
 // ── Source adapter result contract ────────────────────────────────────────────
 // Every src/sources/<platform>.ts returns this type. The discriminated union
 // forces callers to handle both success and failure explicitly.
