@@ -1,13 +1,18 @@
 import type { Env } from "./types/env";
+import { handleIngest } from "./ingest/handleIngest";
 
 const VERSION = "0.1.0";
 
 export default {
-  async fetch(request: Request, _env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
       return handleHealth(VERSION);
+    }
+
+    if (request.method === "POST" && url.pathname === "/ingest") {
+      return handleIngest(request, env);
     }
 
     return new Response(JSON.stringify({ ok: false, error: "not_found" }), {
