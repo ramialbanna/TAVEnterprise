@@ -1,0 +1,257 @@
+{
+  "name": "TAV-FB-Marketplace-Pipeline",
+  "flow": [
+    {
+      "id": 1,
+      "module": "apify:WatchActorRuns",
+      "version": 1,
+      "parameters": {
+        "actorId": "raidr-api~facebook-marketplace-vehicle-scraper",
+        "status": ["SUCCEEDED", "FAILED", "ABORTED"]
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 0, "y": 0 },
+        "notes": "Trigger: fires on every Apify run finish for the FB vehicle scraper"
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true
+      },
+      "mapper": {
+        "url": "{{env.SUPABASE_URL}}/rest/v1/rpc/log_run_start",
+        "method": "post",
+        "headers": [
+          { "name": "apikey",        "value": "{{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+          { "name": "Authorization", "value": "Bearer {{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+          { "name": "Content-Type",  "value": "application/json" }
+        ],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"p_apify_run_id\":\"{{1.id}}\",\"p_apify_task_id\":\"{{1.actorTaskId}}\",\"p_cluster\":\"{{1.actorTaskName}}\",\"p_started_at\":\"{{1.startedAt}}\",\"p_finished_at\":\"{{1.finishedAt}}\",\"p_apify_status\":\"{{1.status}}\",\"p_items_returned\":{{ifempty(1.stats.outputBodyLen; 0)}}}"
+      },
+      "metadata": {
+        "designer": { "x": 300, "y": 0 },
+        "notes": "Module 2: Log run start to tav.run_metrics. Continue on error — metrics never block ingest."
+      }
+    },
+    {
+      "id": 3,
+      "module": "apify:GetDatasetItems",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "datasetId": "{{1.defaultDatasetId}}",
+        "limit": "1000"
+      },
+      "metadata": {
+        "designer": { "x": 600, "y": 0 },
+        "notes": "Module 3: Pull all items from the run's output dataset"
+      }
+    },
+    {
+      "id": 4,
+      "module": "builtin:BasicIterator",
+      "version": 1,
+      "parameters": {},
+      "mapper": {
+        "array": "{{3.items}}"
+      },
+      "metadata": {
+        "designer": { "x": 900, "y": 0 },
+        "notes": "Module 4: Iterate over each item"
+      }
+    },
+    {
+      "id": 5,
+      "module": "builtin:BasicFilter",
+      "version": 1,
+      "parameters": {
+        "label": "is_live=true AND is_sold=false",
+        "condition": {
+          "a": "{{4.is_live}}",
+          "b": "true",
+          "o": "equal",
+          "next": {
+            "a": "{{4.is_sold}}",
+            "b": "false",
+            "o": "equal"
+          }
+        }
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": { "x": 1200, "y": 0 },
+        "notes": "Module 5: Drop sold/offline listings before hitting the Worker"
+      }
+    },
+    {
+      "id": 6,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": false
+      },
+      "mapper": {
+        "url": "{{env.NORMALIZER_URL}}/normalize",
+        "method": "post",
+        "headers": [
+          { "name": "Authorization", "value": "Bearer {{connection.NORMALIZER_SECRET}}" },
+          { "name": "Content-Type",  "value": "application/json" }
+        ],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"raw\": {{toJSON(4)}}}",
+        "timeout": 10,
+        "parseResponse": true
+      },
+      "metadata": {
+        "designer": { "x": 1500, "y": 0 },
+        "notes": "Module 6: POST raw item to Cloudflare Worker. Returns {ok, payload} or {ok:false, reason, missing_fields}. Non-2xx does NOT throw — we inspect 6.ok ourselves in the router."
+      }
+    },
+    {
+      "id": 7,
+      "module": "builtin:BasicRouter",
+      "version": 1,
+      "parameters": {},
+      "mapper": {},
+      "routes": [
+        {
+          "flow": [
+            {
+              "id": 8,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": true
+              },
+              "mapper": {
+                "url": "{{env.SUPABASE_URL}}/rest/v1/rpc/upsert_listing",
+                "method": "post",
+                "headers": [
+                  { "name": "apikey",        "value": "{{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+                  { "name": "Authorization", "value": "Bearer {{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+                  { "name": "Content-Type",  "value": "application/json" },
+                  { "name": "Prefer",        "value": "return=representation" }
+                ],
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "data": "{\"payload\": {{mergeCollections(6.payload; toCollection(\"scenario_run_id\"; \"{{executionId}}\"); toCollection(\"apify_run_id\"; \"{{1.id}}\"); toCollection(\"source_task\"; \"{{1.actorTaskName}}\"))}}}"
+              },
+              "metadata": {
+                "designer": { "x": 1800, "y": -150 },
+                "notes": "Module 8a (Router branch A — ok=true): POST normalized payload to tav.upsert_listing(). Merges in run-correlation fields for item_metrics."
+              }
+            }
+          ],
+          "label": "ok = true",
+          "filter": {
+            "name": "Worker returned ok",
+            "conditions": [
+              [
+                {
+                  "a": "{{6.ok}}",
+                  "b": "true",
+                  "o": "equal"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "flow": [
+            {
+              "id": 9,
+              "module": "http:ActionSendData",
+              "version": 3,
+              "parameters": {
+                "handleErrors": true
+              },
+              "mapper": {
+                "url": "{{env.SUPABASE_URL}}/rest/v1/rpc/log_dead_letter",
+                "method": "post",
+                "headers": [
+                  { "name": "apikey",        "value": "{{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+                  { "name": "Authorization", "value": "Bearer {{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+                  { "name": "Content-Type",  "value": "application/json" }
+                ],
+                "bodyType": "raw",
+                "contentType": "application/json",
+                "data": "{\"p_source\":\"normalizer\",\"p_reason\":\"{{6.reason}}\",\"p_missing_fields\":{{ifempty(toJSON(6.missing_fields); \"null\")}},\"p_payload_version\":null,\"p_raw\":{{toJSON(4)}},\"p_error_detail\":\"{{6.error}}\"}"
+              },
+              "metadata": {
+                "designer": { "x": 1800, "y": 150 },
+                "notes": "Module 8b (Router branch B — ok=false): Route validation failures to tav.dead_letter for forensics."
+              }
+            }
+          ],
+          "label": "ok = false",
+          "filter": {
+            "name": "Worker returned not-ok",
+            "conditions": [
+              [
+                {
+                  "a": "{{6.ok}}",
+                  "b": "true",
+                  "o": "not-equal"
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "metadata": {
+        "designer": { "x": 1650, "y": 0 },
+        "notes": "Module 7: Router on Worker response. Branch A = upsert to Postgres. Branch B = dead-letter."
+      }
+    },
+    {
+      "id": 10,
+      "module": "http:ActionSendData",
+      "version": 3,
+      "parameters": {
+        "handleErrors": true
+      },
+      "mapper": {
+        "url": "{{env.SUPABASE_URL}}/rest/v1/rpc/log_scenario_end",
+        "method": "post",
+        "headers": [
+          { "name": "apikey",        "value": "{{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+          { "name": "Authorization", "value": "Bearer {{connection.SUPABASE_SERVICE_ROLE_KEY}}" },
+          { "name": "Content-Type",  "value": "application/json" }
+        ],
+        "bodyType": "raw",
+        "contentType": "application/json",
+        "data": "{\"payload\":{\"scenario_run_id\":\"{{executionId}}\",\"apify_run_id\":\"{{1.id}}\",\"started_at\":\"{{scenarioStartedAt}}\",\"finished_at\":\"{{now}}\",\"items_in\":{{ifempty(length(3.items); 0)}},\"items_filtered_out\":0,\"items_ok\":0,\"items_dead_letter\":0,\"scenario_status\":\"success\"}}"
+      },
+      "metadata": {
+        "designer": { "x": 2100, "y": 0 },
+        "notes": "Module 9: Log scenario rollup to tav.scenario_metrics after iterator completes. Continue on error — metrics never block ingest. Note: items_ok/dead_letter are 0 here as placeholders — use IncrementVariable modules inside branches if exact counts are needed."
+      }
+    }
+  ],
+  "metadata": {
+    "instant": true,
+    "version": 2,
+    "scenario": {
+      "roundtrips": 1,
+      "maxErrors": 3,
+      "autoCommit": true,
+      "autoCommitTriggerLast": true,
+      "sequential": false,
+      "confidential": false,
+      "dataloss": false,
+      "dlq": false,
+      "freshVariables": false
+    },
+    "designer": {
+      "orphans": []
+    },
+    "zone": "us2.make.com"
+  }
+}
