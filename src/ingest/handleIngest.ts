@@ -66,12 +66,11 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
 
   const db = getSupabaseClient(env);
 
-  // 7. Upsert source_run. Failure here is fatal for the request.
+  // 7. Upsert source_run. Failure here is fatal for the request. No retry —
+  //    the SELECT+upsert pair is not idempotent-safe to retry blindly.
   let run;
   try {
-    run = await withRetry(() =>
-      upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length }),
-    );
+    run = await upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ event: "ingest.error", reason: "source_run_failed", error: String(err) }));
@@ -93,41 +92,59 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   }
 
   // 9. Batch loop — insert each item as a raw_listing.
+  //    Aborts after 25 s to stay within CF Worker CPU budget.
   //    Item failures go to dead_letters; the batch always runs to completion.
-  let processed = 0;
+  const BATCH_TIMEOUT_MS = 25_000;
+  const controller = new AbortController();
+  const batchTimer = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
+
+  let rawInserted = 0;
   let rejected = 0;
 
   let itemIndex = 0;
-  for (const item of items) {
-    const i = itemIndex++;
-    try {
-      await withRetry(() =>
-        insertRawListing(db, {
-          source,
-          source_run_id: run.id,
-          raw_item: item,
-          received_at: new Date().toISOString(),
-        }),
-      );
-      processed++;
-    } catch (err) {
-      await writeDeadLetter(db, env, {
-        source,
-        region,
-        run_id,
-        item_index: i,
-        reason_code: "raw_insert_failed",
-        payload: item,
-        error_message: err instanceof Error ? err.message : String(err),
-      });
-      rejected++;
+  try {
+    for (const item of items) {
+      const i = itemIndex++;
+      if (controller.signal.aborted) {
+        try {
+          await writeDeadLetter(db, env, {
+            source, region, run_id, item_index: i,
+            reason_code: "batch_timeout", payload: item,
+            error_message: "batch loop aborted: timeout exceeded",
+          });
+        } catch { /* writeDeadLetter contract: never throws */ }
+        rejected++;
+        continue;
+      }
+      try {
+        await withRetry(() =>
+          insertRawListing(db, {
+            source,
+            source_run_id: run.id,
+            raw_item: item,
+            received_at: new Date().toISOString(),
+          }),
+        );
+        rawInserted++;
+      } catch (err) {
+        try {
+          await writeDeadLetter(db, env, {
+            source, region, run_id, item_index: i,
+            reason_code: "raw_insert_failed", payload: item,
+            error_message: err instanceof Error ? err.message : String(err),
+          });
+        } catch { /* writeDeadLetter contract: never throws */ }
+        rejected++;
+      }
     }
+  } finally {
+    clearTimeout(batchTimer);
   }
 
   // 10. Mark run complete. Non-fatal if this fails — response still returns.
   try {
     await withRetry(() =>
-      completeSourceRun(db, run.id, { processed, rejected, created_leads: 0 }),
+      completeSourceRun(db, run.id, { processed: rawInserted, rejected, created_leads: 0 }),
     );
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -135,7 +152,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   }
 
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "ingest.complete", source, run_id, processed, rejected, created_leads: 0 }));
+  console.log(JSON.stringify({ event: "ingest.complete", source, run_id, processed: rawInserted, rejected, created_leads: 0 }));
 
-  return json({ ok: true, source, run_id, processed, rejected, created_leads: 0 }, 200);
+  return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: 0 }, 200);
 }

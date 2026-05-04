@@ -21,7 +21,7 @@ export async function writeDeadLetter(
   const fp = await fingerprint(params.source, params.run_id, params.item_index);
 
   try {
-    await db.from("dead_letters").upsert(
+    const { error: dbErr } = await db.from("dead_letters").upsert(
       {
         source: params.source,
         region: params.region,
@@ -32,9 +32,10 @@ export async function writeDeadLetter(
       },
       { onConflict: "fingerprint" },
     );
-    return;
+    if (!dbErr) return;
+    // dbErr present — fall through to KV fallback
   } catch {
-    // fall through to KV fallback
+    // network throw — fall through to KV fallback
   }
 
   // KV fallback — 7-day TTL, idempotent key.
