@@ -1,0 +1,7 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Claude local-only config
+.claude/settings.local.json
+CLAUDE.local.md
