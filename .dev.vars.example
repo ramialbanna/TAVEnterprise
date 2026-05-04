@@ -1,0 +1,26 @@
+# Copy to .dev.vars for local development only.
+# Never commit .dev.vars — it is in .gitignore.
+# Keep every value in this file as replace_me.
+
+# ── Database ───────────────────────────────────────────────────────────────────
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=replace_me
+
+# ── Ingest authentication ──────────────────────────────────────────────────────
+WEBHOOK_HMAC_SECRET=replace_me
+NORMALIZER_SECRET=replace_me
+
+# ── Manheim MMR API ────────────────────────────────────────────────────────────
+MANHEIM_CLIENT_ID=replace_me
+MANHEIM_CLIENT_SECRET=replace_me
+MANHEIM_USERNAME=replace_me
+MANHEIM_PASSWORD=replace_me
+MANHEIM_TOKEN_URL=replace_me
+MANHEIM_MMR_URL=replace_me
+
+# ── Alerts ─────────────────────────────────────────────────────────────────────
+ALERT_WEBHOOK_URL=replace_me
+TWILIO_ACCOUNT_SID=replace_me
+TWILIO_AUTH_TOKEN=replace_me
+TWILIO_FROM_NUMBER=replace_me
+ALERT_TO_NUMBER=replace_me

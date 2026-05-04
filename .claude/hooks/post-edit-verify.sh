@@ -41,8 +41,12 @@ SYNTAX_OK=1
 case "${FILE_PATH}" in
   *.ts|*.tsx)
     if command -v npx >/dev/null 2>&1; then
-      # Single-file noEmit pass; project tsconfig governs strictness.
-      npx --no-install tsc --noEmit --skipLibCheck "${FILE_PATH}" 2>&1 | head -n 20 >&2 || SYNTAX_OK=0
+      if [[ -f "tsconfig.json" ]]; then
+        # Use the project tsconfig so types (e.g. @cloudflare/workers-types) are resolved.
+        npx --no-install tsc --noEmit 2>&1 | head -n 20 >&2 || SYNTAX_OK=0
+      else
+        npx --no-install tsc --noEmit --skipLibCheck "${FILE_PATH}" 2>&1 | head -n 20 >&2 || SYNTAX_OK=0
+      fi
     fi
     ;;
   *.sh)

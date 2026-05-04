@@ -1,0 +1,25 @@
+name = "tav-aip"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = false
+
+# KV namespace for valuation cache and DLQ overflow.
+# Run the following once, then replace the placeholder IDs below:
+#   wrangler kv namespace create TAV_KV
+#   wrangler kv namespace create TAV_KV --preview
+[[kv_namespaces]]
+binding = "TAV_KV"
+id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+preview_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+[env.staging]
+name = "tav-aip-staging"
+[[env.staging.kv_namespaces]]
+binding = "TAV_KV"
+id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+[env.production]
+name = "tav-aip-production"
+[[env.production.kv_namespaces]]
+binding = "TAV_KV"
+id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
