@@ -1,0 +1,193 @@
+import type { Env } from "../types/env";
+import type { ValuationConfidence } from "../types/domain";
+
+export interface MmrResult {
+  mmrValue: number;
+  confidence: ValuationConfidence; // "high" = VIN match, "medium" = YMM match
+  rawResponse: unknown;
+}
+
+export interface MmrParams {
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  mileage?: number;
+}
+
+const TOKEN_KV_KEY = "manheim:token";
+const TOKEN_TTL_S = 86000;  // Manheim tokens expire at ~86399s (≈24h); cache slightly shorter
+const VIN_TTL_S = 86400;    // 24h — VIN values are stable
+const YMM_TTL_S = 21600;    // 6h  — YMM bucket values drift more with market
+
+// Rounds mileage to the nearest 10,000-mile floor for YMM cache keys.
+// e.g. 82_400 → 80_000, giving good hit rates without sacrificing accuracy.
+export function mileageBucket(mileage: number): number {
+  return Math.floor(mileage / 10_000) * 10_000;
+}
+
+export function kvKeyForVin(vin: string): string {
+  return `mmr:vin:${vin.toUpperCase()}`;
+}
+
+export function kvKeyForYmm(year: number, make: string, model: string, mileage: number): string {
+  return `mmr:ymm:${year}:${make.toLowerCase()}:${model.toLowerCase()}:${mileageBucket(mileage)}`;
+}
+
+async function getManheimToken(env: Env, kv: KVNamespace): Promise<string> {
+  const cached = await kv.get(TOKEN_KV_KEY);
+  if (cached) return cached;
+
+  const body = new URLSearchParams({
+    grant_type: "password",
+    username: env.MANHEIM_USERNAME,
+    password: env.MANHEIM_PASSWORD,
+    client_id: env.MANHEIM_CLIENT_ID,
+    client_secret: env.MANHEIM_CLIENT_SECRET,
+  });
+
+  const res = await fetch(env.MANHEIM_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Manheim token fetch failed: HTTP ${res.status}`);
+  }
+
+  const data = await res.json() as { access_token?: string };
+  if (!data.access_token) {
+    throw new Error("Manheim token response missing access_token");
+  }
+
+  await kv.put(TOKEN_KV_KEY, data.access_token, { expirationTtl: TOKEN_TTL_S });
+  return data.access_token;
+}
+
+// Extracts the wholesale mileage-adjusted MMR value from Manheim API responses.
+// Field names vary by endpoint and API version — checked in priority order.
+function extractMmrValue(data: unknown): number | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+
+  const candidate = Array.isArray(d.items) ? d.items[0] : d;
+  if (!candidate || typeof candidate !== "object") return null;
+
+  const t = candidate as Record<string, unknown>;
+
+  // Preferred: mileage+build adjusted wholesale (VIN endpoint response shape)
+  if (t.adjustedPricing && typeof t.adjustedPricing === "object") {
+    const ap = t.adjustedPricing as Record<string, unknown>;
+    if (ap.wholesale && typeof ap.wholesale === "object") {
+      const w = ap.wholesale as Record<string, unknown>;
+      if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
+    }
+  }
+
+  // Flat numeric fields (some search responses)
+  for (const key of ["adjustedWholesaleAverage", "wholesaleMileageAdjusted", "wholesaleAverage", "mmrValue", "average", "value"]) {
+    const v = t[key];
+    if (typeof v === "number" && v > 0) return Math.round(v);
+  }
+
+  // Base wholesale object fallback (unadjusted — used when no mileage was passed)
+  if (t.wholesale && typeof t.wholesale === "object") {
+    const w = t.wholesale as Record<string, unknown>;
+    if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
+  }
+
+  return null;
+}
+
+async function getMmrByVin(
+  vin: string,
+  mileage: number | undefined,
+  token: string,
+  baseUrl: string,
+): Promise<MmrResult | null> {
+  const url = new URL(`/valuations/vin/${encodeURIComponent(vin)}`, baseUrl);
+  if (mileage !== undefined) url.searchParams.set("odometer", String(mileage));
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) return null;
+
+  const data: unknown = await res.json();
+  const mmrValue = extractMmrValue(data);
+  if (!mmrValue) return null;
+
+  return { mmrValue, confidence: "high", rawResponse: data };
+}
+
+async function getMmrByYmm(
+  year: number,
+  make: string,
+  model: string,
+  mileage: number,
+  token: string,
+  baseUrl: string,
+): Promise<MmrResult | null> {
+  const url = new URL("/valuations/search", baseUrl);
+  url.searchParams.set("year", String(year));
+  url.searchParams.set("make", make);
+  url.searchParams.set("model", model);
+  url.searchParams.set("odometer", String(mileage));
+  url.searchParams.set("include", "ci");
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) return null;
+
+  const data: unknown = await res.json();
+  const mmrValue = extractMmrValue(data);
+  if (!mmrValue) return null;
+
+  return { mmrValue, confidence: "medium", rawResponse: data };
+}
+
+// Main entry point. Tries VIN first (high confidence), falls back to YMM.
+// Returns null if neither path produces a value — callers must handle gracefully.
+export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace): Promise<MmrResult | null> {
+  const { vin, year, make, model, mileage } = params;
+
+  if (vin) {
+    const vinKey = kvKeyForVin(vin);
+    const cached = await kv.get(vinKey);
+    if (cached) return JSON.parse(cached) as MmrResult;
+
+    try {
+      const token = await getManheimToken(env, kv);
+      const result = await getMmrByVin(vin, mileage, token, env.MANHEIM_MMR_URL);
+      if (result) {
+        await kv.put(vinKey, JSON.stringify(result), { expirationTtl: VIN_TTL_S });
+        return result;
+      }
+    } catch {
+      // VIN lookup failed — fall through to YMM
+    }
+  }
+
+  if (year !== undefined && make && model && mileage !== undefined) {
+    const ymmKey = kvKeyForYmm(year, make, model, mileage);
+    const cached = await kv.get(ymmKey);
+    if (cached) return JSON.parse(cached) as MmrResult;
+
+    try {
+      const token = await getManheimToken(env, kv);
+      const result = await getMmrByYmm(year, make, model, mileage, token, env.MANHEIM_MMR_URL);
+      if (result) {
+        await kv.put(ymmKey, JSON.stringify(result), { expirationTtl: YMM_TTL_S });
+        return result;
+      }
+    } catch {
+      // YMM lookup failed — MMR unavailable
+    }
+  }
+
+  return null;
+}

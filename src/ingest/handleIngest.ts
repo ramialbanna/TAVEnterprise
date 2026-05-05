@@ -21,6 +21,8 @@ import { computeStaleScore } from "../stale/scorer";
 import { computeDealScore } from "../scoring/deal";
 import { matchBuyBox } from "../scoring/buybox";
 import { computeFreshnessScore, computeSourceConfidenceScore, computeRegionScore, computeFinalScore } from "../scoring/lead";
+import { getMmrValue } from "../valuation/mmr";
+import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 
@@ -179,12 +181,28 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         // Non-fatal: listing is still normalized even without dedupe
       }
 
-      // E: scoring
+      // E: valuation — non-blocking; dealScore stays 0 if MMR is unavailable
+      let mmrResult = null;
+      try {
+        mmrResult = await getMmrValue(
+          { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, mileage: listing.mileage },
+          env,
+          env.TAV_KV,
+        );
+        if (mmrResult) {
+          await writeValuationSnapshot(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, mmrResult });
+          log("valuation.fetched", { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true }, listingCtx);
+        }
+      } catch (err) {
+        logError("valuation", "ingest.mmr_failed", err, listingCtx);
+      }
+
+      // F: scoring
       const staleResult = computeStaleScore(new Date(listing.scrapedAt));
       const freshnessScore = computeFreshnessScore(staleResult.score);
       const sourceConfidenceScore = computeSourceConfidenceScore(listing.source);
       const regionScore = computeRegionScore(listing.region);
-      const dealScore = computeDealScore(listing.price, undefined); // MMR not yet available
+      const dealScore = computeDealScore(listing.price, mmrResult?.mmrValue);
 
       if (!cachedRules) {
         try { cachedRules = await fetchActiveBuyBoxRules(db); }

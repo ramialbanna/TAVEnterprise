@@ -7,7 +7,8 @@ export type ErrorCategory =
   | "budget"
   | "dedupe"
   | "scoring"
-  | "lead";
+  | "lead"
+  | "valuation";
 
 export interface LogContext {
   runId?: string;
