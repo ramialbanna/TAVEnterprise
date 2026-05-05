@@ -237,6 +237,7 @@ CREATE TABLE tav.leads (
   assigned_at             timestamptz,
   lock_expires_at         timestamptz,
   last_action_at          timestamptz,
+  score_components        jsonb,
   created_at              timestamptz NOT NULL DEFAULT now(),
   updated_at              timestamptz NOT NULL DEFAULT now()
 );
@@ -254,19 +255,52 @@ CREATE TABLE tav.lead_actions (
 );
 
 -- ── purchase_outcomes ─────────────────────────────────────────────────────────
+-- lead_id is nullable (historical imports may have no matching lead).
+-- Uniqueness on lead_id is enforced via partial index, not a column constraint.
 
 CREATE TABLE tav.purchase_outcomes (
-  id                    uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  lead_id               uuid        NOT NULL UNIQUE REFERENCES tav.leads (id),
-  vehicle_candidate_id  uuid        REFERENCES tav.vehicle_candidates (id),
-  purchase_price        integer,
-  mmr_value_at_purchase integer,
-  gross_profit_est      integer,
-  odometer_at_purchase  integer,
-  purchase_date         date,
-  buyer                 text,
-  notes                 text,
-  created_at            timestamptz NOT NULL DEFAULT now()
+  id                          uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  lead_id                     uuid        REFERENCES tav.leads (id),            -- nullable; see index below
+  vehicle_candidate_id        uuid        REFERENCES tav.vehicle_candidates (id),
+  purchase_price              integer,
+  mmr_value_at_purchase       integer,
+  gross_profit_est            integer,
+  odometer_at_purchase        integer,
+  purchase_date               date,
+  buyer                       text,
+  notes                       text,
+  -- denormalized vehicle fields (captured at purchase time)
+  vin                         text,
+  year                        smallint    CHECK (year BETWEEN 1900 AND 2100),
+  make                        text,
+  model                       text,
+  mileage                     integer     CHECK (mileage >= 0),
+  source                      text,
+  region                      text,
+  listed_price                integer     CHECK (listed_price >= 0),
+  -- financial detail
+  price_paid                  integer,
+  sale_price                  integer,
+  gross_profit                integer,
+  hold_days                   integer,
+  transport_cost              integer,
+  auction_fee                 integer,
+  misc_overhead               integer,
+  -- condition
+  condition_grade_raw         text,
+  condition_grade_normalized  text
+    CHECK (condition_grade_normalized IN ('excellent','good','fair','poor','unknown')),
+  -- channel classification
+  purchase_channel            text
+    CHECK (purchase_channel IN ('auction','private','dealer')),
+  selling_channel             text
+    CHECK (selling_channel IN ('retail','wholesale','auction')),
+  -- import provenance
+  week_label                  text,
+  buyer_id                    uuid,
+  import_batch_id             uuid,
+  import_fingerprint          text,
+  created_at                  timestamptz NOT NULL DEFAULT now()
 );
 
 -- ── dead_letters ──────────────────────────────────────────────────────────────
@@ -352,6 +386,102 @@ CREATE INDEX ON tav.leads (created_at DESC);
 CREATE INDEX ON tav.leads (status, final_score DESC)
   WHERE status IN ('new', 'assigned');
 
+-- ── import_batches ────────────────────────────────────────────────────────────
+
+CREATE TABLE tav.import_batches (
+  id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  week_label       text,
+  row_count        integer     NOT NULL DEFAULT 0,
+  imported_count   integer     NOT NULL DEFAULT 0,
+  duplicate_count  integer     NOT NULL DEFAULT 0,
+  rejected_count   integer     NOT NULL DEFAULT 0,
+  status           text        NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','importing','complete','failed')),
+  notes            text
+);
+
+-- ── import_rows ───────────────────────────────────────────────────────────────
+
+CREATE TABLE tav.import_rows (
+  id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  import_batch_id  uuid        NOT NULL REFERENCES tav.import_batches (id),
+  row_index        integer     NOT NULL,
+  status           text        NOT NULL
+    CHECK (status IN ('imported','duplicate','rejected')),
+  reason_code      text,
+  raw_row          jsonb       NOT NULL,
+  outcome_id       uuid        REFERENCES tav.purchase_outcomes (id),
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── market_expenses ───────────────────────────────────────────────────────────
+
+CREATE TABLE tav.market_expenses (
+  id             uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+  region         text    NOT NULL,
+  city           text,
+  expense_type   text    NOT NULL
+    CHECK (expense_type IN ('transport','auction_fee','misc_overhead')),
+  amount_cents   integer NOT NULL,
+  effective_date date    NOT NULL,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── market_demand_index ───────────────────────────────────────────────────────
+
+CREATE TABLE tav.market_demand_index (
+  id                uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+  region            text    NOT NULL,
+  segment_key       text,
+  purchase_count    integer NOT NULL DEFAULT 0,
+  avg_hold_days     numeric(8,2),
+  sell_through_rate numeric(5,4)
+    CHECK (sell_through_rate BETWEEN 0 AND 1),
+  demand_score      integer NOT NULL DEFAULT 50
+    CHECK (demand_score BETWEEN 0 AND 100),
+  week_label        text    NOT NULL,
+  computed_at       timestamptz NOT NULL DEFAULT now(),
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── buy_box_score_attributions ────────────────────────────────────────────────
+
+CREATE TABLE tav.buy_box_score_attributions (
+  id              uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id         uuid    NOT NULL REFERENCES tav.leads (id),
+  rule_id         text,
+  rule_version    integer,
+  rule_score      integer,
+  segment_score   integer,
+  demand_score    integer,
+  hybrid_score    integer NOT NULL,
+  components      jsonb   NOT NULL DEFAULT '{}',
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- purchase_outcomes
+CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
+  WHERE lead_id IS NOT NULL;
+CREATE UNIQUE INDEX ON tav.purchase_outcomes (import_fingerprint)
+  WHERE import_fingerprint IS NOT NULL;
+
+-- import_rows
+CREATE INDEX ON tav.import_rows (import_batch_id);
+CREATE INDEX ON tav.import_rows (outcome_id) WHERE outcome_id IS NOT NULL;
+
+-- market_expenses
+CREATE INDEX ON tav.market_expenses (region);
+CREATE UNIQUE INDEX ON tav.market_expenses (region, expense_type, COALESCE(city,''), effective_date);
+
+-- market_demand_index
+CREATE INDEX ON tav.market_demand_index (region);
+CREATE UNIQUE INDEX ON tav.market_demand_index (region, COALESCE(segment_key,''), week_label);
+
+-- buy_box_score_attributions
+CREATE INDEX ON tav.buy_box_score_attributions (lead_id);
+
 -- dead_letters
 CREATE INDEX ON tav.dead_letters (resolved, created_at) WHERE resolved = false;
 
@@ -393,6 +523,45 @@ WHERE l.status IN ('new', 'assigned')
   AND nl.freshness_status NOT IN ('stale_confirmed', 'removed')
   AND nl.last_seen_at > now() - interval '30 days'
 ORDER BY l.final_score DESC, l.created_at DESC;
+
+-- v_outcome_summary: region-level KPIs for the operations dashboard.
+CREATE OR REPLACE VIEW tav.v_outcome_summary AS
+SELECT
+  region,
+  COUNT(*)                                                    AS total_outcomes,
+  ROUND(AVG(gross_profit)::numeric, 2)                        AS avg_gross_profit,
+  ROUND(AVG(hold_days)::numeric, 2)                           AS avg_hold_days,
+  ROUND(
+    COUNT(*) FILTER (WHERE sale_price IS NOT NULL)::numeric /
+    NULLIF(COUNT(*), 0),
+    4
+  )                                                           AS sell_through_rate,
+  MAX(created_at)                                             AS last_outcome_at
+FROM tav.purchase_outcomes
+GROUP BY region;
+
+-- v_segment_profit: YMM + mileage-bucket gross margin for buy-box tuning.
+CREATE OR REPLACE VIEW tav.v_segment_profit AS
+SELECT
+  year,
+  make,
+  model,
+  FLOOR(mileage / 10000) * 10000                              AS mileage_bucket,
+  COUNT(*)                                                    AS outcome_count,
+  ROUND(AVG(gross_profit)::numeric, 2)                        AS avg_gross_profit,
+  ROUND(
+    AVG(
+      CASE WHEN gross_profit > 0
+           THEN gross_profit::numeric / NULLIF(price_paid, 0)
+      END
+    ) * 100,
+    2
+  )                                                           AS avg_gross_margin_pct
+FROM tav.purchase_outcomes
+WHERE gross_profit IS NOT NULL
+  AND price_paid   IS NOT NULL
+  AND price_paid   > 0
+GROUP BY year, make, model, FLOOR(mileage / 10000) * 10000;
 
 -- v_source_health: latest run per source/region pair.
 CREATE OR REPLACE VIEW tav.v_source_health AS

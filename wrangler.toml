@@ -17,6 +17,11 @@ preview_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" # REPLACE with real preview name
 [triggers]
 crons = ["0 6 * * *"]
 
+[vars]
+HYBRID_BUYBOX_ENABLED = "false"
+# ADMIN_API_SECRET must be set as a Cloudflare secret:
+#   wrangler secret put ADMIN_API_SECRET
+
 [env.staging]
 name = "tav-aip-staging"
 [[env.staging.kv_namespaces]]

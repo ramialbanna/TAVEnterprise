@@ -1,5 +1,6 @@
 import type { Env } from "./types/env";
 import { handleIngest } from "./ingest/handleIngest";
+import { handleAdmin } from "./admin/routes";
 import { getSupabaseClient } from "./persistence/supabase";
 import { runStaleSweep } from "./stale/engine";
 import { log } from "./logging/logger";
@@ -16,6 +17,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return handleIngest(request, env);
+    }
+
+    if (url.pathname.startsWith("/admin")) {
+      return handleAdmin(request, env);
     }
 
     return new Response(JSON.stringify({ ok: false, error: "not_found" }), {

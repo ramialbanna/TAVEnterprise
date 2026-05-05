@@ -30,4 +30,10 @@ export interface Env {
 
   // ── Cloudflare KV ──────────────────────────────────────────────────────────
   TAV_KV: KVNamespace;
+
+  // ── Admin auth ─────────────────────────────────────────────────────────────
+  ADMIN_API_SECRET: string;
+
+  // ── Feature flags ──────────────────────────────────────────────────────────
+  HYBRID_BUYBOX_ENABLED: string; // "true" | "false" — wrangler.toml [vars]
 }

@@ -73,6 +73,8 @@ function makeEnv(): Env {
     TWILIO_FROM_NUMBER: "+15550000000",
     ALERT_TO_NUMBER: "+15551111111",
     TAV_KV: null as unknown as KVNamespace,
+    ADMIN_API_SECRET: "admin-secret",
+    HYBRID_BUYBOX_ENABLED: "false",
   };
 }
 

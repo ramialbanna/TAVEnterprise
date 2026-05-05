@@ -21,6 +21,12 @@ import { computeStaleScore } from "../stale/scorer";
 import { computeDealScore } from "../scoring/deal";
 import { matchBuyBox } from "../scoring/buybox";
 import { computeFreshnessScore, computeSourceConfidenceScore, computeRegionScore, computeFinalScore } from "../scoring/lead";
+import { computeHybridBuyBoxScore } from "../scoring/hybrid";
+import { computeSegmentProfitScore } from "../scoring/segment";
+import { computeRegionDemandScore } from "../scoring/demand";
+import { getSegmentAvgMarginPct } from "../persistence/purchaseOutcomes";
+import { getDemandScoreForRegion } from "../persistence/marketDemandIndex";
+import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttributions";
 import { getMmrValue } from "../valuation/mmr";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { log, logError } from "../logging/logger";
@@ -220,11 +226,51 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       const buyBoxMatch = matchBuyBox(listing, cachedRules, mmrResult?.mmrValue);
       const buyBoxScore = buyBoxMatch?.score ?? 0;
 
-      const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore, freshnessScore, regionScore, sourceConfidenceScore });
+      // Hybrid scoring: when flag is enabled, blend rule score with segment + demand data
+      let effectiveBuyBoxScore = buyBoxScore;
+      let segmentProfitScore = 50;
+      let regionDemandScore = 50;
+
+      if (env.HYBRID_BUYBOX_ENABLED === "true") {
+        // Non-blocking: DB failures fall back to neutral (50) — same pattern as MMR
+        try {
+          const marginPct = await getSegmentAvgMarginPct(db, {
+            year: listing.year,
+            make: listing.make,
+            model: listing.model,
+            mileageBucket: listing.mileage != null ? Math.floor(listing.mileage / 10_000) * 10_000 : undefined,
+          });
+          segmentProfitScore = computeSegmentProfitScore(marginPct);
+        } catch (err) {
+          logError("scoring", "ingest.segment_score_failed", err, listingCtx);
+        }
+
+        try {
+          const demandScore = await getDemandScoreForRegion(db, listing.region ?? "", null);
+          regionDemandScore = computeRegionDemandScore(demandScore);
+        } catch (err) {
+          logError("scoring", "ingest.demand_score_failed", err, listingCtx);
+        }
+
+        effectiveBuyBoxScore = computeHybridBuyBoxScore(buyBoxScore, segmentProfitScore, regionDemandScore);
+      }
+
+      const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore: effectiveBuyBoxScore, freshnessScore, regionScore, sourceConfidenceScore });
+
+      const scoreComponents: Record<string, unknown> = {
+        rule_score: buyBoxScore,
+        segment_score: segmentProfitScore,
+        demand_score: regionDemandScore,
+        hybrid_score: effectiveBuyBoxScore,
+        deal_score: dealScore,
+        freshness_score: freshnessScore,
+        region_score: regionScore,
+        source_confidence_score: sourceConfidenceScore,
+      };
 
       const scored: ScoredLead = {
         dealScore,
-        buyBoxScore,
+        buyBoxScore: effectiveBuyBoxScore,
         freshnessScore,
         regionScore,
         sourceConfidenceScore,
@@ -240,11 +286,27 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       if (grade !== "pass") {
         try {
           const lead = await withRetry(() =>
-            upsertLead(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, scored, mmrValue: mmrResult?.mmrValue, matchedRuleDbId: buyBoxMatch?.ruleDbId }),
+            upsertLead(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, scored, mmrValue: mmrResult?.mmrValue, matchedRuleDbId: buyBoxMatch?.ruleDbId, scoreComponents }),
           );
           if (lead.created) {
             createdLeads++;
             log("lead.created", { lead_id: lead.id, grade, final_score: finalScore, matched_rule: buyBoxMatch?.ruleId, kpi: true }, listingCtx);
+
+            // Non-blocking attribution write — analytics only
+            try {
+              await insertBuyBoxScoreAttribution(db, {
+                leadId: lead.id,
+                ruleId: buyBoxMatch?.ruleId ?? null,
+                ruleVersion: buyBoxMatch?.ruleVersion ?? null,
+                ruleScore: buyBoxScore,
+                segmentScore: env.HYBRID_BUYBOX_ENABLED === "true" ? segmentProfitScore : null,
+                demandScore: env.HYBRID_BUYBOX_ENABLED === "true" ? regionDemandScore : null,
+                hybridScore: effectiveBuyBoxScore,
+                components: scoreComponents,
+              });
+            } catch (err) {
+              logError("scoring", "ingest.attribution_failed", err, listingCtx);
+            }
           }
         } catch (err) {
           logError("lead", "ingest.lead_upsert_failed", err, listingCtx);

@@ -24,3 +24,9 @@ TWILIO_ACCOUNT_SID=replace_me
 TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=replace_me
 ALERT_TO_NUMBER=replace_me
+
+# ── Admin ──────────────────────────────────────────────────────────────────────
+ADMIN_API_SECRET=replace_me
+
+# ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
+# HYBRID_BUYBOX_ENABLED=false
