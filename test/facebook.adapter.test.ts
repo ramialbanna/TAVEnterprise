@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseFacebookItem } from "../src/sources/facebook";
+import { parseFacebookItem, detectFacebookDrift } from "../src/sources/facebook";
 import type { RegionKey } from "../src/types/domain";
 
 const CTX = {
@@ -386,11 +386,25 @@ describe("parseFacebookItem — bad data", () => {
     expect(r.reason).toBe("missing_ymm");
   });
 
-  it("C10: year < 1990 → invalid_year", () => {
+  it("C10: year < 2000 → invalid_year (1985)", () => {
     const r = parseFacebookItem({ url: "https://fb.com/c10", title: "1985 Ford Mustang" }, CTX);
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe("invalid_year");
+  });
+
+  it("C10b: year 1999 → invalid_year (below 2000 floor)", () => {
+    const r = parseFacebookItem({ url: "https://fb.com/c10b", title: "1999 Ford Mustang" }, CTX);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("invalid_year");
+  });
+
+  it("C10c: year 2000 → valid (new floor)", () => {
+    const r = parseFacebookItem({ url: "https://fb.com/c10c", title: "2000 Toyota Camry LE", price: "$5,000" }, CTX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.year).toBe(2000);
   });
 
   it("C11: year > 2035 → invalid_year", () => {
@@ -539,5 +553,59 @@ describe("parseFacebookItem — no VIN (Facebook norm)", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.listing.vin).toBeUndefined();
+  });
+});
+
+// ── Group F: Schema drift detection ──────────────────────────────────────────
+
+describe("detectFacebookDrift", () => {
+  it("F1: all known fields → no drift events", () => {
+    const events = detectFacebookDrift({
+      url: "https://fb.com/1",
+      title: "2020 Toyota Camry",
+      price: "$18,000",
+      mileage: "62000",
+      description: "clean title",
+    });
+    expect(events).toHaveLength(0);
+  });
+
+  it("F2: one unknown field → one unexpected_field event", () => {
+    const events = detectFacebookDrift({
+      url: "https://fb.com/2",
+      title: "2020 Toyota Camry",
+      verification_status: "verified",
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]!.event_type).toBe("unexpected_field");
+    expect(events[0]!.field_path).toBe("verification_status");
+    expect(events[0]!.sample_value).toBe("verified");
+  });
+
+  it("F3: multiple unknown fields → one event per field", () => {
+    const events = detectFacebookDrift({
+      url: "https://fb.com/3",
+      title: "2021 Honda Civic",
+      badge_count: 3,
+      seller_rating: 4.8,
+    });
+    expect(events).toHaveLength(2);
+    const paths = events.map(e => e.field_path).sort();
+    expect(paths).toEqual(["badge_count", "seller_rating"]);
+  });
+
+  it("F4: mix of known and unknown fields → only unknowns reported", () => {
+    const events = detectFacebookDrift({
+      url: "https://fb.com/4",        // known
+      title: "2022 Ford F-150",       // known
+      price: "$35,000",               // known
+      promoted_listing: true,         // unknown
+    });
+    expect(events).toHaveLength(1);
+    expect(events[0]!.field_path).toBe("promoted_listing");
+  });
+
+  it("F5: empty object → no events", () => {
+    expect(detectFacebookDrift({})).toHaveLength(0);
   });
 });

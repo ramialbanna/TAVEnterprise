@@ -4,7 +4,7 @@
 Scale foundation complete. Pipeline runs end-to-end:
 Apify → Cloudflare Worker → raw_listings → normalized_listings → vehicle_candidates → leads
 
-## What Is Done (This Session)
+## What Is Done (Phase 4 complete)
 - [x] Canonical vehicle schema (TS types + SQL)
 - [x] Validation + rejection logic (adapter-level + reason_codes)
 - [x] Deduplication system (identity_key fingerprinting, vehicle_candidates, duplicate_groups)
@@ -15,8 +15,10 @@ Apify → Cloudflare Worker → raw_listings → normalized_listings → vehicle
 - [x] Buy-box rule matching (src/scoring/buybox.ts + 3 default rules via migration 0006)
 - [x] Lead creation pipeline (src/persistence/leads.ts — grade != pass → upsert lead)
 - [x] Deal scoring, final scoring, grade calculation
-- [x] 135 unit tests passing
-- [x] Pushed to github.com/ramialbanna/TAVEnterprise
+- [x] Real region scoring — computeRegionScore() with 3-tier market priority (migration 0007 for year constraint)
+- [x] Year validation aligned — business rule 2000–2035 enforced in TS adapter + SQL CHECK
+- [x] Schema drift detection — detectFacebookDrift() + writeSchemaDrift() wired into ingest, non-blocking
+- [x] 153 unit tests passing
 
 ## Migrations Still Needed in Supabase SQL Editor
 Run in this order:

@@ -44,6 +44,10 @@ vi.mock("../src/persistence/leads", () => ({
   upsertLead: vi.fn(),
 }));
 
+vi.mock("../src/persistence/schemaDrift", () => ({
+  writeSchemaDrift: vi.fn(),
+}));
+
 import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
 import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
@@ -51,6 +55,7 @@ import { upsertVehicleCandidate } from "../src/persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../src/persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../src/persistence/buyBoxRules";
 import { upsertLead } from "../src/persistence/leads";
+import { writeSchemaDrift } from "../src/persistence/schemaDrift";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -77,6 +82,7 @@ beforeEach(() => {
   vi.mocked(linkNormalizedListingToCandidate).mockResolvedValue(undefined);
   vi.mocked(fetchActiveBuyBoxRules).mockResolvedValue([]);
   vi.mocked(upsertLead).mockResolvedValue({ id: "lead-uuid", created: true });
+  vi.mocked(writeSchemaDrift).mockResolvedValue(undefined);
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -233,5 +239,44 @@ describe("POST /ingest", () => {
   it("existing GET /health still returns 200", async () => {
     const res = await worker.fetch(new Request("http://localhost/health"), env, ctx);
     expect(res.status).toBe(200);
+  });
+
+  it("records schema drift for unknown fields and still returns 200", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-drift-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      // verification_status is not in KNOWN_FACEBOOK_FIELDS → should trigger drift
+      items: [{ url: "https://fb.com/item/drift", title: "2020 Toyota Camry SE, 62k miles", verification_status: "verified" }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(vi.mocked(writeSchemaDrift)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ event_type: "unexpected_field", field_path: "verification_status" }),
+    );
+  });
+
+  it("ingest still returns 200 when writeSchemaDrift throws", async () => {
+    vi.mocked(writeSchemaDrift).mockRejectedValue(new Error("DB unavailable"));
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-drift-002",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{ url: "https://fb.com/item/drift2", title: "2021 Honda Civic EX, 30k miles", unknown_future_field: "value" }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.processed).toBe(1);
   });
 });

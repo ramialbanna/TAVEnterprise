@@ -13,13 +13,14 @@ import { upsertVehicleCandidate } from "../persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
 import { upsertLead } from "../persistence/leads";
-import { parseFacebookItem } from "../sources/facebook";
+import { parseFacebookItem, detectFacebookDrift } from "../sources/facebook";
 import type { AdapterContext } from "../sources/facebook";
+import { writeSchemaDrift } from "../persistence/schemaDrift";
 import { computeIdentityKey } from "../dedupe/fingerprint";
 import { computeStaleScore } from "../stale/scorer";
 import { computeDealScore } from "../scoring/deal";
 import { matchBuyBox } from "../scoring/buybox";
-import { computeFreshnessScore, computeSourceConfidenceScore, computeFinalScore } from "../scoring/lead";
+import { computeFreshnessScore, computeSourceConfidenceScore, computeRegionScore, computeFinalScore } from "../scoring/lead";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 
@@ -131,6 +132,18 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         ? parseFacebookItem(item, adapterCtx)
         : { ok: false as const, reason: "unsupported_source", details: { source } };
 
+      // B.1: schema drift detection — runs regardless of adapter result, never blocks
+      if (source === "facebook" && typeof item === "object" && item !== null && !Array.isArray(item)) {
+        const driftEvents = detectFacebookDrift(item as Record<string, unknown>);
+        if (driftEvents.length > 0) {
+          try {
+            await Promise.all(
+              driftEvents.map(e => writeSchemaDrift(db, { source, source_run_id: run.id, ...e })),
+            );
+          } catch { /* drift writes are best-effort observability — never block ingest */ }
+        }
+      }
+
       if (!adapterResult.ok) {
         await writeFilteredOut(db, env, { source, source_run_id: run_id, reason_code: adapterResult.reason, details: { reason: adapterResult.reason, detail: adapterResult.details, item }, raw_listing_id: rawId });
         rejected++;
@@ -170,6 +183,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       const staleResult = computeStaleScore(new Date(listing.scrapedAt));
       const freshnessScore = computeFreshnessScore(staleResult.score);
       const sourceConfidenceScore = computeSourceConfidenceScore(listing.source);
+      const regionScore = computeRegionScore(listing.region);
       const dealScore = computeDealScore(listing.price, undefined); // MMR not yet available
 
       if (!cachedRules) {
@@ -180,13 +194,13 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       const buyBoxMatch = matchBuyBox(listing, cachedRules);
       const buyBoxScore = buyBoxMatch?.score ?? 0;
 
-      const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore, freshnessScore, sourceConfidenceScore });
+      const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore, freshnessScore, regionScore, sourceConfidenceScore });
 
       const scored: ScoredLead = {
         dealScore,
         buyBoxScore,
         freshnessScore,
-        regionScore: 100,
+        regionScore,
         sourceConfidenceScore,
         finalScore,
         grade,
