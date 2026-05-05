@@ -11,7 +11,7 @@ export interface Env {
 
   // ── Ingest authentication ──────────────────────────────────────────────────
   WEBHOOK_HMAC_SECRET: string;
-  NORMALIZER_SECRET: string;
+  NORMALIZER_SECRET: string; // reserved for Phase 6 replay endpoint auth
 
   // ── Manheim MMR API ────────────────────────────────────────────────────────
   MANHEIM_CLIENT_ID: string;

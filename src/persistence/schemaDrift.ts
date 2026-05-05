@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "./supabase";
+import { log } from "../logging/logger";
 
 export type SchemaDriftParams = {
   source: string;
@@ -23,19 +24,9 @@ export async function writeSchemaDrift(
       sample_value: params.sample_value ?? null,
     });
     if (error) {
-      console.log(JSON.stringify({
-        event: "schema_drift.write_failed",
-        source: params.source,
-        field_path: params.field_path,
-        error: error.message,
-      }));
+      log("schema_drift.write_failed", { source: params.source, field_path: params.field_path, error: error.message });
     }
   } catch (err) {
-    console.log(JSON.stringify({
-      event: "schema_drift.write_failed",
-      source: params.source,
-      field_path: params.field_path,
-      error: err instanceof Error ? err.message : String(err),
-    }));
+    log("schema_drift.write_failed", { source: params.source, field_path: params.field_path, error: err instanceof Error ? err.message : String(err) });
   }
 }

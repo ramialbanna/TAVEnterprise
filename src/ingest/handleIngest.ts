@@ -189,12 +189,20 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
           env,
           env.TAV_KV,
         );
-        if (mmrResult) {
-          await writeValuationSnapshot(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, mmrResult });
-          log("valuation.fetched", { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true }, listingCtx);
-        }
       } catch (err) {
         logError("valuation", "ingest.mmr_failed", err, listingCtx);
+      }
+
+      if (mmrResult) {
+        try {
+          await withRetry(() => writeValuationSnapshot(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, mmrResult: mmrResult! }));
+          log("valuation.fetched", { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true }, listingCtx);
+        } catch (err) {
+          logError("valuation", "ingest.snapshot_failed", err, listingCtx);
+          try {
+            await writeDeadLetter(db, env, { source, region, run_id, item_index: i, reason_code: "valuation_snapshot_failed", payload: { normalizedListingId: normResult.id, mmrValue: mmrResult.mmrValue }, error_message: err instanceof Error ? err.message : String(err) });
+          } catch { /* never throws */ }
+        }
       }
 
       // F: scoring
@@ -209,7 +217,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         catch { cachedRules = []; }
       }
 
-      const buyBoxMatch = matchBuyBox(listing, cachedRules);
+      const buyBoxMatch = matchBuyBox(listing, cachedRules, mmrResult?.mmrValue);
       const buyBoxScore = buyBoxMatch?.score ?? 0;
 
       const { finalScore, grade } = computeFinalScore({ dealScore, buyBoxScore, freshnessScore, regionScore, sourceConfidenceScore });
@@ -225,14 +233,14 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         reasonCodes: [],
         matchedRuleId: buyBoxMatch?.ruleId,
         matchedRuleVersion: buyBoxMatch?.ruleVersion,
-        valuationConfidence: "none",
+        valuationConfidence: mmrResult?.confidence ?? "none",
       };
 
       // F: lead upsert (skip pass-grade listings)
       if (grade !== "pass") {
         try {
           const lead = await withRetry(() =>
-            upsertLead(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, scored, matchedRuleDbId: buyBoxMatch?.ruleDbId }),
+            upsertLead(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, scored, mmrValue: mmrResult?.mmrValue, matchedRuleDbId: buyBoxMatch?.ruleDbId }),
           );
           if (lead.created) {
             createdLeads++;

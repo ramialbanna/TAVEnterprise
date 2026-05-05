@@ -13,17 +13,18 @@ export async function upsertVehicleCandidate(
 ): Promise<VehicleCandidateRecord> {
   const { data: existing, error: selectErr } = await db
     .from("vehicle_candidates")
-    .select("id")
+    .select("id, listing_count")
     .eq("identity_key", identityKey)
     .maybeSingle();
 
   if (selectErr) throw selectErr;
 
   if (existing) {
-    await db
+    const { error: updateErr } = await db
       .from("vehicle_candidates")
-      .update({ last_seen_at: listing.scrapedAt })
+      .update({ last_seen_at: listing.scrapedAt, listing_count: (existing.listing_count as number) + 1 })
       .eq("id", existing.id);
+    if (updateErr) throw updateErr;
     return { id: existing.id as string, isNew: false };
   }
 

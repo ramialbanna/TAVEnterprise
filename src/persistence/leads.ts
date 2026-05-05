@@ -66,7 +66,7 @@ export async function upsertLead(
       deal_score: scored.dealScore,
       buy_box_score: scored.buyBoxScore,
       freshness_score: scored.freshnessScore,
-      region_score: 100,
+      region_score: scored.regionScore,
       source_confidence_score: scored.sourceConfidenceScore,
       final_score: scored.finalScore,
       reason_codes: scored.reasonCodes,
