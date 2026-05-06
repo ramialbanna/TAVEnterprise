@@ -118,7 +118,7 @@ describe("sendExcellentLeadSummary", () => {
     expect(smsCall).toBeDefined();
     const msgBody = new URLSearchParams(smsCall![1].body as string).get("Body") ?? "";
     expect(msgBody).toMatch(/Toyota/);
-    expect(msgBody).toMatch(/8,500/);
+    expect(msgBody).toMatch(/8.500/);
     expect(msgBody).toMatch(/92/);
     expect(msgBody).toMatch(/dallas_tx/);
   });

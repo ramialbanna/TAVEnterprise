@@ -8,7 +8,7 @@ import { log } from "./logging/logger";
 const VERSION = "0.1.0";
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
@@ -16,7 +16,7 @@ export default {
     }
 
     if (request.method === "POST" && url.pathname === "/ingest") {
-      return handleIngest(request, env);
+      return handleIngest(request, env, ctx);
     }
 
     if (url.pathname.startsWith("/admin")) {

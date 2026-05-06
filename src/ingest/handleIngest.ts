@@ -44,7 +44,7 @@ function json(body: unknown, status: number): Response {
   });
 }
 
-export async function handleIngest(request: Request, env: Env): Promise<Response> {
+export async function handleIngest(request: Request, env: Env, execCtx: ExecutionContext): Promise<Response> {
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (declaredLength > MAX_BODY_BYTES) {
     log("ingest.rejected", { reason: "payload_too_large", declared_bytes: declaredLength });
@@ -344,11 +344,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   log("ingest.complete", { processed: rawInserted, rejected, created_leads: createdLeads, kpi: true }, ctx);
 
   if (excellentLeads.length > 0) {
-    try {
-      await sendExcellentLeadSummary(env, excellentLeads, { runId: run_id, source });
-    } catch {
-      // Non-fatal — alert failure must not affect ingest response
-    }
+    execCtx.waitUntil(sendExcellentLeadSummary(env, excellentLeads, { runId: run_id, source }));
   }
 
   return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: createdLeads }, 200);

@@ -48,6 +48,16 @@ vi.mock("../src/persistence/schemaDrift", () => ({
   writeSchemaDrift: vi.fn(),
 }));
 
+vi.mock("../src/alerts/alerts", () => ({
+  sendExcellentLeadSummary: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
+vi.mock("../src/scoring/lead", async () => {
+  const actual = await vi.importActual<typeof import("../src/scoring/lead")>("../src/scoring/lead");
+  return { ...actual, computeFinalScore: vi.fn().mockImplementation(actual.computeFinalScore) };
+});
+
 import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
 import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
@@ -56,6 +66,8 @@ import { linkNormalizedListingToCandidate } from "../src/persistence/duplicateGr
 import { fetchActiveBuyBoxRules } from "../src/persistence/buyBoxRules";
 import { upsertLead } from "../src/persistence/leads";
 import { writeSchemaDrift } from "../src/persistence/schemaDrift";
+import { sendExcellentLeadSummary } from "../src/alerts/alerts";
+import { computeFinalScore } from "../src/scoring/lead";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -278,5 +290,21 @@ describe("POST /ingest", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(body.processed).toBe(1);
+  });
+
+  it("dispatches excellent lead alert via ctx.waitUntil when grade is excellent", async () => {
+    vi.mocked(computeFinalScore).mockReturnValueOnce({ finalScore: 92, grade: "excellent" });
+    vi.mocked(upsertLead).mockResolvedValueOnce({ id: "lead-excellent", created: true });
+    const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(waitUntilSpy).toHaveBeenCalled();
+    expect(vi.mocked(sendExcellentLeadSummary)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ leadId: "lead-excellent", finalScore: 92 })]),
+      expect.objectContaining({ runId: "run-001", source: "facebook" }),
+    );
   });
 });
