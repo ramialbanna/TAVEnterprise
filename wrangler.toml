@@ -18,7 +18,7 @@ preview_id = "00464744d6e140799a9a88fe3247cc17"
 crons = ["0 6 * * *"]
 
 [vars]
-HYBRID_BUYBOX_ENABLED = "false"
+HYBRID_BUYBOX_ENABLED = "true"
 # ADMIN_API_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put ADMIN_API_SECRET
 
