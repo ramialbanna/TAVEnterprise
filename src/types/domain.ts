@@ -203,6 +203,9 @@ export interface PurchaseOutcome {
   miscOverhead?: number | null;
   weekLabel?: string | null;
   buyerId?: string | null;
+  closerId?: string | null;
+  cotCity?: string | null;
+  cotState?: string | null;
   importBatchId?: string | null;
   importFingerprint?: string | null;
   createdAt: string;
