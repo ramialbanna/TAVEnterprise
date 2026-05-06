@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "./supabase";
 import type { ParsedOutcomeRow, PurchaseOutcome } from "../types/domain";
+import { withRetry } from "./retry";
 
 export interface UpsertPurchaseOutcomeInput {
   leadId?: string | null;
@@ -59,12 +60,15 @@ export async function upsertPurchaseOutcome(
 
   if (!inserted) {
     // Conflict was ignored — row already exists. Fetch its id for the caller.
-    const { data: existing, error: fetchErr } = await db
-      .from("purchase_outcomes")
-      .select("id")
-      .eq("import_fingerprint", data.importFingerprint)
-      .single();
-    if (fetchErr) throw fetchErr;
+    const existing = await withRetry(async () => {
+      const { data: row, error: fetchErr } = await db
+        .from("purchase_outcomes")
+        .select("id")
+        .eq("import_fingerprint", data.importFingerprint)
+        .single();
+      if (fetchErr) throw fetchErr;
+      return row;
+    });
     return { id: existing!.id as string, isDuplicate: true };
   }
 
