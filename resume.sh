@@ -1,83 +1,127 @@
 #!/usr/bin/env zsh
-# resume.sh — launch Claude with full Phase 6 handoff context
+# resume.sh — launch Claude with full Phase 7 handoff context
 
 SYSTEM_PROMPT=$(cat <<'HANDOFF'
-# TAV-AIP Session Resume — Phase 6 Complete
+# TAV-AIP Session Resume — Phase 7 Complete
 
 ## Where we stopped
 
-Phase 6 (hybrid BuyBox intelligence) is fully implemented and committed at 8246a21.
-All 236 tests pass. Working tree is clean.
+Phases 1–7 are fully implemented. HEAD is 039d6ba (fix: address phase-7 second-pass review
+findings). 262 tests pass. Branch is main, 15 commits ahead of origin/main — not yet pushed.
 
-## What was built in Phase 6
+Three files have uncommitted changes (Phase 7 minor cleanup, safe to commit or continue):
+  - src/alerts/alerts.ts
+  - test/alerts.test.ts
+  - test/ingest.test.ts
 
-### Schema (migrations 0011-0017 -- NOT yet applied to Supabase)
-- 0011: purchase_outcomes expanded (financials, condition grade, channels, import provenance, lead_id nullable)
-- 0012: import_batches + import_rows (per-row audit, idempotent re-imports)
-- 0013: market_expenses (transport/auction/misc costs by city/region)
-- 0014: market_demand_index (region + segment demand score)
-- 0015: buy_box_score_attributions (per-lead hybrid score breakdown)
-- 0016: v_outcome_summary + v_segment_profit analytic views
-- 0017: leads.score_components JSONB column
+## What is live in production
 
-### Scoring layer
-- src/scoring/segment.ts -- avg gross margin pct to 0-100
-- src/scoring/demand.ts -- demand index passthrough with clamp
-- src/scoring/hybrid.ts -- ruleScore*0.60 + segmentScore*0.25 + demandScore*0.15
-- Feature flag: HYBRID_BUYBOX_ENABLED (env var, defaults "false" in wrangler.toml)
+All 21 migrations applied to Supabase. All secrets provisioned on the Cloudflare Worker.
+HYBRID_BUYBOX_ENABLED = "true" in all environments.
 
-### Outcomes module (src/outcomes/)
-- conditionGrade.ts -- raw text to excellent/good/fair/poor/unknown
-- fingerprint.ts -- SHA-256 import dedup key via Web Crypto
-- import.ts -- row parser, discriminated union result, snake_case CSV input
+### Ingest pipeline (POST /ingest, HMAC-signed)
+- HMAC auth via WEBHOOK_HMAC_SECRET (x-tav-signature: sha256=<hex>)
+- Zod validation (IngestRequestSchema)
+- Per-item: Facebook adapter → normalize → dedupe → stale → MMR valuation → hybrid score → upsertLead
+- Excellent leads batched and dispatched via execCtx.waitUntil(sendExcellentLeadSummary(...))
 
-### Persistence (src/persistence/)
-- purchaseOutcomes.ts -- upsertPurchaseOutcome (fingerprint dedup), getSegmentAvgMarginPct
-- importBatches.ts -- createImportBatch, updateImportBatchCounts, listImportBatches
-- importRows.ts -- insertImportRow, bulkInsertImportRows
-- marketExpenses.ts -- upsertMarketExpense, getMarketExpensesByRegion
-- marketDemandIndex.ts -- upsertMarketDemandIndex, getDemandScoreForRegion
-- buyBoxScoreAttributions.ts -- insertBuyBoxScoreAttribution
+### Hybrid scoring
+- hybridScore = ruleScore×0.60 + segmentScore×0.25 + demandScore×0.15
+- segmentScore from v_segment_profit view (purchase outcome data)
+- demandScore from market_demand_index table
+- Both are non-blocking with fallback 50
 
-### Ingest wiring (src/ingest/handleIngest.ts)
-- Hybrid scoring lookups are non-blocking (catch, log, fallback 50)
-- leads.score_components written on every upsert
-- buy_box_score_attributions written non-blocking on lead.created
+### Alerts (Phase 7)
+- src/alerts/alerts.ts -- sendSmsAlert, sendWebhookAlert, sendExcellentLeadSummary
+- Twilio SMS + arbitrary webhook URL, parallel via Promise.allSettled
+- Non-fatal: either channel can fail without affecting the other or ingest response
+- Guard: absent or "replace_me" env vars → no-op (SMS + webhook each guarded independently)
+- execCtx.waitUntil ensures alerts fire after HTTP response returns (non-blocking)
 
-### Admin routes (src/admin/routes.ts -- all require Authorization: Bearer ADMIN_API_SECRET)
-- POST /admin/import-outcomes
+### Admin routes (Authorization: Bearer ADMIN_API_SECRET)
+- POST /admin/import-outcomes         -- CSV import of historical purchase outcomes
 - GET  /admin/outcomes/dashboard
-- GET  /admin/market/expenses?region=xxx
+- GET  /admin/market/expenses?region=
 - PUT  /admin/market/expenses
 - GET  /admin/market/demand
-- POST /admin/market/demand/recompute
-- GET  /admin/buy-box/attributions?lead_id=xxx
+- POST /admin/market/demand/recompute  -- recompute demand scores from purchase_outcomes
+- GET  /admin/buy-box/attributions?lead_id=
 - GET  /admin/import-batches
 
-## Before enabling hybrid scoring in production
-1. Apply migrations 0011-0017 to Supabase (in order)
-2. wrangler secret put ADMIN_API_SECRET
-3. Import historical purchase data via POST /admin/import-outcomes
-4. Run POST /admin/market/demand/recompute
-5. wrangler secret put HYBRID_BUYBOX_ENABLED  (enter: true)
+### Stale sweep
+- Daily cron at 06:00 UTC, calls tav.run_stale_sweep()
 
-## Known blockers / deferred items
-- Manheim YMM search API returns 596 (account not provisioned) -- contact Manheim rep
-- NORMALIZER_SECRET reserved for Phase 7 replay endpoint auth
-- No RLS policies yet -- deferred to a later phase
+### Manheim MMR
+- VIN path provisioned; YMM path returns 596 (account not provisioned — contact Manheim rep)
+- Valuation cached in KV; null on failure, ingest continues
 
-## Commit history
-8246a21 feat: phase 6 -- hybrid BuyBox intelligence with purchase outcome data
-f86e637 chore: add memory.sh -- local Claude session launcher with project context
-c54c1c6 chore: post-review fixes -- data integrity, scoring correctness, test coverage
-59156a6 feat: phase 5 -- Manheim MMR valuation (VIN path)
-7761a4b chore: close phase 4 data integrity gaps before mmr
+## Uncommitted changes detail
 
-## What is next (Phase 7 / 8 candidates)
-- Phase 7: replay endpoint (POST /replay) -- re-process raw listings through normalize pipeline
-  Auth: NORMALIZER_SECRET bearer token
-- Phase 8: alerts -- Twilio SMS + webhook on high-grade leads (TWILIO_* + ALERT_WEBHOOK_URL already in Env)
-- Dashboard: Next.js frontend with Supabase Auth (not started)
+src/alerts/alerts.ts     -- minor cleanup (console.error → structured log pattern)
+test/alerts.test.ts      -- test coverage additions / regex fix
+test/ingest.test.ts      -- waitUntil assertion for excellent lead ingest
+
+Run `git diff` to see exact state before continuing.
+
+## First thing to do next session
+
+1. Review the 3 uncommitted files (git diff)
+2. Run npm test to confirm 262 tests still pass
+3. Commit the cleanup: "chore: finalize phase-7 test and alert cleanup"
+4. Push: git push origin main
+5. Begin Phase 8: replay endpoint (POST /replay, auth via NORMALIZER_SECRET bearer token)
+
+## Phase roadmap
+
+Phase 1  DONE  Ingest, Facebook adapter, normalize, Supabase persistence
+Phase 2  DONE  Dedupe fingerprinting, stale sweep cron
+Phase 3  DONE  Buy-box rule scoring, lead grading
+Phase 4  DONE  Data integrity, HMAC auth, retry layer
+Phase 5  DONE  Manheim MMR valuation (VIN + YMM)
+Phase 6  DONE  Hybrid buy-box: purchase outcome import, market data, demand index
+Phase 7  DONE  Excellent lead alerts via Twilio SMS + webhook
+Phase 8  NEXT  Replay endpoint POST /replay — re-process raw listings through normalize pipeline
+               Auth: NORMALIZER_SECRET bearer token
+Phase 9  --    Twilio inbound webhook (buyer reply handling)
+Phase -- --    Next.js dashboard with Supabase Auth
+
+## Top open items (docs/followups.md — ~27 items total)
+
+High priority:
+- Consolidate ParsedOutcomeRow: declared in src/outcomes/import.ts AND src/types/domain.ts
+- Pick one source of truth for ConditionGradeNormalized (conditionGrade.ts vs domain.ts)
+- Migration 0022: add NOT NULL to purchase_outcomes.import_fingerprint
+- Promote supabase/repair-functions.sql to migration 0022 or delete
+- Replace N+1 per-region SELECT in /recompute with single GROUP BY aggregate
+- Clamp ?limit to max 100 on GET /admin/import-batches
+- Add Zod schema for PUT /admin/market/expenses (currently uses manual `as` casts)
+
+Lower priority / config:
+- Add preview_id to [[env.staging.kv_namespaces]] in wrangler.toml
+- Evaluate top-level KV namespace pointing to production ID (wrangler dev contamination risk)
+- Log catch-path failures in sendSmsAlert / sendWebhookAlert (network timeout / AbortError)
+
+## Key architectural rules (never violate)
+
+- Four concepts: Raw Listing → Normalized Listing → Vehicle Candidate → Lead. Never collapse.
+- Facebook listings rarely have VIN. Never assume VIN. YMM + mileage is the valuation path.
+- Every rejection has a reason_code. Silent drops are forbidden.
+- Service role key lives only in the Cloudflare Worker. Never echoed, never logged.
+- withRetry wraps all Supabase writes. Non-retryable Postgres codes: 23505, 23514, 23502, 23503, 42501.
+- Stale-detection regressions are blockers.
+
+## Commit history (most recent first)
+
+039d6ba fix: address phase-7 second-pass review findings
+72b3be8 fix: address phase-7 review findings — waitUntil, locale, wiring test
+bff5c35 chore: mark two completed follow-ups done; add 2 new items from final review
+95b6b23 fix: log HTTP status when !res.ok in sendSmsAlert and sendWebhookAlert
+d4c845d fix: wrap primary upsert in upsertPurchaseOutcome with withRetry
+e58a643 feat: phase 7 — excellent lead alerts via Twilio SMS + webhook
+b1d7d91 fix: include pricePaid in import fingerprint; use empty-string sentinels
+9fbcf33 fix: withRetry + per-region error boundary in demand recompute loop
+5ae4940 fix: strip currency/comma formatting in getNumber before Number() parse
+f009b74 fix: add closerId, cotCity, cotState to PurchaseOutcome interface
 HANDOFF
 )
 
