@@ -1,7 +1,7 @@
 name = "tav-aip"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
-workers_dev = false
+workers_dev = true
 
 # KV namespace for valuation cache and DLQ overflow.
 # REQUIRED before deploy — replace all placeholder IDs with real namespace IDs:
@@ -10,8 +10,8 @@ workers_dev = false
 # Deploying with placeholder IDs binds to a nonexistent namespace — all KV ops fail at runtime.
 [[kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"       # REPLACE with real namespace ID
-preview_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" # REPLACE with real preview namespace ID
+id = "e61e291003f647a5ad0ffce778ac6631"
+preview_id = "00464744d6e140799a9a88fe3247cc17"
 
 # Daily stale sweep at 06:00 UTC
 [triggers]
@@ -26,10 +26,10 @@ HYBRID_BUYBOX_ENABLED = "false"
 name = "tav-aip-staging"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+id = "e61e291003f647a5ad0ffce778ac6631"
 
 [env.production]
 name = "tav-aip-production"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+id = "e61e291003f647a5ad0ffce778ac6631"
