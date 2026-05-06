@@ -24,12 +24,18 @@ HYBRID_BUYBOX_ENABLED = "true"
 
 [env.staging]
 name = "tav-aip-staging"
+[env.staging.vars]
+HYBRID_BUYBOX_ENABLED = "true"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
-id = "e61e291003f647a5ad0ffce778ac6631"
+# Staging-only namespace — must not share with production.
+# To provision (if not yet live): wrangler kv namespace create TAV_KV --env staging
+id = "44c7dbe6bad5478cb51878b053758805"
 
 [env.production]
 name = "tav-aip-production"
+[env.production.vars]
+HYBRID_BUYBOX_ENABLED = "true"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
