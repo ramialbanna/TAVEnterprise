@@ -467,8 +467,8 @@ CREATE TABLE tav.buy_box_score_attributions (
 -- purchase_outcomes
 CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
   WHERE lead_id IS NOT NULL;
-CREATE UNIQUE INDEX ON tav.purchase_outcomes (import_fingerprint)
-  WHERE import_fingerprint IS NOT NULL;
+ALTER TABLE tav.purchase_outcomes
+  ADD CONSTRAINT purchase_outcomes_import_fingerprint_key UNIQUE (import_fingerprint);
 
 -- import_rows
 CREATE INDEX ON tav.import_rows (import_batch_id);
