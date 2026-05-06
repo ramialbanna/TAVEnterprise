@@ -13,6 +13,8 @@ export interface ExcellentLeadSummary {
 
 // Sends a Twilio SMS to ALERT_TO_NUMBER. Returns false (does not throw) on failure.
 export async function sendSmsAlert(env: Env, message: string): Promise<boolean> {
+  if (!env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me") return false;
+
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const credentials = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
   const body = new URLSearchParams({
@@ -29,7 +31,11 @@ export async function sendSmsAlert(env: Env, message: string): Promise<boolean> 
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: body.toString(),
+      signal: AbortSignal.timeout(5000),
     });
+    if (!res.ok) {
+      console.error(JSON.stringify({ event: "alert.sms_failed", status: res.status, reason_code: "twilio_http_error" }));
+    }
     return res.ok;
   } catch {
     return false;
@@ -45,7 +51,11 @@ export async function sendWebhookAlert(env: Env, payload: Record<string, unknown
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
     });
+    if (!res.ok) {
+      console.error(JSON.stringify({ event: "alert.webhook_failed", status: res.status, reason_code: "webhook_http_error" }));
+    }
     return res.ok;
   } catch {
     return false;
@@ -63,7 +73,7 @@ export async function sendExcellentLeadSummary(
 
   const lines = leads.map((l) => {
     const ymm = [l.year, l.make, l.model].filter(Boolean).join(" ") || "Unknown vehicle";
-    const price = l.listingPrice != null ? ` | $${l.listingPrice.toLocaleString()}` : "";
+    const price = l.listingPrice != null ? ` | $${l.listingPrice.toLocaleString("en-US")}` : "";
     return `${ymm}${price} | Score ${l.finalScore} | ${l.region}`;
   });
 
@@ -79,7 +89,7 @@ export async function sendExcellentLeadSummary(
     run_id: context.runId,
     source: context.source,
     count: leads.length,
-    leads: leads.map((l) => ({ ...l })),
+    leads,
   };
 
   await Promise.allSettled([
