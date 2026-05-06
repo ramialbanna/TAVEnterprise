@@ -47,38 +47,58 @@ describe("normalizeConditionGrade", () => {
 
 describe("computeImportFingerprint", () => {
   it("is deterministic — same input produces same fingerprint", async () => {
-    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
-    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
+    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
     expect(a).toBe(b);
   });
 
   it("produces a 64-char hex string", async () => {
-    const fp = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
+    const fp = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
     expect(fp).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("differs when VIN changes", async () => {
-    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
-    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004999", "buyer-1");
+    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004999", "buyer-1", 12000);
     expect(a).not.toBe(b);
   });
 
   it("differs when weekLabel changes", async () => {
-    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
-    const b = await computeImportFingerprint("2024-W02", "1HGCM82633A004352", "buyer-1");
+    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W02", "1HGCM82633A004352", "buyer-1", 12000);
     expect(a).not.toBe(b);
   });
 
   it("differs when buyerId changes", async () => {
-    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
-    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-2");
+    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-2", 12000);
+    expect(a).not.toBe(b);
+  });
+
+  it("differs when pricePaid changes", async () => {
+    const a = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 13500);
     expect(a).not.toBe(b);
   });
 
   it("is case-insensitive for VIN — lower and upper produce same fingerprint", async () => {
-    const a = await computeImportFingerprint("2024-W01", "1hgcm82633a004352", "buyer-1");
-    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1");
+    const a = await computeImportFingerprint("2024-W01", "1hgcm82633a004352", "buyer-1", 12000);
+    const b = await computeImportFingerprint("2024-W01", "1HGCM82633A004352", "buyer-1", 12000);
     expect(a).toBe(b);
+  });
+
+  it("same VIN without weekLabel/buyerId but different pricePaid produces distinct fingerprints", async () => {
+    // Regression: two purchases of the same vehicle, both lacking week/buyer, at different
+    // prices must not collide and get silently deduped.
+    const a = await computeImportFingerprint("", "1HGCM82633A004352", "", 12000);
+    const b = await computeImportFingerprint("", "1HGCM82633A004352", "", 13500);
+    expect(a).not.toBe(b);
+  });
+
+  it("absent weekLabel (empty string) differs from literal string 'unknown'", async () => {
+    const a = await computeImportFingerprint("", "1HGCM82633A004352", "", 12000);
+    const b = await computeImportFingerprint("unknown", "1HGCM82633A004352", "", 12000);
+    expect(a).not.toBe(b);
   });
 });
 

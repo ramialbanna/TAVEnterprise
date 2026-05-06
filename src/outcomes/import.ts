@@ -132,13 +132,11 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
     ? (vin as string)
     : `${year!}:${make!}:${model!}:${Math.floor((mileage ?? 0) / 10000) * 10000}`;
 
-  const fingerprintWeekLabel = weekLabel ?? "unknown";
-  const fingerprintBuyerId = buyerId ?? "anonymous";
-
   const importFingerprint = await computeImportFingerprint(
-    fingerprintWeekLabel,
+    weekLabel ?? "",
     vehicleKey,
-    fingerprintBuyerId,
+    buyerId ?? "",
+    rawPricePaid,
   );
 
   const data: ParsedOutcomeRow = {

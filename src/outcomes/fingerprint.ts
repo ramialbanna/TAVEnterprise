@@ -9,8 +9,9 @@ export async function computeImportFingerprint(
   weekLabel: string,
   vehicleKey: string, // VIN if available, else "YYYY:make:model:mileage_bucket"
   buyerId: string,
+  pricePaid: number,
 ): Promise<string> {
-  const input = `${weekLabel}|${vehicleKey.toUpperCase()}|${buyerId.toLowerCase()}`;
+  const input = `${weekLabel}|${vehicleKey.toUpperCase()}|${buyerId.toLowerCase()}|${pricePaid}`;
   const encoded = new TextEncoder().encode(input);
   const hashBuffer = await crypto.subtle.digest("SHA-256", encoded);
   return Array.from(new Uint8Array(hashBuffer))
