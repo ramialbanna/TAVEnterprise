@@ -70,6 +70,13 @@ describe("sendSmsAlert", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("skips fetch when TWILIO_FROM_NUMBER is placeholder", async () => {
+    const env = makeEnv({ TWILIO_FROM_NUMBER: "replace_me" });
+    const result = await sendSmsAlert(env, "test");
+    expect(result).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("skips fetch when ALERT_TO_NUMBER is placeholder", async () => {
     const env = makeEnv({ ALERT_TO_NUMBER: "replace_me" });
     const result = await sendSmsAlert(env, "test");

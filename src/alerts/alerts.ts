@@ -18,6 +18,7 @@ export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContex
   if (
     !env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me" ||
     !env.TWILIO_AUTH_TOKEN || env.TWILIO_AUTH_TOKEN === "replace_me" ||
+    !env.TWILIO_FROM_NUMBER || env.TWILIO_FROM_NUMBER === "replace_me" ||
     !env.ALERT_TO_NUMBER || env.ALERT_TO_NUMBER === "replace_me"
   ) return false;
 
