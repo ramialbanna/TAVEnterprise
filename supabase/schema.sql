@@ -297,7 +297,8 @@ CREATE TABLE tav.purchase_outcomes (
     CHECK (selling_channel IN ('retail','wholesale','auction')),
   -- import provenance
   week_label                  text,
-  buyer_id                    uuid,
+  buyer_id                    text,
+  closer_id                   text,
   import_batch_id             uuid,
   import_fingerprint          text,
   created_at                  timestamptz NOT NULL DEFAULT now()

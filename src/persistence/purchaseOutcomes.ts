@@ -52,6 +52,7 @@ export async function upsertPurchaseOutcome(
       misc_overhead: data.miscOverhead ?? null,
       week_label: data.weekLabel ?? null,
       buyer_id: data.buyerId ?? null,
+      closer_id: data.closerId ?? null,
       import_batch_id: importBatchId ?? null,
       import_fingerprint: data.importFingerprint,
     })

@@ -24,6 +24,7 @@ export interface ParsedOutcomeRow {
   miscOverhead?: number;
   weekLabel?: string;
   buyerId?: string;
+  closerId?: string;
   region?: string;
   source?: string;
   importFingerprint: string;
@@ -103,6 +104,7 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
   const conditionGradeRaw = getString(row, "condition_grade_raw", "conditionGradeRaw");
   const weekLabel = getString(row, "week_label", "weekLabel");
   const buyerId = getString(row, "buyer_id", "buyerId");
+  const closerId = getString(row, "closer", "closer_id", "closerId");
   const region = getString(row, "region");
   const source = getString(row, "source");
   const salePrice = getNumber(row, "sale_price", "salePrice");
@@ -156,6 +158,7 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
   if (miscOverhead !== undefined) data.miscOverhead = miscOverhead;
   if (weekLabel !== undefined) data.weekLabel = weekLabel;
   if (buyerId !== undefined) data.buyerId = buyerId;
+  if (closerId !== undefined) data.closerId = closerId;
   if (region !== undefined) data.region = region;
   if (source !== undefined) data.source = source;
 

@@ -311,6 +311,7 @@ export interface ParsedOutcomeRow {
   miscOverhead?: number;
   weekLabel?: string;
   buyerId?: string;
+  closerId?: string;
   region?: string;
   source?: string;
   importFingerprint: string;
