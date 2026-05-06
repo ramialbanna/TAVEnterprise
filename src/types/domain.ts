@@ -313,6 +313,8 @@ export interface ParsedOutcomeRow {
   buyerId?: string;
   closerId?: string;
   region?: string;
+  cotCity?: string;
+  cotState?: string;
   source?: string;
   importFingerprint: string;
 }

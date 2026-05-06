@@ -26,6 +26,8 @@ export interface ParsedOutcomeRow {
   buyerId?: string;
   closerId?: string;
   region?: string;
+  cotCity?: string;
+  cotState?: string;
   source?: string;
   importFingerprint: string;
 }
@@ -105,6 +107,8 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
   const weekLabel = getString(row, "week_label", "weekLabel");
   const buyerId = getString(row, "buyer_id", "buyerId");
   const closerId = getString(row, "closer", "closer_id", "closerId");
+  const cotCity = getString(row, "cot_city", "COT City", "cotCity");
+  const cotState = getString(row, "cot_state", "COT State", "cotState");
   const region = getString(row, "region");
   const source = getString(row, "source");
   const salePrice = getNumber(row, "sale_price", "salePrice");
@@ -160,6 +164,8 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
   if (buyerId !== undefined) data.buyerId = buyerId;
   if (closerId !== undefined) data.closerId = closerId;
   if (region !== undefined) data.region = region;
+  if (cotCity !== undefined) data.cotCity = cotCity;
+  if (cotState !== undefined) data.cotState = cotState;
   if (source !== undefined) data.source = source;
 
   return { ok: true, data };
