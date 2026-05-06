@@ -65,7 +65,16 @@ export async function parseOutcomeRow(rawRow: unknown): Promise<ParseOutcomeResu
     return { ok: false, reasonCode: "invalid_row_type" };
   }
 
-  const row = rawRow as Record<string, unknown>;
+  // Normalize keys: keep the original AND store a lowercase copy so spreadsheet
+  // exports with mixed-case headers (e.g. "VIN", "Year", "Region") resolve the
+  // same as snake_case keys, while camelCase aliases (e.g. "pricePaid") remain
+  // resolvable via their original form.
+  const raw = rawRow as Record<string, unknown>;
+  const row: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    row[key] = raw[key];
+    row[key.toLowerCase()] = raw[key];
+  }
 
   // Validate price_paid (required, positive integer)
   const rawPricePaid = getNumber(row, "price_paid", "pricePaid");
