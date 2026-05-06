@@ -31,6 +31,8 @@ import { getMmrValue } from "../valuation/mmr";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
+import { sendExcellentLeadSummary } from "../alerts/alerts";
+import type { ExcellentLeadSummary } from "../alerts/alerts";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const BATCH_TIMEOUT_MS = 25_000;
@@ -107,6 +109,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   let rejected = 0;
   let createdLeads = 0;
   let itemIndex = 0;
+  const excellentLeads: ExcellentLeadSummary[] = [];
 
   try {
     for (const item of items) {
@@ -291,6 +294,18 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
           if (lead.created) {
             createdLeads++;
             log("lead.created", { lead_id: lead.id, grade, final_score: finalScore, matched_rule: buyBoxMatch?.ruleId, kpi: true }, listingCtx);
+            if (grade === "excellent") {
+              excellentLeads.push({
+                leadId: lead.id,
+                finalScore,
+                year: listing.year,
+                make: listing.make,
+                model: listing.model,
+                region: listing.region ?? region,
+                listingUrl: listing.url,
+                listingPrice: listing.price,
+              });
+            }
 
             // Non-blocking attribution write — analytics only
             try {
@@ -327,6 +342,14 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   }
 
   log("ingest.complete", { processed: rawInserted, rejected, created_leads: createdLeads, kpi: true }, ctx);
+
+  if (excellentLeads.length > 0) {
+    try {
+      await sendExcellentLeadSummary(env, excellentLeads, { runId: run_id, source });
+    } catch {
+      // Non-fatal — alert failure must not affect ingest response
+    }
+  }
 
   return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: createdLeads }, 200);
 }
