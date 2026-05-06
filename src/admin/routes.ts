@@ -11,6 +11,7 @@ import { bulkInsertImportRows } from "../persistence/importRows";
 import type { ImportRowInput } from "../persistence/importRows";
 import { upsertMarketExpense, getMarketExpensesByRegion } from "../persistence/marketExpenses";
 import { upsertMarketDemandIndex } from "../persistence/marketDemandIndex";
+import { withRetry } from "../persistence/retry";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -172,50 +173,67 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     const weekLabel = new Date().toISOString().slice(0, 10);
 
     let recomputed = 0;
+    let errors = 0;
     for (const region of uniqueRegions) {
-      const { data: agg } = await db
-        .from("purchase_outcomes")
-        .select("hold_days, sale_price")
-        .eq("region", region);
-      if (!agg || agg.length === 0) continue;
+      // Per-region try/catch: one region failure must not abort the remaining regions.
+      try {
+        const agg = await withRetry(async () => {
+          const { data, error } = await db
+            .from("purchase_outcomes")
+            .select("hold_days, sale_price")
+            .eq("region", region);
+          if (error) throw error;
+          return data;
+        });
+        if (!agg || agg.length === 0) continue;
 
-      const purchaseCount = agg.length;
-      const holdDaysList = (agg as Array<{ hold_days: number | null }>)
-        .map((r) => r.hold_days)
-        .filter((d): d is number => d != null);
-      const avgHoldDays =
-        holdDaysList.length > 0
-          ? holdDaysList.reduce((a, b) => a + b, 0) / holdDaysList.length
-          : null;
-      const soldCount = (agg as Array<{ sale_price: number | null }>).filter(
-        (r) => r.sale_price != null,
-      ).length;
-      const sellThroughRate = purchaseCount > 0 ? soldCount / purchaseCount : null;
+        const purchaseCount = agg.length;
+        const holdDaysList = (agg as Array<{ hold_days: number | null }>)
+          .map((r) => r.hold_days)
+          .filter((d): d is number => d != null);
+        const avgHoldDays =
+          holdDaysList.length > 0
+            ? holdDaysList.reduce((a, b) => a + b, 0) / holdDaysList.length
+            : null;
+        const soldCount = (agg as Array<{ sale_price: number | null }>).filter(
+          (r) => r.sale_price != null,
+        ).length;
+        const sellThroughRate = purchaseCount > 0 ? soldCount / purchaseCount : null;
 
-      // Higher sell-through raises score; shorter hold days add a small bonus.
-      let demandScore = 50;
-      if (sellThroughRate != null) {
-        demandScore = Math.round(sellThroughRate * 100);
+        // Higher sell-through raises score; shorter hold days add a small bonus.
+        let demandScore = 50;
+        if (sellThroughRate != null) {
+          demandScore = Math.round(sellThroughRate * 100);
+        }
+        if (avgHoldDays != null && avgHoldDays < 30) {
+          demandScore = Math.min(100, demandScore + 10);
+        } else if (avgHoldDays != null && avgHoldDays > 90) {
+          demandScore = Math.max(0, demandScore - 10);
+        }
+
+        await withRetry(() =>
+          upsertMarketDemandIndex(db, {
+            region,
+            segmentKey: '',
+            purchaseCount,
+            avgHoldDays,
+            sellThroughRate,
+            demandScore,
+            weekLabel,
+          })
+        );
+        recomputed++;
+      } catch (err) {
+        errors++;
+        console.error(JSON.stringify({
+          event: "recompute.region_failed",
+          region,
+          error: err instanceof Error ? err.message : String(err),
+        }));
       }
-      if (avgHoldDays != null && avgHoldDays < 30) {
-        demandScore = Math.min(100, demandScore + 10);
-      } else if (avgHoldDays != null && avgHoldDays > 90) {
-        demandScore = Math.max(0, demandScore - 10);
-      }
-
-      await upsertMarketDemandIndex(db, {
-        region,
-        segmentKey: '',
-        purchaseCount,
-        avgHoldDays,
-        sellThroughRate,
-        demandScore,
-        weekLabel,
-      });
-      recomputed++;
     }
 
-    return json({ ok: true, recomputed });
+    return json({ ok: true, recomputed, errors });
   }
 
   // GET /admin/buy-box/attributions?lead_id=xxx
