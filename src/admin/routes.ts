@@ -205,7 +205,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
       await upsertMarketDemandIndex(db, {
         region,
-        segmentKey: null,
+        segmentKey: '',
         purchaseCount,
         avgHoldDays,
         sellThroughRate,

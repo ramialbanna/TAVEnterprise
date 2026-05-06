@@ -20,7 +20,7 @@ export async function upsertMarketDemandIndex(
     .upsert(
       {
         region: input.region,
-        segment_key: input.segmentKey ?? null,
+        segment_key: input.segmentKey ?? '',
         purchase_count: input.purchaseCount,
         avg_hold_days: input.avgHoldDays ?? null,
         sell_through_rate: input.sellThroughRate ?? null,
@@ -52,11 +52,7 @@ export async function getDemandScoreForRegion(
     .order("week_label", { ascending: false })
     .limit(1);
 
-  if (segmentKey != null) {
-    query = query.eq("segment_key", segmentKey);
-  } else {
-    query = query.is("segment_key", null);
-  }
+  query = query.eq("segment_key", segmentKey ?? '');
 
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
@@ -70,7 +66,7 @@ function mapDemandIndex(row: Record<string, unknown>): MarketDemandIndex {
   return {
     id: row.id as string,
     region: row.region as string,
-    segmentKey: (row.segment_key as string | null) ?? null,
+    segmentKey: (row.segment_key as string) || null,
     purchaseCount: row.purchase_count as number,
     avgHoldDays: (row.avg_hold_days as number | null) ?? null,
     sellThroughRate: (row.sell_through_rate as number | null) ?? null,
