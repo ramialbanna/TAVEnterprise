@@ -48,6 +48,10 @@ vi.mock("../src/persistence/schemaDrift", () => ({
   writeSchemaDrift: vi.fn(),
 }));
 
+vi.mock("../src/persistence/buyBoxScoreAttributions", () => ({
+  insertBuyBoxScoreAttribution: vi.fn().mockResolvedValue("attr-uuid"),
+}));
+
 vi.mock("../src/alerts/alerts", () => ({
   sendExcellentLeadSummary: vi.fn().mockResolvedValue(undefined),
 }));
@@ -68,6 +72,7 @@ import { upsertLead } from "../src/persistence/leads";
 import { writeSchemaDrift } from "../src/persistence/schemaDrift";
 import { sendExcellentLeadSummary } from "../src/alerts/alerts";
 import { computeFinalScore } from "../src/scoring/lead";
+import { insertBuyBoxScoreAttribution } from "../src/persistence/buyBoxScoreAttributions";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -95,6 +100,7 @@ beforeEach(() => {
   vi.mocked(fetchActiveBuyBoxRules).mockResolvedValue([]);
   vi.mocked(upsertLead).mockResolvedValue({ id: "lead-uuid", created: true });
   vi.mocked(writeSchemaDrift).mockResolvedValue(undefined);
+  vi.mocked(insertBuyBoxScoreAttribution).mockResolvedValue("attr-uuid");
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -306,5 +312,16 @@ describe("POST /ingest", () => {
       expect.arrayContaining([expect.objectContaining({ leadId: "lead-excellent", finalScore: 92 })]),
       expect.objectContaining({ runId: "run-001", source: "facebook" }),
     );
+  });
+
+  it("does not dispatch alert when grade is good (not excellent)", async () => {
+    vi.mocked(computeFinalScore).mockReturnValueOnce({ finalScore: 75, grade: "good" });
+    const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(vi.mocked(sendExcellentLeadSummary)).not.toHaveBeenCalled();
+    expect(waitUntilSpy).not.toHaveBeenCalled();
   });
 });

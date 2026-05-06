@@ -1,4 +1,6 @@
 import type { Env } from "../types/env";
+import { log } from "../logging/logger";
+import type { LogContext } from "../logging/logger";
 
 export interface ExcellentLeadSummary {
   leadId: string;
@@ -12,8 +14,12 @@ export interface ExcellentLeadSummary {
 }
 
 // Sends a Twilio SMS to ALERT_TO_NUMBER. Returns false (does not throw) on failure.
-export async function sendSmsAlert(env: Env, message: string): Promise<boolean> {
-  if (!env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me") return false;
+export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContext): Promise<boolean> {
+  if (
+    !env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me" ||
+    !env.TWILIO_AUTH_TOKEN || env.TWILIO_AUTH_TOKEN === "replace_me" ||
+    !env.ALERT_TO_NUMBER || env.ALERT_TO_NUMBER === "replace_me"
+  ) return false;
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const credentials = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
@@ -34,7 +40,7 @@ export async function sendSmsAlert(env: Env, message: string): Promise<boolean> 
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      console.error(JSON.stringify({ event: "alert.sms_failed", status: res.status, reason_code: "twilio_http_error" }));
+      log("alert.sms_failed", { status: res.status, reason_code: "twilio_http_error" }, logCtx);
     }
     return res.ok;
   } catch {
@@ -43,7 +49,7 @@ export async function sendSmsAlert(env: Env, message: string): Promise<boolean> 
 }
 
 // POSTs a JSON payload to ALERT_WEBHOOK_URL. Returns false (does not throw) on failure.
-export async function sendWebhookAlert(env: Env, payload: Record<string, unknown>): Promise<boolean> {
+export async function sendWebhookAlert(env: Env, payload: Record<string, unknown>, logCtx?: LogContext): Promise<boolean> {
   if (!env.ALERT_WEBHOOK_URL || env.ALERT_WEBHOOK_URL === "replace_me") return false;
 
   try {
@@ -54,7 +60,7 @@ export async function sendWebhookAlert(env: Env, payload: Record<string, unknown
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      console.error(JSON.stringify({ event: "alert.webhook_failed", status: res.status, reason_code: "webhook_http_error" }));
+      log("alert.webhook_failed", { status: res.status, reason_code: "webhook_http_error" }, logCtx);
     }
     return res.ok;
   } catch {
@@ -74,7 +80,7 @@ export async function sendExcellentLeadSummary(
   const lines = leads.map((l) => {
     const ymm = [l.year, l.make, l.model].filter(Boolean).join(" ") || "Unknown vehicle";
     const price = l.listingPrice != null ? ` | $${l.listingPrice.toLocaleString("en-US")}` : "";
-    return `${ymm}${price} | Score ${l.finalScore} | ${l.region}`;
+    return `${ymm}${price} | Score ${l.finalScore} | ${l.region} | Lead ${l.leadId}`;
   });
 
   const heading =
@@ -92,8 +98,10 @@ export async function sendExcellentLeadSummary(
     leads,
   };
 
+  const alertCtx: LogContext = { runId: context.runId, source: context.source };
+
   await Promise.allSettled([
-    sendSmsAlert(env, smsBody),
-    sendWebhookAlert(env, webhookPayload),
+    sendSmsAlert(env, smsBody, alertCtx),
+    sendWebhookAlert(env, webhookPayload, alertCtx),
   ]);
 }

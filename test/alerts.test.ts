@@ -56,16 +56,40 @@ describe("sendSmsAlert", () => {
     expect(init.body).toContain("test+message");
   });
 
+  it("skips fetch when TWILIO_ACCOUNT_SID is placeholder", async () => {
+    const env = makeEnv({ TWILIO_ACCOUNT_SID: "replace_me" });
+    const result = await sendSmsAlert(env, "test");
+    expect(result).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("skips fetch when TWILIO_AUTH_TOKEN is placeholder", async () => {
+    const env = makeEnv({ TWILIO_AUTH_TOKEN: "replace_me" });
+    const result = await sendSmsAlert(env, "test");
+    expect(result).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("skips fetch when ALERT_TO_NUMBER is placeholder", async () => {
+    const env = makeEnv({ ALERT_TO_NUMBER: "replace_me" });
+    const result = await sendSmsAlert(env, "test");
+    expect(result).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("returns false (does not throw) when fetch rejects", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
     const result = await sendSmsAlert(makeEnv(), "test");
     expect(result).toBe(false);
   });
 
-  it("returns false (does not throw) when Twilio returns non-ok", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+  it("returns false and logs when Twilio returns non-ok", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 400 }));
+    const spy = vi.spyOn(console, "log");
     const result = await sendSmsAlert(makeEnv(), "test");
     expect(result).toBe(false);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("alert.sms_failed"));
+    spy.mockRestore();
   });
 });
 
@@ -96,6 +120,15 @@ describe("sendWebhookAlert", () => {
     const result = await sendWebhookAlert(makeEnv(), { event: "test" });
     expect(result).toBe(false);
   });
+
+  it("returns false and logs when webhook returns non-ok", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const spy = vi.spyOn(console, "log");
+    const result = await sendWebhookAlert(makeEnv(), { event: "test" });
+    expect(result).toBe(false);
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("alert.webhook_failed"));
+    spy.mockRestore();
+  });
 });
 
 describe("sendExcellentLeadSummary", () => {
@@ -109,7 +142,7 @@ describe("sendExcellentLeadSummary", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("SMS body includes vehicle, price, score, and region for single lead", async () => {
+  it("SMS body includes vehicle, price, score, region, and leadId for single lead", async () => {
     await sendExcellentLeadSummary(makeEnv(), [LEAD], { runId: "run-1", source: "facebook" });
 
     const smsCall = (fetch as ReturnType<typeof vi.fn>).mock.calls.find(
@@ -117,10 +150,11 @@ describe("sendExcellentLeadSummary", () => {
     );
     expect(smsCall).toBeDefined();
     const msgBody = new URLSearchParams(smsCall![1].body as string).get("Body") ?? "";
-    expect(msgBody).toMatch(/Toyota/);
-    expect(msgBody).toMatch(/8.500/);
-    expect(msgBody).toMatch(/92/);
-    expect(msgBody).toMatch(/dallas_tx/);
+    expect(msgBody).toContain("Toyota");
+    expect(msgBody).toContain("$8,500");
+    expect(msgBody).toContain("92");
+    expect(msgBody).toContain("dallas_tx");
+    expect(msgBody).toContain("lead-1");
   });
 
   it("SMS heading uses plural form for multiple leads", async () => {
@@ -151,7 +185,7 @@ describe("sendExcellentLeadSummary", () => {
     expect(payload.leads).toHaveLength(1);
   });
 
-  it("both channels fire in parallel — does not throw when one fails", async () => {
+  it("does not throw when one channel fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) =>
@@ -160,6 +194,13 @@ describe("sendExcellentLeadSummary", () => {
           : Promise.resolve({ ok: true }),
       ),
     );
+    await expect(
+      sendExcellentLeadSummary(makeEnv(), [LEAD], { runId: "run-1", source: "facebook" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("resolves when both channels fail", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     await expect(
       sendExcellentLeadSummary(makeEnv(), [LEAD], { runId: "run-1", source: "facebook" }),
     ).resolves.toBeUndefined();
