@@ -130,10 +130,13 @@ async function getMmrByYmm(
   token: string,
   baseUrl: string,
 ): Promise<MmrResult | null> {
-  const url = new URL("/valuations/search", baseUrl);
-  url.searchParams.set("year", String(year));
-  url.searchParams.set("make", make);
-  url.searchParams.set("model", model);
+  // Manheim MMR search uses path segments, not query params:
+  //   GET /valuations/search/{year}/{make}/{model}?odometer=N&include=ci
+  // Passing year/make/model as query params returns HTTP 596 ("URL may be malformed").
+  const url = new URL(
+    `/valuations/search/${encodeURIComponent(year)}/${encodeURIComponent(make)}/${encodeURIComponent(model)}`,
+    baseUrl,
+  );
   url.searchParams.set("odometer", String(mileage));
   url.searchParams.set("include", "ci");
 
@@ -167,8 +170,9 @@ export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace):
         await kv.put(vinKey, JSON.stringify(result), { expirationTtl: VIN_TTL_S });
         return result;
       }
-    } catch {
+    } catch (err) {
       // VIN lookup failed — fall through to YMM
+      console.error(JSON.stringify({ event: "mmr.vin_failed", error: err instanceof Error ? err.message : String(err) }));
     }
   }
 
@@ -184,8 +188,11 @@ export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace):
         await kv.put(ymmKey, JSON.stringify(result), { expirationTtl: YMM_TTL_S });
         return result;
       }
-    } catch {
-      // YMM lookup failed — MMR unavailable
+      // Token obtained but no extractable MMR value in response
+      console.error(JSON.stringify({ event: "mmr.ymm_no_value", year, make, model, mileage }));
+    } catch (err) {
+      // Log the real error so it surfaces in wrangler tail
+      console.error(JSON.stringify({ event: "mmr.ymm_failed", error: err instanceof Error ? err.message : String(err), year, make, model }));
     }
   }
 

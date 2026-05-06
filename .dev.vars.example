@@ -15,8 +15,12 @@ MANHEIM_CLIENT_ID=replace_me
 MANHEIM_CLIENT_SECRET=replace_me
 MANHEIM_USERNAME=replace_me
 MANHEIM_PASSWORD=replace_me
-MANHEIM_TOKEN_URL=replace_me
-MANHEIM_MMR_URL=replace_me
+# Production endpoints:
+MANHEIM_TOKEN_URL=https://api.manheim.com/oauth2/token.oauth2
+MANHEIM_MMR_URL=https://api.manheim.com/valuations
+# UAT/pre-production endpoints (comment out above, uncomment below):
+# MANHEIM_TOKEN_URL=https://uat.api.manheim.com/oauth2/token.oauth2
+# MANHEIM_MMR_URL=https://uat.api.manheim.com/valuations
 
 # ── Alerts ─────────────────────────────────────────────────────────────────────
 ALERT_WEBHOOK_URL=replace_me
