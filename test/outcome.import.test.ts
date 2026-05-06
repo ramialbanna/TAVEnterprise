@@ -174,6 +174,50 @@ describe("parseOutcomeRow", () => {
     expect(result.data.pricePaid).toBe(15000);
   });
 
+  it("accepts price_paid with dollar sign and commas", async () => {
+    const result = await parseOutcomeRow({
+      vin: "1HGCM82633A004352",
+      price_paid: "$14,500",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.pricePaid).toBe(14500);
+  });
+
+  it("accepts numeric fields with commas (sale_price, mileage)", async () => {
+    const result = await parseOutcomeRow({
+      vin: "1HGCM82633A004352",
+      price_paid: "12,000",
+      sale_price: "$18,750",
+      mileage: "82,000",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.pricePaid).toBe(12000);
+    expect(result.data.salePrice).toBe(18750);
+    expect(result.data.mileage).toBe(82000);
+  });
+
+  it("accepts currency-formatted price_paid: '$14,000'", async () => {
+    const result = await parseOutcomeRow({ vin: "1HGCM82633A004352", price_paid: "$14,000" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.pricePaid).toBe(14000);
+  });
+
+  it("accepts comma-formatted price_paid: '14,000'", async () => {
+    const result = await parseOutcomeRow({ vin: "1HGCM82633A004352", price_paid: "14,000" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.pricePaid).toBe(14000);
+  });
+
+  it("rejects non-numeric price_paid after stripping: '$abc'", async () => {
+    const result = await parseOutcomeRow({ vin: "1HGCM82633A004352", price_paid: "$abc" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reasonCode).toBe("missing_price_paid");
+  });
+
   // ── Rejection: price_paid ────────────────────────────────────────────────
 
   it("missing price_paid returns reasonCode: missing_price_paid", async () => {

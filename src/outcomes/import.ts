@@ -52,7 +52,7 @@ function getNumber(row: Record<string, unknown>, ...keys: string[]): number | un
     const val = row[key];
     if (typeof val === "number" && isFinite(val)) return val;
     if (typeof val === "string") {
-      const parsed = Number(val);
+      const parsed = Number(val.replace(/[$,]/g, "").trim());
       if (!isNaN(parsed) && isFinite(parsed)) return parsed;
     }
   }
