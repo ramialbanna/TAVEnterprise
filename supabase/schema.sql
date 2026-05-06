@@ -423,7 +423,7 @@ CREATE TABLE tav.import_rows (
 CREATE TABLE tav.market_expenses (
   id             uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   region         text    NOT NULL,
-  city           text,
+  city           text    NOT NULL DEFAULT '',
   expense_type   text    NOT NULL
     CHECK (expense_type IN ('transport','auction_fee','misc_overhead')),
   amount_cents   integer NOT NULL,
@@ -437,7 +437,7 @@ CREATE TABLE tav.market_expenses (
 CREATE TABLE tav.market_demand_index (
   id                uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
   region            text    NOT NULL,
-  segment_key       text,
+  segment_key       text    NOT NULL DEFAULT '',
   purchase_count    integer NOT NULL DEFAULT 0,
   avg_hold_days     numeric(8,2),
   sell_through_rate numeric(5,4)
@@ -476,11 +476,11 @@ CREATE INDEX ON tav.import_rows (outcome_id) WHERE outcome_id IS NOT NULL;
 
 -- market_expenses
 CREATE INDEX ON tav.market_expenses (region);
-CREATE UNIQUE INDEX ON tav.market_expenses (region, expense_type, COALESCE(city,''), effective_date);
+ALTER TABLE tav.market_expenses ADD CONSTRAINT market_expenses_region_type_city_date_key UNIQUE (region, expense_type, city, effective_date);
 
 -- market_demand_index
 CREATE INDEX ON tav.market_demand_index (region);
-CREATE UNIQUE INDEX ON tav.market_demand_index (region, COALESCE(segment_key,''), week_label);
+ALTER TABLE tav.market_demand_index ADD CONSTRAINT market_demand_index_region_segment_week_key UNIQUE (region, segment_key, week_label);
 
 -- buy_box_score_attributions
 CREATE INDEX ON tav.buy_box_score_attributions (lead_id);
