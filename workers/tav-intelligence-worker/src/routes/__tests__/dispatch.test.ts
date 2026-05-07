@@ -14,6 +14,8 @@ const env: Env = {
   MANHEIM_PASSWORD:      "",
   MANHEIM_TOKEN_URL:     "",
   MANHEIM_MMR_URL:       "",
+  SUPABASE_URL:          "",
+  SUPABASE_SERVICE_ROLE_KEY: "",
 };
 
 const AUTH_HEADERS: HeadersInit = {

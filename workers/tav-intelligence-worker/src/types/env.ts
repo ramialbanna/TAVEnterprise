@@ -31,5 +31,8 @@ export interface Env {
   /** MMR base URL, e.g. https://api.manheim.com (no trailing slash). */
   MANHEIM_MMR_URL: string;
 
-  // Future (Phase G.2): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
+  /** Supabase project URL, e.g. https://<ref>.supabase.co. */
+  SUPABASE_URL: string;
+  /** Supabase service-role key. NEVER log this. */
+  SUPABASE_SERVICE_ROLE_KEY: string;
 }

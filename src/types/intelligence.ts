@@ -45,6 +45,7 @@ const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 export const MmrVinLookupRequestSchema = z.object({
   vin:           z.string().min(11).max(17),
+  year:          z.number().int().min(1900).max(2100).optional(),
   mileage:       z.number().int().nonnegative().max(2_000_000).optional(),
   force_refresh: z.boolean().optional().default(false),
   ...RequesterIdentityShape,

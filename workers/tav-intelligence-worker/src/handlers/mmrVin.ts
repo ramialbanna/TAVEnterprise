@@ -1,15 +1,23 @@
 import { okResponse } from "../types/api";
 import { AuthError, ValidationError } from "../errors";
 import { MmrVinLookupRequestSchema } from "../validate";
+import { canForceRefresh } from "../auth/userContext";
+import { ManheimHttpClient } from "../clients/manheimHttp";
+import { KvMmrCache } from "../cache/kvMmrCache";
+import { KvCacheLock } from "../cache/kvLock";
+import { getSupabaseClient } from "../persistence/supabase";
+import { createMmrQueriesRepository } from "../persistence/mmrQueriesRepository";
+import { createMmrCacheRepository } from "../persistence/mmrCacheRepository";
+import { createUserActivityRepository } from "../persistence/userActivityRepository";
+import { performMmrLookup } from "../services/mmrLookup";
 import type { HandlerArgs } from "./types";
 
 /**
- * POST /mmr/vin — VIN-based MMR lookup. Phase F.1 SCAFFOLD ONLY.
+ * POST /mmr/vin — VIN-based Manheim MMR lookup.
  *
- * Validates the request body, requires Cloudflare Access identity, and
- * returns a well-formed envelope marked `error_code: "not_implemented"`
- * so callers can integrate end-to-end against the contract before Phase G
- * brings real Manheim fetches.
+ * Validates the request body, requires Cloudflare Access identity, calls
+ * the MMR orchestration service, and returns the result envelope. All
+ * Postgres persistence is best-effort and never blocks the response.
  */
 export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
   if (args.userContext.email === null) {
@@ -25,7 +33,38 @@ export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
     );
   }
 
-  return okResponse(buildScaffoldEnvelope(), args.requestId);
+  if (parsed.data.force_refresh && !canForceRefresh(args.userContext, args.env.MANAGER_EMAIL_ALLOWLIST)) {
+    throw new AuthError("force_refresh requires manager role or allowlist membership");
+  }
+
+  const supabase    = getSupabaseClient(args.env);
+  const queryRepo   = createMmrQueriesRepository(supabase);
+  const cacheRepo   = createMmrCacheRepository(supabase);
+  const activityRepo = createUserActivityRepository(supabase);
+
+  const envelope = await performMmrLookup(
+    {
+      input: {
+        kind:    "vin",
+        vin:     parsed.data.vin,
+        year:    parsed.data.year ?? new Date().getFullYear(),
+        mileage: parsed.data.mileage,
+      },
+      requestId:    args.requestId,
+      forceRefresh: parsed.data.force_refresh,
+      userContext:  args.userContext,
+    },
+    {
+      client: new ManheimHttpClient(args.env, args.env.TAV_INTEL_KV),
+      cache:  new KvMmrCache(args.env.TAV_INTEL_KV),
+      lock:   new KvCacheLock(args.env.TAV_INTEL_KV),
+      queryRepo,
+      cacheRepo,
+      activityRepo,
+    },
+  );
+
+  return okResponse(envelope, args.requestId);
 }
 
 async function readJsonBody(request: Request): Promise<unknown> {
@@ -34,20 +73,4 @@ async function readJsonBody(request: Request): Promise<unknown> {
   } catch {
     throw new ValidationError("Request body is not valid JSON");
   }
-}
-
-function buildScaffoldEnvelope(): Record<string, unknown> {
-  const now = new Date().toISOString();
-  return {
-    ok:                  false,
-    mmr_value:           null,
-    mileage_used:        0,
-    is_inferred_mileage: false,
-    cache_hit:           false,
-    source:              "manheim",
-    fetched_at:          now,
-    expires_at:          null,
-    error_code:          "not_implemented",
-    error_message:       "MMR VIN lookup is scaffolded only; real fetch lands in Phase G.",
-  };
 }

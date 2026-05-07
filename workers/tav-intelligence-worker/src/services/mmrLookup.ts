@@ -26,14 +26,18 @@
  * No I/O lives here other than the calls into the injected dependencies.
  * Each dependency is small and mockable, which keeps unit tests pure.
  *
- * Postgres audit + cache mirror writes are NOT performed here — they land in
- * Phase G.2 wired into the handler layer.
+ * Phase G.2 wires three optional Postgres repos (queryRepo, cacheRepo,
+ * activityRepo) as best-effort writes — they never block the response.
  */
 
 import type { MmrResponseEnvelope } from "../validate";
 import type { ManheimClient } from "../clients/manheim";
 import type { MmrCache } from "../cache/mmrCache";
 import type { CacheLock } from "../cache/lock";
+import type { UserContext } from "../auth/userContext";
+import type { MmrQueriesRepository } from "../persistence/mmrQueriesRepository";
+import type { MmrCacheRepository } from "../persistence/mmrCacheRepository";
+import type { UserActivityRepository } from "../persistence/userActivityRepository";
 import { deriveVinCacheKey, deriveYmmCacheKey } from "../cache/mmrCacheKey";
 import {
   POSITIVE_CACHE_TTL_SECONDS,
@@ -41,8 +45,9 @@ import {
   LOCK_TIMEOUT_MS,
 } from "../cache/constants";
 import { getMmrMileageData } from "../../../../src/scoring/mmrMileage";
-import { CacheLockError } from "../errors";
+import { CacheLockError, IntelligenceError } from "../errors";
 import { log } from "../utils/logger";
+import type { LogFields } from "../utils/logger";
 
 export type MmrLookupInput =
   | {
@@ -61,18 +66,30 @@ export type MmrLookupInput =
     };
 
 export interface MmrLookupArgs {
-  input:          MmrLookupInput;
-  requestId:      string;
-  forceRefresh?:  boolean;
+  input:         MmrLookupInput;
+  requestId:     string;
+  forceRefresh?: boolean;
+  /** Cloudflare Access identity — used to populate audit records. */
+  userContext?:  UserContext;
   /** Override clock for deterministic mileage inference in tests. */
-  now?: () => Date;
+  now?:          () => Date;
 }
 
 export interface MmrLookupDeps {
-  client: ManheimClient;
-  cache:  MmrCache;
-  lock:   CacheLock;
+  client:       ManheimClient;
+  cache:        MmrCache;
+  lock:         CacheLock;
+  /** Postgres audit log of every MMR lookup. Best-effort — absence skips write. */
+  queryRepo?:    MmrQueriesRepository;
+  /** Postgres mirror of the KV cache entry. Best-effort — absence skips write. */
+  cacheRepo?:    MmrCacheRepository;
+  /** Portal presence + activity feed. Best-effort — absence skips write. */
+  activityRepo?: UserActivityRepository;
 }
+
+const NULL_USER_CONTEXT: UserContext = {
+  userId: null, email: null, name: null, roles: [],
+};
 
 /**
  * Run a cached, single-flight Manheim MMR lookup.
@@ -93,9 +110,10 @@ export async function performMmrLookup(
   args: MmrLookupArgs,
   deps: MmrLookupDeps,
 ): Promise<MmrResponseEnvelope> {
-  const start = Date.now();
-  const requestId    = args.requestId;
+  const start       = Date.now();
+  const requestId   = args.requestId;
   const forceRefresh = args.forceRefresh === true;
+  const userCtx     = args.userContext ?? NULL_USER_CONTEXT;
 
   // 1. Resolve mileage (single source of truth — same as main worker).
   const mileageData = getMmrMileageData(
@@ -129,11 +147,8 @@ export async function performMmrLookup(
     if (!forceRefresh) {
       const cached = await deps.cache.get(cacheKey, requestId);
       if (cached !== null) {
-        log("mmr.lookup.cache_hit", {
-          requestId,
-          cacheKey,
-          path: "initial",
-        });
+        const latencyMs = Date.now() - start;
+        log("mmr.lookup.cache_hit", { requestId, cacheKey, path: "initial" });
         log("mmr.lookup.complete", {
           requestId,
           route:           args.input.kind,
@@ -142,10 +157,16 @@ export async function performMmrLookup(
           cacheKey,
           inferredMileage: mileageData.isInferred,
           retryCount:      0,
-          latencyMs:       Date.now() - start,
+          latencyMs,
           kpi: true,
         });
-        return { ...cached, cache_hit: true };
+        const envelope: MmrResponseEnvelope = { ...cached, cache_hit: true };
+        await writePersistenceRecords(deps, {
+          requestId, input: args.input, userCtx, envelope,
+          cacheHit: true, forceRefresh, retryCount: 0, latencyMs, outcome: "hit",
+          writeCacheMirror: false, cacheKey,
+        });
+        return envelope;
       }
       log("mmr.lookup.cache_miss", { requestId, cacheKey });
     }
@@ -160,11 +181,8 @@ export async function performMmrLookup(
         if (!forceRefresh) {
           const recheck = await deps.cache.get(cacheKey, requestId);
           if (recheck !== null) {
-            log("mmr.lookup.cache_hit", {
-              requestId,
-              cacheKey,
-              path: "recheck",
-            });
+            const latencyMs = Date.now() - start;
+            log("mmr.lookup.cache_hit", { requestId, cacheKey, path: "recheck" });
             log("mmr.lookup.complete", {
               requestId,
               route:           args.input.kind,
@@ -173,10 +191,16 @@ export async function performMmrLookup(
               cacheKey,
               inferredMileage: mileageData.isInferred,
               retryCount:      0,
-              latencyMs:       Date.now() - start,
+              latencyMs,
               kpi: true,
             });
-            return { ...recheck, cache_hit: true };
+            const envelope: MmrResponseEnvelope = { ...recheck, cache_hit: true };
+            await writePersistenceRecords(deps, {
+              requestId, input: args.input, userCtx, envelope,
+              cacheHit: true, forceRefresh, retryCount: 0, latencyMs, outcome: "hit",
+              writeCacheMirror: false, cacheKey,
+            });
+            return envelope;
           }
         }
 
@@ -217,7 +241,7 @@ export async function performMmrLookup(
           error_message:       null,
         };
 
-        // Best-effort cache write — never block the response on a cache failure.
+        // Best-effort KV write — never block the response on a cache failure.
         try {
           await deps.cache.set(cacheKey, envelope, ttl, requestId);
         } catch (err) {
@@ -228,6 +252,7 @@ export async function performMmrLookup(
           });
         }
 
+        const latencyMs = Date.now() - start;
         log("mmr.lookup.complete", {
           requestId,
           route:           args.input.kind,
@@ -236,8 +261,14 @@ export async function performMmrLookup(
           cacheKey,
           inferredMileage: mileageData.isInferred,
           retryCount:      result.retryCount,
-          latencyMs:       Date.now() - start,
+          latencyMs,
           kpi: true,
+        });
+
+        await writePersistenceRecords(deps, {
+          requestId, input: args.input, userCtx, envelope,
+          cacheHit: false, forceRefresh, retryCount: result.retryCount,
+          latencyMs, outcome: "miss", writeCacheMirror: true, cacheKey,
         });
 
         return envelope;
@@ -254,11 +285,8 @@ export async function performMmrLookup(
     await deps.lock.wait(cacheKey, LOCK_TIMEOUT_MS);
     const afterWait = await deps.cache.get(cacheKey, requestId);
     if (afterWait !== null) {
-      log("mmr.lookup.cache_hit", {
-        requestId,
-        cacheKey,
-        path: "after_wait",
-      });
+      const latencyMs = Date.now() - start;
+      log("mmr.lookup.cache_hit", { requestId, cacheKey, path: "after_wait" });
       log("mmr.lookup.complete", {
         requestId,
         route:           args.input.kind,
@@ -267,28 +295,143 @@ export async function performMmrLookup(
         cacheKey,
         inferredMileage: mileageData.isInferred,
         retryCount:      0,
-        latencyMs:       Date.now() - start,
+        latencyMs,
         kpi: true,
       });
-      return { ...afterWait, cache_hit: true };
+      const envelope: MmrResponseEnvelope = { ...afterWait, cache_hit: true };
+      await writePersistenceRecords(deps, {
+        requestId, input: args.input, userCtx, envelope,
+        cacheHit: true, forceRefresh, retryCount: 0, latencyMs, outcome: "hit",
+        writeCacheMirror: false, cacheKey,
+      });
+      return envelope;
     }
 
     // Cache still empty after the wait window — surface as 503 so the caller
     // can decide whether to retry.
-    throw new CacheLockError("Lock contention exceeded wait window", {
-      cacheKey,
-    });
+    throw new CacheLockError("Lock contention exceeded wait window", { cacheKey });
   } catch (err) {
+    const latencyMs = Date.now() - start;
+    const errorCode =
+      err instanceof IntelligenceError ? err.code :
+      err instanceof Error             ? err.name :
+      "unknown";
+    const errorMessage = err instanceof Error ? err.message : String(err);
+
     log("mmr.lookup.failure", {
       requestId,
       route:           args.input.kind,
       cacheKey,
       inferredMileage: mileageData.isInferred,
-      error_code:      err instanceof Error ? err.name : "unknown",
-      error_message:   err instanceof Error ? err.message : String(err),
-      latencyMs:       Date.now() - start,
+      error_code:      errorCode,
+      error_message:   errorMessage,
+      latencyMs,
       kpi: true,
     });
+
+    await silentWrite(
+      () =>
+        deps.queryRepo?.insert({
+          requestId, input: args.input, userContext: userCtx,
+          envelope:     null,
+          cacheHit:     false,
+          forceRefresh,
+          retryCount:   0,
+          latencyMs,
+          outcome:      "error",
+          errorCode,
+          errorMessage,
+        }) ?? Promise.resolve(),
+      "mmr.persist.query_write_failed",
+      { requestId, cacheKey },
+    );
+
     throw err;
+  }
+}
+
+// ── Persistence helpers ───────────────────────────────────────────────────────
+
+interface PersistArgs {
+  requestId:       string;
+  input:           MmrLookupInput;
+  userCtx:         UserContext;
+  envelope:        MmrResponseEnvelope;
+  cacheHit:        boolean;
+  forceRefresh:    boolean;
+  retryCount:      number;
+  latencyMs:       number;
+  outcome:         "hit" | "miss" | "error";
+  writeCacheMirror: boolean;
+  cacheKey:        string;
+}
+
+async function writePersistenceRecords(
+  deps: MmrLookupDeps,
+  p: PersistArgs,
+): Promise<void> {
+  // Activity record — every lookup, presence TTL of 5 min.
+  await silentWrite(
+    () => {
+      const base = {
+        userContext:      p.userCtx,
+        activityType:     "mmr_search" as const,
+        activityPayload:  { lookupType: p.input.kind, cacheHit: p.cacheHit, forceRefresh: p.forceRefresh },
+        activeUntil:      new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      };
+      const extraFields = p.input.kind === "vin"
+        ? { vin: p.input.vin, year: p.input.year }
+        : { year: p.input.year, make: p.input.make, model: p.input.model };
+      return deps.activityRepo?.insert({ ...base, ...extraFields }) ?? Promise.resolve();
+    },
+    "mmr.persist.activity_write_failed",
+    { requestId: p.requestId, cacheKey: p.cacheKey },
+  );
+
+  // Audit record.
+  await silentWrite(
+    () =>
+      deps.queryRepo?.insert({
+        requestId:   p.requestId,
+        input:       p.input,
+        userContext: p.userCtx,
+        envelope:    p.envelope,
+        cacheHit:    p.cacheHit,
+        forceRefresh: p.forceRefresh,
+        retryCount:  p.retryCount,
+        latencyMs:   p.latencyMs,
+        outcome:     p.outcome,
+      }) ?? Promise.resolve(),
+    "mmr.persist.query_write_failed",
+    { requestId: p.requestId, cacheKey: p.cacheKey },
+  );
+
+  // Postgres cache mirror — only on live Manheim calls.
+  if (p.writeCacheMirror) {
+    await silentWrite(
+      () =>
+        deps.cacheRepo?.upsert({
+          cacheKey: p.cacheKey,
+          input:    p.input,
+          envelope: p.envelope,
+        }) ?? Promise.resolve(),
+      "mmr.persist.cache_write_failed",
+      { requestId: p.requestId, cacheKey: p.cacheKey },
+    );
+  }
+}
+
+async function silentWrite(
+  fn: () => Promise<void>,
+  event:  string,
+  fields: LogFields,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    log(event, {
+      ...fields,
+      error_message: err instanceof Error ? err.message : String(err),
+    });
   }
 }

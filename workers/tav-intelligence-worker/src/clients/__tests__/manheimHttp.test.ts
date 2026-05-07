@@ -31,6 +31,8 @@ const ENV: Env = {
   MANHEIM_PASSWORD:      PASSWORD,
   MANHEIM_TOKEN_URL:     "https://api.manheim.com/oauth2/token",
   MANHEIM_MMR_URL:       "https://api.manheim.com",
+  SUPABASE_URL:          "",
+  SUPABASE_SERVICE_ROLE_KEY: "",
 };
 
 interface FakeKv {
