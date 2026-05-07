@@ -233,9 +233,11 @@ describe("ManheimHttpClient", () => {
     await expect(flush(promise)).rejects.toBeInstanceOf(ManheimAuthError);
   });
 
-  // ── 5. Token endpoint 5xx → ManheimAuthError (impl maps non-OK to auth) ─────
+  // ── 5. Token endpoint 5xx → ManheimUnavailableError (locked 2026-05-07) ─────
+  // Token-endpoint 5xx and network failures map to ManheimUnavailableError
+  // (infrastructure availability), not ManheimAuthError (credentials).
 
-  it("token refresh on 5xx surfaces as ManheimAuthError", async () => {
+  it("token refresh on 5xx surfaces as ManheimUnavailableError", async () => {
     const { kv } = makeFakeKv();
     const fetchFn = vi.fn(async () => statusResponse(503));
 
@@ -246,7 +248,7 @@ describe("ManheimHttpClient", () => {
       requestId: "req-tok-5xx",
     });
 
-    await expect(flush(promise)).rejects.toBeInstanceOf(ManheimAuthError);
+    await expect(flush(promise)).rejects.toBeInstanceOf(ManheimUnavailableError);
   });
 
   // ── 6. VIN happy path ───────────────────────────────────────────────────────
@@ -360,7 +362,7 @@ describe("ManheimHttpClient", () => {
     expect(result.retryCount).toBe(1);
     // Retry-After observed event was emitted.
     expect(logEvents().some((e) =>
-      e.event === "manheim.lookup.retry_after_observed",
+      e.event === "manheim.http.retry_after_observed",
     )).toBe(true);
   });
 

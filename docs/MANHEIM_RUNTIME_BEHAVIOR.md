@@ -38,8 +38,9 @@ The orchestrator runs:
 3. if !forceRefresh:
      cached = cache.get(cacheKey)
      if cached:
-       log mmr.lookup.complete (cacheHit=true, lockAttempted=false)
+       log mmr.lookup.cache_hit; log mmr.lookup.complete (cacheHit=true, lockAttempted=false)
        return { ...cached, cache_hit: true }
+     log mmr.lookup.cache_miss
 4. acquired = lock.acquire(cacheKey, LOCK_TIMEOUT_MS, requestId)
    if acquired:
      try {
@@ -237,7 +238,7 @@ When Manheim returns 429 with a `Retry-After: <seconds>` header:
 honored_delay = max(scheduled_backoff, retry_after_ms)
 ```
 
-The current implementation logs `manheim.lookup.retry_after_observed`
+The current implementation logs `manheim.http.retry_after_observed`
 with both `scheduled_delay_ms` and `honored_delay_ms` so operators can
 audit Manheim's published rate limits against our backoff. The retry
 helper's scheduled delay is used as a soft floor — in practice with
@@ -312,18 +313,27 @@ request.
 
 ### Failure modes
 
-| Origin | Mapped to |
-|---|---|
-| Token endpoint network error | `ManheimAuthError("network")` |
-| Token endpoint 401/403 | `ManheimAuthError("Manheim rejected OAuth credentials")` |
-| Token endpoint 5xx | `ManheimAuthError("non-OK")` (per current impl) |
-| Token endpoint malformed JSON | `ManheimAuthError("not JSON")` |
-| Missing access_token / expires_in | `ManheimAuthError("missing fields")` |
-| Lock-wait timeout | `ManheimAuthError("lock held")` |
+Decision (locked 2026-05-07): infrastructure availability problems
+(`5xx`, network) and credential/configuration problems map to
+**different** error classes. Dashboards, alerts, and retry behavior
+must distinguish them — collapsing them into one category masks the
+operational signal.
 
-All token-side failures surface as `ManheimAuthError` (HTTP 502) rather
-than 401 — internal portal callers do not own Manheim's OAuth state, so
-exposing 401 would be misleading.
+| Origin | Mapped to | Class |
+|---|---|---|
+| Token endpoint network error | `ManheimUnavailableError("network error")` | infra |
+| Token endpoint 5xx | `ManheimUnavailableError("token endpoint 5xx")` | infra |
+| Token endpoint 401/403 | `ManheimAuthError("Manheim rejected OAuth credentials")` | credentials |
+| Token endpoint 4xx (other) | `ManheimAuthError("non-OK")` | credentials/config |
+| Token endpoint malformed JSON | `ManheimAuthError("not JSON")` | response shape |
+| Missing access_token / expires_in | `ManheimAuthError("missing fields")` | response shape |
+| Lock-wait timeout | `ManheimAuthError("lock held")` | contention (legacy mapping; see follow-up) |
+
+All token-side failures surface to internal portal callers as HTTP 502
+regardless of class — internal callers do not own Manheim's OAuth
+state. The class distinction matters for telemetry, alerting, and
+retry policy at the orchestrator/handler layer, not for the HTTP
+status itself.
 
 ---
 
@@ -389,19 +399,26 @@ All log lines are JSON, one per line, written via `utils/logger.ts`. Every
 line includes `requestId`. The `kpi: true` flag marks events surfaced in
 operational dashboards.
 
-### Manheim client events (`manheimHttp.ts`)
+### Manheim transport events (`manheimHttp.ts`)
 
-| Event | Adds |
-|---|---|
-| `manheim.lookup.started` | `lookup_type`, `cache_key`, `mileage_used` |
-| `manheim.lookup.attempt` | `attempt`, `status`, `latency_ms` |
-| `manheim.lookup.retry_after_observed` | `attempt`, `retry_after_ms`, `scheduled_delay_ms`, `honored_delay_ms` |
-| `manheim.lookup.complete` | `mmr_value`, `latency_ms`, `attempts`, `kpi: true` |
-| `manheim.lookup.failed` | `error_category`, `error_code`, `attempts` |
-| `manheim.token.cached` | `age_seconds` |
-| `manheim.token.refresh_started` | (no extras) |
-| `manheim.token.refresh_complete` | `expires_in` |
-| `manheim.token.refresh_failed` | `status`, `error_category` |
+Decision (locked 2026-05-07): event names follow the
+`manheim.http.*` namespace for HTTP transport and `manheim.token.*`
+for OAuth lifecycle. The transport namespace mirrors Rami's locked
+four-event taxonomy: `request`, `retry`, `complete`, `failure`.
+Orchestration-level events live in the `mmr.lookup.*` namespace
+(see below) — telemetry partitions cleanly between layers.
+
+| Event | Adds | When |
+|---|---|---|
+| `manheim.http.request` | `attempt`, `status`, `latency_ms` | Each first-attempt fetch |
+| `manheim.http.retry` | `attempt`, `status`, `latency_ms` | Each retry fetch (attempt > 1) |
+| `manheim.http.retry_after_observed` | `attempt`, `retry_after_ms`, `scheduled_delay_ms`, `honored_delay_ms` | When 429 returns a `Retry-After` header |
+| `manheim.http.complete` | `mmr_value`, `latency_ms`, `attempts`, `kpi: true` | Successful HTTP lookup return |
+| `manheim.http.failure` | `error_category`, `error_code`, `attempts` | Final mapped error from `executeLookup` |
+| `manheim.token.cached` | `age_seconds` | Token reuse on cache hit |
+| `manheim.token.refresh_started` | (no extras) | Token refresh fetch begins |
+| `manheim.token.refresh_complete` | `expires_in` | Token refresh succeeded |
+| `manheim.token.refresh_failed` | `status`, `error_category` | Token refresh terminal failure |
 
 ### Cache events (`kvMmrCache.ts`)
 
@@ -424,10 +441,21 @@ operational dashboards.
 
 ### Orchestrator events (`mmrLookup.ts`)
 
-| Event | Adds |
-|---|---|
-| `mmr.lookup.complete` | `route`, `cacheHit`, `lockAttempted`, `cacheKey`, `inferredMileage`, `retryCount`, `latencyMs`, `kpi: true` |
-| `mmr.lookup.cache_set_failed` | `cacheKey`, `error_message` |
+Six canonical events plus one diagnostic sub-event. Every event
+includes `requestId`. KPI-flagged events feed dashboards.
+
+| Event | Adds | When |
+|---|---|---|
+| `mmr.lookup.start` | `route`, `cacheKey`, `forceRefresh`, `inferredMileage` | Function entry, before any I/O |
+| `mmr.lookup.cache_hit` | `cacheKey`, `path` (`initial` / `recheck` / `after_wait`) | Any cache read returned a populated envelope |
+| `mmr.lookup.cache_miss` | `cacheKey` | Initial cache read returned null |
+| `mmr.lookup.lock_wait` | `cacheKey` | Lock held by another request; calling `lock.wait` |
+| `mmr.lookup.complete` | `route`, `cacheHit`, `lockAttempted`, `cacheKey`, `inferredMileage`, `retryCount`, `latencyMs`, `kpi: true` | Final success return |
+| `mmr.lookup.failure` | `route`, `cacheKey`, `inferredMileage`, `error_code`, `error_message`, `latencyMs`, `kpi: true` | Final error path; orchestrator rethrows after logging |
+| `mmr.lookup.cache_set_failed` | `cacheKey`, `error_message` | Best-effort cache write threw; response continues |
+
+`mmr.lookup.complete` and `mmr.lookup.failure` are the dashboard
+signals; the others are partition-by fields and trace breadcrumbs.
 
 ### Secrets
 

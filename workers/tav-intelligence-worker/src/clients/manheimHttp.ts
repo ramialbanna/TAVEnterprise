@@ -166,15 +166,6 @@ export class ManheimHttpClient implements ManheimClient {
     requestId: string;
   }): Promise<ManheimVinResponse> {
     const start = Date.now();
-    const cacheKey = `vin:${args.vin.toUpperCase()}`;
-    log("manheim.lookup.started", {
-      requestId: args.requestId,
-      lookup_type: "vin",
-      cache_key: cacheKey,
-      mileage_used: args.mileage,
-      // Inference is decided upstream; the client just receives the value.
-      is_inferred_mileage: undefined,
-    });
 
     const token = await this.getAccessToken(args.requestId);
     const url = new URL(
@@ -201,13 +192,6 @@ export class ManheimHttpClient implements ManheimClient {
     requestId: string;
   }): Promise<ManheimYmmResponse> {
     const start = Date.now();
-    log("manheim.lookup.started", {
-      requestId: args.requestId,
-      lookup_type: "ymm",
-      cache_key: `ymm:${args.year}:${args.make}:${args.model}`,
-      mileage_used: args.mileage,
-      is_inferred_mileage: undefined,
-    });
 
     const token = await this.getAccessToken(args.requestId);
 
@@ -253,7 +237,7 @@ export class ManheimHttpClient implements ManheimClient {
       response = result.response;
       attempts = result.attempts;
     } catch (err) {
-      log("manheim.lookup.failed", {
+      log("manheim.http.failure", {
         requestId: args.requestId,
         error_category: errorCategory(err),
         error_code: err instanceof Error ? err.name : "unknown",
@@ -268,7 +252,7 @@ export class ManheimHttpClient implements ManheimClient {
 
     // 404 = "no MMR data for this VIN/YMM" — a valid result, not an error.
     if (response.status === 404) {
-      log("manheim.lookup.complete", {
+      log("manheim.http.complete", {
         requestId: args.requestId,
         mmr_value: null,
         latency_ms: latencyMs,
@@ -285,7 +269,7 @@ export class ManheimHttpClient implements ManheimClient {
 
     // Auth failure surfaced from MMR endpoint — caller will refresh on next call.
     if (response.status === 401 || response.status === 403) {
-      log("manheim.lookup.failed", {
+      log("manheim.http.failure", {
         requestId: args.requestId,
         error_category: "auth",
         error_code: "manheim_auth_error",
@@ -298,7 +282,7 @@ export class ManheimHttpClient implements ManheimClient {
 
     if (!response.ok) {
       // Non-retryable 4xx (other than 429 which is handled in the retry loop).
-      log("manheim.lookup.failed", {
+      log("manheim.http.failure", {
         requestId: args.requestId,
         error_category: "response_shape",
         error_code: "manheim_response_error",
@@ -313,7 +297,7 @@ export class ManheimHttpClient implements ManheimClient {
     try {
       payload = (await response.json()) as Record<string, unknown>;
     } catch (err) {
-      log("manheim.lookup.failed", {
+      log("manheim.http.failure", {
         requestId: args.requestId,
         error_category: "response_shape",
         error_code: "manheim_response_error",
@@ -326,7 +310,7 @@ export class ManheimHttpClient implements ManheimClient {
 
     const mmrValue = extractMmrValue(payload);
 
-    log("manheim.lookup.complete", {
+    log("manheim.http.complete", {
       requestId: args.requestId,
       mmr_value: mmrValue,
       latency_ms: latencyMs,
@@ -368,7 +352,7 @@ export class ManheimHttpClient implements ManheimClient {
         try {
           res = await this.fetchFn(url, init);
         } catch (err) {
-          log("manheim.lookup.attempt", {
+          log(attempts === 1 ? "manheim.http.request" : "manheim.http.retry", {
             requestId,
             attempt: attempts,
             status:  null,
@@ -377,7 +361,7 @@ export class ManheimHttpClient implements ManheimClient {
           throw new NetworkError(err);
         }
 
-        log("manheim.lookup.attempt", {
+        log(attempts === 1 ? "manheim.http.request" : "manheim.http.retry", {
           requestId,
           attempt: attempts,
           status:  res.status,
@@ -413,7 +397,7 @@ export class ManheimHttpClient implements ManheimClient {
             // computed delay is a soft lower bound when backoff < Retry-After
             // — in practice, with baseDelayMs=500 and ratios ≤2, the gap is
             // never large enough to exceed Manheim's typical 1–5s asks.
-            log("manheim.lookup.retry_after_observed", {
+            log("manheim.http.retry_after_observed", {
               requestId,
               attempt,
               retry_after_ms: pendingRetryAfterMs,
@@ -539,7 +523,7 @@ export class ManheimHttpClient implements ManheimClient {
         status: null,
         error_category: "network",
       });
-      throw new ManheimAuthError("Manheim token endpoint network error", {
+      throw new ManheimUnavailableError("Manheim token endpoint network error", {
         cause: err instanceof Error ? err.message : String(err),
       });
     }
@@ -556,10 +540,24 @@ export class ManheimHttpClient implements ManheimClient {
     }
 
     if (!res.ok) {
+      // Decision (2026-05-07): 5xx and network failures from the token
+      // endpoint surface as ManheimUnavailableError (infrastructure
+      // availability), not ManheimAuthError (credentials/configuration).
+      // Dashboards and retry behavior must distinguish them.
+      if (res.status >= 500 && res.status < 600) {
+        log("manheim.token.refresh_failed", {
+          requestId,
+          status: res.status,
+          error_category: "upstream",
+        });
+        throw new ManheimUnavailableError("Manheim token endpoint 5xx", {
+          status: res.status,
+        });
+      }
       log("manheim.token.refresh_failed", {
         requestId,
         status: res.status,
-        error_category: res.status >= 500 ? "upstream" : "response_shape",
+        error_category: "response_shape",
       });
       throw new ManheimAuthError("Manheim token endpoint returned non-OK", {
         status: res.status,
