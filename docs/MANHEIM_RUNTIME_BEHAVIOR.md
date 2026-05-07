@@ -289,7 +289,7 @@ actually expires, avoiding edge races on long-tail requests.
        sleep 250ms
        refreshed = kv.get('manheim:token')
        if refreshed valid: return refreshed.access_token
-     throw ManheimAuthError("lock_wait_timeout")
+     throw CacheLockError("token refresh lock-wait timeout")
 3. kv.put('lock:manheim:token:refresh', requestId, { expirationTtl: 10s })
 4. try fetch token, store in KV
    finally release lock if we still own it
@@ -327,13 +327,19 @@ operational signal.
 | Token endpoint 4xx (other) | `ManheimAuthError("non-OK")` | credentials/config |
 | Token endpoint malformed JSON | `ManheimAuthError("not JSON")` | response shape |
 | Missing access_token / expires_in | `ManheimAuthError("missing fields")` | response shape |
-| Lock-wait timeout | `ManheimAuthError("lock held")` | contention (legacy mapping; see follow-up) |
+| Token-refresh lock-wait timeout | `CacheLockError("token refresh lock held")` | contention |
 
-All token-side failures surface to internal portal callers as HTTP 502
-regardless of class — internal callers do not own Manheim's OAuth
-state. The class distinction matters for telemetry, alerting, and
-retry policy at the orchestrator/handler layer, not for the HTTP
-status itself.
+Token-side failures surface to internal portal callers as HTTP 502
+(`ManheimAuthError`, `ManheimUnavailableError`) or HTTP 503
+(`CacheLockError`). Internal callers do not own Manheim's OAuth
+state, so we do not propagate Manheim's 401 directly. The class
+distinction matters for telemetry, alerting, and retry policy:
+
+- `ManheimAuthError` → page on-call (credentials likely rotated)
+- `ManheimUnavailableError` → wait it out (Manheim is down)
+- `CacheLockError` → ephemeral; client retry usually succeeds
+
+Three different operational responses; three different error classes.
 
 ---
 
@@ -418,7 +424,8 @@ Orchestration-level events live in the `mmr.lookup.*` namespace
 | `manheim.token.cached` | `age_seconds` | Token reuse on cache hit |
 | `manheim.token.refresh_started` | (no extras) | Token refresh fetch begins |
 | `manheim.token.refresh_complete` | `expires_in` | Token refresh succeeded |
-| `manheim.token.refresh_failed` | `status`, `error_category` | Token refresh terminal failure |
+| `manheim.token.refresh_failed` | `status`, `error_category` | Token refresh terminal failure (network, 4xx, 5xx, response shape) |
+| `manheim.token.refresh_lock_timeout` | `polls`, `wait_ms` | Single-flight refresh lock held; wait window exhausted (→ `CacheLockError`) |
 
 ### Cache events (`kvMmrCache.ts`)
 

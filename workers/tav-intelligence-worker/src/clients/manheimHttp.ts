@@ -20,6 +20,7 @@ import type {
   ManheimYmmResponse,
 } from "./manheim";
 import {
+  CacheLockError,
   ManheimAuthError,
   ManheimRateLimitError,
   ManheimResponseError,
@@ -475,12 +476,19 @@ export class ManheimHttpClient implements ManheimClient {
           return refreshed.access_token;
         }
       }
-      log("manheim.token.refresh_failed", {
+      // Decision (locked 2026-05-07): lock-wait timeout during token refresh
+      // is distributed-coordination contention, not auth failure. Surface as
+      // CacheLockError so dashboards can distinguish bad credentials, token
+      // endpoint outages, and lock starvation as separate operational signals.
+      log("manheim.token.refresh_lock_timeout", {
         requestId,
-        status: null,
-        error_category: "lock_wait_timeout",
+        polls: TOKEN_REFRESH_LOCK_MAX_POLLS,
+        wait_ms: TOKEN_REFRESH_LOCK_MAX_POLLS * LOCK_RETRY_INTERVAL_MS,
       });
-      throw new ManheimAuthError("Token refresh lock held by other request; wait timed out");
+      throw new CacheLockError("Token refresh lock held by another request; wait timed out", {
+        lockKey: TOKEN_REFRESH_LOCK_KEY,
+        wait_polls: TOKEN_REFRESH_LOCK_MAX_POLLS,
+      });
     }
 
     // Acquire (best-effort).

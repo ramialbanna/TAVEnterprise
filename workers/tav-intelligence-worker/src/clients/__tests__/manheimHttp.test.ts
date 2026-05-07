@@ -10,6 +10,7 @@ function urlOfCall(mock: ReturnType<typeof vi.fn>, callIndex: number): string {
   return String(call[0]);
 }
 import {
+  CacheLockError,
   ManheimAuthError,
   ManheimRateLimitError,
   ManheimResponseError,
@@ -249,6 +250,36 @@ describe("ManheimHttpClient", () => {
     });
 
     await expect(flush(promise)).rejects.toBeInstanceOf(ManheimUnavailableError);
+  });
+
+  // ── 5b. Token refresh lock-wait timeout → CacheLockError (locked 2026-05-07)
+  // Distributed-coordination contention is NOT an auth failure. Credentials
+  // are valid; the local request simply could not acquire the single-flight
+  // lock and the wait window exhausted before another request finished
+  // refreshing. Dashboards must distinguish credentials, infrastructure, and
+  // contention as three separate operational signals.
+
+  it("token refresh lock held with no token surfaces as CacheLockError", async () => {
+    const { kv, store } = makeFakeKv();
+    // Lock held by someone else; token cache stays empty for the entire wait.
+    store.set("lock:manheim:token:refresh", "other-req");
+
+    const fetchFn = vi.fn(); // never invoked; we never get past the lock wait
+    const client  = new ManheimHttpClient(ENV, kv, fetchFn);
+
+    const promise = client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "waiter-timeout",
+    });
+
+    await expect(flush(promise)).rejects.toBeInstanceOf(CacheLockError);
+    expect(fetchFn).not.toHaveBeenCalled();
+
+    // Telemetry assertion: distinct event name, not refresh_failed.
+    const events = logEvents().map((e) => e.event);
+    expect(events).toContain("manheim.token.refresh_lock_timeout");
+    expect(events).not.toContain("manheim.token.refresh_failed");
   });
 
   // ── 6. VIN happy path ───────────────────────────────────────────────────────
