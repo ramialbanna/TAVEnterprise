@@ -6,7 +6,7 @@ import type { ApiResponse } from "../../types/api";
 const env: Env = {
   // KV is unused for the routes covered by these scaffold tests, so a typed
   // null shim is acceptable here. Real KV wiring is a Phase G concern.
-  TAV_KV: null as unknown as KVNamespace,
+  TAV_INTEL_KV: null as unknown as KVNamespace,
   MANAGER_EMAIL_ALLOWLIST: "",
 };
 

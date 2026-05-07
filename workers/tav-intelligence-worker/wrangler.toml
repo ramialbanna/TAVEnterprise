@@ -5,39 +5,74 @@ compatibility_date = "2024-09-23"
 # workers_dev disabled until Rami flips this on at first deploy time.
 workers_dev = false
 
-# KV namespace for MMR cache + anti-stampede locks.
-# REQUIRED before deploy — Rami: provision a SEPARATE namespace from the main
-# tav-aip worker and replace the placeholder IDs below:
-#   wrangler kv namespace create TAV_KV --config workers/tav-intelligence-worker/wrangler.toml
-#   wrangler kv namespace create TAV_KV --config workers/tav-intelligence-worker/wrangler.toml --preview
-# Deploying with the placeholder ID below will bind to a non-existent namespace
-# and every KV op will fail at runtime.
+# ── KV: per-environment namespaces, all separate from the main worker ─────────
+#
+# Decision (locked 2026-05-07): each environment has its own KV namespace.
+# The default block is used by `wrangler dev`; staging and production each
+# have their own block below. Do NOT share IDs across envs.
+#
+# Provisioning (Rami runs these once, then pastes the returned IDs back here):
+#
+#   wrangler kv namespace create TAV_INTEL_KV_PREVIEW \
+#     --config workers/tav-intelligence-worker/wrangler.toml
+#
+#   wrangler kv namespace create TAV_INTEL_KV_STAGING \
+#     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+#   wrangler kv namespace create TAV_INTEL_KV_PRODUCTION \
+#     --config workers/tav-intelligence-worker/wrangler.toml --env production
+#
+# Each command prints an `id`. Replace the placeholders below.
+# Deploying with placeholder IDs binds to a non-existent namespace; every KV
+# op fails at runtime.
+
 [[kv_namespaces]]
-binding = "TAV_KV"
-id = "REPLACE_WITH_REAL_ID_BEFORE_DEPLOY"
-preview_id = "REPLACE_WITH_REAL_PREVIEW_ID_BEFORE_DEPLOY"
+binding = "TAV_INTEL_KV"
+id         = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
+preview_id = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
 
 [vars]
 # Comma-separated email allowlist for force_refresh (temporary; see
 # docs/INTELLIGENCE_CONTRACTS.md §D). Empty string = no email-based bypass.
 MANAGER_EMAIL_ALLOWLIST = ""
 
-# ── Staging / production env blocks ───────────────────────────────────────────
-# TODO(rami): uncomment + fill before first staged deploy. Each env needs its
-# own KV namespace; do NOT share IDs across envs.
+# ── Staging ──────────────────────────────────────────────────────────────────
+
+[env.staging]
+name = "tav-intelligence-worker-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "TAV_INTEL_KV"
+id      = "REPLACE_WITH_TAV_INTEL_KV_STAGING_ID"
+
+[env.staging.vars]
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Production ───────────────────────────────────────────────────────────────
+
+[env.production]
+name = "tav-intelligence-worker-production"
+
+[[env.production.kv_namespaces]]
+binding = "TAV_INTEL_KV"
+id      = "REPLACE_WITH_TAV_INTEL_KV_PRODUCTION_ID"
+
+[env.production.vars]
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Manheim secrets (set in Phase G) ─────────────────────────────────────────
 #
-# [env.staging]
-# name = "tav-intelligence-worker-staging"
-# [env.staging.vars]
-# MANAGER_EMAIL_ALLOWLIST = ""
-# [[env.staging.kv_namespaces]]
-# binding = "TAV_KV"
-# id = "REPLACE_WITH_STAGING_KV_ID"
+# Decision (locked 2026-05-07): same Manheim credentials as the main
+# tav-aip worker. Cloudflare secrets are per-Worker, so the values must be
+# set on this Worker too — but they are the SAME values currently set on
+# tav-aip. For each of the six secrets, run on each env:
 #
-# [env.production]
-# name = "tav-intelligence-worker-production"
-# [env.production.vars]
-# MANAGER_EMAIL_ALLOWLIST = ""
-# [[env.production.kv_namespaces]]
-# binding = "TAV_KV"
-# id = "REPLACE_WITH_PRODUCTION_KV_ID"
+#   wrangler secret put MANHEIM_CLIENT_ID     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_CLIENT_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_USERNAME      --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_PASSWORD      --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_TOKEN_URL     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_MMR_URL       --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+# Repeat with --env production. The MANHEIM_* fields will be added to
+# src/types/env.ts when the Manheim client implementation lands in Phase G.

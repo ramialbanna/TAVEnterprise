@@ -5,7 +5,7 @@
  * bindings land in Phase G.
  */
 export interface Env {
-  TAV_KV: KVNamespace;
+  TAV_INTEL_KV: KVNamespace;
 
   /**
    * Comma-separated list of emails permitted to call `force_refresh: true`

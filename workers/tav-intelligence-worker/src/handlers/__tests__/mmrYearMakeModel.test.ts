@@ -6,7 +6,7 @@ import type { Env } from "../../types/env";
 import type { ApiResponse } from "../../types/api";
 
 const env: Env = {
-  TAV_KV: null as unknown as KVNamespace,
+  TAV_INTEL_KV: null as unknown as KVNamespace,
   MANAGER_EMAIL_ALLOWLIST: "",
 };
 
