@@ -60,12 +60,12 @@ id      = "REPLACE_WITH_TAV_INTEL_KV_PRODUCTION_ID"
 [env.production.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
 
-# ── Manheim secrets (set in Phase G) ─────────────────────────────────────────
+# ── Secrets (set before first deploy) ────────────────────────────────────────
 #
-# Decision (locked 2026-05-07): same Manheim credentials as the main
-# tav-aip worker. Cloudflare secrets are per-Worker, so the values must be
-# set on this Worker too — but they are the SAME values currently set on
-# tav-aip. For each of the six secrets, run on each env:
+# All secrets are per-Worker and per-environment. Run each command for both
+# --env staging and --env production (swap as needed).
+#
+# Manheim OAuth + MMR (same values as the main tav-aip worker):
 #
 #   wrangler secret put MANHEIM_CLIENT_ID     --config workers/tav-intelligence-worker/wrangler.toml --env staging
 #   wrangler secret put MANHEIM_CLIENT_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
@@ -74,5 +74,9 @@ MANAGER_EMAIL_ALLOWLIST = ""
 #   wrangler secret put MANHEIM_TOKEN_URL     --config workers/tav-intelligence-worker/wrangler.toml --env staging
 #   wrangler secret put MANHEIM_MMR_URL       --config workers/tav-intelligence-worker/wrangler.toml --env staging
 #
-# Repeat with --env production. The MANHEIM_* fields will be added to
-# src/types/env.ts when the Manheim client implementation lands in Phase G.
+# Supabase (same project as the main tav-aip worker; service-role key only):
+#
+#   wrangler secret put SUPABASE_URL              --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+# Repeat all of the above with --env production.
