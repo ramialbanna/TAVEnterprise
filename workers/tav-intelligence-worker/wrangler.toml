@@ -1,0 +1,43 @@
+name = "tav-intelligence-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# workers_dev disabled until Rami flips this on at first deploy time.
+workers_dev = false
+
+# KV namespace for MMR cache + anti-stampede locks.
+# REQUIRED before deploy — Rami: provision a SEPARATE namespace from the main
+# tav-aip worker and replace the placeholder IDs below:
+#   wrangler kv namespace create TAV_KV --config workers/tav-intelligence-worker/wrangler.toml
+#   wrangler kv namespace create TAV_KV --config workers/tav-intelligence-worker/wrangler.toml --preview
+# Deploying with the placeholder ID below will bind to a non-existent namespace
+# and every KV op will fail at runtime.
+[[kv_namespaces]]
+binding = "TAV_KV"
+id = "REPLACE_WITH_REAL_ID_BEFORE_DEPLOY"
+preview_id = "REPLACE_WITH_REAL_PREVIEW_ID_BEFORE_DEPLOY"
+
+[vars]
+# Comma-separated email allowlist for force_refresh (temporary; see
+# docs/INTELLIGENCE_CONTRACTS.md §D). Empty string = no email-based bypass.
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Staging / production env blocks ───────────────────────────────────────────
+# TODO(rami): uncomment + fill before first staged deploy. Each env needs its
+# own KV namespace; do NOT share IDs across envs.
+#
+# [env.staging]
+# name = "tav-intelligence-worker-staging"
+# [env.staging.vars]
+# MANAGER_EMAIL_ALLOWLIST = ""
+# [[env.staging.kv_namespaces]]
+# binding = "TAV_KV"
+# id = "REPLACE_WITH_STAGING_KV_ID"
+#
+# [env.production]
+# name = "tav-intelligence-worker-production"
+# [env.production.vars]
+# MANAGER_EMAIL_ALLOWLIST = ""
+# [[env.production.kv_namespaces]]
+# binding = "TAV_KV"
+# id = "REPLACE_WITH_PRODUCTION_KV_ID"
