@@ -50,3 +50,43 @@ export class PersistenceError extends IntelligenceError {
   readonly code = "persistence_error";
   readonly httpStatus = 503;
 }
+
+/**
+ * 502 — Manheim OAuth token endpoint refused our credentials or the MMR
+ * endpoint rejected our bearer token. Surfaced as 502 (not 401) because
+ * internal portal callers don't need to reason about Manheim's auth state —
+ * to them, the upstream is simply unavailable.
+ */
+export class ManheimAuthError extends IntelligenceError {
+  readonly code = "manheim_auth_error";
+  readonly httpStatus = 502;
+}
+
+/**
+ * 502 — Manheim returned 429 and the retry budget was exhausted. Surfaced as
+ * 502 (not 429) because internal portal callers are not the rate-limit owner;
+ * the rate limit applies to our shared upstream account.
+ */
+export class ManheimRateLimitError extends IntelligenceError {
+  readonly code = "manheim_rate_limited";
+  readonly httpStatus = 502;
+}
+
+/**
+ * 502 — Manheim returned a 200 but the body was malformed JSON or missing
+ * required fields. Distinct from a network or auth error because the bug is
+ * data-shape — needed to disambiguate observability dashboards.
+ */
+export class ManheimResponseError extends IntelligenceError {
+  readonly code = "manheim_response_error";
+  readonly httpStatus = 502;
+}
+
+/**
+ * 502 — Manheim returned a transient 5xx and the retry budget was exhausted,
+ * or a network error persisted across all attempts.
+ */
+export class ManheimUnavailableError extends IntelligenceError {
+  readonly code = "manheim_unavailable";
+  readonly httpStatus = 502;
+}

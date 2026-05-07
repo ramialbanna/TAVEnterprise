@@ -8,6 +8,12 @@ import type { ApiResponse } from "../../types/api";
 const env: Env = {
   TAV_INTEL_KV: null as unknown as KVNamespace,
   MANAGER_EMAIL_ALLOWLIST: "",
+  MANHEIM_CLIENT_ID:     "",
+  MANHEIM_CLIENT_SECRET: "",
+  MANHEIM_USERNAME:      "",
+  MANHEIM_PASSWORD:      "",
+  MANHEIM_TOKEN_URL:     "",
+  MANHEIM_MMR_URL:       "",
 };
 
 function buildArgs(opts: {

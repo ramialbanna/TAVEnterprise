@@ -1,0 +1,244 @@
+/**
+ * MMR lookup orchestration.
+ *
+ * Single-purpose entrypoint that handlers (and the future bulk replay job)
+ * call to retrieve an `MmrResponseEnvelope`. It owns the cache-then-lock
+ * dance defined in `docs/MANHEIM_INTEGRATION_ARCHITECTURE.md §4`:
+ *
+ *   1. Resolve mileage via the shared inferred-mileage helper.
+ *   2. Derive the cache key (VIN- or YMM-namespaced).
+ *   3. Read the cache (skipped on `force_refresh`).
+ *   4. On miss, attempt to acquire the anti-stampede lock.
+ *      - acquired → re-check cache, then call Manheim, write cache,
+ *        release lock.
+ *      - lock held by another → wait, re-read cache; throw `CacheLockError`
+ *        on timeout.
+ *
+ * No I/O lives here other than the calls into the injected dependencies.
+ * Each dependency is small and mockable, which keeps unit tests pure.
+ *
+ * Postgres audit + cache mirror writes are NOT performed here — they land in
+ * Phase G.2 wired into the handler layer.
+ */
+
+import type { MmrResponseEnvelope } from "../validate";
+import type { ManheimClient } from "../clients/manheim";
+import type { MmrCache } from "../cache/mmrCache";
+import type { CacheLock } from "../cache/lock";
+import { deriveVinCacheKey, deriveYmmCacheKey } from "../cache/mmrCacheKey";
+import {
+  POSITIVE_CACHE_TTL_SECONDS,
+  NEGATIVE_CACHE_TTL_SECONDS,
+  LOCK_TIMEOUT_MS,
+} from "../cache/constants";
+import { getMmrMileageData } from "../../../../src/scoring/mmrMileage";
+import { CacheLockError } from "../errors";
+import { log } from "../utils/logger";
+
+export type MmrLookupInput =
+  | {
+      kind:    "vin";
+      vin:     string;
+      year:    number;
+      mileage?: number;
+    }
+  | {
+      kind:    "ymm";
+      year:    number;
+      make:    string;
+      model:   string;
+      trim?:   string;
+      mileage?: number;
+    };
+
+export interface MmrLookupArgs {
+  input:          MmrLookupInput;
+  requestId:      string;
+  forceRefresh?:  boolean;
+  /** Override clock for deterministic mileage inference in tests. */
+  now?: () => Date;
+}
+
+export interface MmrLookupDeps {
+  client: ManheimClient;
+  cache:  MmrCache;
+  lock:   CacheLock;
+}
+
+/**
+ * Run a cached, single-flight Manheim MMR lookup.
+ *
+ * Resolution order:
+ *   1. Cache hit (unless `forceRefresh`) → returned with `cache_hit: true`.
+ *   2. Lock acquired → fetch from Manheim, persist to cache, return.
+ *   3. Lock held → wait for release, re-read cache. Throws `CacheLockError`
+ *      if the cache is still empty after the wait window.
+ *
+ * Errors from `client.lookup*` (e.g. `ManheimUnavailableError`,
+ * `ManheimRateLimitError`) bubble unchanged so the handler layer can map
+ * them to HTTP responses via the standard error envelope.
+ */
+export async function performMmrLookup(
+  args: MmrLookupArgs,
+  deps: MmrLookupDeps,
+): Promise<MmrResponseEnvelope> {
+  const start = Date.now();
+  const requestId    = args.requestId;
+  const forceRefresh = args.forceRefresh === true;
+
+  // 1. Resolve mileage (single source of truth — same as main worker).
+  const mileageData = getMmrMileageData(
+    args.input.year,
+    args.input.mileage ?? null,
+    args.now?.() ?? new Date(),
+  );
+
+  // 2. Derive cache key.
+  const cacheKey =
+    args.input.kind === "vin"
+      ? deriveVinCacheKey(args.input.vin)
+      : deriveYmmCacheKey({
+          year:    args.input.year,
+          make:    args.input.make,
+          model:   args.input.model,
+          trim:    args.input.trim ?? null,
+          mileage: mileageData.value,
+        });
+
+  // 3. Cache read (skipped on force_refresh).
+  if (!forceRefresh) {
+    const cached = await deps.cache.get(cacheKey, requestId);
+    if (cached !== null) {
+      log("mmr.lookup.complete", {
+        requestId,
+        route:           args.input.kind,
+        cacheHit:        true,
+        lockAttempted:   false,
+        cacheKey,
+        inferredMileage: mileageData.isInferred,
+        retryCount:      0,
+        latencyMs:       Date.now() - start,
+        kpi: true,
+      });
+      return { ...cached, cache_hit: true };
+    }
+  }
+
+  // 4. Lock acquire.
+  const acquired = await deps.lock.acquire(cacheKey, LOCK_TIMEOUT_MS, requestId);
+
+  if (acquired) {
+    try {
+      // Re-check cache — another request may have populated it between our
+      // miss and our acquire.
+      if (!forceRefresh) {
+        const recheck = await deps.cache.get(cacheKey, requestId);
+        if (recheck !== null) {
+          log("mmr.lookup.complete", {
+            requestId,
+            route:           args.input.kind,
+            cacheHit:        true,
+            lockAttempted:   true,
+            cacheKey,
+            inferredMileage: mileageData.isInferred,
+            retryCount:      0,
+            latencyMs:       Date.now() - start,
+            kpi: true,
+          });
+          return { ...recheck, cache_hit: true };
+        }
+      }
+
+      // Live Manheim call.
+      const result =
+        args.input.kind === "vin"
+          ? await deps.client.lookupByVin({
+              vin:       args.input.vin,
+              mileage:   mileageData.value,
+              requestId,
+            })
+          : await deps.client.lookupByYmm({
+              year:      args.input.year,
+              make:      args.input.make,
+              model:     args.input.model,
+              ...(args.input.trim !== undefined ? { trim: args.input.trim } : {}),
+              mileage:   mileageData.value,
+              requestId,
+            });
+
+      const ttl =
+        result.mmr_value === null
+          ? NEGATIVE_CACHE_TTL_SECONDS
+          : POSITIVE_CACHE_TTL_SECONDS;
+      const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
+
+      const envelope: MmrResponseEnvelope = {
+        ok:                  result.mmr_value !== null,
+        mmr_value:           result.mmr_value,
+        mileage_used:        mileageData.value,
+        is_inferred_mileage: mileageData.isInferred,
+        cache_hit:           false,
+        source:              "manheim",
+        fetched_at:          result.fetched_at,
+        expires_at:          expiresAt,
+        mmr_payload:         result.payload,
+        error_code:          null,
+        error_message:       null,
+      };
+
+      // Best-effort cache write — never block the response on a cache failure.
+      try {
+        await deps.cache.set(cacheKey, envelope, ttl, requestId);
+      } catch (err) {
+        log("mmr.lookup.cache_set_failed", {
+          requestId,
+          cacheKey,
+          error_message: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      log("mmr.lookup.complete", {
+        requestId,
+        route:           args.input.kind,
+        cacheHit:        false,
+        lockAttempted:   true,
+        cacheKey,
+        inferredMileage: mileageData.isInferred,
+        retryCount:      result.retryCount,
+        latencyMs:       Date.now() - start,
+        kpi: true,
+      });
+
+      return envelope;
+    } finally {
+      // Release ALWAYS — even on Manheim error — so peers don't wait on a
+      // dead owner. KV's TTL is the safety net for crashed workers; this
+      // is the polite path.
+      await deps.lock.release(cacheKey, requestId);
+    }
+  }
+
+  // 5. Lock held by someone else — wait, then re-read.
+  await deps.lock.wait(cacheKey, LOCK_TIMEOUT_MS);
+  const afterWait = await deps.cache.get(cacheKey, requestId);
+  if (afterWait !== null) {
+    log("mmr.lookup.complete", {
+      requestId,
+      route:           args.input.kind,
+      cacheHit:        true,
+      lockAttempted:   true,
+      cacheKey,
+      inferredMileage: mileageData.isInferred,
+      retryCount:      0,
+      latencyMs:       Date.now() - start,
+      kpi: true,
+    });
+    return { ...afterWait, cache_hit: true };
+  }
+
+  // Cache still empty after the wait window — surface as 503 so the caller
+  // can decide whether to retry.
+  throw new CacheLockError("Lock contention exceeded wait window", {
+    cacheKey,
+  });
+}
