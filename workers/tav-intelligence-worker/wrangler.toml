@@ -40,10 +40,11 @@ MANAGER_EMAIL_ALLOWLIST = ""
 
 [env.staging]
 name = "tav-intelligence-worker-staging"
+workers_dev = true
 
 [[env.staging.kv_namespaces]]
 binding = "TAV_INTEL_KV"
-id      = "REPLACE_WITH_TAV_INTEL_KV_STAGING_ID"
+id      = "80195f01a65c4431af1e3835f9bea933"
 
 [env.staging.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
@@ -80,3 +81,5 @@ MANAGER_EMAIL_ALLOWLIST = ""
 #   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/tav-intelligence-worker/wrangler.toml --env staging
 #
 # Repeat all of the above with --env production.
+
+

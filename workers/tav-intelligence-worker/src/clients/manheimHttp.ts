@@ -39,8 +39,10 @@ import { retryWithBackoff } from "../utils/retry";
 const TOKEN_KV_KEY = "manheim:token";
 /** Lock key for single-flight token refresh. */
 const TOKEN_REFRESH_LOCK_KEY = "lock:manheim:token:refresh";
-/** Soft TTL for the lock; ample budget for a token endpoint round-trip. */
-const TOKEN_REFRESH_LOCK_TTL_S = 10;
+/** Soft TTL for the lock; ample budget for a token endpoint round-trip.
+ *  KV requires expirationTtl >= 60s — 60s is still short enough to avoid
+ *  meaningful lock starvation; the lock is deleted immediately on success. */
+const TOKEN_REFRESH_LOCK_TTL_S = 60;
 /** Buffer before token's true expiry — refresh early to avoid edge races. */
 const TOKEN_EXPIRY_BUFFER_MS = 60_000;
 /** Sleep between re-reads while another request is refreshing the token. */
@@ -158,7 +160,7 @@ export class ManheimHttpClient implements ManheimClient {
   constructor(
     private env: Env,
     private kv:  KVNamespace,
-    private fetchFn: typeof fetch = fetch,
+    private fetchFn: typeof fetch = fetch.bind(globalThis),
   ) {}
 
   async lookupByVin(args: {
