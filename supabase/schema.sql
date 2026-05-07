@@ -464,65 +464,6 @@ CREATE TABLE tav.buy_box_score_attributions (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- ── historical_sales ──────────────────────────────────────────────────────────
--- Raw CSV ingest staging table. This is the "raw" layer: every row from an
--- uploaded CSV lands here with minimal transformation, preserving the original
--- payload for audit and reprocessing.
--- Unique on (import_run_id, row_offset) — idempotent re-ingest of the same CSV.
-
-CREATE TABLE tav.historical_sales (
-  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  import_run_id       uuid        NOT NULL REFERENCES tav.import_batches (id),
-  row_offset          integer     NOT NULL,
-  stock_number        text,
-  vin                 text,
-  year                smallint,
-  make                text,
-  model               text,
-  trim                text,
-  mileage             integer,
-  purchase_price      numeric(10,2),
-  sale_price          numeric(10,2),
-  purchase_date       date,
-  sale_date           date,
-  days_in_inventory   integer,
-  buyer_id            text,
-  closer_id           text,
-  source_location     text,
-  row_status          text        NOT NULL DEFAULT 'pending'
-    CHECK (row_status IN ('pending','processed','rejected','skipped')),
-  rejection_reason    text,
-  raw_row             jsonb       NOT NULL,
-  created_at          timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT historical_sales_import_run_row_key UNIQUE (import_run_id, row_offset)
-);
-
--- ── market_velocities ─────────────────────────────────────────────────────────
--- Time-decay velocity scores per Make/Model/Trim segment. The velocity_score
--- multiplier (1.0000 = baseline) feeds the buy-box scorer. trim = '' means
--- make/model-only segment — same sentinel pattern as market_demand_index.
-
-CREATE TABLE tav.market_velocities (
-  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  make              text        NOT NULL,
-  model             text        NOT NULL,
-  trim              text        NOT NULL DEFAULT '',
-  region            text        NOT NULL
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx')),
-  velocity_score    numeric(5,4) NOT NULL
-    CHECK (velocity_score >= 0),
-  sample_count      integer     NOT NULL DEFAULT 0,
-  avg_days_to_sell  numeric(6,2),
-  baseline_days     numeric(6,2),
-  computed_at       timestamptz NOT NULL DEFAULT now(),
-  valid_until       timestamptz,
-  created_at        timestamptz NOT NULL DEFAULT now(),
-
-  CONSTRAINT market_velocities_make_model_trim_region_key
-    UNIQUE (make, model, trim, region)
-);
-
 -- purchase_outcomes
 CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
   WHERE lead_id IS NOT NULL;
@@ -543,16 +484,6 @@ ALTER TABLE tav.market_demand_index ADD CONSTRAINT market_demand_index_region_se
 
 -- buy_box_score_attributions
 CREATE INDEX ON tav.buy_box_score_attributions (lead_id);
-
--- historical_sales
-CREATE INDEX ON tav.historical_sales (import_run_id);
-CREATE INDEX ON tav.historical_sales (row_status)
-  WHERE row_status = 'pending';
-CREATE INDEX ON tav.historical_sales (vin)
-  WHERE vin IS NOT NULL;
-
--- market_velocities
-CREATE INDEX ON tav.market_velocities (region, make, model);
 
 -- dead_letters
 CREATE INDEX ON tav.dead_letters (resolved, created_at) WHERE resolved = false;
