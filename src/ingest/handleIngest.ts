@@ -19,7 +19,7 @@ import { writeSchemaDrift } from "../persistence/schemaDrift";
 import { computeIdentityKey } from "../dedupe/fingerprint";
 import { computeStaleScore } from "../stale/scorer";
 import { computeDealScore } from "../scoring/deal";
-import { matchBuyBox } from "../scoring/buybox";
+import { matchBuyBox } from "../scoring/buyBox";
 import { computeFreshnessScore, computeSourceConfidenceScore, computeRegionScore, computeFinalScore } from "../scoring/lead";
 import { computeHybridBuyBoxScore } from "../scoring/hybrid";
 import { computeSegmentProfitScore } from "../scoring/segment";
