@@ -39,3 +39,30 @@ Example:
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /kpis/summary with real Supabase RPC tav.get_mmr_kpis (p95 latency, cache hit rate, by-type/outcome breakdown, top requesters) — DONE
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /intel/mmr/queries paginated audit history (21-field allowlist, all filters, offset pagination with has_more) — DONE
 - [x] 2026-05-08 supabase/migrations — add 0032_get_mmr_kpis.sql: CREATE tav.get_mmr_kpis RPC + GRANT EXECUTE to service_role — DONE
+
+## Production deploy blockers — tav-intelligence-worker
+
+These must be completed before the intelligence worker can be deployed to production.
+Do NOT modify wrangler.toml IDs until the namespace is provisioned.
+
+- [ ] 2026-05-08 wrangler.toml — provision TAV_INTEL_KV production namespace and replace placeholder ID:
+      `wrangler kv namespace create TAV_INTEL_KV_PRODUCTION --config workers/tav-intelligence-worker/wrangler.toml --env production`
+      Then paste the returned `id` into `[[env.production.kv_namespaces]] id = ...`
+
+- [ ] 2026-05-08 wrangler.toml — provision TAV_INTEL_KV preview namespace (used by `wrangler dev` without --env) and replace both placeholder IDs:
+      `wrangler kv namespace create TAV_INTEL_KV_PREVIEW --config workers/tav-intelligence-worker/wrangler.toml`
+      Then paste `id` and `preview_id` into `[[kv_namespaces]]`
+
+- [ ] 2026-05-08 wrangler.toml — confirm staging KV namespace has `preview_id` set in `[[env.staging.kv_namespaces]]`
+      (currently only `id` is set; missing `preview_id` will cause `wrangler dev --env staging` to warn)
+
+- [ ] 2026-05-08 secrets — provision all 8 production secrets (run each with --env production):
+      MANHEIM_CLIENT_ID, MANHEIM_CLIENT_SECRET, MANHEIM_USERNAME, MANHEIM_PASSWORD,
+      MANHEIM_TOKEN_URL, MANHEIM_MMR_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+      `wrangler secret put <NAME> --config workers/tav-intelligence-worker/wrangler.toml --env production`
+
+- [ ] 2026-05-08 wrangler.toml — set `workers_dev = true` under `[env.production]` once production secrets are provisioned,
+      or use a Cloudflare Access policy to gate the production worker endpoint
+
+- [ ] 2026-05-08 supabase/migrations — apply migration 0033 (user_activity feed index + purge_expired_activity function)
+      to remote before deploying production worker: `npx supabase db push`

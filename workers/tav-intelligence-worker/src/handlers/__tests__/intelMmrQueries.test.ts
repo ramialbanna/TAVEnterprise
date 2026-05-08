@@ -164,4 +164,25 @@ describe("handleIntelMmrQueries", () => {
     expect(mockFrom).toHaveBeenCalledWith("mmr_queries");
     expect(qb.order).toHaveBeenCalledWith("created_at", { ascending: false });
   });
+
+  it("normalizes vin filter to uppercase and reflects it in filters", async () => {
+    mockRange.mockResolvedValueOnce({ data: [], count: 0, error: null });
+
+    const res  = await handleIntelMmrQueries(buildArgs({ vin: "1hgcm82633a123456" }));
+    const body = (await res.json()) as ApiResponse<MmrQueriesResponse>;
+
+    expect(body.data?.filters.vin).toBe("1HGCM82633A123456");
+    expect(qb.eq).toHaveBeenCalledWith("vin", "1HGCM82633A123456");
+  });
+
+  it("computes has_more correctly with non-zero offset", async () => {
+    // page 2: offset=50, limit=50, total=120 → items 50–99 → has_more=true (100 < 120)
+    mockRange.mockResolvedValueOnce({ data: Array(50).fill(STUB_ROW), count: 120, error: null });
+
+    const res  = await handleIntelMmrQueries(buildArgs({ offset: "50", limit: "50" }));
+    const body = (await res.json()) as ApiResponse<MmrQueriesResponse>;
+
+    expect(body.data?.offset).toBe(50);
+    expect(body.data?.has_more).toBe(true);
+  });
 });

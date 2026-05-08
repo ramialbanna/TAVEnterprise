@@ -5,6 +5,7 @@ import { MMR_LOOKUP_TYPES } from "../validate";
 import type { HandlerArgs } from "./types";
 
 const DEFAULT_WINDOW_DAYS = 7;
+const MAX_WINDOW_DAYS     = 90;
 
 export interface KpisSummaryData {
   total_lookups:      number;
@@ -58,6 +59,14 @@ export async function handleKpisSummary(args: HandlerArgs): Promise<Response> {
 
   if (fromTs >= toTs) {
     throw new ValidationError("'from' must be before 'to'");
+  }
+
+  const windowDays = (toTs.getTime() - fromTs.getTime()) / (24 * 60 * 60 * 1000);
+  if (windowDays > MAX_WINDOW_DAYS) {
+    throw new ValidationError(
+      `Time window exceeds maximum of ${MAX_WINDOW_DAYS} days`,
+      { max_days: MAX_WINDOW_DAYS, requested_days: Math.ceil(windowDays) },
+    );
   }
 
   // --- optional filters ---

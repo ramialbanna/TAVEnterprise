@@ -166,4 +166,25 @@ describe("handleKpisSummary", () => {
     expect(call[1].p_email).toBeNull();
     expect(call[1].p_lookup_type).toBeNull();
   });
+
+  it("uses a 7-day window relative to 'to' when only 'to' is provided", async () => {
+    mockRpc.mockResolvedValueOnce({ data: STUB_KPIS, error: null });
+    const to          = "2026-05-08T00:00:00.000Z";
+    const expectedFrom = new Date(new Date(to).getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await handleKpisSummary(buildArgs({ to }));
+
+    const call = mockRpc.mock.calls[0]!;
+    expect(call[1].p_to).toBe(to);
+    expect(call[1].p_from).toBe(expectedFrom);
+  });
+
+  it("throws ValidationError when window exceeds 90 days", async () => {
+    await expect(
+      handleKpisSummary(buildArgs({
+        from: "2025-01-01T00:00:00Z",
+        to:   "2026-05-08T00:00:00Z",
+      })),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
 });

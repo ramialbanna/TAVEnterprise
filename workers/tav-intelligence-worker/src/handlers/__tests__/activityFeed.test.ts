@@ -4,12 +4,20 @@ import type { HandlerArgs } from "../types";
 import type { Env } from "../../types/env";
 import type { ApiResponse } from "../../types/api";
 
-const mockLimit  = vi.fn();
-const mockOrder  = vi.fn(() => ({ limit: mockLimit }));
-const mockIsNull = vi.fn(() => ({ order: mockOrder }));
-const mockEq     = vi.fn(() => ({ is: mockIsNull, eq: vi.fn(() => ({ is: mockIsNull })), order: mockOrder }));
-const mockSelect = vi.fn(() => ({ is: mockIsNull, eq: mockEq }));
-const mockFrom   = vi.fn(() => ({ select: mockSelect }));
+// Builder-style mock: all chainable methods return `this`; the chain is
+// thenable so `await query` works when no explicit terminal method is called.
+const mockResult = vi.fn();
+const qb = {
+  select: vi.fn().mockReturnThis(),
+  is:     vi.fn().mockReturnThis(),
+  order:  vi.fn().mockReturnThis(),
+  limit:  vi.fn().mockReturnThis(),
+  eq:     vi.fn().mockReturnThis(),
+  then:   (onFulfilled: (v: unknown) => unknown, onRejected?: (v: unknown) => unknown) =>
+            mockResult().then(onFulfilled, onRejected),
+  catch:  (onRejected: (v: unknown) => unknown) => mockResult().catch(onRejected),
+};
+const mockFrom = vi.fn(() => qb);
 
 vi.mock("../../persistence/supabase", () => ({
   getSupabaseClient: () => ({ from: mockFrom }),
@@ -62,7 +70,7 @@ describe("handleActivityFeed", () => {
       { id: "1", activity_type: "mmr_search", created_at: "2026-05-08T12:00:00Z" },
       { id: "2", activity_type: "vin_view",   created_at: "2026-05-08T11:00:00Z" },
     ];
-    mockLimit.mockResolvedValueOnce({ data: rows, error: null });
+    mockResult.mockResolvedValueOnce({ data: rows, error: null });
 
     const res  = await handleActivityFeed(buildArgs());
     expect(res.status).toBe(200);
@@ -75,7 +83,7 @@ describe("handleActivityFeed", () => {
   });
 
   it("returns empty entries when no rows exist", async () => {
-    mockLimit.mockResolvedValueOnce({ data: null, error: null });
+    mockResult.mockResolvedValueOnce({ data: null, error: null });
 
     const res  = await handleActivityFeed(buildArgs());
     const body = (await res.json()) as ApiResponse<{ entries: unknown[] }>;
@@ -83,7 +91,7 @@ describe("handleActivityFeed", () => {
   });
 
   it("respects limit param clamped to 100", async () => {
-    mockLimit.mockResolvedValueOnce({ data: [], error: null });
+    mockResult.mockResolvedValueOnce({ data: [], error: null });
 
     const res  = await handleActivityFeed(buildArgs({ limit: "999" }));
     const body = (await res.json()) as ApiResponse<{ limit: number }>;
@@ -91,13 +99,21 @@ describe("handleActivityFeed", () => {
   });
 
   it("throws PersistenceError when Supabase returns an error", async () => {
-    mockLimit.mockResolvedValueOnce({ data: null, error: { code: "PGRST", message: "db error" } });
+    mockResult.mockResolvedValueOnce({ data: null, error: { code: "PGRST", message: "db error" } });
     await expect(handleActivityFeed(buildArgs())).rejects.toBeInstanceOf(PersistenceError);
   });
 
   it("queries the user_activity table", async () => {
-    mockLimit.mockResolvedValueOnce({ data: [], error: null });
+    mockResult.mockResolvedValueOnce({ data: [], error: null });
     await handleActivityFeed(buildArgs());
     expect(mockFrom).toHaveBeenCalledWith("user_activity");
+  });
+
+  it("normalizes vin filter to uppercase and applies eq filter", async () => {
+    mockResult.mockResolvedValueOnce({ data: [], error: null });
+
+    await handleActivityFeed(buildArgs({ vin: "1hgcm82633a123456" }));
+
+    expect(qb.eq).toHaveBeenCalledWith("vin", "1HGCM82633A123456");
   });
 });
