@@ -7,6 +7,7 @@ import { handleMmrVin }            from "../handlers/mmrVin";
 import { handleMmrYearMakeModel }  from "../handlers/mmrYearMakeModel";
 import { handleSalesUpload }       from "../handlers/salesUpload";
 import { handleActivityVin }       from "../handlers/activityVin";
+import { handleActivityFeed }      from "../handlers/activityFeed";
 import { handleKpisSummary }       from "../handlers/kpisSummary";
 import { handleIntelMmrCacheKey }  from "../handlers/intelMmrCacheKey";
 import type { HandlerArgs }        from "../handlers/types";
@@ -33,6 +34,10 @@ export async function dispatch(
   if (method === "POST" && pathname === "/mmr/year-make-model")  return handleMmrYearMakeModel(baseArgs);
   if (method === "POST" && pathname === "/sales/upload")         return handleSalesUpload(baseArgs);
   if (method === "GET"  && pathname === "/kpis/summary")         return handleKpisSummary(baseArgs);
+
+  if (method === "GET" && pathname === "/activity/feed") {
+    return handleActivityFeed(baseArgs);
+  }
 
   if (method === "GET" && pathname.startsWith("/activity/vin/")) {
     const vin = pathname.slice("/activity/vin/".length);
