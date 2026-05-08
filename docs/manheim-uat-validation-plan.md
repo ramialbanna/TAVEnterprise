@@ -419,3 +419,120 @@ These do not block UAT but should be tracked before production promotion.
 | No integration test covers `POST /ingest → valuation_snapshots` write in `MANHEIM_LOOKUP_MODE="worker"` mode | `test/ingest.test.ts` | Existing ingest tests mock `workerClient`; no test hits a real Supabase write. Acceptable pre-production if staging smoke test (section 9) passes manually. |
 | `workerClient.ts` emits no structured log events | `src/valuation/workerClient.ts` | Pre-call and post-call observability is missing for the worker-mode path. See section 10 future-enhancement note. |
 | Trim not sent to intelligence worker | Design decision (G.5.3) | `trim_sent_to_worker: false` documented in enrichment payload. Revisit if UAT shows materially different values with trim included. |
+
+---
+
+## 14. Sandbox UAT Results — 2026-05-08
+
+All four observations below executed against the Cox sandbox. No tokens, secrets,
+or credential material recorded. Worker-mode end-to-end (`POST /ingest →
+valuation_snapshots`) not yet exercised — covered separately under §8.
+
+### 14a. Token-only — PASS
+
+| Check | Observed |
+|---|---|
+| HTTP status | 200 |
+| `token_type` | `Bearer` |
+| `expires_in` | 86400 |
+| `scope` | `wholesale-valuations.vehicle.mmr-ext.get` |
+| `access_token` | present (length > 0); not printed; not logged |
+
+Resolves §0.5 open items: token URL works; scope accepted by Cox; Basic-Auth
+flow operational against sandbox.
+
+### 14b. VIN lookup with known-good VIN — PASS
+
+Request: `GET /vin/1FT8W3BT1SEC27066?odometer=50000` (path-segment VIN, odometer query).
+
+| Field | Observed |
+|---|---|
+| HTTP status | 200 |
+| `count` | 5 |
+| `items[0]` year/make/model | 2025 / FORD / F350 SRW 4WD V8 TDSL |
+| `items[0]` trim | CREW CAB 6.7L LARIAT |
+| `items[0].adjustedPricing.wholesale.average` | 67100 |
+| `items[0].adjustedPricing.wholesale.above` | 70700 |
+| `items[0].adjustedPricing.wholesale.below` | 63500 |
+| `items[0].sampleSize` | `"7"` |
+| `items[0].requestedDate` / `returnedDate` | 2026-05-08 |
+| `items[0].bestMatch` | `true` |
+| `items[0].adjustedBy.Odometer` | 50000 |
+| `adjustedPricing.retail.*` | absent (`include=retail` not sent — `MANHEIM_INCLUDE_RETAIL=false`) |
+
+Confirms: `odometer` query supported on `/vin/{vin}`; response shape matches
+`extractManheimDistribution`'s parser (wholesale tiers + sampleSize); retail
+tiers correctly null when `include=retail` not requested.
+
+### 14c. VIN with `include=retail` — PASS (non-core)
+
+Request: `GET /vin/1FT8W3BT1SEC27066?odometer=50000&include=retail`.
+
+`include=retail` returned `adjustedPricing.retail.{above,average,below}` plus
+a separate base `retail.*` block. The flag is mechanically wired and verified;
+exact tier values are recorded in the raw response cache for audit.
+
+> **Business decision (2026-05-08):** TAV is **wholesale-only**. Retail is
+> optional context only. Do NOT add retail persistence columns to
+> `tav.valuation_snapshots`. Do NOT extend `extractManheimDistribution` beyond
+> the existing `retailClean` / `retailAvg` / `retailRough` shape. Raw retail
+> data is preserved on the cached payload (`mmr_payload`) for any future
+> opportunistic use — but it does not drive scoring, alerts, or buyer workflow.
+
+### 14d. No-data VIN — PASS
+
+Request: `GET /vin/1FT8W3BT199999999?odometer=50000`.
+
+| Field | Observed |
+|---|---|
+| HTTP status | 404 |
+| `message` / `developerMessage` | "Matching vehicles not found" |
+| Mapping in code | `executeLookup` returns envelope `{ mmr_value: null, payload: {}, retryCount: 0 }` and emits `manheim.http.complete` log with `mmr_value: null`. Non-blocking. |
+
+Confirms: 404 on unknown VIN flows through the existing 404 → null-envelope
+branch without throwing.
+
+### 14e. YMMT Search with known-good YMMT — PASS
+
+Request: `GET /search/2025/Acura/ADX%20AWD/4D%20SUV?odometer=50000` (path-segment year/make/model/bodyname, URL-encoded spaces, odometer query).
+
+| Field | Observed |
+|---|---|
+| HTTP status | 200 |
+| `count` | 3 |
+| `items[0]` year/make/model | 2025 / ACURA / ADX AWD |
+| `items[0]` trim | 4D SUV A-SPEC PKG |
+| `items[0].adjustedPricing.wholesale.average` | 26800 |
+| `items[0].adjustedPricing.wholesale.above` | 28200 |
+| `items[0].adjustedPricing.wholesale.below` | 25400 |
+| `items[0].sampleSize` | `"6"` |
+| `items[0].requestedDate` / `returnedDate` | 2026-05-08 |
+| `items[0].bestMatch` | absent / null on Search responses |
+| `items[0].adjustedBy.Odometer` | 50000 |
+
+Confirms: short-form YMMT path works; `encodeURIComponent` on bodyname space
+is accepted; `bestMatch` is a VIN-only field (treat as nullable on Search);
+odometer adjustment applies on Search.
+
+### Resolved by these UAT runs
+
+- Cox token endpoint accepts our credentials and scope.
+- Sandbox test VIN + YMMT data is sufficient for routine smoke runs.
+- `odometer` query parameter accepted on both `/vin/{vin}` and `/search/...`.
+- `adjustedPricing.wholesale.{above,average,below}` and `sampleSize` shape match
+  the parser's expectations on real Cox responses.
+- `include=retail` flag mechanically works — non-core for TAV (wholesale-only).
+  No further retail persistence work planned.
+
+### Still open (validation deferred)
+
+- `include=ci` behavior on VIN — confirm `confidenceInterval` populates and
+  is correctly stripped on Search/YMMT.
+- `include=forecast` and `include=historical` — only investigate further if
+  these sections add wholesale-pricing signal (e.g. forecast-based stale
+  detection). Skip if they're retail-flavored only.
+- Batch endpoint (`POST /mmr-batch/vins`) — not yet exercised.
+- `mmr-lookup` reference-sync as the future source-of-truth for
+  make/model/trim aliases.
+- Trim/bodyname aliasing from `mmr-lookup` — listing trims may not match Cox
+  `bodyname` strings; alias table not yet populated.

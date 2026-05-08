@@ -76,17 +76,27 @@ Full UAT validation plan: `docs/manheim-uat-validation-plan.md`
 - [x] `zipCode` (not `zip`) supported as a query param.
 - [x] `include` query supports `retail`, `forecast`, `historical`, `ci` (`ci` stripped on Search/YMMT). Behavior gated by `MANHEIM_INCLUDE_*` env flags; default conservative (no flags set → no `include` param).
 
-**Open Cox blockers (pending product-guide review or rep response):**
-- [ ] Confirm exact `MANHEIM_TOKEN_URL` (Cox Bridge 2 token endpoint full URL — copy verbatim from the Cox app detail page).
-- [ ] Provide ≥2 known-good sandbox VINs, ≥1 expected-404 VIN, ≥2 YMM combos with valid `bodyname`.
+**Resolved by sandbox UAT 2026-05-08 (see `docs/manheim-uat-validation-plan.md` §14):**
+- [x] Token URL works against Cox sandbox (HTTP 200, scope accepted, `Bearer` token, `expires_in: 86400`).
+- [x] Sandbox VIN/YMMT test data validated: VIN `1FT8W3BT1SEC27066` returns 2025 Ford F-350SD wholesale tiers; no-data VIN `1FT8W3BT199999999` returns 404 → null envelope; YMMT `2025 / Acura / ADX AWD / 4D SUV` returns wholesale tiers.
+- [x] Response shape confirmed: `adjustedPricing.wholesale.{above,average,below}` + `sampleSize` (string) match the parser's expectations on real Cox responses.
+- [x] `include=retail` flag mechanically works on VIN. **Non-core for TAV (wholesale-only).** No further retail parser or persistence work planned; raw retail payload is preserved for opportunistic use only.
+
+**Open Cox blockers:** none. (All previously-listed blockers resolved by sandbox UAT.)
+
+**Business decision (2026-05-08): TAV is wholesale-only.** Retail values are not
+a core requirement. Do not add `mmr_retail_avg` / `mmr_retail_rough` columns to
+`tav.valuation_snapshots`. Do not extend the parser or scoring around retail
+data. Retail remains optional context preserved on the raw `mmr_payload` only.
 
 **Deferred Cox features (logged for future phases):**
+- [ ] **`include=ci` sandbox validation on VIN** — turn `MANHEIM_INCLUDE_CI=true` on, confirm `confidenceInterval` populates on `/vin/{vin}` and is correctly stripped on Search/YMMT (no 4xx, no `ci` token in the URL).
+- [ ] **`include=forecast` / `include=historical` sandbox validation** — only pursue if these sections add wholesale-pricing signal (e.g. forecast-based stale detection). Skip if they are retail-flavored only.
 - [ ] **Reference-sync from `mmr-lookup` endpoints** — Cox `/mmr-lookup` is the future source-of-truth for make/model/trim alias data (currently `mmr_reference_makes` / `mmr_reference_models` / `mmr_make_aliases` / `mmr_model_aliases` are seeded by hand and `bodyname` has no alias table). Plan: build a periodic job that pulls canonical strings from `/mmr-lookup` and refreshes the reference tables.
 - [ ] VIN disambiguation variants `/vin/{vin}/{subseries}` and `/vin/{vin}/{subseries}/{transmission}`.
 - [ ] Long-form YMMT path `/search/years/{year}/makes/{make}/models/{model}/trims/{bodyname}`.
 - [ ] Trim alias table (currently pass-through; listing trims may not match Cox `bodyname` strings).
-- [ ] Wire `forecast`, `historical`, `confidenceInterval` into `extractManheimDistribution` (today only `wholesale` and `retail` tiers are parsed).
-- [ ] **Retail distribution persistence**: `extractManheimDistribution` now extracts `adjustedPricing.retail.{above,average,below}` as `retailClean` / `retailAvg` / `retailRough`, but `tav.valuation_snapshots` only persists `mmr_retail_clean`. Future schema migration may add `mmr_retail_avg` / `mmr_retail_rough` columns + `writeValuationSnapshot` mappings if the full retail distribution is needed for downstream scoring or analytics.
+- [ ] Wire `forecast`, `historical`, `confidenceInterval` into `extractManheimDistribution` only if a wholesale-relevant downstream consumer needs them. Today only `wholesale` (and a non-core `retail`) tier is parsed.
 - [ ] Reference endpoints `/colors`, `/edition`, `/grades`, `/regions`, `/regions/auction/id/{auction_id}`, `/regions/id/{region_id}` for future enrichment.
 - [ ] Batch endpoint `POST {.../mmr-batch}/vins` (up to 100 VINs); no batch use case in ingest yet.
 - [ ] Plumb `region`, `color`, `grade`, `date`, `extendedCoverage`, `orgId`, `excludeBuild` query params through `appendCoxQueryParams` when use cases land.
