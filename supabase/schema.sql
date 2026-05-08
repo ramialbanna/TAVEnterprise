@@ -464,6 +464,159 @@ CREATE TABLE tav.buy_box_score_attributions (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- ── sales_upload_batches ──────────────────────────────────────────────────────
+-- Per-CSV-upload batch record for the sales/historical upload flow.
+-- Created BEFORE historical_sales because historical_sales.upload_batch_id
+-- is a foreign key into this table.
+
+CREATE TABLE tav.sales_upload_batches (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  uploaded_by_user_id   text,
+  uploaded_by_name      text,
+  uploaded_by_email     text,
+  file_name             text        NOT NULL,
+  row_count             integer     NOT NULL,
+  accepted_count        integer     NOT NULL DEFAULT 0,
+  rejected_count        integer     NOT NULL DEFAULT 0,
+  status                text        NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending','validating','complete','failed')),
+  validation_errors     jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  created_at            timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── historical_sales ──────────────────────────────────────────────────────────
+-- Per-vehicle historical purchase/sale record. Source for KPI rollups and
+-- market-velocity calc. row_hash is the application-computed dedup key.
+
+CREATE TABLE tav.historical_sales (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  vin                 text,
+  year                smallint    NOT NULL,
+  make                text        NOT NULL,
+  model               text        NOT NULL,
+  trim                text,
+  buyer               text,
+  buyer_user_id       text,
+  acquisition_date    date,
+  sale_date           date        NOT NULL,
+  acquisition_cost    numeric(12,2),
+  sale_price          numeric(12,2) NOT NULL,
+  transport_cost      numeric(10,2),
+  recon_cost          numeric(10,2),
+  auction_fees        numeric(10,2),
+  gross_profit        numeric(12,2)
+    GENERATED ALWAYS AS (
+      sale_price
+      - COALESCE(acquisition_cost, 0)
+      - COALESCE(transport_cost, 0)
+      - COALESCE(recon_cost, 0)
+      - COALESCE(auction_fees, 0)
+    ) STORED,
+  source_file_name    text,
+  upload_batch_id     uuid        REFERENCES tav.sales_upload_batches (id),
+  row_hash            text        NOT NULL,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── market_velocities ─────────────────────────────────────────────────────────
+-- Time-decay-weighted velocity per segment. Output of the deterministic
+-- velocity job that rolls up historical_sales.
+
+CREATE TABLE tav.market_velocities (
+  id                       uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+  segment_key              text          NOT NULL,
+  year                     smallint,
+  make                     text          NOT NULL,
+  model                    text          NOT NULL,
+  trim                     text,
+  region                   text
+    CHECK (region IS NULL OR region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx')),
+  sales_count_7d           integer       NOT NULL DEFAULT 0,
+  sales_count_30d          integer       NOT NULL DEFAULT 0,
+  sales_count_90d          integer       NOT NULL DEFAULT 0,
+  avg_gross_profit_30d     numeric(10,2),
+  avg_turn_time_30d        numeric(6,2),
+  velocity_score           numeric(5,4)  NOT NULL
+    CHECK (velocity_score >= 0),
+  time_decay_multiplier    numeric(5,4)  NOT NULL DEFAULT 1.0000,
+  calculated_at            timestamptz   NOT NULL DEFAULT now(),
+  components               jsonb         NOT NULL DEFAULT '{}'::jsonb,
+  created_at               timestamptz   NOT NULL DEFAULT now()
+);
+
+-- ── mmr_queries ───────────────────────────────────────────────────────────────
+-- Audit log of every Manheim MMR lookup. Append-only.
+
+CREATE TABLE tav.mmr_queries (
+  id                      uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  vin                     text,
+  year                    smallint,
+  make                    text,
+  model                   text,
+  trim                    text,
+  mileage_used            integer,
+  is_inferred_mileage     boolean     NOT NULL DEFAULT false,
+  lookup_type             text        NOT NULL
+    CHECK (lookup_type IN ('vin','year_make_model')),
+  requested_by_user_id    text,
+  requested_by_name       text,
+  requested_by_email      text,
+  source                  text        NOT NULL
+    CHECK (source IN ('manheim','cache','manual')),
+  cache_hit               boolean     NOT NULL,
+  force_refresh           boolean     NOT NULL DEFAULT false,
+  mmr_value               numeric(10,2),
+  mmr_payload             jsonb,
+  error_code              text,
+  error_message           text,
+  created_at              timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── mmr_cache ─────────────────────────────────────────────────────────────────
+-- Postgres-side queryable mirror of the KV MMR cache. KV serves the hot path;
+-- this table serves analytics + cold-start recovery.
+
+CREATE TABLE tav.mmr_cache (
+  id                    uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  cache_key             text        NOT NULL,
+  vin                   text,
+  year                  smallint,
+  make                  text,
+  model                 text,
+  trim                  text,
+  mileage_used          integer,
+  is_inferred_mileage   boolean     NOT NULL DEFAULT false,
+  mmr_value             numeric(10,2),
+  mmr_payload           jsonb       NOT NULL,
+  fetched_at            timestamptz NOT NULL DEFAULT now(),
+  expires_at            timestamptz NOT NULL,
+  source                text        NOT NULL
+    CHECK (source IN ('manheim','manual')),
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── user_activity ─────────────────────────────────────────────────────────────
+-- Presence + activity feed. active_until drives expiry for short-lived rows.
+
+CREATE TABLE tav.user_activity (
+  id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             text,
+  user_name           text,
+  user_email          text,
+  vin                 text,
+  year                smallint,
+  make                text,
+  model               text,
+  activity_type       text        NOT NULL
+    CHECK (activity_type IN (
+      'mmr_search','vin_view','sales_upload','kpi_view','batch_view'
+    )),
+  activity_payload    jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  active_until        timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+
 -- purchase_outcomes
 CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
   WHERE lead_id IS NOT NULL;
@@ -484,6 +637,43 @@ ALTER TABLE tav.market_demand_index ADD CONSTRAINT market_demand_index_region_se
 
 -- buy_box_score_attributions
 CREATE INDEX ON tav.buy_box_score_attributions (lead_id);
+
+-- sales_upload_batches
+CREATE INDEX ON tav.sales_upload_batches (created_at DESC);
+
+-- historical_sales
+ALTER TABLE tav.historical_sales
+  ADD CONSTRAINT historical_sales_row_hash_key UNIQUE (row_hash);
+CREATE INDEX ON tav.historical_sales (vin) WHERE vin IS NOT NULL;
+CREATE INDEX ON tav.historical_sales (year, make, model);
+CREATE INDEX ON tav.historical_sales (upload_batch_id);
+CREATE INDEX ON tav.historical_sales (sale_date DESC);
+CREATE INDEX ON tav.historical_sales (make, model, trim, sale_date DESC);
+
+-- market_velocities
+ALTER TABLE tav.market_velocities
+  ADD CONSTRAINT market_velocities_segment_key_key UNIQUE (segment_key);
+CREATE INDEX ON tav.market_velocities (make, model);
+CREATE INDEX ON tav.market_velocities (calculated_at DESC);
+
+-- mmr_queries
+CREATE INDEX ON tav.mmr_queries (vin) WHERE vin IS NOT NULL;
+CREATE INDEX ON tav.mmr_queries (year, make, model)
+  WHERE year IS NOT NULL AND make IS NOT NULL AND model IS NOT NULL;
+CREATE INDEX ON tav.mmr_queries (requested_by_user_id);
+CREATE INDEX ON tav.mmr_queries (created_at DESC);
+
+-- mmr_cache
+ALTER TABLE tav.mmr_cache
+  ADD CONSTRAINT mmr_cache_cache_key_key UNIQUE (cache_key);
+CREATE INDEX ON tav.mmr_cache (vin) WHERE vin IS NOT NULL;
+CREATE INDEX ON tav.mmr_cache (expires_at);
+
+-- user_activity
+CREATE INDEX ON tav.user_activity (vin) WHERE vin IS NOT NULL;
+CREATE INDEX ON tav.user_activity (user_id);
+CREATE INDEX ON tav.user_activity (created_at DESC);
+CREATE INDEX ON tav.user_activity (active_until) WHERE active_until IS NOT NULL;
 
 -- dead_letters
 CREATE INDEX ON tav.dead_letters (resolved, created_at) WHERE resolved = false;
@@ -506,6 +696,10 @@ CREATE TRIGGER trg_leads_updated_at
 
 CREATE TRIGGER trg_buy_box_rules_updated_at
   BEFORE UPDATE ON tav.buy_box_rules
+  FOR EACH ROW EXECUTE FUNCTION tav.set_updated_at();
+
+CREATE TRIGGER trg_mmr_cache_updated_at
+  BEFORE UPDATE ON tav.mmr_cache
   FOR EACH ROW EXECUTE FUNCTION tav.set_updated_at();
 
 -- =============================================================================

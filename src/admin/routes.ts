@@ -228,6 +228,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         console.error(JSON.stringify({
           event: "recompute.region_failed",
           region,
+          reason_code: "recompute_error",
           error: err instanceof Error ? err.message : String(err),
         }));
       }
@@ -251,7 +252,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   // GET /admin/import-batches
   if (request.method === "GET" && pathname === "/admin/import-batches") {
     const limitParam = url.searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : 20;
+    const limit = Math.min(limitParam ? parseInt(limitParam, 10) : 20, 100);
     const batches = await listImportBatches(db, limit);
     return json({ ok: true, data: batches });
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchBuyBox } from "../src/scoring/buybox";
+import { matchBuyBox } from "../src/scoring/buyBox";
 import type { BuyBoxRule, NormalizedListingInput } from "../src/types/domain";
 
 const baseRule: BuyBoxRule = {

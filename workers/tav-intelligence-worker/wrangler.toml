@@ -1,0 +1,85 @@
+name = "tav-intelligence-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# workers_dev disabled until Rami flips this on at first deploy time.
+workers_dev = false
+
+# ── KV: per-environment namespaces, all separate from the main worker ─────────
+#
+# Decision (locked 2026-05-07): each environment has its own KV namespace.
+# The default block is used by `wrangler dev`; staging and production each
+# have their own block below. Do NOT share IDs across envs.
+#
+# Provisioning (Rami runs these once, then pastes the returned IDs back here):
+#
+#   wrangler kv namespace create TAV_INTEL_KV_PREVIEW \
+#     --config workers/tav-intelligence-worker/wrangler.toml
+#
+#   wrangler kv namespace create TAV_INTEL_KV_STAGING \
+#     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+#   wrangler kv namespace create TAV_INTEL_KV_PRODUCTION \
+#     --config workers/tav-intelligence-worker/wrangler.toml --env production
+#
+# Each command prints an `id`. Replace the placeholders below.
+# Deploying with placeholder IDs binds to a non-existent namespace; every KV
+# op fails at runtime.
+
+[[kv_namespaces]]
+binding = "TAV_INTEL_KV"
+id         = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
+preview_id = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
+
+[vars]
+# Comma-separated email allowlist for force_refresh (temporary; see
+# docs/INTELLIGENCE_CONTRACTS.md §D). Empty string = no email-based bypass.
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Staging ──────────────────────────────────────────────────────────────────
+
+[env.staging]
+name = "tav-intelligence-worker-staging"
+workers_dev = true
+
+[[env.staging.kv_namespaces]]
+binding = "TAV_INTEL_KV"
+id      = "80195f01a65c4431af1e3835f9bea933"
+
+[env.staging.vars]
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Production ───────────────────────────────────────────────────────────────
+
+[env.production]
+name = "tav-intelligence-worker-production"
+
+[[env.production.kv_namespaces]]
+binding = "TAV_INTEL_KV"
+id      = "REPLACE_WITH_TAV_INTEL_KV_PRODUCTION_ID"
+
+[env.production.vars]
+MANAGER_EMAIL_ALLOWLIST = ""
+
+# ── Secrets (set before first deploy) ────────────────────────────────────────
+#
+# All secrets are per-Worker and per-environment. Run each command for both
+# --env staging and --env production (swap as needed).
+#
+# Manheim OAuth + MMR (same values as the main tav-aip worker):
+#
+#   wrangler secret put MANHEIM_CLIENT_ID     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_CLIENT_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_USERNAME      --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_PASSWORD      --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_TOKEN_URL     --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put MANHEIM_MMR_URL       --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+# Supabase (same project as the main tav-aip worker; service-role key only):
+#
+#   wrangler secret put SUPABASE_URL              --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/tav-intelligence-worker/wrangler.toml --env staging
+#
+# Repeat all of the above with --env production.
+
+
