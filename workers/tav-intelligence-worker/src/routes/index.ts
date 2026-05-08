@@ -8,6 +8,7 @@ import { handleMmrYearMakeModel }  from "../handlers/mmrYearMakeModel";
 import { handleSalesUpload }       from "../handlers/salesUpload";
 import { handleActivityVin }       from "../handlers/activityVin";
 import { handleKpisSummary }       from "../handlers/kpisSummary";
+import { handleIntelMmrCacheKey }  from "../handlers/intelMmrCacheKey";
 import type { HandlerArgs }        from "../handlers/types";
 
 /**
@@ -36,6 +37,11 @@ export async function dispatch(
   if (method === "GET" && pathname.startsWith("/activity/vin/")) {
     const vin = pathname.slice("/activity/vin/".length);
     return handleActivityVin({ ...baseArgs, pathParams: { vin } });
+  }
+
+  if (method === "GET" && pathname.startsWith("/intel/mmr/")) {
+    const cacheKey = decodeURIComponent(pathname.slice("/intel/mmr/".length));
+    return handleIntelMmrCacheKey({ ...baseArgs, pathParams: { cacheKey } });
   }
 
   return errorResponse(
