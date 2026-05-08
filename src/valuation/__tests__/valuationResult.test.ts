@@ -117,8 +117,26 @@ describe("fromMmrResult — distribution field extraction", () => {
     expect(result.sampleCount).toBe(22);
   });
 
-  it("retailClean is always null regardless of payload", () => {
+  it("retailClean is null when adjustedPricing.retail is absent from the payload", () => {
     const result = fromMmrResult(VIN_RESULT_WITH_DIST);
     expect(result.retailClean).toBeNull();
+  });
+
+  it("retailClean is extracted from adjustedPricing.retail.above when present", () => {
+    const withRetail: MmrResult = {
+      mmrValue:   14_000,
+      confidence: "high",
+      method:     "vin",
+      rawResponse: {
+        items: [{
+          adjustedPricing: {
+            wholesale: { above: 15_200, average: 14_000, below: 12_800 },
+            retail:    { above: 17_500, average: 16_000, below: 14_750 },
+          },
+        }],
+      },
+    };
+    const result = fromMmrResult(withRetail);
+    expect(result.retailClean).toBe(17_500);
   });
 });

@@ -101,6 +101,57 @@ function joinUrl(base: string, path: string): string {
   return b + p;
 }
 
+/** Truthy strings: "true" / "TRUE" / "1". Anything else (including undefined) → false. */
+function envBool(value: string | undefined): boolean {
+  if (!value) return false;
+  const v = value.trim().toLowerCase();
+  return v === "true" || v === "1";
+}
+
+/**
+ * Build the Cox `include` query value from configured flags.
+ * Returns null when no flags are set (caller omits the parameter entirely).
+ * The `ci` token is dropped on Search/YMMT calls — the MMR Lookup guide
+ * documents `include=ci` as unsupported on `/search/...`.
+ */
+function buildCoxIncludeTokens(env: Env, isSearch: boolean): string | null {
+  const tokens: string[] = [];
+  if (envBool(env.MANHEIM_INCLUDE_RETAIL))     tokens.push("retail");
+  if (envBool(env.MANHEIM_INCLUDE_FORECAST))   tokens.push("forecast");
+  if (envBool(env.MANHEIM_INCLUDE_HISTORICAL)) tokens.push("historical");
+  if (!isSearch && envBool(env.MANHEIM_INCLUDE_CI)) tokens.push("ci");
+  return tokens.length > 0 ? tokens.join(",") : null;
+}
+
+/**
+ * Append Cox MMR query parameters to a URL.
+ * `evbh` (Electric Vehicle Battery Health) is sent only when in [75, 100].
+ * Out-of-range values are dropped silently to avoid surfacing 4xx errors on
+ * a non-EV vehicle that happens to receive a stray sensor reading.
+ */
+function appendCoxQueryParams(
+  url: URL,
+  env: Env,
+  opts: {
+    odometer?: number;
+    zipCode?:  string;
+    evbh?:     number;
+    isSearch:  boolean;
+  },
+): void {
+  if (typeof opts.odometer === "number" && Number.isFinite(opts.odometer) && opts.odometer >= 0) {
+    url.searchParams.set("odometer", String(opts.odometer));
+  }
+  if (typeof opts.zipCode === "string" && opts.zipCode.trim().length > 0) {
+    url.searchParams.set("zipCode", opts.zipCode.trim());
+  }
+  if (typeof opts.evbh === "number" && Number.isFinite(opts.evbh) && opts.evbh >= 75 && opts.evbh <= 100) {
+    url.searchParams.set("evbh", String(opts.evbh));
+  }
+  const include = buildCoxIncludeTokens(env, opts.isSearch);
+  if (include) url.searchParams.set("include", include);
+}
+
 /** Categorize an unknown error for log dashboards without leaking detail. */
 function errorCategory(err: unknown): string {
   if (err instanceof ManheimAuthError)        return "auth";
@@ -173,6 +224,8 @@ export class ManheimHttpClient implements ManheimClient {
   async lookupByVin(args: {
     vin:       string;
     mileage:   number;
+    zipCode?:  string;
+    evbh?:     number;
     requestId: string;
   }): Promise<ManheimVinResponse> {
     const start = Date.now();
@@ -180,7 +233,10 @@ export class ManheimHttpClient implements ManheimClient {
     const token = await this.getAccessToken(args.requestId);
 
     return this.executeLookup<ManheimVinResponse>({
-      url:        this.buildVinUrl(args.vin, args.mileage),
+      url:        this.buildVinUrl(args.vin, args.mileage, {
+        zipCode: args.zipCode,
+        evbh:    args.evbh,
+      }),
       token,
       requestId:  args.requestId,
       lookupType: "vin",
@@ -194,6 +250,8 @@ export class ManheimHttpClient implements ManheimClient {
     model:     string;
     trim?:     string;
     mileage:   number;
+    zipCode?:  string;
+    evbh?:     number;
     requestId: string;
   }): Promise<ManheimYmmResponse> {
     const start = Date.now();
@@ -221,7 +279,15 @@ export class ManheimHttpClient implements ManheimClient {
     const token = await this.getAccessToken(args.requestId);
 
     return this.executeLookup<ManheimYmmResponse>({
-      url:        this.buildYmmUrl(args),
+      url:        this.buildYmmUrl({
+        year:     args.year,
+        make:     args.make,
+        model:    args.model,
+        trim:     args.trim,
+        mileage:  args.mileage,
+        zipCode:  args.zipCode,
+        evbh:     args.evbh,
+      }),
       token,
       requestId:  args.requestId,
       lookupType: "ymm",
@@ -238,20 +304,31 @@ export class ManheimHttpClient implements ManheimClient {
   /**
    * Build the VIN lookup URL.
    *
-   * Cox Wholesale-Valuations MMR 1.4: GET ${MANHEIM_MMR_URL}/vin/{vin}
+   * Cox Wholesale-Valuations MMR 1.4: GET ${MANHEIM_MMR_URL}/vin/{vin}?odometer=...
    *   MANHEIM_MMR_URL is the full base ending in /vehicle/mmr (e.g.
    *   https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr).
    *   Subseries / transmission disambiguation variants
    *   (/vin/{vin}/{subseries}, /vin/{vin}/{subseries}/{transmission}) are not
-   *   yet implemented. `odometer` is omitted — not documented as a query
-   *   parameter in MMR 1.4; re-add only after Cox docs confirm support.
+   *   yet implemented. Optional Cox query params (zipCode, evbh, include)
+   *   are appended via appendCoxQueryParams.
    *
    * Legacy Manheim: GET ${MANHEIM_MMR_URL}/valuations/vin/{vin}?odometer=...
    *   MANHEIM_MMR_URL is host-only.
    */
-  private buildVinUrl(vin: string, mileage: number): string {
+  private buildVinUrl(
+    vin:     string,
+    mileage: number,
+    opts:    { zipCode?: string; evbh?: number } = {},
+  ): string {
     if (this.isCoxVendor()) {
-      return joinUrl(this.env.MANHEIM_MMR_URL, `/vin/${encodeURIComponent(vin)}`);
+      const u = new URL(joinUrl(this.env.MANHEIM_MMR_URL, `/vin/${encodeURIComponent(vin)}`));
+      appendCoxQueryParams(u, this.env, {
+        odometer: mileage,
+        zipCode:  opts.zipCode,
+        evbh:     opts.evbh,
+        isSearch: false,
+      });
+      return u.toString();
     }
     const u = new URL(
       `/valuations/vin/${encodeURIComponent(vin)}`,
@@ -265,25 +342,29 @@ export class ManheimHttpClient implements ManheimClient {
    * Build the YMM lookup URL.
    *
    * Cox Wholesale-Valuations MMR 1.4:
-   *   GET ${MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}
+   *   GET ${MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}?odometer=...
    *   `bodyname` (trim) is a REQUIRED path segment per the OpenAPI spec.
    *   `lookupByYmm` short-circuits to a null envelope when trim is missing
    *   for vendor=cox; this builder is therefore only called with a non-empty
-   *   trim on the Cox path. Long-form path
+   *   trim on the Cox path. Optional Cox query params (zipCode, evbh,
+   *   include) are appended via appendCoxQueryParams. The `ci` token is
+   *   stripped from the include list on Search/YMMT (unsupported per the
+   *   MMR Lookup guide). Long-form path
    *   /search/years/{year}/makes/{make}/models/{model}/trims/{body} is not
-   *   yet implemented. `odometer` and `include=ci` are omitted on Cox — not
-   *   documented as query params in 1.4; re-add when confirmed.
+   *   yet implemented.
    *
    * Legacy Manheim: GET ${MANHEIM_MMR_URL}/valuations/search/{year}/{make}/{model}?odometer=...&include=ci
    *   CRITICAL: year/make/model are PATH segments. Query-style returns HTTP 596 on the
    *   legacy account (regression — see commit 5a66d6b3).
    */
   private buildYmmUrl(args: {
-    year:    number;
-    make:    string;
-    model:   string;
-    trim?:   string;
-    mileage: number;
+    year:     number;
+    make:     string;
+    model:    string;
+    trim?:    string;
+    mileage:  number;
+    zipCode?: string;
+    evbh?:    number;
   }): string {
     if (this.isCoxVendor()) {
       // Caller (lookupByYmm) guarantees a non-empty trim on the Cox path.
@@ -293,7 +374,14 @@ export class ManheimHttpClient implements ManheimClient {
         `/${encodeURIComponent(args.make)}` +
         `/${encodeURIComponent(args.model)}` +
         `/${encodeURIComponent(trim)}`;
-      return joinUrl(this.env.MANHEIM_MMR_URL, path);
+      const u = new URL(joinUrl(this.env.MANHEIM_MMR_URL, path));
+      appendCoxQueryParams(u, this.env, {
+        odometer: args.mileage,
+        zipCode:  args.zipCode,
+        evbh:     args.evbh,
+        isSearch: true,
+      });
+      return u.toString();
     }
     const u = new URL(
       `/valuations/search/${encodeURIComponent(args.year)}/${encodeURIComponent(args.make)}/${encodeURIComponent(args.model)}`,

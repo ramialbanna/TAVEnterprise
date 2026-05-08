@@ -99,36 +99,80 @@ Code appends path segments per the MMR 1.4 OpenAPI:
 no fetch, log `manheim.http.skipped { reason: "cox_ymm_requires_trim" }`) when trim
 is missing or whitespace-only and vendor=cox.
 
+### 3a. Query parameters (Cox MMR 1.4)
+
+Both `/vin/{vin}` and `/search/...` accept the same query params. Code currently
+sends `odometer`, optional `zipCode`, optional `evbh`, and optional `include`.
+
+| Param | Notes |
+|---|---|
+| `odometer` | Sent from the existing `mileage` arg on `lookupByVin`/`lookupByYmm` when ≥0 and finite. |
+| `zipCode` | Optional. Five-digit ZIP. Spelled `zipCode`, NOT `zip`. Sent only when caller passes it (whitespace-trimmed). |
+| `include` | Comma-list of `retail`, `forecast`, `historical`, `ci`. Built from env flags (see §5). On Search/YMMT, `ci` is dropped — the MMR Lookup guide documents it as unsupported there. |
+| `evbh` | Electric-Vehicle Battery Health. Validated to integer in `[75, 100]` inclusive; out-of-range values are dropped silently. |
+| `region`, `color`, `grade`, `date`, `extendedCoverage`, `orgId`, `excludeBuild` | Documented by the Cox guide; not yet plumbed through the client. Add via `appendCoxQueryParams` when a use case lands. |
+
+### 3b. Batch endpoint
+
+`POST {MANHEIM_MMR_URL_BATCH}/vins` (separate base
+`https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr-batch`) supports
+up to 100 VINs per call. Not yet wired into ingest; deferred until a batch use case
+is identified.
+
 ---
 
 ## 4. Open verification items (before first live call)
 
-Assumptions still flagged against the Cox Wholesale Valuations product guide:
+Resolved by the MMR 1.4 guide (no longer open):
+- `odometer` is supported on both `/vin/{vin}` and `/search/...` — code now sends it.
+- Response shape is documented and parsed via `extractManheimDistribution`
+  (`adjustedPricing.wholesale.{above,average,below}`, `adjustedPricing.retail.{above,average,below}`,
+  `sampleSize`).
+- Endpoint paths and methods are confirmed.
 
-1. **`odometer` query param support** — MMR 1.4 spec does not document `odometer` on
-   either `/vin/{vin}` or `/search/...`. Code currently omits it for vendor=cox.
-   Re-add via `URLSearchParams` only after Cox docs confirm the parameter name
-   and accepted values.
-2. **Response shape parity** — code reuses `extractMmrValue` and
-   `extractManheimDistribution` (legacy `adjustedPricing.wholesale.{average,above,below}`
-   + `sampleSize`). Confirm Cox returns the same shape; if not, extend the parser
-   fallback chain — do not change defaults.
-3. **Token URL exact path** — copy the full URL from the Cox app detail page; the
-   `.../oauth2/.../v1/token` segment is account-scoped.
-4. **`bodyname` format** — `normalizeMmrParams` returns trim pass-through (no alias
-   table). Listing-source trim values may not match Cox's accepted `bodyname` strings.
-   Trim alias work is logged as a future phase in `docs/followups.md`.
-5. **Subseries / transmission disambiguation** — deferred; the bare `/vin/{vin}`
+Still open:
+
+1. **Token URL exact path** — copy the full URL from the Cox app detail page; the
+   `.../oauth2/<authServerId>/v1/token` segment is account-scoped.
+2. **`bodyname` format coupling** — `normalizeMmrParams` returns trim pass-through
+   (no alias table). Listing-source trim values may not match Cox's accepted
+   `bodyname` strings. The future plan is to use Cox's `mmr-lookup` endpoints
+   as the source-of-truth for make/model/trim alias data; tracked in
+   `docs/followups.md`.
+3. **Subseries / transmission disambiguation** — deferred; the bare `/vin/{vin}`
    variant ships in this phase.
-6. **Long-form YMMT path** — deferred in favor of the short form
-   `/search/{year}/{make}/{model}/{bodyname}`.
+4. **Long-form YMMT path** (`/search/years/.../makes/...`) — deferred in favor of
+   the short form `/search/{year}/{make}/{model}/{bodyname}`.
 
-Tests guard the URL templates and headers we send so any product-guide-driven
+Tests guard the URL templates, query params, and headers so any product-guide-driven
 correction surfaces as a unit-test failure before deploy.
 
 ---
 
-## 5. Logging hygiene (hard rules)
+## 5. `include` flag configuration
+
+Set as wrangler secrets on the intelligence worker (string `"true"` enables, anything
+else — including absent — leaves the flag off):
+
+| Env var | Token added | Notes |
+|---|---|---|
+| `MANHEIM_INCLUDE_RETAIL` | `retail` | Returns `adjustedPricing.retail.{above,average,below}`. Parser maps to `retailClean` / `retailAvg` / `retailRough` on `ValuationResult`. |
+| `MANHEIM_INCLUDE_FORECAST` | `forecast` | Returns `forecast` field on the response. Not yet read by the parser. |
+| `MANHEIM_INCLUDE_HISTORICAL` | `historical` | Returns `historicalAverages`. Not yet read by the parser. |
+| `MANHEIM_INCLUDE_CI` | `ci` | Returns `confidenceInterval` data on VIN lookups only. **Stripped from Search/YMMT calls** because the MMR Lookup guide documents `include=ci` as unsupported there. |
+
+**Default** when no flags are set: no `include=` query param at all (conservative —
+request the minimum).
+
+The token names `retail`, `forecast`, `historical`, and `ci` are confirmed by the
+Cox MMR Valuations guide. `ci` is documented as unsupported on Search/YMMT and is
+stripped from the include list there. End-to-end sandbox behavior (which response
+sections each flag actually returns, and the exact 4xx code for an unsupported
+combination) still needs validation against a live sandbox call before going live.
+
+---
+
+## 6. Logging hygiene (hard rules)
 
 The following must **never** appear in any log line, structured field, or error message:
 
@@ -146,7 +190,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 
 ---
 
-## 6. Environment configuration
+## 7. Environment configuration
 
 | Env var | Value (sandbox) | Source |
 |---|---|---|
@@ -159,10 +203,14 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 | `MANHEIM_MMR_URL` | `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr` | wrangler secret |
 | `MANHEIM_USERNAME` | — | not required for client_credentials |
 | `MANHEIM_PASSWORD` | — | not required for client_credentials |
+| `MANHEIM_INCLUDE_RETAIL` | `false` (default) | wrangler secret; `"true"` opts in |
+| `MANHEIM_INCLUDE_FORECAST` | `false` (default) | wrangler secret; `"true"` opts in |
+| `MANHEIM_INCLUDE_HISTORICAL` | `false` (default) | wrangler secret; `"true"` opts in |
+| `MANHEIM_INCLUDE_CI` | `false` (default) | wrangler secret; `"true"` opts in (VIN only — stripped on Search/YMMT) |
 
 ---
 
-## 7. Related documents
+## 8. Related documents
 
 - `docs/manheim-uat-validation-plan.md` — staging UAT test matrix and pass/fail gates.
 - `docs/MANHEIM_INTEGRATION_ARCHITECTURE.md` — overall layered architecture (vendor-agnostic).

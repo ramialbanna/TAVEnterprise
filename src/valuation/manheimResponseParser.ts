@@ -1,18 +1,19 @@
 /**
- * Pure extractor for Manheim MMR response distribution fields.
- *
- * Derived from real Manheim API responses observed in the staging environment
- * (2026-05-07). Only field paths confirmed in actual payloads are extracted.
- * Paths not seen in production return null rather than guessing.
+ * Pure extractor for Manheim/Cox MMR response distribution fields.
  *
  * Documented payload shape (items[0] or root when no items array):
  *   adjustedPricing.wholesale.average  → wholesaleAvg   (mileage-adjusted average)
  *   adjustedPricing.wholesale.above    → wholesaleClean  (above-avg condition tier)
  *   adjustedPricing.wholesale.below    → wholesaleRough  (below-avg condition tier)
+ *   adjustedPricing.retail.average     → retailAvg
+ *   adjustedPricing.retail.above       → retailClean
+ *   adjustedPricing.retail.below       → retailRough
  *   sampleSize                         → sampleCount     (string in API, e.g. "6")
  *
- * retailClean is always null — retail pricing is absent from the VIN and YMM
- * endpoints this system uses. Add extraction here if a retail endpoint is added.
+ * Cox MMR 1.4 returns retail tiers when the request includes `retail` in the
+ * include list (`MANHEIM_INCLUDE_RETAIL=true`); otherwise the retail object is
+ * absent and the retail fields parse to null. The legacy Manheim VIN/YMM
+ * endpoints did not return retail and produced null on every call.
  *
  * Used by both src/valuation/valuationResult.ts (main worker) and
  * workers/tav-intelligence-worker/src/persistence/mmrCacheRepository.ts.
@@ -22,8 +23,12 @@ export interface ManheimDistribution {
   wholesaleAvg:   number | null;
   wholesaleClean: number | null;
   wholesaleRough: number | null;
-  /** Always null — retail pricing not present in Manheim VIN/YMM endpoints. */
-  retailClean:    null;
+  /** Cox MMR 1.4 retail tier above. Null when retail include flag is off or absent from payload. */
+  retailClean:    number | null;
+  /** Cox MMR 1.4 retail tier average. Null when retail include flag is off or absent from payload. */
+  retailAvg:      number | null;
+  /** Cox MMR 1.4 retail tier below. Null when retail include flag is off or absent from payload. */
+  retailRough:    number | null;
   sampleCount:    number | null;
 }
 
@@ -33,6 +38,8 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     wholesaleClean: null,
     wholesaleRough: null,
     retailClean:    null,
+    retailAvg:      null,
+    retailRough:    null,
     sampleCount:    null,
   };
 
@@ -49,6 +56,9 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
   let wholesaleAvg:   number | null = null;
   let wholesaleClean: number | null = null;
   let wholesaleRough: number | null = null;
+  let retailClean:    number | null = null;
+  let retailAvg:      number | null = null;
+  let retailRough:    number | null = null;
 
   if (t.adjustedPricing && typeof t.adjustedPricing === "object") {
     const ap = t.adjustedPricing as Record<string, unknown>;
@@ -58,13 +68,21 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
       wholesaleClean = posNum(w.above);
       wholesaleRough = posNum(w.below);
     }
+    if (ap.retail && typeof ap.retail === "object") {
+      const r = ap.retail as Record<string, unknown>;
+      retailAvg   = posNum(r.average);
+      retailClean = posNum(r.above);
+      retailRough = posNum(r.below);
+    }
   }
 
   return {
     wholesaleAvg,
     wholesaleClean,
     wholesaleRough,
-    retailClean: null,
+    retailClean,
+    retailAvg,
+    retailRough,
     sampleCount: parseSampleSize(t.sampleSize),
   };
 }

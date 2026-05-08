@@ -62,10 +62,22 @@ export interface Env {
   /**
    * MMR API base URL (host + path prefix; no trailing slash). Code appends
    * vendor-specific path segments.
-   *   Cox sandbox: https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle
+   *   Cox sandbox: https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
    *   Legacy:      https://api.manheim.com
    */
   MANHEIM_MMR_URL: string;
+
+  /**
+   * Cox MMR `include` flag tokens — control which optional sections the API
+   * returns. Default for every flag is "false" (conservative — request the
+   * minimum). Set to "true" to opt in. The intelligence worker drops `ci`
+   * from the include list on Search/YMMT calls because the MMR Lookup guide
+   * documents it as unsupported there.
+   */
+  MANHEIM_INCLUDE_RETAIL?: string;
+  MANHEIM_INCLUDE_FORECAST?: string;
+  MANHEIM_INCLUDE_HISTORICAL?: string;
+  MANHEIM_INCLUDE_CI?: string;
 
   /** Supabase project URL, e.g. https://<ref>.supabase.co. */
   SUPABASE_URL: string;

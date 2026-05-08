@@ -712,13 +712,14 @@ describe("ManheimHttpClient", () => {
     await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 50_000, requestId: "cox-vin" }));
 
     const url = urlOfCall(fetchFn, 1);
-    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/vin/1HGCM82633A123456");
-    // MMR 1.4 spec does not document a query string on /vin/{vin}.
-    expect(url).not.toContain("?");
-    expect(url).not.toContain("odometer");
+    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/vin/1HGCM82633A123456?odometer=50000");
+    // MMR 1.4 supports odometer as a query param on /vin/{vin}.
+    expect(url).toContain("odometer=50000");
     // No legacy Manheim path remnants and no early-pass /mmr?vin= shape.
     expect(url).not.toContain("/valuations/vin/");
-    expect(url).not.toContain("/mmr?");
+    expect(url).not.toContain("/mmr?vin=");
+    // No include token by default (conservative — all flags off).
+    expect(url).not.toContain("include=");
   });
 
   // ── 22. Cox vendor: YMMT URL = ${MMR_URL}/search/{year}/{make}/{model}/{body}
@@ -742,14 +743,15 @@ describe("ManheimHttpClient", () => {
     }));
 
     const url = urlOfCall(fetchFn, 1);
-    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/search/2020/Toyota/Camry/SE");
-    // MMR 1.4 spec does not document a query string on /search/...
-    expect(url).not.toContain("?");
-    expect(url).not.toContain("odometer");
+    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/search/2020/Toyota/Camry/SE?odometer=60000");
+    // MMR 1.4 supports odometer on Search; ci on Search is unsupported per the
+    // MMR Lookup guide, so the include list never carries it.
+    expect(url).toContain("odometer=60000");
     expect(url).not.toContain("include=ci");
-    // No legacy Manheim path remnants and no early-pass /mmr-lookup shape.
+    expect(url).not.toContain("include=");
+    // No legacy Manheim path remnants and no /mmr-lookup early-pass shape.
     expect(url).not.toContain("/valuations/search/");
-    expect(url).not.toContain("/mmr-lookup");
+    expect(url).not.toContain("/mmr-lookup/");
   });
 
   // ── 22a. Cox YMMT URL-encodes whitespace in trim ────────────────────────────
@@ -773,7 +775,8 @@ describe("ManheimHttpClient", () => {
     }));
 
     const url = urlOfCall(fetchFn, 1);
-    expect(url.endsWith("/SE%20Premium")).toBe(true);
+    expect(url).toContain("/SE%20Premium?");
+    expect(url).toContain("odometer=60000");
   });
 
   // ── 22b. Cox YMM with no trim short-circuits to null envelope ───────────────
@@ -899,5 +902,215 @@ describe("ManheimHttpClient", () => {
     expect(allLogJson).not.toContain(b64);
     expect(allLogJson).not.toContain(CLIENT_SECRET);
     expect(allLogJson).not.toContain(PASSWORD);
+  });
+
+  // ── 26. Cox include flags: VIN includes all four when env flags set ─────────
+
+  it("cox vendor: VIN URL include= carries retail/forecast/historical/ci when all env flags true", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR:        "cox",
+      MANHEIM_GRANT_TYPE:        "client_credentials",
+      MANHEIM_SCOPE:             "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:           "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+      MANHEIM_INCLUDE_RETAIL:    "true",
+      MANHEIM_INCLUDE_FORECAST:  "true",
+      MANHEIM_INCLUDE_HISTORICAL: "true",
+      MANHEIM_INCLUDE_CI:        "true",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "cox-include-all" }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.get("include")).toBe("retail,forecast,historical,ci");
+  });
+
+  // ── 27. Cox include flags: Search/YMMT strips ci ────────────────────────────
+
+  it("cox vendor: Search/YMMT include= strips ci even when MANHEIM_INCLUDE_CI is true", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(YMM_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR:        "cox",
+      MANHEIM_GRANT_TYPE:        "client_credentials",
+      MANHEIM_SCOPE:             "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:           "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+      MANHEIM_INCLUDE_RETAIL:    "true",
+      MANHEIM_INCLUDE_FORECAST:  "true",
+      MANHEIM_INCLUDE_HISTORICAL: "true",
+      MANHEIM_INCLUDE_CI:        "true",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByYmm({
+      year: 2020, make: "Toyota", model: "Camry", trim: "SE", mileage: 60_000, requestId: "cox-search-no-ci",
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    const include = url.searchParams.get("include");
+    expect(include).toBe("retail,forecast,historical");
+    expect(include).not.toContain("ci");
+  });
+
+  // ── 28. Cox include flags: omitted entirely when no env flags set ───────────
+
+  it("cox vendor: VIN URL omits include= when no flags are set (conservative default)", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "cox-no-include" }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.has("include")).toBe(false);
+  });
+
+  // ── 29. Cox zipCode flows through to query string ───────────────────────────
+
+  it("cox vendor: zipCode flows through to query as zipCode (not zip)", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      zipCode: "75201",
+      requestId: "cox-zip",
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.get("zipCode")).toBe("75201");
+    expect(url.searchParams.has("zip")).toBe(false);
+  });
+
+  // ── 30. Cox evbh boundary validation (75–100 inclusive) ─────────────────────
+
+  it("cox vendor: evbh in range [75, 100] is sent as a query param", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      evbh: 90,
+      requestId: "cox-evbh-ok",
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.get("evbh")).toBe("90");
+  });
+
+  it("cox vendor: evbh below 75 is dropped (not sent)", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      evbh: 74,
+      requestId: "cox-evbh-low",
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.has("evbh")).toBe(false);
+  });
+
+  it("cox vendor: evbh above 100 is dropped (not sent)", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      evbh: 101,
+      requestId: "cox-evbh-high",
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.has("evbh")).toBe(false);
+  });
+
+  it("cox vendor: evbh boundaries 75 and 100 inclusive are both accepted", async () => {
+    for (const value of [75, 100]) {
+      const { kv } = makeFakeKv();
+      const fetchFn = vi.fn();
+      fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+      fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+      const env: Env = {
+        ...ENV,
+        MANHEIM_API_VENDOR: "cox",
+        MANHEIM_GRANT_TYPE: "client_credentials",
+        MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+        MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+      };
+      const client = new ManheimHttpClient(env, kv, fetchFn);
+      await flush(client.lookupByVin({
+        vin: "1HGCM82633A123456",
+        mileage: 45_000,
+        evbh: value,
+        requestId: `cox-evbh-boundary-${value}`,
+      }));
+
+      const url = new URL(urlOfCall(fetchFn, 1));
+      expect(url.searchParams.get("evbh")).toBe(String(value));
+    }
   });
 });

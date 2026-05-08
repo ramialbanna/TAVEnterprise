@@ -32,16 +32,24 @@ These are now confirmed from the Cox app detail page and Bridge 2 OAuth document
 
 ### Open verification items (pending product-guide review before first live call)
 
-MMR 1.4 endpoint paths are now confirmed (`/vin/{vin}`, `/search/{y}/{mk}/{md}/{body}`).
-Remaining unknowns:
+MMR 1.4 paths, query params, and response shape are now confirmed by the Cox MMR
+Valuations guide. Implemented (mocked tests only; no live calls yet):
+
+- VIN: `GET /vin/{vin}?odometer=...` plus optional `zipCode`, `evbh`, `include`.
+- YMMT: `GET /search/{year}/{make}/{model}/{bodyname}?odometer=...` plus same optional
+  params; `include=ci` is stripped (unsupported per the MMR Lookup guide).
+- Response: `adjustedPricing.wholesale.{above,average,below}` and
+  `adjustedPricing.retail.{above,average,below}` (when `MANHEIM_INCLUDE_RETAIL=true`)
+  parsed by `extractManheimDistribution`.
+
+Remaining open items:
 
 | Item | Why it matters |
 |---|---|
-| **`odometer` query parameter** | Not documented on `/vin/{vin}` or `/search/...` in the 1.4 spec. Code currently omits it. Confirm whether Cox accepts an odometer query and what the parameter name is, then re-introduce. |
-| **Response shape parity** | Code reuses the legacy parser (`adjustedPricing.wholesale.{above,average,below}` + `sampleSize`). Confirm Cox returns this shape; if different, extend the parser fallback chain. |
-| **`bodyname` format** | `normalizeMmrParams` returns trim pass-through (no alias table). Listing-source trim values may not match Cox's accepted `bodyname` strings — trim alias work is logged as a follow-up. |
 | **Token URL exact path** | Bridge 2 token endpoint is account-scoped (`.../oauth2/<authServerId>/v1/token`). Copy verbatim from the Cox app detail page. |
+| **`bodyname` format** | `normalizeMmrParams` returns trim pass-through (no alias table). Listing-source trim values may not match Cox's accepted `bodyname` strings. The `mmr-lookup` reference endpoints are the future source-of-truth — see `docs/followups.md`. |
 | **Known-good sandbox test VINs and YMM combos** | Need ≥2 VINs expected to return data, ≥1 expected 404, ≥2 YMM combos with valid `bodyname`. Cannot run V-01–V-03 / Y-01–Y-05 without these. |
+| **Confirmed `evbh` semantics** | Code validates `[75, 100]` per the Cox guide and silently drops out-of-range values. Confirm during sandbox UAT that an in-range value flows through and an out-of-range value is ignored client-side rather than rejected upstream. |
 
 ---
 
@@ -99,8 +107,8 @@ MANHEIM_MMR_URL=https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/
 URL composition in code (vendor=cox, MMR 1.4 spec):
 
 - Token: `POST {MANHEIM_TOKEN_URL}` with `Authorization: Basic base64(client_id:client_secret)` and body `grant_type=client_credentials&scope=...`
-- VIN:   `GET {MANHEIM_MMR_URL}/vin/{vin}` (path-segment, no query string)
-- YMMT:  `GET {MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}` (path-segments; `bodyname`/trim **required**)
+- VIN:   `GET {MANHEIM_MMR_URL}/vin/{vin}?odometer={miles}` plus optional `zipCode`, `evbh`, `include`.
+- YMMT:  `GET {MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}?odometer={miles}` plus optional `zipCode`, `evbh`, `include`. `bodyname`/trim **required**. `include=ci` is **stripped** on Search/YMMT.
 
 All lookup requests must include:
 
@@ -121,9 +129,10 @@ Content-Type:  application/vnd.coxauto.v1+json
 > no MMR request, ingest stays non-blocking. Trim must be sent end-to-end to use
 > the Cox YMMT endpoint.
 
-> **`odometer` query parameter:** MMR 1.4 spec does not document `odometer` on
-> `/vin/{vin}` or `/search/...`. The Cox URL builder omits it. Re-introduce only
-> after Cox product guide confirms the parameter (see open item §0.5).
+> **Query parameters:** `odometer` is supported on both endpoints per the Cox guide
+> and now ships on every Cox call. Optional `zipCode`, `evbh` (75–100 inclusive),
+> and `include` (built from `MANHEIM_INCLUDE_*` env flags; `ci` stripped on Search)
+> are appended when configured. See `docs/COX_API_INTEGRATION.md` §3a + §5.
 
 > **VIN disambiguation variants** (`/vin/{vin}/{subseries}`,
 > `/vin/{vin}/{subseries}/{transmission}`) and the **long-form YMMT path**

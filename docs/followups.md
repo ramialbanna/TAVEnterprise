@@ -69,18 +69,27 @@ Full UAT validation plan: `docs/manheim-uat-validation-plan.md`
 - [x] YMMT endpoint: `GET /search/{year}/{makename}/{modelname}/{bodyname}` — `bodyname` (trim) REQUIRED.
 - [x] Code wired to MMR 1.4 paths in `manheimHttp.ts` `buildVinUrl` / `buildYmmUrl`; trim threaded across boundary in `workerClient.ts`; trimless YMM short-circuits to null envelope.
 
+**Resolved by Cox MMR 1.4 guide (2026-05-08):**
+- [x] `odometer` supported as a query param on both `/vin/{vin}` and `/search/...` — code now sends it.
+- [x] Response shape: `adjustedPricing.wholesale.{average,above,below}` + `adjustedPricing.retail.{average,above,below}` (when `include=retail`) + `sampleSize`. `extractManheimDistribution` updated to extract retail tiers.
+- [x] `evbh` validated to integer in `[75, 100]` inclusive; out-of-range silently dropped.
+- [x] `zipCode` (not `zip`) supported as a query param.
+- [x] `include` query supports `retail`, `forecast`, `historical`, `ci` (`ci` stripped on Search/YMMT). Behavior gated by `MANHEIM_INCLUDE_*` env flags; default conservative (no flags set → no `include` param).
+
 **Open Cox blockers (pending product-guide review or rep response):**
 - [ ] Confirm exact `MANHEIM_TOKEN_URL` (Cox Bridge 2 token endpoint full URL — copy verbatim from the Cox app detail page).
-- [ ] Confirm whether `odometer` is a supported query param on `/vin/{vin}` and `/search/...` (current code omits it pending docs).
-- [ ] Confirm response-shape parity vs `adjustedPricing.wholesale.{average,above,below}` + `sampleSize`. If shape differs, extend `extractMmrValue` / `extractManheimDistribution` fallback chain.
 - [ ] Provide ≥2 known-good sandbox VINs, ≥1 expected-404 VIN, ≥2 YMM combos with valid `bodyname`.
 
 **Deferred Cox features (logged for future phases):**
+- [ ] **Reference-sync from `mmr-lookup` endpoints** — Cox `/mmr-lookup` is the future source-of-truth for make/model/trim alias data (currently `mmr_reference_makes` / `mmr_reference_models` / `mmr_make_aliases` / `mmr_model_aliases` are seeded by hand and `bodyname` has no alias table). Plan: build a periodic job that pulls canonical strings from `/mmr-lookup` and refreshes the reference tables.
 - [ ] VIN disambiguation variants `/vin/{vin}/{subseries}` and `/vin/{vin}/{subseries}/{transmission}`.
 - [ ] Long-form YMMT path `/search/years/{year}/makes/{make}/models/{model}/trims/{bodyname}`.
 - [ ] Trim alias table (currently pass-through; listing trims may not match Cox `bodyname` strings).
+- [ ] Wire `forecast`, `historical`, `confidenceInterval` into `extractManheimDistribution` (today only `wholesale` and `retail` tiers are parsed).
+- [ ] **Retail distribution persistence**: `extractManheimDistribution` now extracts `adjustedPricing.retail.{above,average,below}` as `retailClean` / `retailAvg` / `retailRough`, but `tav.valuation_snapshots` only persists `mmr_retail_clean`. Future schema migration may add `mmr_retail_avg` / `mmr_retail_rough` columns + `writeValuationSnapshot` mappings if the full retail distribution is needed for downstream scoring or analytics.
 - [ ] Reference endpoints `/colors`, `/edition`, `/grades`, `/regions`, `/regions/auction/id/{auction_id}`, `/regions/id/{region_id}` for future enrichment.
-- [ ] Batch endpoint `/mmr-batch` (no batch use case in ingest yet).
+- [ ] Batch endpoint `POST {.../mmr-batch}/vins` (up to 100 VINs); no batch use case in ingest yet.
+- [ ] Plumb `region`, `color`, `grade`, `date`, `extendedCoverage`, `orgId`, `excludeBuild` query params through `appendCoxQueryParams` when use cases land.
 
 **Internal staging blockers:**
 - [ ] Provision `INTEL_WORKER_URL` secret on main worker (staging URL of tav-intelligence-worker).

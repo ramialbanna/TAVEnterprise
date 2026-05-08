@@ -17,7 +17,7 @@ export function fromMmrResult(result: MmrResult): ValuationResult {
     wholesaleAvg:            result.mmrValue, // primary scalar is authoritative; dist.wholesaleAvg is redundant here
     wholesaleClean:          dist.wholesaleClean,
     wholesaleRough:          dist.wholesaleRough,
-    retailClean:             null,            // not in Manheim VIN/YMM endpoints
+    retailClean:             dist.retailClean,
     sampleCount:             dist.sampleCount,
     confidence:              result.confidence,
     valuationMethod,

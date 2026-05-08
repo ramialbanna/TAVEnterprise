@@ -47,8 +47,50 @@ describe("extractManheimDistribution — full VIN payload", () => {
     expect(extractManheimDistribution(VIN_PAYLOAD).sampleCount).toBe(6);
   });
 
-  it("retailClean is always null", () => {
+  it("retailClean is null when adjustedPricing.retail is absent", () => {
     expect(extractManheimDistribution(VIN_PAYLOAD).retailClean).toBeNull();
+    expect(extractManheimDistribution(VIN_PAYLOAD).retailAvg).toBeNull();
+    expect(extractManheimDistribution(VIN_PAYLOAD).retailRough).toBeNull();
+  });
+});
+
+// ── Cox MMR 1.4 retail tier (when MANHEIM_INCLUDE_RETAIL=true) ────────────────
+
+describe("extractManheimDistribution — adjustedPricing.retail present", () => {
+  const VIN_WITH_RETAIL = {
+    adjustedPricing: {
+      wholesale: { above: 2400, average: 2100, below: 1775 },
+      retail:    { above: 3300, average: 3000, below: 2750 },
+    },
+    sampleSize: "6",
+  };
+  const PAYLOAD_WITH_RETAIL = { items: [VIN_WITH_RETAIL] };
+
+  it("extracts retailAvg from adjustedPricing.retail.average", () => {
+    expect(extractManheimDistribution(PAYLOAD_WITH_RETAIL).retailAvg).toBe(3000);
+  });
+
+  it("extracts retailClean from adjustedPricing.retail.above", () => {
+    expect(extractManheimDistribution(PAYLOAD_WITH_RETAIL).retailClean).toBe(3300);
+  });
+
+  it("extracts retailRough from adjustedPricing.retail.below", () => {
+    expect(extractManheimDistribution(PAYLOAD_WITH_RETAIL).retailRough).toBe(2750);
+  });
+
+  it("returns null per tier when only one retail tier is present", () => {
+    const partial = { items: [{ adjustedPricing: { retail: { average: 3000 } }, sampleSize: "1" }] };
+    const dist    = extractManheimDistribution(partial);
+    expect(dist.retailAvg).toBe(3000);
+    expect(dist.retailClean).toBeNull();
+    expect(dist.retailRough).toBeNull();
+  });
+
+  it("returns null for a retail tier whose value is zero or negative", () => {
+    const bad = { items: [{ adjustedPricing: { retail: { average: 0, above: -1 } } }] };
+    const dist = extractManheimDistribution(bad);
+    expect(dist.retailAvg).toBeNull();
+    expect(dist.retailClean).toBeNull();
   });
 });
 
