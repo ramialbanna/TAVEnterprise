@@ -9,6 +9,14 @@ function urlOfCall(mock: ReturnType<typeof vi.fn>, callIndex: number): string {
   if (!call) throw new Error(`expected call at index ${callIndex} but none recorded`);
   return String(call[0]);
 }
+
+/** Read the RequestInit passed to a fetch mock invocation. */
+function initOfCall(mock: ReturnType<typeof vi.fn>, callIndex: number): RequestInit {
+  const calls = mock.mock.calls as unknown as Array<unknown[]>;
+  const call = calls[callIndex];
+  if (!call) throw new Error(`expected call at index ${callIndex} but none recorded`);
+  return call[1] as RequestInit;
+}
 import {
   CacheLockError,
   ManheimAuthError,
@@ -538,5 +546,358 @@ describe("ManheimHttpClient", () => {
     const allLogJson = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(allLogJson).not.toContain(PASSWORD);
     expect(allLogJson).not.toContain(CLIENT_SECRET);
+  });
+
+  // ── 18. client_credentials uses HTTP Basic Auth header (Cox Bridge 2) ───────
+
+  it("client_credentials grant uses HTTP Basic Auth header and omits credentials from body", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "req-cc" }));
+
+    const tokenInit = initOfCall(fetchFn, 0);
+
+    // Authorization: Basic base64(client_id:client_secret)
+    const headers = (tokenInit.headers ?? {}) as Record<string, string>;
+    const expectedBasic = `Basic ${btoa(`${env.MANHEIM_CLIENT_ID}:${env.MANHEIM_CLIENT_SECRET}`)}`;
+    expect(headers.Authorization).toBe(expectedBasic);
+    expect(headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+
+    // Body has only grant_type and scope. NO client_id, client_secret, username, password.
+    const params = new URLSearchParams(String(tokenInit.body));
+    expect(params.get("grant_type")).toBe("client_credentials");
+    expect(params.get("scope")).toBe("wholesale-valuations.vehicle.mmr-ext.get");
+    expect(params.has("client_id")).toBe(false);
+    expect(params.has("client_secret")).toBe(false);
+    expect(params.has("username")).toBe(false);
+    expect(params.has("password")).toBe(false);
+  });
+
+  // ── 18b. client_credentials without MANHEIM_SCOPE omits scope param ─────────
+
+  it("client_credentials with no MANHEIM_SCOPE omits scope from body", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = { ...ENV, MANHEIM_GRANT_TYPE: "client_credentials" };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "req-cc-no-scope" }));
+
+    const params = new URLSearchParams(String(initOfCall(fetchFn, 0).body));
+    expect(params.get("grant_type")).toBe("client_credentials");
+    expect(params.has("scope")).toBe(false);
+  });
+
+  // ── 18c. 400 invalid_scope surfaces error_code in log + ManheimAuthError ────
+
+  it("400 invalid_scope surfaces error_code in refresh_failed log and ManheimAuthError", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "invalid_scope", error_description: "bad scope" }), {
+        status:  400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "title-services.bad",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    const promise = client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "req-bad-scope",
+    });
+
+    await expect(flush(promise)).rejects.toBeInstanceOf(ManheimAuthError);
+
+    const failed = logEvents().find((e) => e.event === "manheim.token.refresh_failed");
+    expect(failed).toBeDefined();
+    expect(failed?.error_category).toBe("auth");
+    expect(failed?.error_code).toBe("invalid_scope");
+  });
+
+  // ── 19. password grant: body credentials, no Basic header (legacy) ──────────
+
+  it("password grant (explicit) sends body credentials and no Basic header", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = { ...ENV, MANHEIM_GRANT_TYPE: "password" };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "req-pw" }));
+
+    const tokenInit = initOfCall(fetchFn, 0);
+    const headers = (tokenInit.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+
+    const params = new URLSearchParams(String(tokenInit.body));
+    expect(params.get("grant_type")).toBe("password");
+    expect(params.get("client_id")).toBe(env.MANHEIM_CLIENT_ID);
+    expect(params.get("client_secret")).toBe(env.MANHEIM_CLIENT_SECRET);
+    expect(params.get("username")).toBe(env.MANHEIM_USERNAME);
+    expect(params.has("password")).toBe(true);
+  });
+
+  // ── 19b. password grant + scope: scope appended to body (vendor-agnostic) ───
+
+  it("password grant with MANHEIM_SCOPE appends scope to body", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = { ...ENV, MANHEIM_GRANT_TYPE: "password", MANHEIM_SCOPE: "extra.scope" };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "req-pw-scope" }));
+
+    const params = new URLSearchParams(String(initOfCall(fetchFn, 0).body));
+    expect(params.get("scope")).toBe("extra.scope");
+  });
+
+  // ── 20. No MANHEIM_GRANT_TYPE defaults to password grant ────────────────────
+
+  it("undefined MANHEIM_GRANT_TYPE defaults to password grant", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    // ENV fixture has no MANHEIM_GRANT_TYPE — exercises the default.
+    const client = new ManheimHttpClient(ENV, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "req-default" }));
+
+    const tokenInit = initOfCall(fetchFn, 0);
+    const params = new URLSearchParams(String(tokenInit.body));
+    expect(params.get("grant_type")).toBe("password");
+    expect(params.get("username")).toBe(ENV.MANHEIM_USERNAME);
+
+    // grant_type must appear in the refresh_started log for observability.
+    expect(logEvents().some((e) =>
+      e.event === "manheim.token.refresh_started" && e.grant_type === "password",
+    )).toBe(true);
+  });
+
+  // ── 21. Cox vendor: VIN URL = ${MMR_URL}/vin/{vin} (MMR 1.4 path-segment) ───
+
+  it("cox vendor: VIN URL is ${MMR_URL}/vin/{vin} (no query params)", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 50_000, requestId: "cox-vin" }));
+
+    const url = urlOfCall(fetchFn, 1);
+    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/vin/1HGCM82633A123456");
+    // MMR 1.4 spec does not document a query string on /vin/{vin}.
+    expect(url).not.toContain("?");
+    expect(url).not.toContain("odometer");
+    // No legacy Manheim path remnants and no early-pass /mmr?vin= shape.
+    expect(url).not.toContain("/valuations/vin/");
+    expect(url).not.toContain("/mmr?");
+  });
+
+  // ── 22. Cox vendor: YMMT URL = ${MMR_URL}/search/{year}/{make}/{model}/{body}
+
+  it("cox vendor: YMMT URL is ${MMR_URL}/search/{year}/{make}/{model}/{bodyname}", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(YMM_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByYmm({
+      year: 2020, make: "Toyota", model: "Camry", trim: "SE", mileage: 60_000, requestId: "cox-ymm",
+    }));
+
+    const url = urlOfCall(fetchFn, 1);
+    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/search/2020/Toyota/Camry/SE");
+    // MMR 1.4 spec does not document a query string on /search/...
+    expect(url).not.toContain("?");
+    expect(url).not.toContain("odometer");
+    expect(url).not.toContain("include=ci");
+    // No legacy Manheim path remnants and no early-pass /mmr-lookup shape.
+    expect(url).not.toContain("/valuations/search/");
+    expect(url).not.toContain("/mmr-lookup");
+  });
+
+  // ── 22a. Cox YMMT URL-encodes whitespace in trim ────────────────────────────
+
+  it("cox vendor: YMMT URL-encodes whitespace in bodyname", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(YMM_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByYmm({
+      year: 2020, make: "Toyota", model: "Camry", trim: "SE Premium", mileage: 60_000, requestId: "cox-ymm-enc",
+    }));
+
+    const url = urlOfCall(fetchFn, 1);
+    expect(url.endsWith("/SE%20Premium")).toBe(true);
+  });
+
+  // ── 22b. Cox YMM with no trim short-circuits to null envelope ───────────────
+
+  it("cox vendor: YMM with missing trim returns null envelope and skips fetch", async () => {
+    const { kv } = makeFakeKv();
+    // No token POST or lookup expected; fetchFn must not be called.
+    const fetchFn = vi.fn();
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+
+    const result = await flush(client.lookupByYmm({
+      year: 2020, make: "Toyota", model: "Camry", mileage: 60_000, requestId: "cox-no-trim",
+    })) as { mmr_value: number | null; payload: unknown; retryCount: number };
+
+    expect(result.mmr_value).toBeNull();
+    expect(result.retryCount).toBe(0);
+    expect(result.payload).toEqual({});
+    expect(fetchFn).not.toHaveBeenCalled();
+
+    const skipped = logEvents().find((e) => e.event === "manheim.http.skipped");
+    expect(skipped).toBeDefined();
+    expect(skipped?.reason).toBe("cox_ymm_requires_trim");
+  });
+
+  // ── 22c. Cox YMM with whitespace-only trim is treated as missing ────────────
+
+  it("cox vendor: YMM with whitespace-only trim short-circuits to null envelope", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+
+    const result = await flush(client.lookupByYmm({
+      year: 2020, make: "Toyota", model: "Camry", trim: "   ", mileage: 60_000, requestId: "cox-ws-trim",
+    })) as { mmr_value: number | null; payload: unknown };
+
+    expect(result.mmr_value).toBeNull();
+    expect(fetchFn).not.toHaveBeenCalled();
+
+    expect(logEvents().some((e) => e.event === "manheim.http.skipped")).toBe(true);
+  });
+
+  // ── 23. Cox vendor: lookup carries Cox media headers ────────────────────────
+
+  it("cox vendor: lookup request includes Accept and Content-Type vendor media headers", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "cox-headers" }));
+
+    const lookupInit = initOfCall(fetchFn, 1);
+    const headers = (lookupInit.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toMatch(/^Bearer /);
+    expect(headers.Accept).toBe("application/vnd.coxauto.v1+json");
+    expect(headers["Content-Type"]).toBe("application/vnd.coxauto.v1+json");
+  });
+
+  // ── 24. Legacy vendor (default): no Cox media headers on lookup ─────────────
+
+  it("legacy vendor: lookup request has no Cox media headers", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const client = new ManheimHttpClient(ENV, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", mileage: 45_000, requestId: "legacy-headers" }));
+
+    const lookupInit = initOfCall(fetchFn, 1);
+    const headers = (lookupInit.headers ?? {}) as Record<string, string>;
+    expect(headers.Accept).toBeUndefined();
+    expect(headers["Content-Type"]).toBeUndefined();
+  });
+
+  // ── 25. Logging redaction extension: no Basic header value, no b64 secret ───
+
+  it("logs never contain the Basic header value or base64-encoded credentials", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "trace-basic",
+    }));
+
+    const allLogJson = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    const b64 = btoa(`${env.MANHEIM_CLIENT_ID}:${env.MANHEIM_CLIENT_SECRET}`);
+    expect(allLogJson).not.toContain("Basic ");
+    expect(allLogJson).not.toContain(b64);
+    expect(allLogJson).not.toContain(CLIENT_SECRET);
+    expect(allLogJson).not.toContain(PASSWORD);
   });
 });

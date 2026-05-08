@@ -49,31 +49,55 @@ Each layer has one job and one error-mapping rule (see §10).
 
 ## 2. OAuth flow
 
-Manheim uses **OAuth 2.0 password grant** (per existing
-`src/valuation/mmr.ts`). The intelligence Worker re-uses the same six
-secrets the main Worker already has set:
+The intelligence Worker supports two vendor profiles selected via
+`MANHEIM_API_VENDOR`. The current Cox sandbox account uses Bridge 2 /
+`client_credentials`; the legacy Manheim password-grant flow is retained for
+older accounts.
 
 | Secret | Purpose |
 |---|---|
+| `MANHEIM_API_VENDOR` | `"cox"` (default for Cox accounts) or `"manheim"` (legacy) |
+| `MANHEIM_GRANT_TYPE` | `"client_credentials"` (Cox) or `"password"` (legacy default) |
+| `MANHEIM_SCOPE` | OAuth scope (Cox: `wholesale-valuations.vehicle.mmr-ext.get`) |
 | `MANHEIM_CLIENT_ID` | OAuth client identifier |
-| `MANHEIM_CLIENT_SECRET` | OAuth client secret |
-| `MANHEIM_USERNAME` | Manheim user account |
-| `MANHEIM_PASSWORD` | Manheim user password |
+| `MANHEIM_CLIENT_SECRET` | OAuth client secret (NEVER log) |
 | `MANHEIM_TOKEN_URL` | OAuth token endpoint |
-| `MANHEIM_MMR_URL` | MMR API base URL |
+| `MANHEIM_MMR_URL` | MMR API base URL. Cox: `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr` (path-prefixed, MMR 1.4). Legacy: `https://api.manheim.com` (host-only). |
+| `MANHEIM_USERNAME` | Required only for `password` grant (legacy) |
+| `MANHEIM_PASSWORD` | Required only for `password` grant (legacy) |
 
-**First request after a cold start:**
-1. Read the cached token from KV (`mmr:token`).
+### 2a. Cox Bridge 2 (`client_credentials`) — current
+
+1. Read the cached token from KV (`manheim:token`).
 2. If absent or `expires_at < now + 60s`, request a new token.
-3. POST to `MANHEIM_TOKEN_URL` with `grant_type=password`, `username`,
-   `password`, `client_id`, `client_secret`.
-4. On 200, store `{ access_token, expires_at }` in KV with TTL =
-   `expires_in - 60s`.
-5. Use `access_token` as `Authorization: Bearer ...` for the lookup.
+3. POST to `MANHEIM_TOKEN_URL` with:
+   - Header: `Authorization: Basic base64(client_id:client_secret)`
+   - Header: `Content-Type: application/x-www-form-urlencoded`
+   - Body: `grant_type=client_credentials&scope=${MANHEIM_SCOPE}`
+   - **Body must NOT contain `client_id`, `client_secret`, `username`, or `password`.**
+4. On 200, store `{ access_token, expires_at }` in KV with TTL = `expires_in - 60s`.
+5. Use `access_token` as `Authorization: Bearer ...` for lookups, alongside Cox vendor
+   media headers (`Accept` and `Content-Type` = `application/vnd.coxauto.v1+json`).
 
-**Token failure modes:**
-- `401` from token endpoint → `ExternalApiError("manheim_oauth_failed")`. Surface as 502.
-- `5xx` from token endpoint → retry per §5; if exhausted, `ExternalApiError`.
+**Cox MMR 1.4 endpoint paths** appended to `MANHEIM_MMR_URL`:
+
+- VIN: `GET /vin/{vin}` (path-segment; no query string)
+- YMMT: `GET /search/{year}/{makename}/{modelname}/{bodyname}` — `bodyname` (trim) is REQUIRED
+- Trimless YMM calls short-circuit to `mmr_value: null` (log `manheim.http.skipped`,
+  no fetch); ingest stays non-blocking. See `docs/COX_API_INTEGRATION.md` §3.
+
+### 2b. Legacy Manheim (`password` grant) — fallback
+
+1. Same KV cache read.
+2. POST to `MANHEIM_TOKEN_URL` with body `grant_type=password`, `username`, `password`,
+   `client_id`, `client_secret`. No Basic header.
+3. Same caching and bearer use.
+
+### Token failure modes (both flows)
+
+- `400 invalid_scope` → `ManheimAuthError` (log adds `error_code: "invalid_scope"`).
+- `401` from token endpoint → `ManheimAuthError`. Surface as 502.
+- `5xx` from token endpoint → retry per §5; if exhausted, `ManheimUnavailableError`.
 - Network error → retry per §5.
 
 ---

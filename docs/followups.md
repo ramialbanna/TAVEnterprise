@@ -39,6 +39,10 @@ Example:
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /kpis/summary with real Supabase RPC tav.get_mmr_kpis (p95 latency, cache hit rate, by-type/outcome breakdown, top requesters) — DONE
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /intel/mmr/queries paginated audit history (21-field allowlist, all filters, offset pagination with has_more) — DONE
 - [x] 2026-05-08 supabase/migrations — add 0032_get_mmr_kpis.sql: CREATE tav.get_mmr_kpis RPC + GRANT EXECUTE to service_role — DONE
+- [x] 2026-05-08 src/valuation + supabase/migrations — G.5.3 Manheim reference normalization: mmr_reference_makes/models/aliases tables, normalizeMmrParams pure normalizer, loadMmrReferenceData DB loader, workerClient YMM normalization wiring, ValuationResult metadata fields, valuationSnapshots + vehicleEnrichments persistence — DONE cafbfd7
+- [x] 2026-05-08 workers/tav-intelligence-worker — add MANHEIM_GRANT_TYPE env var support: "client_credentials" omits username/password; "password" or absent preserves current behavior — DONE (this session)
+- [x] 2026-05-08 src/valuation/workerClient.ts — add ingest.mmr_worker_called structured log event before worker fetch; was a noted observability gap in UAT plan — DONE (this session)
+- [x] 2026-05-08 docs — G.5.4 UAT validation plan written to docs/manheim-uat-validation-plan.md — DONE 1ce0579
 
 ## MANHEIM_LOOKUP_MODE="worker" — implemented, not yet enabled in staging/production
 
@@ -54,19 +58,52 @@ wrangler.toml env blocks until the following operational prerequisites are met.
 - Rate-limit guard: ingest calls receive service identity (`service@tav-internal`), not a user email — they do not exhaust per-user quota.
 - On success, `MmrResponseEnvelope` is mapped to `MmrResult`; valuation snapshot is written; scoring uses the returned value.
 
-**Prerequisites before enabling "worker" in staging:**
-- [ ] Provision `INTEL_WORKER_URL` secret on main worker (staging + production URL of tav-intelligence-worker).
+Full UAT validation plan: `docs/manheim-uat-validation-plan.md`
+
+**Cox sandbox confirmed (2026-05-08, MMR 1.4 OpenAPI):**
+- [x] Vendor profile: Cox Bridge 2.
+- [x] Grant type: `client_credentials` with HTTP Basic Auth on token endpoint.
+- [x] Scope: `wholesale-valuations.vehicle.mmr-ext.get`.
+- [x] MMR base: `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr` (note trailing `/mmr`).
+- [x] VIN endpoint: `GET /vin/{vin}` (path-segment).
+- [x] YMMT endpoint: `GET /search/{year}/{makename}/{modelname}/{bodyname}` — `bodyname` (trim) REQUIRED.
+- [x] Code wired to MMR 1.4 paths in `manheimHttp.ts` `buildVinUrl` / `buildYmmUrl`; trim threaded across boundary in `workerClient.ts`; trimless YMM short-circuits to null envelope.
+
+**Open Cox blockers (pending product-guide review or rep response):**
+- [ ] Confirm exact `MANHEIM_TOKEN_URL` (Cox Bridge 2 token endpoint full URL — copy verbatim from the Cox app detail page).
+- [ ] Confirm whether `odometer` is a supported query param on `/vin/{vin}` and `/search/...` (current code omits it pending docs).
+- [ ] Confirm response-shape parity vs `adjustedPricing.wholesale.{average,above,below}` + `sampleSize`. If shape differs, extend `extractMmrValue` / `extractManheimDistribution` fallback chain.
+- [ ] Provide ≥2 known-good sandbox VINs, ≥1 expected-404 VIN, ≥2 YMM combos with valid `bodyname`.
+
+**Deferred Cox features (logged for future phases):**
+- [ ] VIN disambiguation variants `/vin/{vin}/{subseries}` and `/vin/{vin}/{subseries}/{transmission}`.
+- [ ] Long-form YMMT path `/search/years/{year}/makes/{make}/models/{model}/trims/{bodyname}`.
+- [ ] Trim alias table (currently pass-through; listing trims may not match Cox `bodyname` strings).
+- [ ] Reference endpoints `/colors`, `/edition`, `/grades`, `/regions`, `/regions/auction/id/{auction_id}`, `/regions/id/{region_id}` for future enrichment.
+- [ ] Batch endpoint `/mmr-batch` (no batch use case in ingest yet).
+
+**Internal staging blockers:**
+- [ ] Provision `INTEL_WORKER_URL` secret on main worker (staging URL of tav-intelligence-worker).
 - [ ] Provision `INTEL_WORKER_SECRET` secret on main worker (any strong random value, matching below).
 - [ ] Provision `INTEL_SERVICE_SECRET` secret on intelligence worker (same value as `INTEL_WORKER_SECRET`).
+- [ ] Provision Cox sandbox secrets on intelligence worker: `MANHEIM_API_VENDOR=cox`, `MANHEIM_GRANT_TYPE=client_credentials`, `MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get`, `MANHEIM_CLIENT_ID`, `MANHEIM_CLIENT_SECRET`, `MANHEIM_TOKEN_URL`, `MANHEIM_MMR_URL`.
 - [ ] tav-intelligence-worker must be deployed to staging (`workers_dev = true` is already set).
-- [ ] End-to-end smoke test in staging: POST /ingest → verify `valuation.fetched` log event appears and `tav.valuation_snapshots` row is written.
+- [ ] End-to-end smoke test in staging: POST /ingest → verify `ingest.mmr_worker_called` + `valuation.fetched` log events appear and `tav.valuation_snapshots` row is written.
 - [ ] After staging validation: set `MANHEIM_LOOKUP_MODE = "worker"` in `[env.staging.vars]` and redeploy main worker.
 
-**Provisioning commands (staging):**
+**Provisioning commands (staging) — full Cox set:**
 ```
+WRANGLER_FLAGS="--config workers/tav-intelligence-worker/wrangler.toml --env staging"
 wrangler secret put INTEL_WORKER_URL
 wrangler secret put INTEL_WORKER_SECRET
-wrangler secret put INTEL_SERVICE_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
+wrangler secret put INTEL_SERVICE_SECRET   $WRANGLER_FLAGS
+wrangler secret put MANHEIM_API_VENDOR     $WRANGLER_FLAGS  # "cox"
+wrangler secret put MANHEIM_GRANT_TYPE     $WRANGLER_FLAGS  # "client_credentials"
+wrangler secret put MANHEIM_SCOPE          $WRANGLER_FLAGS  # "wholesale-valuations.vehicle.mmr-ext.get"
+wrangler secret put MANHEIM_CLIENT_ID      $WRANGLER_FLAGS
+wrangler secret put MANHEIM_CLIENT_SECRET  $WRANGLER_FLAGS
+wrangler secret put MANHEIM_TOKEN_URL      $WRANGLER_FLAGS
+wrangler secret put MANHEIM_MMR_URL        $WRANGLER_FLAGS
 ```
 
 - [x] 2026-05-08 src/ingest + workers/tav-intelligence-worker — implement MANHEIM_LOOKUP_MODE="worker"
@@ -88,9 +125,11 @@ Do NOT modify wrangler.toml IDs until the namespace is provisioned.
 - [ ] 2026-05-08 wrangler.toml — confirm staging KV namespace has `preview_id` set in `[[env.staging.kv_namespaces]]`
       (currently only `id` is set; missing `preview_id` will cause `wrangler dev --env staging` to warn)
 
-- [ ] 2026-05-08 secrets — provision all 8 production secrets (run each with --env production):
-      MANHEIM_CLIENT_ID, MANHEIM_CLIENT_SECRET, MANHEIM_USERNAME, MANHEIM_PASSWORD,
-      MANHEIM_TOKEN_URL, MANHEIM_MMR_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+- [ ] 2026-05-08 secrets — provision production secrets (run each with --env production):
+      MANHEIM_CLIENT_ID, MANHEIM_CLIENT_SECRET, MANHEIM_TOKEN_URL, MANHEIM_MMR_URL,
+      SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INTEL_SERVICE_SECRET
+      — and conditionally: MANHEIM_USERNAME + MANHEIM_PASSWORD (password grant only),
+      MANHEIM_GRANT_TYPE (only if client_credentials — confirm with Manheim rep first)
       `wrangler secret put <NAME> --config workers/tav-intelligence-worker/wrangler.toml --env production`
 
 - [ ] 2026-05-08 wrangler.toml — set `workers_dev = true` under `[env.production]` once production secrets are provisioned,

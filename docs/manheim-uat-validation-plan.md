@@ -1,27 +1,47 @@
-# G.5.4 — Staging UAT Validation Plan: Manheim/Cox Integration
+# G.5.4 — Staging UAT Validation Plan: Cox Wholesale-Valuations Integration
 
-Validates the tav-intelligence-worker's Manheim HTTP client against the UAT environment
-before enabling `MANHEIM_LOOKUP_MODE="worker"` in staging. No live API calls are made
-during planning. All curl examples are for manual execution during UAT.
+Validates the tav-intelligence-worker's Cox/Manheim HTTP client against the Cox sandbox
+environment (`sandbox.api.coxautoinc.com/wholesale-valuations/vehicle`) before enabling
+`MANHEIM_LOOKUP_MODE="worker"` in staging. No live API calls are made during planning.
+All curl examples are for manual execution during UAT.
+
+**Vendor profile:** Cox Bridge 2 / `client_credentials`. Legacy Manheim
+`uat.api.manheim.com/valuations` integration is not provisioned for our account and is
+retained in code only as a fallback (`MANHEIM_API_VENDOR=manheim`).
 
 **Not covered:** VIN data accuracy (business QA), MMR value correctness, Apify ingest
 pipeline, alerts.
 
 ---
 
-## 0.5 Ask Cox/Manheim Before UAT
+## 0.5 Cox Sandbox Facts (confirmed 2026-05-08)
 
-The following must be confirmed with your Cox/Manheim account representative before any
-UAT call is executed. These are external dependencies — no amount of code reading resolves
-them.
+These are now confirmed from the Cox app detail page and Bridge 2 OAuth documentation:
 
-| Question | Why it matters |
+| Item | Value |
 |---|---|
-| **Confirm UAT base URLs** | `.dev.vars.example` lists `https://uat.api.manheim.com/oauth2/token.oauth2` and `https://uat.api.manheim.com/valuations`. Confirm these are correct for the provisioned account. UAT and pre-production URLs sometimes differ per client package. |
-| **Confirm grant type and required scopes** | The client currently sends `grant_type=password`. If the account uses `client_credentials`, `manheimHttp.ts` must be updated before any token call will succeed. Also confirm whether any OAuth scope parameter is required — the current implementation sends none. |
-| **Confirm YMM endpoint provisioning** | `GET /valuations/search` currently returns 596 on this account. Confirm whether the UAT account has the YMM search endpoint provisioned, and if not, what the activation timeline or required package tier is. YMM test cases Y-01 through Y-05 cannot run until confirmed. |
-| **Provide known-good test VINs and YMM combinations** | Request at least 2 VINs expected to return MMR data and 1 VIN expected to return 404 from the UAT environment. For YMM: at least 2 year/make/model combinations known to return `items[0]` with distribution data. Do not use production VINs in UAT. |
-| **Confirm expected response shape for `adjustedPricing` and `sampleSize`** | The client extracts `items[0].adjustedPricing.wholesale.{above, average, below}` and `sampleSize` (as a string). Confirm this shape is stable in the UAT response contract — Manheim has historically varied field names across API versions. If `sampleSize` is numeric (not a string) in the UAT response, `parseInt` still works, but document it. |
+| OAuth server | Bridge 2 |
+| Application type | `server_to_server` |
+| Grant type | `client_credentials` |
+| Scope | `wholesale-valuations.vehicle.mmr-ext.get` |
+| Token endpoint | `https://authorize.coxautoinc.com/oauth2/.../v1/token` (exact path is per-app — copy verbatim from the Cox app detail page) |
+| MMR API base | `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle` |
+| Enabled endpoints | `/mmr`, `/mmr-batch`, `/mmr-lookup` |
+| Required headers | `Accept: application/vnd.coxauto.v1+json`, `Content-Type: application/vnd.coxauto.v1+json` |
+| Auth at token endpoint | HTTP Basic (`Authorization: Basic base64(client_id:client_secret)`); credentials NEVER in body |
+
+### Open verification items (pending product-guide review before first live call)
+
+MMR 1.4 endpoint paths are now confirmed (`/vin/{vin}`, `/search/{y}/{mk}/{md}/{body}`).
+Remaining unknowns:
+
+| Item | Why it matters |
+|---|---|
+| **`odometer` query parameter** | Not documented on `/vin/{vin}` or `/search/...` in the 1.4 spec. Code currently omits it. Confirm whether Cox accepts an odometer query and what the parameter name is, then re-introduce. |
+| **Response shape parity** | Code reuses the legacy parser (`adjustedPricing.wholesale.{above,average,below}` + `sampleSize`). Confirm Cox returns this shape; if different, extend the parser fallback chain. |
+| **`bodyname` format** | `normalizeMmrParams` returns trim pass-through (no alias table). Listing-source trim values may not match Cox's accepted `bodyname` strings — trim alias work is logged as a follow-up. |
+| **Token URL exact path** | Bridge 2 token endpoint is account-scoped (`.../oauth2/<authServerId>/v1/token`). Copy verbatim from the Cox app detail page. |
+| **Known-good sandbox test VINs and YMM combos** | Need ≥2 VINs expected to return data, ≥1 expected 404, ≥2 YMM combos with valid `bodyname`. Cannot run V-01–V-03 / Y-01–Y-05 without these. |
 
 ---
 
@@ -33,25 +53,27 @@ on the intelligence worker staging environment before any UAT call.
 **Intelligence worker (staging) —
 `--config workers/tav-intelligence-worker/wrangler.toml --env staging`:**
 
-| Secret | Verify command | Note |
+| Secret | Verify command | Sandbox value |
 |---|---|---|
-| `MANHEIM_CLIENT_ID` | `wrangler secret list` | required for all grant types |
-| `MANHEIM_CLIENT_SECRET` | same | required for all grant types |
-| `MANHEIM_USERNAME` | same | required only if password-grant — see UAT prerequisite below |
-| `MANHEIM_PASSWORD` | same | required only if password-grant — see UAT prerequisite below |
-| `MANHEIM_TOKEN_URL` | check `[env.staging.vars]` in wrangler.toml | `https://uat.api.manheim.com/oauth2/token.oauth2` |
-| `MANHEIM_MMR_URL` | same | `https://uat.api.manheim.com/valuations` |
+| `MANHEIM_API_VENDOR` | `wrangler secret list` | `cox` |
+| `MANHEIM_GRANT_TYPE` | same | `client_credentials` |
+| `MANHEIM_SCOPE` | same | `wholesale-valuations.vehicle.mmr-ext.get` |
+| `MANHEIM_CLIENT_ID` | same | from Cox app detail page |
+| `MANHEIM_CLIENT_SECRET` | same | from Cox app detail page (NEVER log) |
+| `MANHEIM_TOKEN_URL` | same | `https://authorize.coxautoinc.com/oauth2/.../v1/token` (exact value from Cox app detail) |
+| `MANHEIM_MMR_URL` | same | `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle` |
+| `MANHEIM_USERNAME` | — | not used for `client_credentials`; do not provision |
+| `MANHEIM_PASSWORD` | — | not used for `client_credentials`; do not provision |
 | `SUPABASE_URL` | `wrangler secret list` | present |
 | `SUPABASE_SERVICE_ROLE_KEY` | same | present |
 | `INTEL_SERVICE_SECRET` | same | must match main-worker `INTEL_WORKER_SECRET` |
 
-> **UAT prerequisite — grant type confirmation (blocker):** The Manheim HTTP client
-> currently uses password-grant (`grant_type=password` with `username` + `password`).
-> Cox/Manheim accounts may instead be provisioned for `client_credentials` (no
-> username/password). Confirm the grant type with your Cox/Manheim rep before running any
-> token test. If the account uses `client_credentials`, `fetchAndStoreToken` in
-> `manheimHttp.ts` must be updated — this is a code change, not a configuration change.
-> Do not assume either path works until confirmed.
+> **Auth requirement (Cox Bridge 2 client_credentials):** Token requests use HTTP Basic
+> on the `Authorization` header — `Basic base64(MANHEIM_CLIENT_ID:MANHEIM_CLIENT_SECRET)`.
+> The form body contains only `grant_type=client_credentials` and `scope=...`.
+> `client_id` / `client_secret` / `username` / `password` MUST NOT appear in the body for
+> `client_credentials`. Wrong scope returns `400 invalid_scope` — do not substitute the
+> `title-services` sample scope from generic Cox docs.
 
 **Main worker (staging):**
 
@@ -62,29 +84,51 @@ on the intelligence worker staging environment before any UAT call.
 
 ---
 
-## 2. UAT URL Configuration
+## 2. URL Configuration (Cox sandbox)
 
-`.dev.vars.example` documents both environments. For UAT runs on the intelligence worker:
+For UAT runs on the intelligence worker:
 
 ```
-MANHEIM_TOKEN_URL=https://uat.api.manheim.com/oauth2/token.oauth2
-MANHEIM_MMR_URL=https://uat.api.manheim.com/valuations
+MANHEIM_API_VENDOR=cox
+MANHEIM_GRANT_TYPE=client_credentials
+MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get
+MANHEIM_TOKEN_URL=https://authorize.coxautoinc.com/oauth2/.../v1/token
+MANHEIM_MMR_URL=https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
 ```
 
-These map to the same path structure as production:
+URL composition in code (vendor=cox, MMR 1.4 spec):
 
-- Token: `POST {MANHEIM_TOKEN_URL}`
-- VIN: `GET {MANHEIM_MMR_URL}/vin/{vin}?odometer={miles}`
-- YMM: `GET {MANHEIM_MMR_URL}/search/{year}/{make}/{model}?odometer={miles}&include=ci`
+- Token: `POST {MANHEIM_TOKEN_URL}` with `Authorization: Basic base64(client_id:client_secret)` and body `grant_type=client_credentials&scope=...`
+- VIN:   `GET {MANHEIM_MMR_URL}/vin/{vin}` (path-segment, no query string)
+- YMMT:  `GET {MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}` (path-segments; `bodyname`/trim **required**)
 
-**Critical:** YMM parameters are path segments, not query params. `GET /search?year=2020...`
-returns HTTP 596. This is a known regression from commit `5a66d6b3` and is documented in
-`manheimHttp.ts`.
+All lookup requests must include:
 
-**YMM account status:** `GET /valuations/search` returns 596 on the current account — the
-YMM endpoint is not provisioned. Contact the Manheim/Cox account rep to enable it before
-running YMM test cases. This is a hard blocker for YMM validation; no code change can
-resolve it.
+```
+Authorization: Bearer {access_token}
+Accept:        application/vnd.coxauto.v1+json
+Content-Type:  application/vnd.coxauto.v1+json
+```
+
+> **Legacy Manheim `uat.api.manheim.com` is no longer in use.** The legacy
+> `/valuations/search` 596 blocker does not apply on Cox; Cox uses `/search/...`
+> under `/vehicle/mmr`. The legacy URL templates remain in code only as a fallback
+> when `MANHEIM_API_VENDOR=manheim`.
+
+> **Trim gating:** when vendor=cox and the YMM call has no trim, the intelligence
+> worker short-circuits to `mmr_value: null` and emits log
+> `manheim.http.skipped { reason: "cox_ymm_requires_trim" }`. No token request,
+> no MMR request, ingest stays non-blocking. Trim must be sent end-to-end to use
+> the Cox YMMT endpoint.
+
+> **`odometer` query parameter:** MMR 1.4 spec does not document `odometer` on
+> `/vin/{vin}` or `/search/...`. The Cox URL builder omits it. Re-introduce only
+> after Cox product guide confirms the parameter (see open item §0.5).
+
+> **VIN disambiguation variants** (`/vin/{vin}/{subseries}`,
+> `/vin/{vin}/{subseries}/{transmission}`) and the **long-form YMMT path**
+> (`/search/years/.../makes/...`) are deferred and not exercised in this phase's
+> tests.
 
 ---
 
@@ -93,18 +137,25 @@ resolve it.
 Obtain UAT-valid test VINs from Manheim's UAT documentation or account rep (see section
 0.5). Placeholders below must be substituted before execution.
 
-### 3a. OAuth token
+### 3a. OAuth token (Cox `client_credentials` + Basic Auth)
 
-> Test cases T-01 through T-04 assume password-grant. If `client_credentials` is confirmed,
-> adjust the request body to omit `username`/`password` and use
-> `grant_type=client_credentials`. KV caching and single-flight behavior is grant-type-agnostic.
+Manual smoke curl (sandbox; replace placeholders, do not commit secrets):
+
+```
+curl -i -X POST "$MANHEIM_TOKEN_URL" \
+  -u "$MANHEIM_CLIENT_ID:$MANHEIM_CLIENT_SECRET" \
+  -d "grant_type=client_credentials&scope=wholesale-valuations.vehicle.mmr-ext.get"
+```
 
 | # | Test | Expected |
 |---|---|---|
-| T-01 | First token request (cold KV cache) | 200; `access_token` + `expires_in` returned; KV key `manheim:token` written |
+| T-01 | First token request (cold KV cache) | 200; `access_token` + `token_type: "Bearer"` + `expires_in` + `scope` returned; KV key `manheim:token` written |
 | T-02 | Second request within TTL | Token served from KV cache; no HTTP call to token endpoint; `manheim.token.cached` log emitted |
 | T-03 | Delete KV key manually, request again | Token endpoint called; new token cached |
-| T-04 | Bad credentials (`MANHEIM_PASSWORD=wrong`) | 401 from token endpoint; `ManheimAuthError` thrown; `manheim.token.refresh_failed` log with `error_category: "auth"` |
+| T-04 | Wrong scope (`MANHEIM_SCOPE=title-services.foo`) | `400 invalid_scope`; `ManheimAuthError` thrown; `manheim.token.refresh_failed` log with `error_category: "auth"` and `error_code: "invalid_scope"` |
+| T-05 | Wrong client secret | `401`; `ManheimAuthError`; `manheim.token.refresh_failed` log with `error_category: "auth"` |
+| T-06 | Token request body inspection | Body contains `grant_type=client_credentials` and `scope=...`; body MUST NOT contain `client_id`, `client_secret`, `username`, or `password` keys |
+| T-07 | Token request header inspection | `Authorization: Basic <b64>` present; `Content-Type: application/x-www-form-urlencoded` present |
 
 ### 3b. VIN lookup
 
@@ -292,15 +343,12 @@ For each UAT call, confirm the following structured log events appear in Cloudfl
 - `mmr.lookup.complete` — includes `cacheHit`, `latencyMs`, `kpi: true`
 - `mmr.lookup.failure` — on any unhandled error
 
-**Main worker (handleIngest.ts):**
+**Main worker (handleIngest.ts + workerClient.ts):**
 
+- `ingest.mmr_worker_called` — pre-call event from `workerClient.ts`; includes `endpoint`, `method`, `vin_present`
 - `valuation.fetched` — on success; includes `mmr_value`, `confidence`, `kpi: true`
 - `ingest.mmr_worker_failed` — on `WorkerTimeoutError`, `WorkerRateLimitError`, or `WorkerUnavailableError`; non-blocking
 - `ingest.normalization_enrichment_failed` — if enrichment write throws; non-blocking
-
-> **Future enhancement:** `workerClient.ts` currently emits no structured log events. A
-> pre-call `ingest.mmr_worker_called` event with `{ endpoint, method, vin_present }` would
-> improve observability for the worker-mode path. Not currently in code.
 
 ---
 

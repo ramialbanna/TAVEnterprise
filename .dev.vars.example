@@ -10,17 +10,28 @@ SUPABASE_SERVICE_ROLE_KEY=replace_me
 WEBHOOK_HMAC_SECRET=replace_me
 NORMALIZER_SECRET=replace_me
 
-# ── Manheim MMR API ────────────────────────────────────────────────────────────
+# ── Cox/Manheim Wholesale-Valuations API ──────────────────────────────────────
+# Current account is Cox Bridge 2 / client_credentials.
+# See docs/COX_API_INTEGRATION.md for full details.
+MANHEIM_API_VENDOR=cox
+MANHEIM_GRANT_TYPE=client_credentials
+MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get
 MANHEIM_CLIENT_ID=replace_me
 MANHEIM_CLIENT_SECRET=replace_me
-MANHEIM_USERNAME=replace_me
-MANHEIM_PASSWORD=replace_me
-# Production endpoints:
-MANHEIM_TOKEN_URL=https://api.manheim.com/oauth2/token.oauth2
-MANHEIM_MMR_URL=https://api.manheim.com/valuations
-# UAT/pre-production endpoints (comment out above, uncomment below):
-# MANHEIM_TOKEN_URL=https://uat.api.manheim.com/oauth2/token.oauth2
-# MANHEIM_MMR_URL=https://uat.api.manheim.com/valuations
+# Cox sandbox endpoints. Copy MANHEIM_TOKEN_URL verbatim from the Cox app detail page;
+# the path segment after /oauth2/ is per-app and must not be guessed.
+MANHEIM_TOKEN_URL=https://authorize.coxautoinc.com/oauth2/REPLACE_AUTH_SERVER_ID/v1/token
+# Cox MMR 1.4 base URL — must end in /mmr; code appends /vin/{vin} or /search/{year}/{make}/{model}/{bodyname}
+MANHEIM_MMR_URL=https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+# Cox integration:  https://integration.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+# Cox production:   https://api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+#
+# Legacy Manheim password grant (deprecated — current account is Cox).
+# Revert by setting: MANHEIM_API_VENDOR=manheim, MANHEIM_GRANT_TYPE=password.
+# MANHEIM_USERNAME=replace_me
+# MANHEIM_PASSWORD=replace_me
+# MANHEIM_TOKEN_URL=https://api.manheim.com/oauth2/token.oauth2
+# MANHEIM_MMR_URL=https://api.manheim.com/valuations
 
 # ── Alerts ─────────────────────────────────────────────────────────────────────
 ALERT_WEBHOOK_URL=replace_me

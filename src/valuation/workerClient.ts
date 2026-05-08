@@ -5,6 +5,7 @@ import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } fr
 import { getSupabaseClient } from "../persistence/supabase";
 import { loadMmrReferenceData } from "./loadMmrReferenceData";
 import { normalizeMmrParams } from "./normalizeMmrParams";
+import { log } from "../logging/logger";
 
 const TIMEOUT_MS = 5_000;
 
@@ -93,8 +94,13 @@ export async function getMmrValueFromWorker(
     const sendModel = normalized.canonicalModel ?? model;
 
     endpoint = `${baseUrl}/mmr/year-make-model`;
-    // trim is intentionally not sent to the intelligence worker in this phase
     body = { year, make: sendMake, model: sendModel, mileage };
+    // Cox MMR 1.4 YMMT requires bodyname (trim) as a path segment, so trim
+    // must cross the boundary when present. normalized.trim is pass-through
+    // today (no trim alias table); when alias work lands, it plugs in here
+    // without changing the wire format.
+    const sendTrim = normalized.trim?.trim();
+    if (sendTrim) body.trim = sendTrim;
 
     // exact and alias both yield "medium"; partial/none degrades to "low"
     confidence =
@@ -113,6 +119,8 @@ export async function getMmrValueFromWorker(
   } else {
     return null;
   }
+
+  log("ingest.mmr_worker_called", { endpoint, method, vin_present: !!vin });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

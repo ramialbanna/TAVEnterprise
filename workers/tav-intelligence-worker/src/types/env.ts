@@ -18,17 +18,53 @@ export interface Env {
    */
   MANAGER_EMAIL_ALLOWLIST: string;
 
-  /** Manheim OAuth client id (password-grant). Wrangler secret. */
+  /** Manheim OAuth client id. Wrangler secret. */
   MANHEIM_CLIENT_ID: string;
   /** Manheim OAuth client secret. Wrangler secret. NEVER log this. */
   MANHEIM_CLIENT_SECRET: string;
-  /** Manheim user account name. Wrangler secret. */
+  /**
+   * Vendor profile for the MMR API.
+   *   "cox"     — Cox Wholesale-Valuations API (current sandbox account).
+   *               URL templates use /mmr and /mmr-lookup; lookup requests carry
+   *               Accept and Content-Type = application/vnd.coxauto.v1+json.
+   *   "manheim" — Legacy Manheim VIN /valuations/vin and YMM /valuations/search.
+   * Absent or unrecognized → "manheim" (legacy default).
+   * See docs/COX_API_INTEGRATION.md.
+   */
+  MANHEIM_API_VENDOR?: string;
+  /**
+   * OAuth grant type.
+   *   "client_credentials" — Cox Bridge 2 flow. Sends HTTP Basic Auth header
+   *                          (base64 of client_id:client_secret); body is
+   *                          grant_type=client_credentials&scope=...
+   *                          MANHEIM_USERNAME / MANHEIM_PASSWORD are not used.
+   *   "password" (or absent) — legacy Manheim flow with body credentials.
+   */
+  MANHEIM_GRANT_TYPE?: string;
+  /**
+   * OAuth scope appended to the token request body when present.
+   * Required for Cox client_credentials. Cox sandbox value:
+   *   wholesale-valuations.vehicle.mmr-ext.get
+   * Wrong scope → 400 invalid_scope.
+   */
+  MANHEIM_SCOPE?: string;
+  /** Manheim user account name. Required only for password grant. Wrangler secret. */
   MANHEIM_USERNAME: string;
-  /** Manheim user account password. Wrangler secret. NEVER log this. */
+  /** Manheim user account password. Required only for password grant. Wrangler secret. NEVER log this. */
   MANHEIM_PASSWORD: string;
-  /** OAuth token endpoint, e.g. https://api.manheim.com/oauth2/token. */
+  /**
+   * OAuth token endpoint.
+   *   Cox sandbox: https://authorize.coxautoinc.com/oauth2/<authServerId>/v1/token
+   *                (copy verbatim from the Cox app detail page; do not guess)
+   *   Legacy:      https://api.manheim.com/oauth2/token.oauth2
+   */
   MANHEIM_TOKEN_URL: string;
-  /** MMR base URL, e.g. https://api.manheim.com (no trailing slash). */
+  /**
+   * MMR API base URL (host + path prefix; no trailing slash). Code appends
+   * vendor-specific path segments.
+   *   Cox sandbox: https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle
+   *   Legacy:      https://api.manheim.com
+   */
   MANHEIM_MMR_URL: string;
 
   /** Supabase project URL, e.g. https://<ref>.supabase.co. */

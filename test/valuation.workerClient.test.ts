@@ -289,11 +289,39 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     expect(result?.lookupModel).toBeNull();
   });
 
-  it("trim is not included in the YMM request body", async () => {
+  it("trim is included in the YMM request body when present", async () => {
     mockFetch(200, ENVELOPE_YMM);
 
     await getMmrValueFromWorker(
       { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
+      BASE_ENV,
+    );
+
+    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
+    // Cox MMR 1.4 YMMT requires bodyname (trim) as a path segment, so the
+    // trim must cross the main-worker → intelligence-worker boundary.
+    expect(sentBody.trim).toBe("XSE");
+  });
+
+  it("trim is omitted from the YMM request body when absent", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+
+    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
+    expect(sentBody).not.toHaveProperty("trim");
+  });
+
+  it("whitespace-only trim is omitted from the YMM request body", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", trim: "   ", mileage: 60_000 },
       BASE_ENV,
     );
 

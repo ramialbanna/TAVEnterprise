@@ -94,6 +94,13 @@ class NetworkError extends Error {
 const SLEEP = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Concatenate base + path safely without losing existing path-prefix on base. */
+function joinUrl(base: string, path: string): string {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return b + p;
+}
+
 /** Categorize an unknown error for log dashboards without leaking detail. */
 function errorCategory(err: unknown): string {
   if (err instanceof ManheimAuthError)        return "auth";
@@ -171,14 +178,9 @@ export class ManheimHttpClient implements ManheimClient {
     const start = Date.now();
 
     const token = await this.getAccessToken(args.requestId);
-    const url = new URL(
-      `/valuations/vin/${encodeURIComponent(args.vin)}`,
-      this.env.MANHEIM_MMR_URL,
-    );
-    url.searchParams.set("odometer", String(args.mileage));
 
     return this.executeLookup<ManheimVinResponse>({
-      url:        url.toString(),
+      url:        this.buildVinUrl(args.vin, args.mileage),
       token,
       requestId:  args.requestId,
       lookupType: "vin",
@@ -196,29 +198,113 @@ export class ManheimHttpClient implements ManheimClient {
   }): Promise<ManheimYmmResponse> {
     const start = Date.now();
 
-    const token = await this.getAccessToken(args.requestId);
-
-    // CRITICAL (regression — see commit 5a66d6b3 / src/valuation/mmr.ts):
-    // Manheim's YMM endpoint takes year/make/model as PATH segments. Passing
-    // them as query params returns HTTP 596 ("URL may be malformed"). Do not
-    // refactor to query-style without verifying with a live call.
-    const url = new URL(
-      `/valuations/search/${encodeURIComponent(args.year)}/${encodeURIComponent(args.make)}/${encodeURIComponent(args.model)}`,
-      this.env.MANHEIM_MMR_URL,
-    );
-    url.searchParams.set("odometer", String(args.mileage));
-    url.searchParams.set("include", "ci");
-    if (args.trim !== undefined && args.trim !== null && args.trim.trim().length > 0) {
-      url.searchParams.set("trim", args.trim);
+    // Cox MMR 1.4 YMMT requires `bodyname` (trim) as a required path segment.
+    // A trimless YMM call has no valid URL on Cox — short-circuit to a null
+    // envelope (mirrors the 404 → mmr_value: null pattern in executeLookup)
+    // so the caller treats it as "no data" and ingest stays non-blocking.
+    if (this.isCoxVendor()) {
+      const trimmed = typeof args.trim === "string" ? args.trim.trim() : "";
+      if (trimmed.length === 0) {
+        log("manheim.http.skipped", {
+          requestId: args.requestId,
+          reason:    "cox_ymm_requires_trim",
+        });
+        return {
+          mmr_value:  null,
+          payload:    {},
+          fetched_at: new Date().toISOString(),
+          retryCount: 0,
+        } as ManheimYmmResponse;
+      }
     }
 
+    const token = await this.getAccessToken(args.requestId);
+
     return this.executeLookup<ManheimYmmResponse>({
-      url:        url.toString(),
+      url:        this.buildYmmUrl(args),
       token,
       requestId:  args.requestId,
       lookupType: "ymm",
       startMs:    start,
     });
+  }
+
+  // ── Vendor-aware URL builders ──────────────────────────────────────────────
+
+  private isCoxVendor(): boolean {
+    return this.env.MANHEIM_API_VENDOR === "cox";
+  }
+
+  /**
+   * Build the VIN lookup URL.
+   *
+   * Cox Wholesale-Valuations MMR 1.4: GET ${MANHEIM_MMR_URL}/vin/{vin}
+   *   MANHEIM_MMR_URL is the full base ending in /vehicle/mmr (e.g.
+   *   https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr).
+   *   Subseries / transmission disambiguation variants
+   *   (/vin/{vin}/{subseries}, /vin/{vin}/{subseries}/{transmission}) are not
+   *   yet implemented. `odometer` is omitted — not documented as a query
+   *   parameter in MMR 1.4; re-add only after Cox docs confirm support.
+   *
+   * Legacy Manheim: GET ${MANHEIM_MMR_URL}/valuations/vin/{vin}?odometer=...
+   *   MANHEIM_MMR_URL is host-only.
+   */
+  private buildVinUrl(vin: string, mileage: number): string {
+    if (this.isCoxVendor()) {
+      return joinUrl(this.env.MANHEIM_MMR_URL, `/vin/${encodeURIComponent(vin)}`);
+    }
+    const u = new URL(
+      `/valuations/vin/${encodeURIComponent(vin)}`,
+      this.env.MANHEIM_MMR_URL,
+    );
+    u.searchParams.set("odometer", String(mileage));
+    return u.toString();
+  }
+
+  /**
+   * Build the YMM lookup URL.
+   *
+   * Cox Wholesale-Valuations MMR 1.4:
+   *   GET ${MANHEIM_MMR_URL}/search/{year}/{makename}/{modelname}/{bodyname}
+   *   `bodyname` (trim) is a REQUIRED path segment per the OpenAPI spec.
+   *   `lookupByYmm` short-circuits to a null envelope when trim is missing
+   *   for vendor=cox; this builder is therefore only called with a non-empty
+   *   trim on the Cox path. Long-form path
+   *   /search/years/{year}/makes/{make}/models/{model}/trims/{body} is not
+   *   yet implemented. `odometer` and `include=ci` are omitted on Cox — not
+   *   documented as query params in 1.4; re-add when confirmed.
+   *
+   * Legacy Manheim: GET ${MANHEIM_MMR_URL}/valuations/search/{year}/{make}/{model}?odometer=...&include=ci
+   *   CRITICAL: year/make/model are PATH segments. Query-style returns HTTP 596 on the
+   *   legacy account (regression — see commit 5a66d6b3).
+   */
+  private buildYmmUrl(args: {
+    year:    number;
+    make:    string;
+    model:   string;
+    trim?:   string;
+    mileage: number;
+  }): string {
+    if (this.isCoxVendor()) {
+      // Caller (lookupByYmm) guarantees a non-empty trim on the Cox path.
+      const trim = (args.trim ?? "").trim();
+      const path =
+        `/search/${encodeURIComponent(String(args.year))}` +
+        `/${encodeURIComponent(args.make)}` +
+        `/${encodeURIComponent(args.model)}` +
+        `/${encodeURIComponent(trim)}`;
+      return joinUrl(this.env.MANHEIM_MMR_URL, path);
+    }
+    const u = new URL(
+      `/valuations/search/${encodeURIComponent(args.year)}/${encodeURIComponent(args.make)}/${encodeURIComponent(args.model)}`,
+      this.env.MANHEIM_MMR_URL,
+    );
+    u.searchParams.set("odometer", String(args.mileage));
+    u.searchParams.set("include", "ci");
+    if (args.trim !== undefined && args.trim !== null && args.trim.trim().length > 0) {
+      u.searchParams.set("trim", args.trim);
+    }
+    return u.toString();
   }
 
   // ── Lookup execution ───────────────────────────────────────────────────────
@@ -230,12 +316,21 @@ export class ManheimHttpClient implements ManheimClient {
     lookupType: "vin" | "ymm";
     startMs:    number;
   }): Promise<T> {
+    const lookupHeaders: Record<string, string> = {
+      Authorization: `Bearer ${args.token}`,
+    };
+    if (this.isCoxVendor()) {
+      // Cox Wholesale-Valuations vendor media type is required on every call.
+      lookupHeaders.Accept         = "application/vnd.coxauto.v1+json";
+      lookupHeaders["Content-Type"] = "application/vnd.coxauto.v1+json";
+    }
+
     let response: Response;
     let attempts: number;
     try {
       const result = await this.fetchWithRetry(args.url, {
         method:  "GET",
-        headers: { Authorization: `Bearer ${args.token}` },
+        headers: lookupHeaders,
       }, args.requestId);
       response = result.response;
       attempts = result.attempts;
@@ -510,21 +605,34 @@ export class ManheimHttpClient implements ManheimClient {
   }
 
   private async fetchAndStoreToken(requestId: string): Promise<string> {
-    log("manheim.token.refresh_started", { requestId });
+    const grantType = this.env.MANHEIM_GRANT_TYPE ?? "password";
+    log("manheim.token.refresh_started", { requestId, grant_type: grantType });
 
-    const body = new URLSearchParams({
-      grant_type:    "password",
-      username:      this.env.MANHEIM_USERNAME,
-      password:      this.env.MANHEIM_PASSWORD,
-      client_id:     this.env.MANHEIM_CLIENT_ID,
-      client_secret: this.env.MANHEIM_CLIENT_SECRET,
-    });
+    const body = new URLSearchParams({ grant_type: grantType });
+    const tokenHeaders: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    if (grantType === "client_credentials") {
+      // Cox Bridge 2 / OAuth 2.0 §4.4 — credentials in HTTP Basic header.
+      // Body must NOT contain client_id, client_secret, username, or password.
+      const basic = btoa(`${this.env.MANHEIM_CLIENT_ID}:${this.env.MANHEIM_CLIENT_SECRET}`);
+      tokenHeaders.Authorization = `Basic ${basic}`;
+      if (this.env.MANHEIM_SCOPE) body.set("scope", this.env.MANHEIM_SCOPE);
+    } else {
+      // Legacy Manheim password grant — body credentials, no Basic header.
+      body.set("client_id",     this.env.MANHEIM_CLIENT_ID);
+      body.set("client_secret", this.env.MANHEIM_CLIENT_SECRET);
+      body.set("username",      this.env.MANHEIM_USERNAME);
+      body.set("password",      this.env.MANHEIM_PASSWORD);
+      if (this.env.MANHEIM_SCOPE) body.set("scope", this.env.MANHEIM_SCOPE);
+    }
 
     let res: Response;
     try {
       res = await this.fetchFn(this.env.MANHEIM_TOKEN_URL, {
         method:  "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers: tokenHeaders,
         body:    body.toString(),
       });
     } catch (err) {
@@ -564,13 +672,24 @@ export class ManheimHttpClient implements ManheimClient {
           status: res.status,
         });
       }
+      // 4xx other than 401/403. OAuth error bodies use { "error": "<code>", ... }.
+      // Surface invalid_scope distinctly so dashboards can spot config drift.
+      let errorCode: string | undefined;
+      try {
+        const parsed = (await res.clone().json()) as { error?: unknown };
+        if (typeof parsed.error === "string") errorCode = parsed.error;
+      } catch {
+        // body not JSON — leave errorCode undefined.
+      }
       log("manheim.token.refresh_failed", {
         requestId,
         status: res.status,
-        error_category: "response_shape",
+        error_category: "auth",
+        ...(errorCode ? { error_code: errorCode } : {}),
       });
       throw new ManheimAuthError("Manheim token endpoint returned non-OK", {
         status: res.status,
+        ...(errorCode ? { error_code: errorCode } : {}),
       });
     }
 
