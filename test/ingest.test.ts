@@ -56,6 +56,15 @@ vi.mock("../src/alerts/alerts", () => ({
   sendExcellentLeadSummary: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/valuation/workerClient", async () => {
+  const actual = await vi.importActual<typeof import("../src/valuation/workerClient")>("../src/valuation/workerClient");
+  return { ...actual, getMmrValueFromWorker: vi.fn().mockResolvedValue(null) };
+});
+
+vi.mock("../src/persistence/valuationSnapshots", () => ({
+  writeValuationSnapshot: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof import("../src/scoring/lead")>("../src/scoring/lead");
@@ -73,6 +82,8 @@ import { writeSchemaDrift } from "../src/persistence/schemaDrift";
 import { sendExcellentLeadSummary } from "../src/alerts/alerts";
 import { computeFinalScore } from "../src/scoring/lead";
 import { insertBuyBoxScoreAttribution } from "../src/persistence/buyBoxScoreAttributions";
+import { getMmrValueFromWorker, WorkerTimeoutError, WorkerRateLimitError } from "../src/valuation/workerClient";
+import { writeValuationSnapshot } from "../src/persistence/valuationSnapshots";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -101,6 +112,8 @@ beforeEach(() => {
   vi.mocked(upsertLead).mockResolvedValue({ id: "lead-uuid", created: true });
   vi.mocked(writeSchemaDrift).mockResolvedValue(undefined);
   vi.mocked(insertBuyBoxScoreAttribution).mockResolvedValue("attr-uuid");
+  vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
+  vi.mocked(writeValuationSnapshot).mockResolvedValue(undefined);
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -323,5 +336,69 @@ describe("POST /ingest", () => {
 
     expect(vi.mocked(sendExcellentLeadSummary)).not.toHaveBeenCalled();
     expect(waitUntilSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ── MANHEIM_LOOKUP_MODE="worker" integration tests ────────────────────────────
+
+const WORKER_MMR_RESULT = {
+  mmrValue: 18_500,
+  confidence: "high" as const,
+  method: "vin" as const,
+  rawResponse: {},
+};
+
+const workerEnv = {
+  WEBHOOK_HMAC_SECRET: SECRET,
+  SUPABASE_URL: "https://test.supabase.co",
+  SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
+  MANHEIM_LOOKUP_MODE: "worker",
+  INTEL_WORKER_URL: "https://intel-worker.example.com",
+  INTEL_WORKER_SECRET: "test-service-secret",
+} as unknown as Env;
+
+describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
+  it("calls intelligence worker and writes valuation snapshot when worker returns a value", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_MMR_RESULT);
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ valuation: expect.objectContaining({ mmrValue: 18_500, confidence: "high" }) }),
+    );
+  });
+
+  it("falls back gracefully (returns 200, no snapshot) when worker call times out", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValueOnce(new WorkerTimeoutError());
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(vi.mocked(writeValuationSnapshot)).not.toHaveBeenCalled();
+  });
+
+  it("falls back gracefully (returns 200, no snapshot) when worker returns 429", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValueOnce(new WorkerRateLimitError());
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(vi.mocked(writeValuationSnapshot)).not.toHaveBeenCalled();
+  });
+
+  it("direct mode does not call getMmrValueFromWorker", async () => {
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    // env has no MANHEIM_LOOKUP_MODE → treated as "direct"
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
   });
 });

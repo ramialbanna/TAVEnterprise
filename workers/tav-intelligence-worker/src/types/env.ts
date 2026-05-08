@@ -35,4 +35,12 @@ export interface Env {
   SUPABASE_URL: string;
   /** Supabase service-role key. NEVER log this. */
   SUPABASE_SERVICE_ROLE_KEY: string;
+
+  /**
+   * Shared secret for worker-to-worker calls from the main tav-aip worker.
+   * When non-empty, a request bearing x-tav-service-secret matching this value
+   * is granted service identity (bypassing CF Access requirement).
+   * Empty string disables the bypass. Set via: wrangler secret put INTEL_SERVICE_SECRET
+   */
+  INTEL_SERVICE_SECRET: string;
 }

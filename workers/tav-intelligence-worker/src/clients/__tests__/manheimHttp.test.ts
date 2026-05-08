@@ -33,6 +33,7 @@ const ENV: Env = {
   MANHEIM_MMR_URL:       "https://api.manheim.com",
   SUPABASE_URL:          "",
   SUPABASE_SERVICE_ROLE_KEY: "",
+  INTEL_SERVICE_SECRET: "",
 };
 
 interface FakeKv {

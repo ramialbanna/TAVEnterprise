@@ -40,44 +40,37 @@ Example:
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /intel/mmr/queries paginated audit history (21-field allowlist, all filters, offset pagination with has_more) — DONE
 - [x] 2026-05-08 supabase/migrations — add 0032_get_mmr_kpis.sql: CREATE tav.get_mmr_kpis RPC + GRANT EXECUTE to service_role — DONE
 
-## MANHEIM_LOOKUP_MODE="worker" — reserved, not yet safe to enable
+## MANHEIM_LOOKUP_MODE="worker" — implemented, not yet enabled in staging/production
 
-`MANHEIM_LOOKUP_MODE` was added in Phase G.4 Step 7 as a feature flag that will eventually route
-main-worker valuation through tav-intelligence-worker. The `"worker"` value is **reserved** and
-must not be set in staging or production until all of the following work is complete.
+`MANHEIM_LOOKUP_MODE="worker"` routes ingest valuation through tav-intelligence-worker
+(`src/valuation/workerClient.ts`). The code is complete but the flag stays `"direct"` in all
+wrangler.toml env blocks until the following operational prerequisites are met.
 
 **Current behavior when set to "worker":**
-- `getMmrValue` is never called — the direct Manheim path is entirely skipped.
-- `mmrResult` stays `null` for every listing in the ingest batch.
-- `dealScore` is computed as 0 (the no-MMR fallback in `computeDealScore`).
-- No valuation snapshot is written to `tav.valuation_snapshots`.
-- The log event `valuation.lookup_mode_skipped` is emitted for each listing.
-- Lead scoring, buy-box matching, and alerts continue to function, but deal quality is invisible.
+- Main worker POSTs to `/mmr/vin` or `/mmr/year-make-model` on tav-intelligence-worker.
+- Auth: `x-tav-service-secret` header must match `INTEL_SERVICE_SECRET` on the intelligence worker.
+- Timeout: 5s hard deadline. Timeout → `WorkerTimeoutError` → `ingest.mmr_worker_failed` log → mmrResult=null (non-blocking).
+- 429 → `WorkerRateLimitError` → same fallback. 5xx → `WorkerUnavailableError` → same fallback.
+- Rate-limit guard: ingest calls receive service identity (`service@tav-internal`), not a user email — they do not exhaust per-user quota.
+- On success, `MmrResponseEnvelope` is mapped to `MmrResult`; valuation snapshot is written; scoring uses the returned value.
 
-**Required future work before "worker" is safe:**
-- [ ] Internal service call: main worker must call a tav-intelligence-worker endpoint (e.g. POST /mmr/vin
-  or POST /mmr/year-make-model) and map the `MmrResponseEnvelope` to an `MmrResult` / `ValuationResult`.
-- [ ] Auth: the call must use a shared secret or Cloudflare service binding — no Cloudflare Access header
-  is available for worker-to-worker calls unless a service binding is configured.
-- [ ] Timeout handling: the intelligence worker call must be wrapped with a deadline (≤ 5s recommended)
-  so a slow upstream cannot stall the ingest batch timeout (currently 25s).
-- [ ] Error mapping: `ManheimRateLimitError`, `ManheimUnavailableError`, `CacheLockError` from the
-  intelligence worker must be mapped to the same non-blocking fallback behavior as the current
-  `getMmrValue` catch block (log + continue, do not fail the listing).
-- [ ] Tests: ingest integration tests must cover the "worker" path — mock the internal call, verify
-  the result is used for scoring and snapshot writing, verify error paths fall through gracefully.
-- [ ] Rate-limit guard: the intelligence worker already applies a per-user rate limit (Phase G.4 Step 6);
-  verify ingest batch calls are attributed to a service identity, not a user email, to avoid
-  exhausting the per-user quota.
+**Prerequisites before enabling "worker" in staging:**
+- [ ] Provision `INTEL_WORKER_URL` secret on main worker (staging + production URL of tav-intelligence-worker).
+- [ ] Provision `INTEL_WORKER_SECRET` secret on main worker (any strong random value, matching below).
+- [ ] Provision `INTEL_SERVICE_SECRET` secret on intelligence worker (same value as `INTEL_WORKER_SECRET`).
+- [ ] tav-intelligence-worker must be deployed to staging (`workers_dev = true` is already set).
+- [ ] End-to-end smoke test in staging: POST /ingest → verify `valuation.fetched` log event appears and `tav.valuation_snapshots` row is written.
+- [ ] After staging validation: set `MANHEIM_LOOKUP_MODE = "worker"` in `[env.staging.vars]` and redeploy main worker.
 
-**Operational warning:**
-Keep `MANHEIM_LOOKUP_MODE = "direct"` in all `wrangler.toml` env blocks (`[vars]`, `[env.staging.vars]`,
-`[env.production.vars]`) until the above work is complete and validated in staging.
-Flipping to `"worker"` today silently zeros out deal scores for all ingested listings.
+**Provisioning commands (staging):**
+```
+wrangler secret put INTEL_WORKER_URL
+wrangler secret put INTEL_WORKER_SECRET
+wrangler secret put INTEL_SERVICE_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
+```
 
-- [ ] 2026-05-08 src/ingest + workers/tav-intelligence-worker — implement MANHEIM_LOOKUP_MODE="worker"
-      path: service-binding call, timeout guard, error mapping, ingest integration tests
-      (noticed by: user)
+- [x] 2026-05-08 src/ingest + workers/tav-intelligence-worker — implement MANHEIM_LOOKUP_MODE="worker"
+      path: service-binding call, timeout guard, error mapping, ingest integration tests — DONE (G.5.2)
 
 ## Production deploy blockers — tav-intelligence-worker
 

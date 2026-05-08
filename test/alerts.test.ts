@@ -24,6 +24,8 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     ADMIN_API_SECRET: "admin-secret",
     HYBRID_BUYBOX_ENABLED: "true",
     MANHEIM_LOOKUP_MODE: "direct",
+    INTEL_WORKER_URL: "",
+    INTEL_WORKER_SECRET: "",
     ...overrides,
   };
 }

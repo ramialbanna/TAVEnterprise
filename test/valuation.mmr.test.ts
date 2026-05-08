@@ -77,6 +77,8 @@ function makeEnv(): Env {
     ADMIN_API_SECRET: "admin-secret",
     HYBRID_BUYBOX_ENABLED: "false",
     MANHEIM_LOOKUP_MODE: "direct",
+    INTEL_WORKER_URL: "",
+    INTEL_WORKER_SECRET: "",
   };
 }
 

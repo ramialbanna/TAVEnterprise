@@ -24,6 +24,7 @@ const env: Env = {
   MANHEIM_MMR_URL:           "",
   SUPABASE_URL:              "https://example.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "test-key",
+  INTEL_SERVICE_SECRET: "",
 };
 
 const authedCtx = { userId: "rami@texasautovalue.com", email: "rami@texasautovalue.com", name: null, roles: [] as string[] };

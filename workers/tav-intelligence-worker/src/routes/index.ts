@@ -27,7 +27,14 @@ export async function dispatch(
   const method = request.method.toUpperCase();
   const pathname = url.pathname;
 
-  const userContext = extractUserContext(request);
+  // Service-to-service identity: when the main worker calls us with the shared
+  // secret header, bypass the CF Access requirement and inject a service identity.
+  // CF Access JWTs are unavailable for direct worker-to-worker fetch calls.
+  let userContext = extractUserContext(request);
+  const serviceSecret = env.INTEL_SERVICE_SECRET;
+  if (serviceSecret && request.headers.get("x-tav-service-secret") === serviceSecret) {
+    userContext = { userId: "service@tav-internal", email: "service@tav-internal", name: "TAV Service", roles: [] };
+  }
   const baseArgs: HandlerArgs = { request, env, requestId, userContext };
 
   if (method === "GET"  && pathname === "/health")               return handleHealth(baseArgs);

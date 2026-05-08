@@ -40,9 +40,23 @@ export interface Env {
   /**
    * Controls which code path executes Manheim MMR valuation lookups.
    *   "direct"  — legacy: main worker calls Manheim directly via src/valuation/mmr.ts (default)
-   *   "worker"  — future: route through tav-intelligence-worker (not yet implemented; skips valuation)
+   *   "worker"  — route through tav-intelligence-worker via src/valuation/workerClient.ts
    *
    * Set in wrangler.toml [vars]. Any value other than "worker" is treated as "direct".
    */
   MANHEIM_LOOKUP_MODE: string;
+
+  /**
+   * Base URL of tav-intelligence-worker, e.g. https://tav-intelligence-worker-staging.workers.dev
+   * Empty string = not configured; worker-path valuation silently falls back to null.
+   * Non-secret — set in wrangler.toml [vars].
+   */
+  INTEL_WORKER_URL: string;
+
+  /**
+   * Shared secret for worker-to-worker auth. Sent as x-tav-service-secret header.
+   * Must match INTEL_SERVICE_SECRET in the intelligence worker. NEVER log this.
+   * Set via: wrangler secret put INTEL_WORKER_SECRET
+   */
+  INTEL_WORKER_SECRET: string;
 }

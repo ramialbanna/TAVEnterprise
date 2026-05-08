@@ -16,6 +16,7 @@ const env: Env = {
   MANHEIM_MMR_URL:       "",
   SUPABASE_URL:          "",
   SUPABASE_SERVICE_ROLE_KEY: "",
+  INTEL_SERVICE_SECRET: "",
 };
 
 function buildArgs(opts: { body?: string; authed?: boolean }): HandlerArgs {

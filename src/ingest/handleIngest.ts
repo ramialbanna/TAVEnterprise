@@ -28,6 +28,7 @@ import { getSegmentAvgMarginPct } from "../persistence/purchaseOutcomes";
 import { getDemandScoreForRegion } from "../persistence/marketDemandIndex";
 import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttributions";
 import { getMmrValue } from "../valuation/mmr";
+import { getMmrValueFromWorker } from "../valuation/workerClient";
 import { getValuationLookupMode } from "../valuation/lookupMode";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
@@ -194,8 +195,8 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
 
       // E: valuation — non-blocking; dealScore stays 0 if MMR is unavailable.
       // MANHEIM_LOOKUP_MODE gates which path runs:
-      //   "direct"  → legacy inline Manheim call (default)
-      //   "worker"  → intelligence worker path (not yet implemented — skips valuation)
+      //   "direct"  → legacy inline Manheim call via src/valuation/mmr.ts (default)
+      //   "worker"  → tav-intelligence-worker via src/valuation/workerClient.ts
       let mmrResult = null;
       if (getValuationLookupMode(env) === "direct") {
         try {
@@ -208,7 +209,14 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
           logError("valuation", "ingest.mmr_failed", err, listingCtx);
         }
       } else {
-        log("valuation.lookup_mode_skipped", { mode: getValuationLookupMode(env) }, listingCtx);
+        try {
+          mmrResult = await getMmrValueFromWorker(
+            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, mileage: listing.mileage },
+            env,
+          );
+        } catch (err) {
+          logError("valuation", "ingest.mmr_worker_failed", err, listingCtx);
+        }
       }
 
       if (mmrResult) {

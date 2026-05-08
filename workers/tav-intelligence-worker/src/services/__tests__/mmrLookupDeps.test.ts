@@ -57,6 +57,7 @@ const env: Env = {
   MANHEIM_MMR_URL:           "https://api.manheim.test",
   SUPABASE_URL:              "https://proj.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-key",
+  INTEL_SERVICE_SECRET: "",
 };
 
 describe("buildMmrLookupDeps", () => {

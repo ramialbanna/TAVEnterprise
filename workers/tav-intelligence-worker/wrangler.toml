@@ -48,6 +48,8 @@ id      = "80195f01a65c4431af1e3835f9bea933"
 
 [env.staging.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
+# INTEL_SERVICE_SECRET must be set as a Cloudflare secret:
+#   wrangler secret put INTEL_SERVICE_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
 
 # ── Production ───────────────────────────────────────────────────────────────
 
