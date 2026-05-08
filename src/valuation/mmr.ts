@@ -113,7 +113,10 @@ async function getMmrByVin(
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(JSON.stringify({ event: "mmr.vin_http_error", status: res.status }));
+    return null;
+  }
 
   const data: unknown = await res.json();
   const mmrValue = extractMmrValue(data);
@@ -144,7 +147,10 @@ async function getMmrByYmm(
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(JSON.stringify({ event: "mmr.ymm_http_error", status: res.status }));
+    return null;
+  }
 
   const data: unknown = await res.json();
   const mmrValue = extractMmrValue(data);

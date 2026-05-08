@@ -9,6 +9,7 @@ export async function computeImportFingerprint(
   weekLabel: string,
   vehicleKey: string, // VIN if available, else "YYYY:make:model:mileage_bucket"
   buyerId: string,
+  // pricePaid is intentional: the same vehicle re-uploaded at a different price is a distinct purchase event.
   pricePaid: number,
 ): Promise<string> {
   const input = `${weekLabel}|${vehicleKey.toUpperCase()}|${buyerId.toLowerCase()}|${pricePaid}`;

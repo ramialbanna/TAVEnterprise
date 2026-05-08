@@ -44,7 +44,8 @@ export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContex
       log("alert.sms_failed", { status: res.status, reason_code: "twilio_http_error" }, logCtx);
     }
     return res.ok;
-  } catch {
+  } catch (err) {
+    log("alert.sms_failed", { reason_code: "network_timeout", error: err instanceof Error ? err.message : String(err) }, logCtx);
     return false;
   }
 }
@@ -64,7 +65,8 @@ export async function sendWebhookAlert(env: Env, payload: Record<string, unknown
       log("alert.webhook_failed", { status: res.status, reason_code: "webhook_http_error" }, logCtx);
     }
     return res.ok;
-  } catch {
+  } catch (err) {
+    log("alert.webhook_failed", { reason_code: "network_timeout", error: err instanceof Error ? err.message : String(err) }, logCtx);
     return false;
   }
 }
@@ -101,8 +103,13 @@ export async function sendExcellentLeadSummary(
 
   const alertCtx: LogContext = { runId: context.runId, source: context.source };
 
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     sendSmsAlert(env, smsBody, alertCtx),
     sendWebhookAlert(env, webhookPayload, alertCtx),
   ]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      log("alert.dispatch_failed", { reason_code: "unhandled_rejection", error: String(result.reason) }, alertCtx);
+    }
+  }
 }
