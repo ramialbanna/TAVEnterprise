@@ -183,3 +183,145 @@ cat docs/manheim-uat-validation-plan.md
 > 4. YMM endpoint provisioning is confirmed (currently returns 596)
 >
 > Using production credentials against UAT, or UAT credentials against production, risks account lockout, exhausted rate-limit quota, and audit log pollution. All current test coverage is fully mocked — no live calls have been made during this session.
+
+---
+
+## Update — End-of-Session State (2026-05-08 PM)
+
+The four blockers above are now **resolved**. Cox sandbox UAT (token-only + VIN +
+YMMT direct curl from local terminal, not via worker) passed earlier this
+session and is captured in `docs/manheim-uat-validation-plan.md` §14.
+
+### Active working directory
+
+```
+/Users/ramialbanna/Claude/TAV-AIP
+```
+
+Future Claude sessions must `cd` here before any wrangler / npm command. The
+case-variant path `~/Claude/tav-aip` resolves to the same directory on macOS
+case-insensitive filesystems but should not be used.
+
+### Branch and tree state
+
+- Branch: `main`
+- Working tree: clean
+- Latest commit (pushed to `origin/main`): `aa096c6` — "Record Cox sandbox UAT results"
+- Recent committed history:
+  - `aa096c6` Record Cox sandbox UAT results
+  - `184444d` Document Cox sandbox UAT test data
+  - `b348689` Add Cox MMR query params and retail parsing
+  - `dfad2e4` Align Cox MMR client with 1.4 API paths
+
+### Staging intelligence worker — deployed
+
+| Field | Value |
+|---|---|
+| Worker | `tav-intelligence-worker-staging` |
+| Deployed Version ID | `baa15646-e43d-423d-b600-3356e2fc31f5` |
+| URL | `https://tav-intelligence-worker-staging.rami-1a9.workers.dev` |
+| KV binding | `TAV_INTEL_KV` → `80195f01a65c4431af1e3835f9bea933` |
+| Staging secrets present | 10/10 (MANHEIM_*, SUPABASE_*, INTEL_SERVICE_SECRET) |
+| `MANAGER_EMAIL_ALLOWLIST` | empty (per `[env.staging.vars]`) |
+
+### Live staging checks performed
+
+| Check | Result |
+|---|---|
+| `GET /health` | `HTTP_STATUS=200`, `success: true`, `data.status: "ok"`, `worker: "tav-intelligence-worker"`, `version: "0.1.0"` |
+| `POST /mmr/vin` (known-good VIN, cache miss) | **NOT RUN** — `INTEL_SERVICE_SECRET` was not available in the Claude Bash environment, so the call could not be issued without exposing the secret value. |
+| `POST /mmr/vin` (same VIN, cache hit) | **NOT RUN** — same reason. |
+| `POST /mmr/vin` (no-data VIN, null envelope) | **NOT RUN** — same reason. |
+
+### Next exact step — run from Terminal.app, not Claude
+
+Open Terminal.app (not Claude). `cd /Users/ramialbanna/Claude/TAV-AIP`. Then:
+
+```
+read -s INTEL_SERVICE_SECRET
+export INTEL_SERVICE_SECRET
+INTEL_BASE='https://tav-intelligence-worker-staging.rami-1a9.workers.dev'
+```
+
+Optional second TTY (recommended for log observation):
+
+```
+wrangler tail --config workers/tav-intelligence-worker/wrangler.toml --env staging
+```
+
+Then run the three calls back-to-back. Each uses temp files so jq only reads
+JSON and `HTTP_STATUS` prints separately:
+
+#### Step 1 — known-good VIN cache miss
+
+```
+BODY_FILE=$(mktemp /tmp/uat-vin-001-body.XXXXXX); STATUS_FILE=$(mktemp /tmp/uat-vin-001-status.XXXXXX); \
+  curl -sS -o "$BODY_FILE" -w '%{http_code}' \
+    -X POST "$INTEL_BASE/mmr/vin" \
+    -H 'Content-Type: application/json' \
+    -H "x-tav-service-secret: $INTEL_SERVICE_SECRET" \
+    -d '{"vin":"1FT8W3BT1SEC27066","mileage":50000,"requestId":"uat-cox-001"}' \
+  > "$STATUS_FILE"; \
+  echo "HTTP_STATUS=$(cat "$STATUS_FILE")"; \
+  jq '{ok,mmr_value,confidence,method,cache_hit,is_inferred_mileage,fetched_at,expires_at,error_code}' < "$BODY_FILE"; \
+  rm -f "$BODY_FILE" "$STATUS_FILE"
+```
+
+Pass: `HTTP_STATUS=200`, `mmr_value: 67100`, `confidence: "high"`, `method: "vin"`, `cache_hit: false`, `error_code: null`.
+
+#### Step 2 — same VIN cache hit
+
+```
+BODY_FILE=$(mktemp /tmp/uat-vin-002-body.XXXXXX); STATUS_FILE=$(mktemp /tmp/uat-vin-002-status.XXXXXX); \
+  curl -sS -o "$BODY_FILE" -w '%{http_code}' \
+    -X POST "$INTEL_BASE/mmr/vin" \
+    -H 'Content-Type: application/json' \
+    -H "x-tav-service-secret: $INTEL_SERVICE_SECRET" \
+    -d '{"vin":"1FT8W3BT1SEC27066","mileage":50000,"requestId":"uat-cox-002"}' \
+  > "$STATUS_FILE"; \
+  echo "HTTP_STATUS=$(cat "$STATUS_FILE")"; \
+  jq '{ok,mmr_value,cache_hit,fetched_at,error_code}' < "$BODY_FILE"; \
+  rm -f "$BODY_FILE" "$STATUS_FILE"
+```
+
+Pass: `HTTP_STATUS=200`, `mmr_value: 67100`, `cache_hit: true`, `fetched_at` matches Step 1.
+
+#### Step 3 — no-data VIN null envelope
+
+```
+BODY_FILE=$(mktemp /tmp/uat-vin-003-body.XXXXXX); STATUS_FILE=$(mktemp /tmp/uat-vin-003-status.XXXXXX); \
+  curl -sS -o "$BODY_FILE" -w '%{http_code}' \
+    -X POST "$INTEL_BASE/mmr/vin" \
+    -H 'Content-Type: application/json' \
+    -H "x-tav-service-secret: $INTEL_SERVICE_SECRET" \
+    -d '{"vin":"1FT8W3BT199999999","mileage":50000,"requestId":"uat-cox-003"}' \
+  > "$STATUS_FILE"; \
+  echo "HTTP_STATUS=$(cat "$STATUS_FILE")"; \
+  jq '{ok,mmr_value,cache_hit,error_code,error_message}' < "$BODY_FILE"; \
+  rm -f "$BODY_FILE" "$STATUS_FILE"
+```
+
+Pass: `HTTP_STATUS=200`, `mmr_value: null`, `cache_hit: false`, `error_code: null`.
+
+#### Cleanup
+
+```
+unset INTEL_SERVICE_SECRET
+```
+
+### Hard stop list — do NOT do these yet
+
+- Do NOT enable `MANHEIM_LOOKUP_MODE="worker"` on the main worker.
+- Do NOT run `POST /ingest` end-to-end against the deployed staging stack.
+- Do NOT run YMMT (`POST /mmr/year-make-model`) from worker yet.
+- Do NOT call `/mmr-batch` or `/mmr-lookup`.
+- Do NOT touch production wrangler.toml `[env.production.vars]`.
+
+### Resume checklist for the next session
+
+1. `cd /Users/ramialbanna/Claude/TAV-AIP`
+2. `git status` — confirm clean tree, branch `main`, in sync with `origin/main` at `aa096c6` (or later if a follow-up handoff doc commit landed).
+3. Confirm staging worker still deployed: `wrangler deployments list --config workers/tav-intelligence-worker/wrangler.toml --env staging` — version `baa15646-...` (or later) should be present.
+4. Confirm staging secrets still set: `wrangler secret list --config workers/tav-intelligence-worker/wrangler.toml --env staging` — expect 10 names.
+5. Run the three `/mmr/vin` curls above from Terminal.app.
+6. Once they pass, the next phase is wiring `MANHEIM_LOOKUP_MODE="worker"` in `[env.staging.vars]` for the main worker and exercising `POST /ingest`. That step has its own preflight in `docs/manheim-uat-validation-plan.md` §8.
