@@ -325,3 +325,102 @@ unset INTEL_SERVICE_SECRET
 4. Confirm staging secrets still set: `wrangler secret list --config workers/tav-intelligence-worker/wrangler.toml --env staging` — expect 10 names.
 5. Run the three `/mmr/vin` curls above from Terminal.app.
 6. Once they pass, the next phase is wiring `MANHEIM_LOOKUP_MODE="worker"` in `[env.staging.vars]` for the main worker and exercising `POST /ingest`. That step has its own preflight in `docs/manheim-uat-validation-plan.md` §8.
+
+---
+
+## End-of-Day Wrap — 2026-05-08 PM (final state for the day)
+
+Stopping for today. State frozen below for tomorrow's resume.
+
+### Repo state
+
+| Item | Value |
+|---|---|
+| Active cwd | `/Users/ramialbanna/Claude/TAV-AIP` (use this exact path for all future commands) |
+| Branch | `main` |
+| Latest commit | `9a072b6` — "Update handoff after staging worker deploy" |
+| Working tree | one uncommitted edit to this file before this end-of-day commit; will be clean after the handoff commit |
+| Remote sync | local `main` will be one commit ahead of `origin/main` until the end-of-day handoff is pushed; otherwise in sync |
+
+### Latest known verification
+
+| Check | Result | Source |
+|---|---|---|
+| `npm run typecheck` | clean | last run earlier this session |
+| `npm run lint` | 8 warnings (pre-existing baseline; no new) | same |
+| `npm test` | 673 / 673 pass, 49 test files | same |
+| `npm run test:int` | not run (no schema/persistence files touched in remaining edits) | n/a |
+
+### Staging intelligence worker deploy
+
+| Field | Value |
+|---|---|
+| Worker | `tav-intelligence-worker-staging` |
+| Deployed Version ID | `baa15646-e43d-423d-b600-3356e2fc31f5` |
+| URL | `https://tav-intelligence-worker-staging.rami-1a9.workers.dev` |
+| KV binding | `TAV_INTEL_KV` → `80195f01a65c4431af1e3835f9bea933` |
+| Secrets present | 10/10 (MANHEIM_API_VENDOR, MANHEIM_GRANT_TYPE, MANHEIM_SCOPE, MANHEIM_CLIENT_ID, MANHEIM_CLIENT_SECRET, MANHEIM_TOKEN_URL, MANHEIM_MMR_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INTEL_SERVICE_SECRET) |
+
+### `/health` UAT against deployed staging worker — PASS
+
+```
+GET https://tav-intelligence-worker-staging.rami-1a9.workers.dev/health
+HTTP_STATUS=200
+{
+  "success": true,
+  "data": { "status": "ok", "worker": "tav-intelligence-worker", "version": "0.1.0" }
+}
+```
+
+### Direct Cox sandbox UAT results (manual curls from local terminal, not via worker)
+
+All five direct-Cox checks passed. Full detail in `docs/manheim-uat-validation-plan.md` §14.
+
+| Check | Result |
+|---|---|
+| Token-only (`POST` to Cox token URL with Basic Auth + `client_credentials` + scope) | PASS — HTTP 200, `Bearer`, `expires_in: 86400`, scope echoed |
+| VIN known-good (`/vin/1FT8W3BT1SEC27066?odometer=50000`) | PASS — HTTP 200, count 5, 2025 Ford F-350SD CREW CAB 6.7L LARIAT, wholesale.average 67100 |
+| VIN no-data (`/vin/1FT8W3BT199999999?odometer=50000`) | PASS — HTTP 404, "Matching vehicles not found" |
+| YMMT (`/search/2025/Acura/ADX%20AWD/4D%20SUV?odometer=50000`) | PASS — HTTP 200, count 3, 2025 Acura ADX AWD 4D SUV A-SPEC PKG, wholesale.average 26800 |
+| `include=retail` on VIN | PASS mechanically — but **retail is non-core for TAV** (wholesale-only). No retail persistence work planned. |
+
+### What was NOT run
+
+- Deployed-worker `/mmr/vin` for known-good VIN — `INTEL_SERVICE_SECRET` not in Claude Bash env, so the call was not issued.
+- Deployed-worker `/mmr/vin` cache-hit test — same reason.
+- Deployed-worker `/mmr/vin` for no-data VIN — same reason.
+- Deployed-worker YMMT (`/mmr/year-make-model`) — out of scope this session.
+- Batch endpoint (`POST /mmr-batch/vins`) — out of scope.
+- `mmr-lookup` reference-sync against Cox — deferred future phase.
+- Main worker `MANHEIM_LOOKUP_MODE="worker"` flip — not done.
+- Full `POST /ingest` end-to-end through staging — not done.
+- Production wrangler config — untouched.
+
+### Tomorrow — exact next steps
+
+Run from Terminal.app (not Claude). `cd /Users/ramialbanna/Claude/TAV-AIP`.
+
+1. **Set the service secret locally** without pasting into Claude:
+   ```
+   read -s INTEL_SERVICE_SECRET
+   export INTEL_SERVICE_SECRET
+   INTEL_BASE='https://tav-intelligence-worker-staging.rami-1a9.workers.dev'
+   ```
+
+2. **Known-good VIN cache miss** — expect `HTTP_STATUS=200`, `mmr_value: 67100`, `cache_hit: false`. Use the temp-file curl pattern from the "Next exact step" section above.
+
+3. **Same VIN cache hit** — expect `HTTP_STATUS=200`, `mmr_value: 67100`, `cache_hit: true`, `fetched_at` matches step 2.
+
+4. **No-data VIN null envelope** — VIN `1FT8W3BT199999999`, expect `HTTP_STATUS=200`, `mmr_value: null`, `cache_hit: false`, `error_code: null`.
+
+5. After all three pass, **consider** moving to YMMT through the deployed worker (`POST /mmr/year-make-model`) using the known-good `2025 / Acura / ADX AWD / 4D SUV` combo. Do NOT advance further (no `MANHEIM_LOOKUP_MODE="worker"`, no full ingest) until those four results are recorded.
+
+6. After Terminal.app session: `unset INTEL_SERVICE_SECRET`. Update `docs/manheim-uat-validation-plan.md` §14 with deployed-worker results in a new sub-section.
+
+### Safety reminders (carry forward)
+
+- Do NOT print tokens, secrets, or `Authorization` headers in any chat or log.
+- Do NOT enable `MANHEIM_LOOKUP_MODE="worker"` on the main worker yet.
+- Do NOT run full `POST /ingest` against staging or production yet.
+- Do NOT touch `[env.production.vars]` or push any production deploy yet.
+- All future commands run from `/Users/ramialbanna/Claude/TAV-AIP` (case-variant `~/Claude/tav-aip` resolves the same on macOS but should not be used).
