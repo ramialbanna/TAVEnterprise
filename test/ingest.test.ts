@@ -65,6 +65,10 @@ vi.mock("../src/persistence/valuationSnapshots", () => ({
   writeValuationSnapshot: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/persistence/vehicleEnrichments", () => ({
+  writeVehicleEnrichment: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof import("../src/scoring/lead")>("../src/scoring/lead");
@@ -84,6 +88,7 @@ import { computeFinalScore } from "../src/scoring/lead";
 import { insertBuyBoxScoreAttribution } from "../src/persistence/buyBoxScoreAttributions";
 import { getMmrValueFromWorker, WorkerTimeoutError, WorkerRateLimitError } from "../src/valuation/workerClient";
 import { writeValuationSnapshot } from "../src/persistence/valuationSnapshots";
+import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -114,6 +119,7 @@ beforeEach(() => {
   vi.mocked(insertBuyBoxScoreAttribution).mockResolvedValue("attr-uuid");
   vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
   vi.mocked(writeValuationSnapshot).mockResolvedValue(undefined);
+  vi.mocked(writeVehicleEnrichment).mockResolvedValue(undefined);
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -400,5 +406,76 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
 
     expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+});
+
+// ── Normalization enrichment tests ────────────────────────────────────────────
+
+// YMM result with full normalization metadata — triggers enrichment write
+const WORKER_YMM_MMR_RESULT = {
+  mmrValue: 16_000,
+  confidence: "medium" as const,
+  method: "year_make_model" as const,
+  rawResponse: {},
+  lookupMake: "Toyota",
+  lookupModel: "Camry",
+  lookupTrim: null,
+  normalizationConfidence: "exact" as const,
+};
+
+describe("POST /ingest — vehicle_enrichments normalization write", () => {
+  it("writes vehicle_enrichments for YMM worker mode when vcId is available", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_YMM_MMR_RESULT);
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(writeVehicleEnrichment)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeVehicleEnrichment)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        vehicleCandidateId: "vc-uuid",
+        enrichmentSource: "mmr_normalization",
+        enrichmentType: "normalization",
+        payload: expect.objectContaining({
+          lookup_make: "Toyota",
+          lookup_model: "Camry",
+          normalization_confidence: "exact",
+          trim_sent_to_worker: false,
+        }),
+      }),
+    );
+  });
+
+  it("does not write vehicle_enrichments for VIN-path worker result", async () => {
+    // WORKER_MMR_RESULT has method: "vin" — should not trigger enrichment
+    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_MMR_RESULT);
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(writeVehicleEnrichment)).not.toHaveBeenCalled();
+  });
+
+  it("does not write vehicle_enrichments in direct mode (YMM result without normalization metadata)", async () => {
+    // Direct-mode MmrResult has no normalizationConfidence field
+    const directYmmResult = { mmrValue: 16_000, confidence: "medium" as const, method: "year_make_model" as const, rawResponse: {} };
+    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(directYmmResult);
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    // Even with workerEnv, if normalizationConfidence is absent the guard fails
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(writeVehicleEnrichment)).not.toHaveBeenCalled();
+  });
+
+  it("enrichment write failure does not fail ingest (returns 200) and logs event", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_YMM_MMR_RESULT);
+    vi.mocked(writeVehicleEnrichment).mockRejectedValueOnce(new Error("db constraint"));
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    // Snapshot still written despite enrichment failure
+    expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
   });
 });

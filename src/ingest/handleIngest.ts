@@ -32,6 +32,7 @@ import { getMmrValueFromWorker } from "../valuation/workerClient";
 import { getValuationLookupMode } from "../valuation/lookupMode";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
+import { writeVehicleEnrichment } from "../persistence/vehicleEnrichments";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import { sendExcellentLeadSummary } from "../alerts/alerts";
@@ -211,7 +212,7 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
       } else {
         try {
           mmrResult = await getMmrValueFromWorker(
-            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, mileage: listing.mileage },
+            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage },
             env,
           );
         } catch (err) {
@@ -228,6 +229,35 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
           try {
             await writeDeadLetter(db, env, { source, region, run_id, item_index: i, reason_code: "valuation_snapshot_failed", payload: { normalizedListingId: normResult.id, mmrValue: mmrResult.mmrValue }, error_message: err instanceof Error ? err.message : String(err) });
           } catch { /* never throws */ }
+        }
+
+        // Write normalization enrichment for YMM worker-mode lookups only.
+        // Condition: worker mode + YMM path + vcId available + normalization metadata present.
+        if (
+          getValuationLookupMode(env) === "worker" &&
+          mmrResult.method === "year_make_model" &&
+          mmrResult.normalizationConfidence !== undefined &&
+          vcId
+        ) {
+          try {
+            await writeVehicleEnrichment(db, {
+              vehicleCandidateId: vcId,
+              enrichmentSource: "mmr_normalization",
+              enrichmentType: "normalization",
+              payload: {
+                raw_make:               listing.make ?? null,
+                raw_model:              listing.model ?? null,
+                raw_trim:               listing.trim ?? null,
+                lookup_make:            mmrResult.lookupMake ?? null,
+                lookup_model:           mmrResult.lookupModel ?? null,
+                lookup_trim:            mmrResult.lookupTrim ?? null,
+                normalization_confidence: mmrResult.normalizationConfidence,
+                trim_sent_to_worker:    false,
+              },
+            });
+          } catch (err) {
+            logError("valuation", "ingest.normalization_enrichment_failed", err, listingCtx);
+          }
         }
       }
 

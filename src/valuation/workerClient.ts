@@ -1,7 +1,10 @@
 import type { Env } from "../types/env";
 import type { MmrParams, MmrResult } from "./mmr";
 import { MmrResponseEnvelopeSchema } from "../types/intelligence";
-import type { ValuationConfidence, ValuationMethod } from "../types/domain";
+import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } from "../types/domain";
+import { getSupabaseClient } from "../persistence/supabase";
+import { loadMmrReferenceData } from "./loadMmrReferenceData";
+import { normalizeMmrParams } from "./normalizeMmrParams";
 
 const TIMEOUT_MS = 5_000;
 
@@ -31,8 +34,9 @@ export class WorkerUnavailableError extends Error {
 /**
  * Call tav-intelligence-worker for an MMR valuation lookup.
  *
- * Tries the VIN endpoint first if a VIN is present; falls back to the
- * YMM endpoint when year+make+model+mileage are all available.
+ * Tries the VIN endpoint first if a VIN is present (bypasses normalization).
+ * Falls back to the YMM endpoint when year+make+model+mileage are available;
+ * normalizes make/model against reference data before sending.
  *
  * Returns null when:
  *   - INTEL_WORKER_URL is empty (not configured)
@@ -56,8 +60,17 @@ export async function getMmrValueFromWorker(
   let body: Record<string, unknown>;
   let confidence: ValuationConfidence;
   let method: ValuationMethod;
+  let normalizationMeta:
+    | {
+        lookupMake: string | null;
+        lookupModel: string | null;
+        lookupTrim: string | null;
+        normalizationConfidence: NormalizationConfidence;
+      }
+    | undefined;
 
   if (vin) {
+    // VIN path — normalization does not apply
     endpoint = `${baseUrl}/mmr/vin`;
     body = {
       vin,
@@ -67,10 +80,36 @@ export async function getMmrValueFromWorker(
     confidence = "high";
     method = "vin";
   } else if (year !== undefined && make && model && mileage !== undefined) {
+    // YMM path — normalize make/model via reference data before sending
+    const db = getSupabaseClient(env);
+    const ref = await loadMmrReferenceData(db);
+    const normalized = normalizeMmrParams(
+      { make, model, trim: params.trim ?? null },
+      ref,
+    );
+
+    // Use canonical values when resolved; fall back to raw on partial/none
+    const sendMake = normalized.canonicalMake ?? make;
+    const sendModel = normalized.canonicalModel ?? model;
+
     endpoint = `${baseUrl}/mmr/year-make-model`;
-    body = { year, make, model, mileage };
-    confidence = "medium";
+    // trim is intentionally not sent to the intelligence worker in this phase
+    body = { year, make: sendMake, model: sendModel, mileage };
+
+    // exact and alias both yield "medium"; partial/none degrades to "low"
+    confidence =
+      normalized.normalizationConfidence === "partial" ||
+      normalized.normalizationConfidence === "none"
+        ? "low"
+        : "medium";
     method = "year_make_model";
+
+    normalizationMeta = {
+      lookupMake: normalized.canonicalMake,
+      lookupModel: normalized.canonicalModel,
+      lookupTrim: params.trim ?? null,
+      normalizationConfidence: normalized.normalizationConfidence,
+    };
   } else {
     return null;
   }
@@ -117,5 +156,6 @@ export async function getMmrValueFromWorker(
     confidence,
     method,
     rawResponse: envelope.mmr_payload ?? {},
+    ...normalizationMeta,
   };
 }

@@ -9,13 +9,18 @@
  * in workers/tav-intelligence-worker and src/types/domain.ts (ValuationResult).
  */
 import type { Env } from "../types/env";
-import type { ValuationConfidence, ValuationMethod } from "../types/domain";
+import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } from "../types/domain";
 
 export interface MmrResult {
   mmrValue: number;
   confidence: ValuationConfidence;
   method?: ValuationMethod; // absent on KV-cached entries written before this field existed
   rawResponse: unknown;
+  // G.5.3: normalization metadata — present on YMM-path results only
+  lookupMake?: string | null;
+  lookupModel?: string | null;
+  lookupTrim?: string | null;
+  normalizationConfidence?: NormalizationConfidence;
 }
 
 export interface MmrParams {
@@ -23,6 +28,7 @@ export interface MmrParams {
   year?: number;
   make?: string;
   model?: string;
+  trim?: string;
   mileage?: number;
 }
 

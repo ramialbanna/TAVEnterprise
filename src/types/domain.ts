@@ -96,6 +96,7 @@ export type DedupeResult =
 
 export type ValuationConfidence = "high" | "medium" | "low" | "none";
 export type ValuationMethod = "vin" | "year_make_model";
+export type NormalizationConfidence = "exact" | "alias" | "partial" | "none";
 
 // Platform-agnostic structured valuation result. Carries the primary scalar
 // plus the full price distribution from the valuation source. Distribution
@@ -111,6 +112,11 @@ export interface ValuationResult {
   valuationMethod: ValuationMethod;
   fetchedAt: string;
   rawResponse: unknown;
+  // G.5.3: normalization metadata — present on YMM-path results only
+  lookupMake?: string | null;
+  lookupModel?: string | null;
+  lookupTrim?: string | null;
+  normalizationConfidence?: NormalizationConfidence;
 }
 
 // ── Concept 4: Lead ───────────────────────────────────────────────────────────

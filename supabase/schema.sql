@@ -166,6 +166,11 @@ CREATE TABLE tav.valuation_snapshots (
   raw_response          jsonb,
   fetched_at            timestamptz NOT NULL DEFAULT now(),
   expires_at            timestamptz,
+  lookup_make           text,
+  lookup_model          text,
+  lookup_trim           text,
+  normalization_confidence text
+    CHECK (normalization_confidence IN ('exact', 'alias', 'partial', 'none')),
 
   CHECK (normalized_listing_id IS NOT NULL OR vehicle_candidate_id IS NOT NULL)
 );
@@ -606,6 +611,39 @@ CREATE TABLE tav.mmr_cache (
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
 
+-- ── mmr_reference_makes / mmr_reference_models ───────────────────────────────
+-- Canonical Manheim make and model strings. Populated via sync path; minimal
+-- make seed is applied in migration 0038.
+
+CREATE TABLE tav.mmr_reference_makes (
+  make          text PRIMARY KEY,
+  display_name  text NOT NULL
+);
+
+CREATE TABLE tav.mmr_reference_models (
+  make   text NOT NULL REFERENCES tav.mmr_reference_makes (make),
+  model  text NOT NULL,
+  PRIMARY KEY (make, model)
+);
+
+-- ── mmr_make_aliases / mmr_model_aliases ──────────────────────────────────────
+-- Maps non-canonical input strings to canonical Manheim make/model strings.
+-- Only unambiguous aliases are stored; ambiguous strings remain unresolved.
+
+CREATE TABLE tav.mmr_make_aliases (
+  alias          text PRIMARY KEY,
+  canonical_make text NOT NULL REFERENCES tav.mmr_reference_makes (make)
+);
+
+CREATE TABLE tav.mmr_model_aliases (
+  alias           text NOT NULL,
+  canonical_make  text NOT NULL REFERENCES tav.mmr_reference_makes (make),
+  canonical_model text NOT NULL,
+  PRIMARY KEY (alias, canonical_make),
+  FOREIGN KEY (canonical_make, canonical_model)
+    REFERENCES tav.mmr_reference_models (make, model)
+);
+
 -- ── vehicle_enrichments ───────────────────────────────────────────────────────
 -- Structured data fetched from external sources for a vehicle candidate.
 -- Each row is one enrichment event; the same source may produce multiple rows.
@@ -618,6 +656,7 @@ CREATE TABLE tav.vehicle_enrichments (
       'manheim_vin_decode',
       'manheim_auction_history',
       'manheim_condition_report',
+      'mmr_normalization',
       'manual'
     )),
   enrichment_type      text        NOT NULL
@@ -626,6 +665,7 @@ CREATE TABLE tav.vehicle_enrichments (
       'auction_history',
       'condition_report',
       'title_status',
+      'normalization',
       'manual_note'
     )),
   payload              jsonb       NOT NULL DEFAULT '{}',

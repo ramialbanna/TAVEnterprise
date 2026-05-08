@@ -148,6 +148,57 @@ describe("writeValuationSnapshot — error handling", () => {
   });
 });
 
+describe("writeValuationSnapshot — normalization columns", () => {
+  it("includes lookup_make, lookup_model, lookup_trim, normalization_confidence when present", async () => {
+    const { db, insertSpy } = makeDb();
+    const ymmWithNorm: typeof YMM_VALUATION = {
+      ...YMM_VALUATION,
+      lookupMake:              "Toyota",
+      lookupModel:             "Camry",
+      lookupTrim:              "SE",
+      normalizationConfidence: "exact",
+    };
+
+    await writeValuationSnapshot(db, { ...BASE_INPUT, valuation: ymmWithNorm });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.lookup_make).toBe("Toyota");
+    expect(payload.lookup_model).toBe("Camry");
+    expect(payload.lookup_trim).toBe("SE");
+    expect(payload.normalization_confidence).toBe("exact");
+  });
+
+  it("nulls lookup fields when absent (VIN path)", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationSnapshot(db, { ...BASE_INPUT, valuation: VIN_VALUATION });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.lookup_make).toBeNull();
+    expect(payload.lookup_model).toBeNull();
+    expect(payload.lookup_trim).toBeNull();
+    expect(payload.normalization_confidence).toBeNull();
+  });
+
+  it("nulls lookup_model and sets normalization_confidence 'partial' for partial resolution", async () => {
+    const { db, insertSpy } = makeDb();
+    const partialNorm: typeof YMM_VALUATION = {
+      ...YMM_VALUATION,
+      lookupMake:              "Toyota",
+      lookupModel:             null,
+      lookupTrim:              null,
+      normalizationConfidence: "partial",
+    };
+
+    await writeValuationSnapshot(db, { ...BASE_INPUT, valuation: partialNorm });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.lookup_make).toBe("Toyota");
+    expect(payload.lookup_model).toBeNull();
+    expect(payload.normalization_confidence).toBe("partial");
+  });
+});
+
 describe("schema.sql integrity", () => {
   const schemaPath = resolve(__dirname, "../../../supabase/schema.sql");
   const schemaContent = readFileSync(schemaPath, "utf-8");

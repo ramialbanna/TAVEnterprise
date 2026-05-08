@@ -13,15 +13,19 @@ export function fromMmrResult(result: MmrResult): ValuationResult {
   const dist = extractManheimDistribution(result.rawResponse);
 
   return {
-    mmrValue:       result.mmrValue,
-    wholesaleAvg:   result.mmrValue, // primary scalar is authoritative; dist.wholesaleAvg is redundant here
-    wholesaleClean: dist.wholesaleClean,
-    wholesaleRough: dist.wholesaleRough,
-    retailClean:    null,            // not in Manheim VIN/YMM endpoints
-    sampleCount:    dist.sampleCount,
-    confidence:     result.confidence,
+    mmrValue:                result.mmrValue,
+    wholesaleAvg:            result.mmrValue, // primary scalar is authoritative; dist.wholesaleAvg is redundant here
+    wholesaleClean:          dist.wholesaleClean,
+    wholesaleRough:          dist.wholesaleRough,
+    retailClean:             null,            // not in Manheim VIN/YMM endpoints
+    sampleCount:             dist.sampleCount,
+    confidence:              result.confidence,
     valuationMethod,
-    fetchedAt:      new Date().toISOString(),
-    rawResponse:    result.rawResponse,
+    fetchedAt:               new Date().toISOString(),
+    rawResponse:             result.rawResponse,
+    lookupMake:              result.lookupMake,
+    lookupModel:             result.lookupModel,
+    lookupTrim:              result.lookupTrim,
+    normalizationConfidence: result.normalizationConfidence,
   };
 }

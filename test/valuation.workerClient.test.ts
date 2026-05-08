@@ -5,7 +5,20 @@ import {
   WorkerRateLimitError,
   WorkerUnavailableError,
 } from "../src/valuation/workerClient";
+import { EMPTY_REFERENCE, type ReferenceData } from "../src/valuation/normalizeMmrParams";
+import { loadMmrReferenceData } from "../src/valuation/loadMmrReferenceData";
 import type { Env } from "../src/types/env";
+
+// ── Module mocks ──────────────────────────────────────────────────────────────
+
+vi.mock("../src/valuation/loadMmrReferenceData", () => ({
+  loadMmrReferenceData: vi.fn(),
+  resetReferenceDataCache: vi.fn(),
+}));
+
+vi.mock("../src/persistence/supabase", () => ({
+  getSupabaseClient: vi.fn(() => ({})),
+}));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -13,6 +26,25 @@ const BASE_ENV: Env = {
   INTEL_WORKER_URL: "https://intel.example.com",
   INTEL_WORKER_SECRET: "secret-xyz",
 } as unknown as Env;
+
+// Default reference: Toyota/Camry exact-matched; used by existing YMM tests.
+const DEFAULT_REF: ReferenceData = {
+  makes: new Set(["Toyota", "Honda"]),
+  models: new Map([
+    ["Toyota", new Set(["Camry"])],
+    ["Honda",  new Set(["Civic"])],
+  ]),
+  makeAliases: new Map(),
+  modelAliases: new Map(),
+};
+
+// Reference that includes Chevrolet and a "chevy" alias for alias tests.
+const ALIAS_REF: ReferenceData = {
+  makes: new Set(["Chevrolet"]),
+  models: new Map([["Chevrolet", new Set(["Malibu"])]]),
+  makeAliases: new Map([["chevy", "Chevrolet"]]),
+  modelAliases: new Map(),
+};
 
 const ENVELOPE_VIN = {
   ok: true,
@@ -62,7 +94,11 @@ function mockFetch(status: number, body: unknown) {
   }));
 }
 
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Default: YMM tests get a reference that exact-matches Toyota/Camry and Honda/Civic
+  vi.mocked(loadMmrReferenceData).mockResolvedValue(DEFAULT_REF);
+});
 afterEach(() => { vi.unstubAllGlobals(); });
 
 // ── INTEL_WORKER_URL not configured ───────────────────────────────────────────
@@ -121,6 +157,20 @@ describe("getMmrValueFromWorker — VIN path", () => {
     const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
     expect(result).toBeNull();
   });
+
+  it("does not call loadMmrReferenceData on the VIN path", async () => {
+    mockFetch(200, ENVELOPE_VIN);
+    await getMmrValueFromWorker({ vin: "1HGCM82633A004352", year: 2020, mileage: 45_000 }, BASE_ENV);
+    expect(loadMmrReferenceData).not.toHaveBeenCalled();
+  });
+
+  it("VIN result has no normalization metadata fields", async () => {
+    mockFetch(200, ENVELOPE_VIN);
+    const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(result?.lookupMake).toBeUndefined();
+    expect(result?.lookupModel).toBeUndefined();
+    expect(result?.normalizationConfidence).toBeUndefined();
+  });
 });
 
 // ── YMM path ──────────────────────────────────────────────────────────────────
@@ -143,6 +193,145 @@ describe("getMmrValueFromWorker — YMM path", () => {
       BASE_ENV,
     );
     expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain("/mmr/vin");
+  });
+});
+
+// ── YMM normalization ─────────────────────────────────────────────────────────
+
+describe("getMmrValueFromWorker — YMM normalization", () => {
+  it("sends canonical make/model when alias resolves", async () => {
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(ALIAS_REF);
+    mockFetch(200, ENVELOPE_YMM);
+
+    await getMmrValueFromWorker(
+      { year: 2019, make: "chevy", model: "Malibu", mileage: 60_000 },
+      BASE_ENV,
+    );
+
+    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
+    expect(sentBody.make).toBe("Chevrolet");
+    expect(sentBody.model).toBe("Malibu");
+  });
+
+  it("exact make/model keeps confidence 'medium'", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.confidence).toBe("medium");
+    expect(result?.normalizationConfidence).toBe("exact");
+  });
+
+  it("alias-resolved make/model keeps confidence 'medium'", async () => {
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(ALIAS_REF);
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "chevy", model: "Malibu", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.confidence).toBe("medium");
+    expect(result?.normalizationConfidence).toBe("alias");
+  });
+
+  it("partial normalization (make resolves, model does not) downgrades confidence to 'low'", async () => {
+    // ALIAS_REF has Chevrolet make but no "FakeTruck" model
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(ALIAS_REF);
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Chevrolet", model: "FakeTruck", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.confidence).toBe("low");
+    expect(result?.normalizationConfidence).toBe("partial");
+  });
+
+  it("none normalization (unrecognized make) downgrades confidence to 'low'", async () => {
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(EMPTY_REFERENCE);
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Porsche", model: "911", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.confidence).toBe("low");
+    expect(result?.normalizationConfidence).toBe("none");
+  });
+
+  it("empty reference data sends raw make/model in request body", async () => {
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(EMPTY_REFERENCE);
+    mockFetch(200, ENVELOPE_YMM);
+
+    await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+
+    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
+    expect(sentBody.make).toBe("Toyota");
+    expect(sentBody.model).toBe("Camry");
+  });
+
+  it("empty reference data sets normalizationConfidence 'none' on result", async () => {
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(EMPTY_REFERENCE);
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.normalizationConfidence).toBe("none");
+    expect(result?.lookupMake).toBeNull();
+    expect(result?.lookupModel).toBeNull();
+  });
+
+  it("trim is not included in the YMM request body", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
+      BASE_ENV,
+    );
+
+    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
+    expect(sentBody).not.toHaveProperty("trim");
+  });
+
+  it("trim from params is present on result as lookupTrim", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.lookupTrim).toBe("XSE");
+  });
+
+  it("lookupTrim is null when trim is not provided", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.lookupTrim).toBeNull();
+  });
+
+  it("normalization metadata present on YMM exact-match result", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+
+    const result = await getMmrValueFromWorker(
+      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(result?.lookupMake).toBe("Toyota");
+    expect(result?.lookupModel).toBe("Camry");
+    expect(result?.normalizationConfidence).toBe("exact");
   });
 });
 
