@@ -94,3 +94,10 @@ AS $$
   )
   FROM totals t, by_type bt, by_outcome bo, top_req tr;
 $$;
+
+-- Grant EXECUTE to service_role so the intelligence Worker can call this
+-- via Supabase RPC. ALTER DEFAULT PRIVILEGES in 0002 covers tables only —
+-- functions require an explicit grant.
+GRANT EXECUTE ON FUNCTION tav.get_mmr_kpis(
+  timestamptz, timestamptz, text, text
+) TO service_role;
