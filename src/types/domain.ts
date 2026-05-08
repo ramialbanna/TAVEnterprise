@@ -95,6 +95,23 @@ export type DedupeResult =
   | { type: "new_listing" };
 
 export type ValuationConfidence = "high" | "medium" | "low" | "none";
+export type ValuationMethod = "vin" | "year_make_model";
+
+// Platform-agnostic structured valuation result. Carries the primary scalar
+// plus the full price distribution from the valuation source. Distribution
+// fields are null until a parsing path is implemented for that source.
+export interface ValuationResult {
+  mmrValue: number;
+  wholesaleAvg: number | null;
+  wholesaleClean: number | null;
+  wholesaleRough: number | null;
+  retailClean: number | null;
+  sampleCount: number | null;
+  confidence: ValuationConfidence;
+  valuationMethod: ValuationMethod;
+  fetchedAt: string;
+  rawResponse: unknown;
+}
 
 // ── Concept 4: Lead ───────────────────────────────────────────────────────────
 // The buyer-facing work item. Created only after scoring, stale-check, and

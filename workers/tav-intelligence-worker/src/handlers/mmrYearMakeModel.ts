@@ -2,14 +2,8 @@ import { okResponse } from "../types/api";
 import { AuthError, ValidationError } from "../errors";
 import { MmrYearMakeModelLookupRequestSchema } from "../validate";
 import { canForceRefresh } from "../auth/userContext";
-import { ManheimHttpClient } from "../clients/manheimHttp";
-import { KvMmrCache } from "../cache/kvMmrCache";
-import { KvCacheLock } from "../cache/kvLock";
-import { getSupabaseClient } from "../persistence/supabase";
-import { createMmrQueriesRepository } from "../persistence/mmrQueriesRepository";
-import { createMmrCacheRepository } from "../persistence/mmrCacheRepository";
-import { createUserActivityRepository } from "../persistence/userActivityRepository";
 import { performMmrLookup } from "../services/mmrLookup";
+import { buildMmrLookupDeps } from "../services/mmrLookupDeps";
 import type { HandlerArgs } from "./types";
 
 /**
@@ -37,11 +31,6 @@ export async function handleMmrYearMakeModel(args: HandlerArgs): Promise<Respons
     throw new AuthError("force_refresh requires manager role or allowlist membership");
   }
 
-  const supabase    = getSupabaseClient(args.env);
-  const queryRepo   = createMmrQueriesRepository(supabase);
-  const cacheRepo   = createMmrCacheRepository(supabase);
-  const activityRepo = createUserActivityRepository(supabase);
-
   const envelope = await performMmrLookup(
     {
       input: {
@@ -56,14 +45,7 @@ export async function handleMmrYearMakeModel(args: HandlerArgs): Promise<Respons
       forceRefresh: parsed.data.force_refresh,
       userContext:  args.userContext,
     },
-    {
-      client: new ManheimHttpClient(args.env, args.env.TAV_INTEL_KV),
-      cache:  new KvMmrCache(args.env.TAV_INTEL_KV),
-      lock:   new KvCacheLock(args.env.TAV_INTEL_KV),
-      queryRepo,
-      cacheRepo,
-      activityRepo,
-    },
+    buildMmrLookupDeps(args.env),
   );
 
   return okResponse(envelope, args.requestId);

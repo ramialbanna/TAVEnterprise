@@ -36,4 +36,13 @@ export interface Env {
 
   // ── Feature flags ──────────────────────────────────────────────────────────
   HYBRID_BUYBOX_ENABLED: string; // "true" | "false" — wrangler.toml [vars]
+
+  /**
+   * Controls which code path executes Manheim MMR valuation lookups.
+   *   "direct"  — legacy: main worker calls Manheim directly via src/valuation/mmr.ts (default)
+   *   "worker"  — future: route through tav-intelligence-worker (not yet implemented; skips valuation)
+   *
+   * Set in wrangler.toml [vars]. Any value other than "worker" is treated as "direct".
+   */
+  MANHEIM_LOOKUP_MODE: string;
 }

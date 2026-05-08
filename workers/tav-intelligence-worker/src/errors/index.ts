@@ -90,3 +90,12 @@ export class ManheimUnavailableError extends IntelligenceError {
   readonly code = "manheim_unavailable";
   readonly httpStatus = 502;
 }
+
+/**
+ * 429 — caller has exceeded the per-user (or global) live-call rate limit
+ * for the current time window. Cache hits are never blocked by this guard.
+ */
+export class RateLimitError extends IntelligenceError {
+  readonly code = "rate_limited";
+  readonly httpStatus = 429;
+}

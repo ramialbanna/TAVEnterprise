@@ -40,6 +40,45 @@ Example:
 - [x] 2026-05-08 workers/tav-intelligence-worker — implement GET /intel/mmr/queries paginated audit history (21-field allowlist, all filters, offset pagination with has_more) — DONE
 - [x] 2026-05-08 supabase/migrations — add 0032_get_mmr_kpis.sql: CREATE tav.get_mmr_kpis RPC + GRANT EXECUTE to service_role — DONE
 
+## MANHEIM_LOOKUP_MODE="worker" — reserved, not yet safe to enable
+
+`MANHEIM_LOOKUP_MODE` was added in Phase G.4 Step 7 as a feature flag that will eventually route
+main-worker valuation through tav-intelligence-worker. The `"worker"` value is **reserved** and
+must not be set in staging or production until all of the following work is complete.
+
+**Current behavior when set to "worker":**
+- `getMmrValue` is never called — the direct Manheim path is entirely skipped.
+- `mmrResult` stays `null` for every listing in the ingest batch.
+- `dealScore` is computed as 0 (the no-MMR fallback in `computeDealScore`).
+- No valuation snapshot is written to `tav.valuation_snapshots`.
+- The log event `valuation.lookup_mode_skipped` is emitted for each listing.
+- Lead scoring, buy-box matching, and alerts continue to function, but deal quality is invisible.
+
+**Required future work before "worker" is safe:**
+- [ ] Internal service call: main worker must call a tav-intelligence-worker endpoint (e.g. POST /mmr/vin
+  or POST /mmr/year-make-model) and map the `MmrResponseEnvelope` to an `MmrResult` / `ValuationResult`.
+- [ ] Auth: the call must use a shared secret or Cloudflare service binding — no Cloudflare Access header
+  is available for worker-to-worker calls unless a service binding is configured.
+- [ ] Timeout handling: the intelligence worker call must be wrapped with a deadline (≤ 5s recommended)
+  so a slow upstream cannot stall the ingest batch timeout (currently 25s).
+- [ ] Error mapping: `ManheimRateLimitError`, `ManheimUnavailableError`, `CacheLockError` from the
+  intelligence worker must be mapped to the same non-blocking fallback behavior as the current
+  `getMmrValue` catch block (log + continue, do not fail the listing).
+- [ ] Tests: ingest integration tests must cover the "worker" path — mock the internal call, verify
+  the result is used for scoring and snapshot writing, verify error paths fall through gracefully.
+- [ ] Rate-limit guard: the intelligence worker already applies a per-user rate limit (Phase G.4 Step 6);
+  verify ingest batch calls are attributed to a service identity, not a user email, to avoid
+  exhausting the per-user quota.
+
+**Operational warning:**
+Keep `MANHEIM_LOOKUP_MODE = "direct"` in all `wrangler.toml` env blocks (`[vars]`, `[env.staging.vars]`,
+`[env.production.vars]`) until the above work is complete and validated in staging.
+Flipping to `"worker"` today silently zeros out deal scores for all ingested listings.
+
+- [ ] 2026-05-08 src/ingest + workers/tav-intelligence-worker — implement MANHEIM_LOOKUP_MODE="worker"
+      path: service-binding call, timeout guard, error mapping, ingest integration tests
+      (noticed by: user)
+
 ## Production deploy blockers — tav-intelligence-worker
 
 These must be completed before the intelligence worker can be deployed to production.
@@ -64,5 +103,5 @@ Do NOT modify wrangler.toml IDs until the namespace is provisioned.
 - [ ] 2026-05-08 wrangler.toml — set `workers_dev = true` under `[env.production]` once production secrets are provisioned,
       or use a Cloudflare Access policy to gate the production worker endpoint
 
-- [ ] 2026-05-08 supabase/migrations — apply migration 0033 (user_activity feed index + purge_expired_activity function)
-      to remote before deploying production worker: `npx supabase db push`
+- [x] 2026-05-08 supabase/migrations — apply migration 0033 (user_activity feed index + purge_expired_activity function)
+      to remote before deploying production worker: `npx supabase db push` — DONE (confirmed via `supabase migration list`; remote is current through 0037)

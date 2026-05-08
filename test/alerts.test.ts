@@ -23,6 +23,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     TAV_KV: {} as KVNamespace,
     ADMIN_API_SECRET: "admin-secret",
     HYBRID_BUYBOX_ENABLED: "true",
+    MANHEIM_LOOKUP_MODE: "direct",
     ...overrides,
   };
 }

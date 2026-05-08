@@ -1,37 +1,37 @@
 import type { SupabaseClient } from "./supabase";
-import type { NormalizedListingInput } from "../types/domain";
-import type { MmrResult } from "../valuation/mmr";
+import type { NormalizedListingInput, ValuationResult } from "../types/domain";
 
 interface ValuationSnapshotInput {
   normalizedListingId: string;
   vehicleCandidateId?: string;
   listing: Pick<NormalizedListingInput, "vin" | "year" | "make" | "model" | "mileage">;
-  mmrResult: MmrResult;
-}
-
-// Confidence values in domain.ts use "high"/"medium" — the DB constraint uses "vin"/"ymm".
-function mapConfidence(confidence: MmrResult["confidence"]): "vin" | "ymm" {
-  return confidence === "high" ? "vin" : "ymm";
+  valuation: ValuationResult;
 }
 
 export async function writeValuationSnapshot(
   db: SupabaseClient,
   input: ValuationSnapshotInput,
 ): Promise<void> {
-  const { normalizedListingId, vehicleCandidateId, listing, mmrResult } = input;
+  const { normalizedListingId, vehicleCandidateId, listing, valuation } = input;
 
   const { error } = await db.schema("tav").from("valuation_snapshots").insert({
-    normalized_listing_id: normalizedListingId,
-    vehicle_candidate_id: vehicleCandidateId ?? null,
-    vin: listing.vin ?? null,
-    year: listing.year ?? null,
-    make: listing.make ?? null,
-    model: listing.model ?? null,
-    mileage: listing.mileage ?? null,
-    mmr_value: mmrResult.mmrValue,
-    confidence: mapConfidence(mmrResult.confidence),
-    fetched_at: new Date().toISOString(),
-    raw_response: mmrResult.rawResponse,
+    normalized_listing_id:  normalizedListingId,
+    vehicle_candidate_id:   vehicleCandidateId ?? null,
+    vin:                    listing.vin ?? null,
+    year:                   listing.year ?? null,
+    make:                   listing.make ?? null,
+    model:                  listing.model ?? null,
+    mileage:                listing.mileage ?? null,
+    mmr_value:              valuation.mmrValue,
+    confidence:             valuation.confidence,
+    valuation_method:       valuation.valuationMethod,
+    mmr_wholesale_avg:      valuation.wholesaleAvg,
+    mmr_wholesale_clean:    valuation.wholesaleClean,
+    mmr_wholesale_rough:    valuation.wholesaleRough,
+    mmr_retail_clean:       valuation.retailClean,
+    mmr_sample_count:       valuation.sampleCount,
+    fetched_at:             valuation.fetchedAt,
+    raw_response:           valuation.rawResponse,
   });
 
   if (error) throw error;

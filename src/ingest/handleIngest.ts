@@ -28,6 +28,8 @@ import { getSegmentAvgMarginPct } from "../persistence/purchaseOutcomes";
 import { getDemandScoreForRegion } from "../persistence/marketDemandIndex";
 import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttributions";
 import { getMmrValue } from "../valuation/mmr";
+import { getValuationLookupMode } from "../valuation/lookupMode";
+import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
@@ -190,21 +192,28 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
         // Non-fatal: listing is still normalized even without dedupe
       }
 
-      // E: valuation — non-blocking; dealScore stays 0 if MMR is unavailable
+      // E: valuation — non-blocking; dealScore stays 0 if MMR is unavailable.
+      // MANHEIM_LOOKUP_MODE gates which path runs:
+      //   "direct"  → legacy inline Manheim call (default)
+      //   "worker"  → intelligence worker path (not yet implemented — skips valuation)
       let mmrResult = null;
-      try {
-        mmrResult = await getMmrValue(
-          { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, mileage: listing.mileage },
-          env,
-          env.TAV_KV,
-        );
-      } catch (err) {
-        logError("valuation", "ingest.mmr_failed", err, listingCtx);
+      if (getValuationLookupMode(env) === "direct") {
+        try {
+          mmrResult = await getMmrValue(
+            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, mileage: listing.mileage },
+            env,
+            env.TAV_KV,
+          );
+        } catch (err) {
+          logError("valuation", "ingest.mmr_failed", err, listingCtx);
+        }
+      } else {
+        log("valuation.lookup_mode_skipped", { mode: getValuationLookupMode(env) }, listingCtx);
       }
 
       if (mmrResult) {
         try {
-          await withRetry(() => writeValuationSnapshot(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, mmrResult: mmrResult! }));
+          await withRetry(() => writeValuationSnapshot(db, { normalizedListingId: normResult.id, vehicleCandidateId: vcId, listing, valuation: fromMmrResult(mmrResult!) }));
           log("valuation.fetched", { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true }, listingCtx);
         } catch (err) {
           logError("valuation", "ingest.snapshot_failed", err, listingCtx);

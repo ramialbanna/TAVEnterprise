@@ -45,6 +45,14 @@ function buildRow(args: MmrCacheUpsertArgs): Record<string, unknown> {
     mileage_used:        envelope.mileage_used,
     is_inferred_mileage: envelope.is_inferred_mileage,
     mmr_value:           envelope.mmr_value,
+    // Distribution columns added in migration 0035. Only wholesaleAvg is
+    // derivable from the current response shape (it equals the primary scalar).
+    // The remaining fields require source-specific parsing not yet implemented.
+    mmr_wholesale_avg:   envelope.mmr_value,
+    mmr_wholesale_clean: null,
+    mmr_wholesale_rough: null,
+    mmr_retail_clean:    null,
+    mmr_sample_count:    null,
     mmr_payload:         envelope.mmr_payload ?? {},
     fetched_at:          envelope.fetched_at,
     expires_at:          envelope.expires_at ?? new Date().toISOString(),

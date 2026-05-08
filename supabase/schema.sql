@@ -151,8 +151,6 @@ CREATE TABLE tav.valuation_snapshots (
   id                    uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   normalized_listing_id uuid        REFERENCES tav.normalized_listings (id),
   vehicle_candidate_id  uuid        REFERENCES tav.vehicle_candidates (id),
-  method                text        NOT NULL
-    CHECK (method IN ('vin','ymm')),
   vin                   text,
   year                  smallint,
   make                  text,
@@ -163,6 +161,8 @@ CREATE TABLE tav.valuation_snapshots (
   mmr_value             integer     CHECK (mmr_value >= 0),
   confidence            text        NOT NULL
     CHECK (confidence IN ('high','medium','low','none')),
+  valuation_method      text        NOT NULL
+    CHECK (valuation_method IN ('vin','year_make_model')),
   raw_response          jsonb,
   fetched_at            timestamptz NOT NULL DEFAULT now(),
   expires_at            timestamptz,
@@ -238,6 +238,7 @@ CREATE TABLE tav.leads (
   lock_expires_at         timestamptz,
   last_action_at          timestamptz,
   score_components        jsonb,
+  scoring_week_label      text,
   created_at              timestamptz NOT NULL DEFAULT now(),
   updated_at              timestamptz NOT NULL DEFAULT now()
 );
@@ -459,9 +460,11 @@ CREATE TABLE tav.buy_box_score_attributions (
   rule_score      integer,
   segment_score   integer,
   demand_score    integer,
-  hybrid_score    integer NOT NULL,
-  components      jsonb   NOT NULL DEFAULT '{}',
-  created_at      timestamptz NOT NULL DEFAULT now()
+  hybrid_score            integer NOT NULL,
+  components              jsonb   NOT NULL DEFAULT '{}',
+  demand_week_label       text,
+  segment_snapshot_week   text,
+  created_at              timestamptz NOT NULL DEFAULT now()
 );
 
 -- ── sales_upload_batches ──────────────────────────────────────────────────────
@@ -569,6 +572,8 @@ CREATE TABLE tav.mmr_queries (
   mmr_payload             jsonb,
   error_code              text,
   error_message           text,
+  vehicle_candidate_id    uuid        REFERENCES tav.vehicle_candidates (id) ON DELETE SET NULL,
+  normalized_listing_id   uuid        REFERENCES tav.normalized_listings  (id) ON DELETE SET NULL,
   created_at              timestamptz NOT NULL DEFAULT now()
 );
 
@@ -587,6 +592,11 @@ CREATE TABLE tav.mmr_cache (
   mileage_used          integer,
   is_inferred_mileage   boolean     NOT NULL DEFAULT false,
   mmr_value             numeric(10,2),
+  mmr_wholesale_avg     numeric(10,2),
+  mmr_wholesale_clean   numeric(10,2),
+  mmr_wholesale_rough   numeric(10,2),
+  mmr_retail_clean      numeric(10,2),
+  mmr_sample_count      integer,
   mmr_payload           jsonb       NOT NULL,
   fetched_at            timestamptz NOT NULL DEFAULT now(),
   expires_at            timestamptz NOT NULL,
@@ -594,6 +604,34 @@ CREATE TABLE tav.mmr_cache (
     CHECK (source IN ('manheim','manual')),
   created_at            timestamptz NOT NULL DEFAULT now(),
   updated_at            timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── vehicle_enrichments ───────────────────────────────────────────────────────
+-- Structured data fetched from external sources for a vehicle candidate.
+-- Each row is one enrichment event; the same source may produce multiple rows.
+
+CREATE TABLE tav.vehicle_enrichments (
+  id                   uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_candidate_id uuid        NOT NULL REFERENCES tav.vehicle_candidates (id) ON DELETE CASCADE,
+  enrichment_source    text        NOT NULL
+    CHECK (enrichment_source IN (
+      'manheim_vin_decode',
+      'manheim_auction_history',
+      'manheim_condition_report',
+      'manual'
+    )),
+  enrichment_type      text        NOT NULL
+    CHECK (enrichment_type IN (
+      'vin_decode',
+      'auction_history',
+      'condition_report',
+      'title_status',
+      'manual_note'
+    )),
+  payload              jsonb       NOT NULL DEFAULT '{}',
+  fetched_at           timestamptz NOT NULL DEFAULT now(),
+  expires_at           timestamptz,
+  created_at           timestamptz NOT NULL DEFAULT now()
 );
 
 -- ── user_activity ─────────────────────────────────────────────────────────────
@@ -662,12 +700,25 @@ CREATE INDEX ON tav.mmr_queries (year, make, model)
   WHERE year IS NOT NULL AND make IS NOT NULL AND model IS NOT NULL;
 CREATE INDEX ON tav.mmr_queries (requested_by_user_id);
 CREATE INDEX ON tav.mmr_queries (created_at DESC);
+CREATE INDEX ON tav.mmr_queries (vehicle_candidate_id)
+  WHERE vehicle_candidate_id IS NOT NULL;
+CREATE INDEX ON tav.mmr_queries (normalized_listing_id)
+  WHERE normalized_listing_id IS NOT NULL;
 
 -- mmr_cache
 ALTER TABLE tav.mmr_cache
   ADD CONSTRAINT mmr_cache_cache_key_key UNIQUE (cache_key);
 CREATE INDEX ON tav.mmr_cache (vin) WHERE vin IS NOT NULL;
 CREATE INDEX ON tav.mmr_cache (expires_at);
+
+-- leads (partial index for vehicle_candidate_id lookups)
+CREATE INDEX ON tav.leads (vehicle_candidate_id)
+  WHERE vehicle_candidate_id IS NOT NULL;
+
+-- vehicle_enrichments
+CREATE INDEX ON tav.vehicle_enrichments (vehicle_candidate_id);
+CREATE INDEX ON tav.vehicle_enrichments (enrichment_source, enrichment_type);
+CREATE INDEX ON tav.vehicle_enrichments (expires_at) WHERE expires_at IS NOT NULL;
 
 -- user_activity
 CREATE INDEX ON tav.user_activity (vin) WHERE vin IS NOT NULL;

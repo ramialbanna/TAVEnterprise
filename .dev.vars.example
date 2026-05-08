@@ -34,3 +34,4 @@ ADMIN_API_SECRET=replace_me
 
 # ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
 # HYBRID_BUYBOX_ENABLED=false
+# MANHEIM_LOOKUP_MODE=direct   # "direct" (default) | "worker" (not yet implemented)

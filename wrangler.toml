@@ -19,6 +19,7 @@ crons = ["0 6 * * *"]
 
 [vars]
 HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "direct"
 # ADMIN_API_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put ADMIN_API_SECRET
 
@@ -26,6 +27,7 @@ HYBRID_BUYBOX_ENABLED = "true"
 name = "tav-aip-staging"
 [env.staging.vars]
 HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "direct"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
@@ -36,6 +38,7 @@ id = "44c7dbe6bad5478cb51878b053758805"
 name = "tav-aip-production"
 [env.production.vars]
 HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "direct"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"

@@ -1,9 +1,20 @@
+/**
+ * @deprecated Legacy direct Manheim client for the main worker.
+ *
+ * This module performs Manheim MMR lookups inline within the ingest pipeline.
+ * It predates the tav-intelligence-worker and will be retired once the worker
+ * path (MANHEIM_LOOKUP_MODE="worker") is fully implemented.
+ *
+ * DO NOT add new Manheim/Cox fields or valuation logic here. New work belongs
+ * in workers/tav-intelligence-worker and src/types/domain.ts (ValuationResult).
+ */
 import type { Env } from "../types/env";
-import type { ValuationConfidence } from "../types/domain";
+import type { ValuationConfidence, ValuationMethod } from "../types/domain";
 
 export interface MmrResult {
   mmrValue: number;
-  confidence: ValuationConfidence; // "high" = VIN match, "medium" = YMM match
+  confidence: ValuationConfidence;
+  method?: ValuationMethod; // absent on KV-cached entries written before this field existed
   rawResponse: unknown;
 }
 
@@ -122,7 +133,7 @@ async function getMmrByVin(
   const mmrValue = extractMmrValue(data);
   if (!mmrValue) return null;
 
-  return { mmrValue, confidence: "high", rawResponse: data };
+  return { mmrValue, confidence: "high", method: "vin", rawResponse: data };
 }
 
 async function getMmrByYmm(
@@ -156,11 +167,14 @@ async function getMmrByYmm(
   const mmrValue = extractMmrValue(data);
   if (!mmrValue) return null;
 
-  return { mmrValue, confidence: "medium", rawResponse: data };
+  return { mmrValue, confidence: "medium", method: "year_make_model", rawResponse: data };
 }
 
-// Main entry point. Tries VIN first (high confidence), falls back to YMM.
-// Returns null if neither path produces a value — callers must handle gracefully.
+/**
+ * @deprecated Use MANHEIM_LOOKUP_MODE="worker" to route through tav-intelligence-worker.
+ * Called only when MANHEIM_LOOKUP_MODE is "direct" (or absent). Tries VIN first
+ * (high confidence), falls back to YMM. Returns null if neither path yields a value.
+ */
 export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace): Promise<MmrResult | null> {
   const { vin, year, make, model, mileage } = params;
 

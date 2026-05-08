@@ -27,6 +27,23 @@ export const LOCK_TIMEOUT_MS = 30_000;
 /** Polling interval while waiting for another request to release the lock. */
 export const LOCK_RETRY_INTERVAL_MS = 250;
 
+// ── Rate-limit constants ──────────────────────────────────────────────────────
+
+/** Length of the rate-limit window. Must keep KV TTL (2×) ≥ 60s. */
+export const RATE_LIMIT_WINDOW_SECONDS = 60;
+
+/**
+ * Maximum live (non-cache) Manheim calls a single user may make per window.
+ * Conservative to protect the shared Manheim account quota.
+ */
+export const RATE_LIMIT_USER_LIVE_PER_WINDOW = 10;
+
+/**
+ * Maximum live Manheim calls across all users per window.
+ * Set at 6× the per-user limit to leave room for burst from multiple users.
+ */
+export const RATE_LIMIT_GLOBAL_LIVE_PER_WINDOW = 60;
+
 /**
  * Maximum number of poll attempts before giving up with CacheLockError.
  * Computed from LOCK_TIMEOUT_MS / LOCK_RETRY_INTERVAL_MS so a waiter never

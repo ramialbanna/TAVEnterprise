@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mileageBucket, kvKeyForVin, kvKeyForYmm, getMmrValue } from "../src/valuation/mmr";
+import { getValuationLookupMode } from "../src/valuation/lookupMode";
 import type { Env } from "../src/types/env";
 
 // ── Pure utility tests ────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ function makeEnv(): Env {
     TAV_KV: null as unknown as KVNamespace,
     ADMIN_API_SECRET: "admin-secret",
     HYBRID_BUYBOX_ENABLED: "false",
+    MANHEIM_LOOKUP_MODE: "direct",
   };
 }
 
@@ -237,5 +239,25 @@ describe("getMmrValue — token caching", () => {
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(url).toContain("/valuations/vin/");
     expect((opts.headers as Record<string, string>)["Authorization"]).toBe("Bearer cached-token-xyz");
+  });
+});
+
+// ── getValuationLookupMode ────────────────────────────────────────────────────
+
+describe("getValuationLookupMode", () => {
+  it("returns 'direct' when MANHEIM_LOOKUP_MODE is 'direct'", () => {
+    expect(getValuationLookupMode({ ...makeEnv(), MANHEIM_LOOKUP_MODE: "direct" })).toBe("direct");
+  });
+
+  it("returns 'direct' when MANHEIM_LOOKUP_MODE is empty string", () => {
+    expect(getValuationLookupMode({ ...makeEnv(), MANHEIM_LOOKUP_MODE: "" })).toBe("direct");
+  });
+
+  it("returns 'direct' for any unrecognised value", () => {
+    expect(getValuationLookupMode({ ...makeEnv(), MANHEIM_LOOKUP_MODE: "unknown" })).toBe("direct");
+  });
+
+  it("returns 'worker' when MANHEIM_LOOKUP_MODE is 'worker'", () => {
+    expect(getValuationLookupMode({ ...makeEnv(), MANHEIM_LOOKUP_MODE: "worker" })).toBe("worker");
   });
 });

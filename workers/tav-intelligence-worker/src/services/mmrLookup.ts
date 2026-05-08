@@ -38,6 +38,7 @@ import type { UserContext } from "../auth/userContext";
 import type { MmrQueriesRepository } from "../persistence/mmrQueriesRepository";
 import type { MmrCacheRepository } from "../persistence/mmrCacheRepository";
 import type { UserActivityRepository } from "../persistence/userActivityRepository";
+import type { RateLimiter } from "../rateLimit/rateLimiter";
 import { deriveVinCacheKey, deriveYmmCacheKey } from "../cache/mmrCacheKey";
 import {
   POSITIVE_CACHE_TTL_SECONDS,
@@ -85,6 +86,11 @@ export interface MmrLookupDeps {
   cacheRepo?:    MmrCacheRepository;
   /** Portal presence + activity feed. Best-effort — absence skips write. */
   activityRepo?: UserActivityRepository;
+  /**
+   * Live-call rate limiter. Checked just before any real Manheim HTTP call —
+   * never on cache hits. Absence disables rate limiting (e.g. in tests).
+   */
+  rateLimiter?:  RateLimiter;
 }
 
 const NULL_USER_CONTEXT: UserContext = {
@@ -203,6 +209,10 @@ export async function performMmrLookup(
             return envelope;
           }
         }
+
+        // Rate-limit guard — only fires on live upstream calls, never on
+        // cache hits (the early-return paths above bypass this entirely).
+        await deps.rateLimiter?.check(userCtx.email, requestId);
 
         // Live Manheim call.
         const result =

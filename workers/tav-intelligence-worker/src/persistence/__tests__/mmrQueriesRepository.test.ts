@@ -113,7 +113,7 @@ describe("mmrQueriesRepository — insert (live call)", () => {
 // ── Test 3: cache mirror written on live Manheim call ────────────────────────
 
 describe("mmrCacheRepository — upsert (live call)", () => {
-  it("upserts with cacheKey and envelope fields", async () => {
+  it("upserts with cacheKey and core envelope fields", async () => {
     const sb   = makeSupabaseMock();
     const repo = createMmrCacheRepository(sb as never);
 
@@ -129,6 +129,58 @@ describe("mmrCacheRepository — upsert (live call)", () => {
     expect(row.mmr_value).toBe(18_500);
     expect(row.source).toBe("manheim");
     expect(row.vin).toBe("1HGCM82633A123456");
+  });
+
+  it("writes mmr_wholesale_avg equal to mmr_value", async () => {
+    const sb   = makeSupabaseMock();
+    const repo = createMmrCacheRepository(sb as never);
+
+    await repo.upsert({
+      cacheKey: "vin:1HGCM82633A123456",
+      input:    VIN_INPUT,
+      envelope: LIVE_ENVELOPE,
+    });
+
+    const row = sb._fromReturn.upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.mmr_wholesale_avg).toBe(18_500);
+  });
+
+  it("writes null for unimplemented distribution columns", async () => {
+    const sb   = makeSupabaseMock();
+    const repo = createMmrCacheRepository(sb as never);
+
+    await repo.upsert({
+      cacheKey: "vin:1HGCM82633A123456",
+      input:    VIN_INPUT,
+      envelope: LIVE_ENVELOPE,
+    });
+
+    const row = sb._fromReturn.upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.mmr_wholesale_clean).toBeNull();
+    expect(row.mmr_wholesale_rough).toBeNull();
+    expect(row.mmr_retail_clean).toBeNull();
+    expect(row.mmr_sample_count).toBeNull();
+  });
+
+  it("writes mmr_wholesale_avg=null when envelope has no mmr_value (negative cache)", async () => {
+    const sb   = makeSupabaseMock();
+    const repo = createMmrCacheRepository(sb as never);
+
+    const negativeEnvelope: MmrResponseEnvelope = {
+      ...LIVE_ENVELOPE,
+      ok:        false,
+      mmr_value: null,
+    };
+
+    await repo.upsert({
+      cacheKey: "vin:1HGCM82633A123456",
+      input:    VIN_INPUT,
+      envelope: negativeEnvelope,
+    });
+
+    const row = sb._fromReturn.upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.mmr_value).toBeNull();
+    expect(row.mmr_wholesale_avg).toBeNull();
   });
 });
 
