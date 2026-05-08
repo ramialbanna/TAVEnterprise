@@ -10,6 +10,7 @@ import { handleActivityVin }       from "../handlers/activityVin";
 import { handleActivityFeed }      from "../handlers/activityFeed";
 import { handleKpisSummary }       from "../handlers/kpisSummary";
 import { handleIntelMmrCacheKey }  from "../handlers/intelMmrCacheKey";
+import { handleIntelMmrQueries }   from "../handlers/intelMmrQueries";
 import type { HandlerArgs }        from "../handlers/types";
 
 /**
@@ -42,6 +43,10 @@ export async function dispatch(
   if (method === "GET" && pathname.startsWith("/activity/vin/")) {
     const vin = pathname.slice("/activity/vin/".length);
     return handleActivityVin({ ...baseArgs, pathParams: { vin } });
+  }
+
+  if (method === "GET" && pathname === "/intel/mmr/queries") {
+    return handleIntelMmrQueries(baseArgs);
   }
 
   if (method === "GET" && pathname.startsWith("/intel/mmr/")) {
