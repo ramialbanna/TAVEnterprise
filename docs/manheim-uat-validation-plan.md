@@ -48,7 +48,7 @@ Remaining open items:
 |---|---|
 | **Token URL exact path** | Bridge 2 token endpoint is account-scoped (`.../oauth2/<authServerId>/v1/token`). Copy verbatim from the Cox app detail page. |
 | **`bodyname` format** | `normalizeMmrParams` returns trim pass-through (no alias table). Listing-source trim values may not match Cox's accepted `bodyname` strings. The `mmr-lookup` reference endpoints are the future source-of-truth — see `docs/followups.md`. |
-| **Known-good sandbox test VINs and YMM combos** | Need ≥2 VINs expected to return data, ≥1 expected 404, ≥2 YMM combos with valid `bodyname`. Cannot run V-01–V-03 / Y-01–Y-05 without these. |
+| ~~Known-good sandbox test VINs and YMM combos~~ | **RESOLVED 2026-05-08.** Confirmed: VIN `1FT8W3BT1SEC27066` (2025 Ford F-350SD), no-data VIN `1FT8W3BT199999999`, YMMT `2025 / Acura / ADX AWD / 4D SUV`. Captured in §3 below. |
 | **Confirmed `evbh` semantics** | Code validates `[75, 100]` per the Cox guide and silently drops out-of-range values. Confirm during sandbox UAT that an in-range value flows through and an out-of-range value is ignored client-side rather than rejected upstream. |
 
 ---
@@ -143,8 +143,15 @@ Content-Type:  application/vnd.coxauto.v1+json
 
 ## 3. Test Case Matrix
 
-Obtain UAT-valid test VINs from Manheim's UAT documentation or account rep (see section
-0.5). Placeholders below must be substituted before execution.
+Confirmed sandbox test data (Cox MMR Valuations, 2026-05-08). Sandbox-specific
+limits: none reported. Batch Service: enabled. MMR Lookup
+years/makes/models/trims: enabled.
+
+| Asset | Value |
+|---|---|
+| Known-good VIN | `1FT8W3BT1SEC27066` (expected: 2025 Ford F-350SD) |
+| No-data VIN | `1FT8W3BT199999999` (expected: 404 / no data) |
+| Known-good YMMT | year=`2025`, make=`Acura`, model=`ADX AWD`, bodyname/trim=`4D SUV` |
 
 ### 3a. OAuth token (Cox `client_credentials` + Basic Auth)
 
@@ -170,24 +177,21 @@ curl -i -X POST "$MANHEIM_TOKEN_URL" \
 
 | # | VIN | Mileage | Expected |
 |---|---|---|---|
-| V-01 | `{UAT_VIN_WITH_DATA}` | 50,000 | 200; `mmr_value` non-null; `adjustedPricing.wholesale.average` present |
-| V-02 | `{UAT_VIN_NO_DATA}` | 50,000 | 404 from Manheim; `mmr_value: null`; no error thrown; `manheim.http.complete` logged |
-| V-03 | `{UAT_VIN_WITH_DATA}` | 120,000 | 200; mileage-adjusted value differs from V-01 |
+| V-01 | `1FT8W3BT1SEC27066` | 50,000 | 200; `mmr_value` non-null; `adjustedPricing.wholesale.average` present; year=2025, make=Ford, model=F-350SD on the matched record |
+| V-02 | `1FT8W3BT199999999` | 50,000 | 404 from Cox; `mmr_value: null`; no error thrown; `manheim.http.complete` logged with `mmr_value: null` |
+| V-03 | `1FT8W3BT1SEC27066` | 120,000 | 200; mileage-adjusted value differs from V-01 (mileage curve applied via `odometer` query) |
 
-### 3c. YMM lookup (blocked pending account provisioning)
+### 3c. YMMT lookup (Search)
 
-| # | Year / Make / Model | Mileage | Expected |
+`bodyname`/trim is REQUIRED on the Cox `/search/...` path. Trimless calls
+short-circuit to a null envelope client-side (`manheim.http.skipped`,
+`reason: cox_ymm_requires_trim`); no upstream call is made.
+
+| # | Year / Make / Model / Bodyname | Mileage | Expected |
 |---|---|---|---|
-| Y-01 | 2020 / Toyota / Camry | 50,000 | 200; `items[0]` present; distribution fields populated |
-| Y-02 | 2019 / Chevrolet / Silverado | 60,000 | 200; verify make/model casing accepted |
-| Y-03 | 2021 / Honda / Civic | 35,000 | 200 |
-| Y-04 | 2015 / FakeMake / FakeModel | 40,000 | 404 or empty `items`; `mmr_value: null`; no error thrown |
-| Y-05 | 2022 / Toyota / Camry (no trim) | 30,000 | 200; no `trim` query param in URL |
-
-> **Trim deferral:** G.5.3 intentionally omits trim from the YMM request to the
-> intelligence worker (`workerClient.ts`, comment on line 97). `lookupTrim` is stored in
-> the enrichment payload as `trim_sent_to_worker: false`. Trim-in-request validation is
-> deferred to a future phase.
+| Y-01 | 2025 / Acura / ADX AWD / 4D SUV | 50,000 | 200; `items[0]` present; `adjustedPricing.wholesale.{above,average,below}` populated |
+| Y-02 | 2025 / Acura / ADX AWD / 4D SUV (URL-encoded space in bodyname) | 50,000 | URL contains `/4D%20SUV?odometer=50000` (verifies `encodeURIComponent` on path segment) |
+| Y-03 | 2025 / Acura / ADX AWD / (no trim) | 50,000 | Client short-circuits to `mmr_value: null`; `fetchFn` never called; `manheim.http.skipped { reason: "cox_ymm_requires_trim" }` log emitted |
 
 ---
 
