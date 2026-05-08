@@ -9,6 +9,20 @@ const VIN_RESULT: MmrResult = {
   rawResponse: { source: "vin" },
 };
 
+const VIN_RESULT_WITH_DIST: MmrResult = {
+  mmrValue:    14_000,
+  confidence:  "high",
+  method:      "vin",
+  rawResponse: {
+    href: "https://api.manheim.com/...",
+    count: 1,
+    items: [{
+      adjustedPricing: { wholesale: { above: 15_200, average: 14_000, below: 12_800 } },
+      sampleSize: "22",
+    }],
+  },
+};
+
 const YMM_RESULT: MmrResult = {
   mmrValue:    12_500,
   confidence:  "medium",
@@ -31,7 +45,7 @@ describe("fromMmrResult — VIN path", () => {
     expect(result.valuationMethod).toBe("vin");
   });
 
-  it("leaves distribution fields null (no parsing path yet)", () => {
+  it("leaves distribution fields null when rawResponse has no adjustedPricing", () => {
     const result = fromMmrResult(VIN_RESULT);
     expect(result.wholesaleClean).toBeNull();
     expect(result.wholesaleRough).toBeNull();
@@ -83,5 +97,28 @@ describe("fromMmrResult — KV fallback (no method field)", () => {
     const cached = { mmrValue: 9_500, confidence: "medium" as const, rawResponse: {} } satisfies MmrResult;
     const result = fromMmrResult(cached);
     expect(result.wholesaleAvg).toBe(9_500);
+  });
+});
+
+describe("fromMmrResult — distribution field extraction", () => {
+  it("extracts wholesaleClean and wholesaleRough from adjustedPricing when present", () => {
+    const result = fromMmrResult(VIN_RESULT_WITH_DIST);
+    expect(result.wholesaleClean).toBe(15_200);
+    expect(result.wholesaleRough).toBe(12_800);
+  });
+
+  it("keeps wholesaleAvg equal to mmrValue (primary scalar)", () => {
+    const result = fromMmrResult(VIN_RESULT_WITH_DIST);
+    expect(result.wholesaleAvg).toBe(14_000);
+  });
+
+  it("extracts sampleCount from sampleSize string", () => {
+    const result = fromMmrResult(VIN_RESULT_WITH_DIST);
+    expect(result.sampleCount).toBe(22);
+  });
+
+  it("retailClean is always null regardless of payload", () => {
+    const result = fromMmrResult(VIN_RESULT_WITH_DIST);
+    expect(result.retailClean).toBeNull();
   });
 });

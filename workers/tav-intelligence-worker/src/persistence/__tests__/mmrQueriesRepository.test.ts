@@ -145,7 +145,7 @@ describe("mmrCacheRepository — upsert (live call)", () => {
     expect(row.mmr_wholesale_avg).toBe(18_500);
   });
 
-  it("writes null for unimplemented distribution columns", async () => {
+  it("writes null for distribution columns when mmr_payload has no pricing data", async () => {
     const sb   = makeSupabaseMock();
     const repo = createMmrCacheRepository(sb as never);
 
@@ -160,6 +160,33 @@ describe("mmrCacheRepository — upsert (live call)", () => {
     expect(row.mmr_wholesale_rough).toBeNull();
     expect(row.mmr_retail_clean).toBeNull();
     expect(row.mmr_sample_count).toBeNull();
+  });
+
+  it("extracts distribution columns from mmr_payload when pricing data is present", async () => {
+    const sb   = makeSupabaseMock();
+    const repo = createMmrCacheRepository(sb as never);
+
+    const envelopeWithPricing: MmrResponseEnvelope = {
+      ...LIVE_ENVELOPE,
+      mmr_payload: {
+        items: [{
+          adjustedPricing: { wholesale: { above: 19_800, average: 18_500, below: 17_200 } },
+          sampleSize: "55",
+        }],
+      },
+    };
+
+    await repo.upsert({
+      cacheKey: "vin:1HGCM82633A123456",
+      input:    VIN_INPUT,
+      envelope: envelopeWithPricing,
+    });
+
+    const row = sb._fromReturn.upsert.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row.mmr_wholesale_clean).toBe(19_800);
+    expect(row.mmr_wholesale_rough).toBe(17_200);
+    expect(row.mmr_sample_count).toBe(55);
+    expect(row.mmr_retail_clean).toBeNull();
   });
 
   it("writes mmr_wholesale_avg=null when envelope has no mmr_value (negative cache)", async () => {
