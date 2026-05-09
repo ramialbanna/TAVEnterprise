@@ -6,19 +6,45 @@ secret guards and refreshed `INTEL_*` shared secret.
 
 ## Live status
 
-| Step | Status                | Notes                                                                                                                                |
-|------|-----------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| 1    | PASS (2026-05-09)     | Both /health → 200                                                                                                                   |
-| 2a   | PASS                  | No-bearer → 401                                                                                                                      |
-| 2b   | PASS                  | Wrong-bearer → 401                                                                                                                   |
-| 2c   | PASS (after fixes)    | Required: re-put SUPABASE_URL on both staging workers; targeted DDL `CREATE TABLE tav.import_batches` + grants on staging Supabase  |
-| 3a   | PASS (2026-05-09)     | VIN good (1FT8W3BT1SEC27066) → 200, mmr.lookup.complete. Required: re-put MANHEIM_CLIENT_ID/SECRET (Cox 401 → fixed); intel staging redeployed |
-| 3b   | PASS (2026-05-09)     | VIN no-data (1FT8W3BT199999999) → 200, ok:false, mmr_value:null, cache_hit:false, error_code:null                                    |
-| 3c   | PASS (2026-05-09)     | placeholder service-secret → 401 auth_error                                                                                          |
-| 3p   | PASS (2026-05-09)     | Intel persistence (mmr_queries / mmr_cache / user_activity) writes succeed after targeted DDL; no persist.*_failed events remain   |
-| 4    | DEFERRED              | Main-worker /ingest — staging schema for source_runs / raw_listings / normalized / leads not yet verified; do not run until checked  |
+| Step | Status                  | Notes                                                                                                                                |
+|------|-------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| 1    | PASS (2026-05-09)       | Both /health → 200                                                                                                                   |
+| 2a   | PASS                    | No-bearer → 401                                                                                                                      |
+| 2b   | PASS                    | Wrong-bearer → 401                                                                                                                   |
+| 2c   | PASS (after fixes)      | Required: re-put SUPABASE_URL on both staging workers; targeted DDL `CREATE TABLE tav.import_batches` + grants on staging Supabase  |
+| 3a   | PASS (2026-05-09)       | VIN good (1FT8W3BT1SEC27066) → 200, mmr.lookup.complete. Required: re-put MANHEIM_CLIENT_ID/SECRET (Cox 401 → fixed); intel staging redeployed |
+| 3b   | PASS (2026-05-09)       | VIN no-data (1FT8W3BT199999999) → 200, ok:false, mmr_value:null, cache_hit:false, error_code:null                                    |
+| 3c   | PASS (2026-05-09)       | placeholder service-secret → 401 auth_error                                                                                          |
+| 3p   | PASS (2026-05-09)       | Intel persistence (mmr_queries / mmr_cache / user_activity) writes succeed after targeted DDL; no persist.*_failed events remain   |
+| 4    | INVESTIGATING           | First attempt 503 (Supabase Pro/compute upgrade in progress — transient maintenance noise, resolved). Second attempt reached worker-mode path: `ingest.mmr_worker_called` fired, but `WorkerUnavailableError: HTTP 404` followed. Direct probe of `/mmr/year-make-model` post-maintenance returns 200 and the 404 does not reproduce — that path was a brief artifact of the upgrade window. **Envelope contract bug found and fixed**: intel `okResponse` wraps envelopes as `{success, data, requestId, timestamp}` but main's `MmrResponseEnvelopeSchema` expected the flat shape — every successful intel call (incl. Cox `mmr_value:32100`) was silently parsed as null. Fixed in main worker; ready for retry. |
 
 Persistence gaps resolved 2026-05-09 by targeted staging SQL (mirrors migrations 0027 / 0028 / 0029) — `tav.mmr_queries`, `tav.mmr_cache`, `tav.user_activity` plus indexes/constraints/grants now present on staging Supabase.
+
+### Step 4 resume gate (post-maintenance)
+
+Order is required. Skipping the admin check risks generating spurious DLQ rows.
+
+1. Supabase dashboard → staging project status shows **Active** (not Provisioning, not Paused, not Maintenance).
+2. **Admin reachability check first** (no schema impact, no writes):
+   ```bash
+   src=~/.tav-staging-secrets.local
+   ADMIN=$(awk -F= '/^ADMIN_API_SECRET=/ {print $2}' "$src")
+   curl -i -s -H "Authorization: Bearer $ADMIN" \
+     https://tav-aip-staging.rami-1a9.workers.dev/admin/import-batches | head -10
+   unset ADMIN
+   ```
+   - **HTTP 200** → upstream healthy. Proceed to step 3.
+   - **HTTP 503 db_error** → Supabase still recovering or DNS not propagated. Wait 1–2 min and re-run; do **not** proceed to /ingest.
+3. Only then retry Step 4 /ingest (snippet in §Step 4 above) with a fresh `RUN_ID`. Tail in a second terminal: `npx wrangler tail tav-aip-staging --format pretty`.
+
+Working theory for the 1016 / 503 outage: planned Supabase Pro/compute upgrade. Earlier free-tier-pause speculation is **not** the cause — staging project is on Pro.
+
+Resilience + correctness fixes shipped while diagnosing the outage and 404 (commits on `main`):
+- `upsertSourceRun` now wrapped in `withRetry` (3 attempts, 250/1000/4000ms backoff) — most transient 1016-class errors will self-heal on retry.
+- `serializeError` extracts `status` + recursive `cause` so future fetch-layer failures land in logs with full diagnostic chain instead of just a wrapper message.
+- `getMmrValueFromWorker` now unwraps the intel `okResponse` envelope (`{success, data, requestId, timestamp}` → inner `MmrResponseEnvelope`). Previously a silent contract mismatch nullified every successful Cox lookup. Emits `ingest.mmr_worker_envelope_invalid` on future drift. Verified via direct probe: `POST /mmr/year-make-model` with trim `4D SUV` returns `mmr_value:32100`; without trim returns the documented null envelope (cox_ymm_requires_trim short-circuit).
+- Latest tav-aip-staging version (post-fix): `b0a6e1ff-0b19-439d-b1df-7ac125c3aefc`
+
 
 Hardening side-fixes shipped during this run:
 - `1267d9d` fail-closed secret validation + Retry-After + opt-in int tests + staging routing toggle
