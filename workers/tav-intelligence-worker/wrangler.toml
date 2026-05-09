@@ -55,6 +55,10 @@ MANAGER_EMAIL_ALLOWLIST = ""
 
 [env.production]
 name = "tav-intelligence-worker-production"
+# Public URL disabled at steady state. Service Binding from
+# tav-aip-production (env.INTEL_WORKER) is the only access path. To
+# re-enable for ad-hoc direct smoke, set workers_dev = true here and
+# redeploy; revert after smoke for tightest prod hygiene.
 
 [[env.production.kv_namespaces]]
 binding = "TAV_INTEL_KV"
