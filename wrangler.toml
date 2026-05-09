@@ -50,8 +50,12 @@ service = "tav-intelligence-worker-staging"
 name = "tav-aip-production"
 [env.production.vars]
 HYBRID_BUYBOX_ENABLED = "true"
-MANHEIM_LOOKUP_MODE = "direct"
-INTEL_WORKER_URL = ""
+MANHEIM_LOOKUP_MODE = "worker"
+# Service Binding INTEL_WORKER is the active transport for worker→intel calls.
+# This URL is kept for diagnostic logging (ingest.mmr_worker_called.endpoint)
+# and as a fallback if the binding is ever absent at runtime; the workerClient
+# never actually fetches it when env.INTEL_WORKER is bound.
+INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
