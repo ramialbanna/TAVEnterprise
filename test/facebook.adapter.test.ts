@@ -554,6 +554,57 @@ describe("parseFacebookItem — no VIN (Facebook norm)", () => {
     if (!r.ok) return;
     expect(r.listing.vin).toBeUndefined();
   });
+
+  it("E5: valid 17-char VIN propagates to NormalizedListingInput, uppercased", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/e5", title: "2025 Ford F-350 Lariat", vin: "1ft8w3bt1sec27066" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.vin).toBe("1FT8W3BT1SEC27066");
+  });
+
+  it("E6: VIN with surrounding whitespace is trimmed before validation", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/e6", title: "2025 Ford F-350 Lariat", vin: "  1FT8W3BT1SEC27066  " },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.vin).toBe("1FT8W3BT1SEC27066");
+  });
+
+  it("E7: 17-char VIN containing forbidden char (I) → undefined", () => {
+    const r = parseFacebookItem(
+      // 17 chars, contains 'I' which is forbidden by ISO 3779
+      { url: "https://fb.com/e7", title: "2019 Honda Accord Sport", vin: "1HGCV1F34KA12345I" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.vin).toBeUndefined();
+  });
+
+  it("E8: VIN of wrong length → undefined", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/e8", title: "2019 Honda Accord Sport", vin: "TOOSHORT" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.vin).toBeUndefined();
+  });
+
+  it("E9: uppercase 'VIN' field key works as alias", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/e9", title: "2025 Ford F-350 Lariat", VIN: "1FT8W3BT1SEC27066" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.vin).toBe("1FT8W3BT1SEC27066");
+  });
 });
 
 // ── Group F: Schema drift detection ──────────────────────────────────────────

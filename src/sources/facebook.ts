@@ -274,6 +274,22 @@ function extractSourceListingId(item: Record<string, unknown>): string | undefin
   return undefined;
 }
 
+// VIN is rare on Facebook listings but occasionally present in the description
+// or a side field. When provided, validate to a 17-char standard VIN (alphanumeric,
+// excluding I/O/Q per ISO 3779) and uppercase. Anything else returns undefined so
+// the YMM fallback path runs cleanly without polluting MMR with malformed input.
+const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
+
+function extractVin(item: Record<string, unknown>): string | undefined {
+  for (const key of ["vin", "VIN", "Vin"]) {
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const candidate = raw.trim().toUpperCase();
+    if (VIN_REGEX.test(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 // ── Schema drift detection ────────────────────────────────────────────────────
 // Fields the Facebook adapter actively reads or recognises as benign.
 // Any top-level key NOT in this set is reported as an unexpected_field drift event.
@@ -290,7 +306,7 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   // Mileage aliases
   "mileage", "miles", "odometer", "Mileage",
   // Vehicle identifiers
-  "vin",
+  "vin", "VIN", "Vin",
   // Descriptive fields
   "description",
   // Media
@@ -361,6 +377,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     const mileage = parseMileage(rec, title);
     const trim = extractTrim(remaining);
     const sourceListingId = extractSourceListingId(rec);
+    const vin = extractVin(rec);
 
     const listing: NormalizedListingInput = {
       source: "facebook",
@@ -376,6 +393,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
       ...(priceResult.price !== undefined && { price: priceResult.price }),
       ...(mileage !== undefined && { mileage }),
       ...(sourceListingId !== undefined && { sourceListingId }),
+      ...(vin !== undefined && { vin }),
     };
 
     return { ok: true, listing };
