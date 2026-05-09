@@ -1,4 +1,12 @@
 # TAV Marketplace — Complete Project Specification
+
+> ⚠️ **LEGACY / HISTORICAL — DO NOT USE FOR DESIGN DECISIONS**
+>
+> Status: superseded 2026-05-09. See `docs/architecture.md` and `docs/adr/0001-drop-make-com.md`.
+> This document describes the **v0 Apify → Make.com → Worker `/normalize`** pipeline. Make.com is no longer part of the target TAV-AIP architecture. Current design is **direct caller/Apify → Worker `/ingest` (HMAC-signed, Zod-validated)**.
+> Retained for historical reference and v0 schema/operational details only. Architecture, route, and integration-bus sections are stale.
+> Source of truth: `CLAUDE.md` + `docs/architecture.md`.
+
 > Generated: 2026-05-02 | Version: v1.5.0 | Author: Claude Code
 
 ---
