@@ -28,8 +28,8 @@ workers_dev = false
 
 [[kv_namespaces]]
 binding = "TAV_INTEL_KV"
-id         = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
-preview_id = "REPLACE_WITH_TAV_INTEL_KV_PREVIEW_ID"
+id         = "1b19d3c13a5e4b9c95f7a9c6aa4161ae"
+preview_id = "1b19d3c13a5e4b9c95f7a9c6aa4161ae"
 
 [vars]
 # Comma-separated email allowlist for force_refresh (temporary; see
@@ -58,7 +58,7 @@ name = "tav-intelligence-worker-production"
 
 [[env.production.kv_namespaces]]
 binding = "TAV_INTEL_KV"
-id      = "REPLACE_WITH_TAV_INTEL_KV_PRODUCTION_ID"
+id      = "ada5f91d77b24ff0966fb3032bb56b94"
 
 [env.production.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
