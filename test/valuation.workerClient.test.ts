@@ -466,4 +466,36 @@ describe("getMmrValueFromWorker — error cases", () => {
     const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
     expect(result).toMatchObject({ mmrValue: 18_500, confidence: "high", method: "vin" });
   });
+
+  it("uses env.INTEL_WORKER service binding when bound (avoids CF 1042)", async () => {
+    // When the service binding is present on env, workerClient must call
+    // env.INTEL_WORKER.fetch — NOT global fetch. Public-URL fetch between
+    // Workers on the same Cloudflare account fails with error code 1042.
+    const bindingFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        success:   true,
+        data:      ENVELOPE_VIN,
+        requestId: "intel-req-2",
+        timestamp: "2026-05-09T00:00:00.000Z",
+      }),
+    });
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+
+    const env = {
+      ...BASE_ENV,
+      INTEL_WORKER: { fetch: bindingFetch } as unknown as Fetcher,
+    } as unknown as Env;
+
+    const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, env);
+
+    expect(result).toMatchObject({ mmrValue: 18_500, confidence: "high", method: "vin" });
+    expect(bindingFetch).toHaveBeenCalledTimes(1);
+    expect(globalFetch).not.toHaveBeenCalled();
+    // Service-secret header still rides along as defense-in-depth
+    const [, init] = bindingFetch.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["x-tav-service-secret"]).toBe("secret-xyz");
+  });
 });

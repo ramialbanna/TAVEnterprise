@@ -132,6 +132,11 @@ export async function getMmrValueFromWorker(
     return null;
   }
 
+  // Prefer Cloudflare Service Binding when configured. Public-URL fetch
+  // between Workers on the same account is blocked by Cloudflare with
+  // error 1042; the binding routes internally and bypasses that limit.
+  const useServiceBinding = env.INTEL_WORKER !== undefined;
+
   // Diagnostic-grade per-call log. body_keys lists fields without their values
   // (vin/year/mileage are not secret, but listing the schema-shape is enough
   // to compare against intel's expected request shape). service_secret_header
@@ -144,22 +149,27 @@ export async function getMmrValueFromWorker(
     vin_present:                   !!vin,
     body_keys:                     Object.keys(body).sort(),
     service_secret_header_present: serviceSecretConfigured,
+    transport:                     useServiceBinding ? "service_binding" : "public_fetch",
   });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
+  const requestInit: RequestInit = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-tav-service-secret": env.INTEL_WORKER_SECRET,
+    },
+    body: JSON.stringify(body),
+    signal: controller.signal,
+  };
+
   let res: Response;
   try {
-    res = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-tav-service-secret": env.INTEL_WORKER_SECRET,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    res = useServiceBinding
+      ? await env.INTEL_WORKER!.fetch(endpoint, requestInit)
+      : await fetch(endpoint, requestInit);
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") throw new WorkerTimeoutError();
     throw err;

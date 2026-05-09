@@ -59,4 +59,14 @@ export interface Env {
    * Set via: wrangler secret put INTEL_WORKER_SECRET
    */
   INTEL_WORKER_SECRET: string;
+
+  /**
+   * Optional Cloudflare Service Binding to tav-intelligence-worker.
+   * Configured via [[env.<env>.services]] in wrangler.toml. When present,
+   * worker-to-worker calls go through this binding (avoids Cloudflare error
+   * 1042 that blocks public-URL fetch between Workers on the same account).
+   * The x-tav-service-secret header still rides along as defense-in-depth.
+   * Absent on local/dev where INTEL_WORKER_URL public fetch is acceptable.
+   */
+  INTEL_WORKER?: Fetcher;
 }

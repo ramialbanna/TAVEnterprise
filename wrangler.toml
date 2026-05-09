@@ -38,6 +38,13 @@ binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
 # To provision (if not yet live): wrangler kv namespace create TAV_KV --env staging
 id = "44c7dbe6bad5478cb51878b053758805"
+# Service binding to tav-intelligence-worker-staging — avoids Cloudflare
+# error 1042 that blocks worker-to-worker public-URL fetches on the same
+# account. workerClient prefers env.INTEL_WORKER.fetch() when this binding
+# is present and falls back to public fetch only if the binding is absent.
+[[env.staging.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-staging"
 
 [env.production]
 name = "tav-aip-production"
@@ -48,3 +55,8 @@ INTEL_WORKER_URL = ""
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
+# Bound but dormant — MANHEIM_LOOKUP_MODE=direct keeps the worker-mode
+# branch dark in prod until the cutover is greenlit.
+[[env.production.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-production"
