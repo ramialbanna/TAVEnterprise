@@ -16,7 +16,7 @@ secret guards and refreshed `INTEL_*` shared secret.
 | 3b   | PASS (2026-05-09)       | VIN no-data (1FT8W3BT199999999) → 200, ok:false, mmr_value:null, cache_hit:false, error_code:null                                    |
 | 3c   | PASS (2026-05-09)       | placeholder service-secret → 401 auth_error                                                                                          |
 | 3p   | PASS (2026-05-09)       | Intel persistence (mmr_queries / mmr_cache / user_activity) writes succeed after targeted DDL; no persist.*_failed events remain   |
-| 4    | INVESTIGATING           | First attempt 503 (Supabase Pro/compute upgrade in progress — transient maintenance noise, resolved). Second attempt reached worker-mode path: `ingest.mmr_worker_called` fired, but `WorkerUnavailableError: HTTP 404` followed. Direct probe of `/mmr/year-make-model` post-maintenance returns 200 and the 404 does not reproduce — that path was a brief artifact of the upgrade window. **Envelope contract bug found and fixed**: intel `okResponse` wraps envelopes as `{success, data, requestId, timestamp}` but main's `MmrResponseEnvelopeSchema` expected the flat shape — every successful intel call (incl. Cox `mmr_value:32100`) was silently parsed as null. Fixed in main worker; ready for retry. |
+| 4    | PASS (2026-05-09)       | RUN_ID `smoke-20260509-114200`. HTTP 200, processed=1, rejected=0. Tail: `ingest.started` → `dedupe.linked identity_key=vin:1FT8W3BT1SEC27066` → `ingest.mmr_worker_called transport=service_binding` → `valuation.fetched mmr_value=68600 confidence=high kpi=true` → `ingest.complete`. No `ingest.snapshot_failed`, no `ingest.mmr_worker_http_error`. Envelope unwrap, VIN propagation, service-binding transport, and valuation_snapshots distribution columns all verified end-to-end. |
 
 Persistence gaps resolved 2026-05-09 by targeted staging SQL (mirrors migrations 0027 / 0028 / 0029) — `tav.mmr_queries`, `tav.mmr_cache`, `tav.user_activity` plus indexes/constraints/grants now present on staging Supabase.
 
@@ -41,9 +41,32 @@ Working theory for the 1016 / 503 outage: planned Supabase Pro/compute upgrade. 
 
 Resilience + correctness fixes shipped while diagnosing the outage and 404 (commits on `main`):
 - `upsertSourceRun` now wrapped in `withRetry` (3 attempts, 250/1000/4000ms backoff) — most transient 1016-class errors will self-heal on retry.
-- `serializeError` extracts `status` + recursive `cause` so future fetch-layer failures land in logs with full diagnostic chain instead of just a wrapper message.
-- `getMmrValueFromWorker` now unwraps the intel `okResponse` envelope (`{success, data, requestId, timestamp}` → inner `MmrResponseEnvelope`). Previously a silent contract mismatch nullified every successful Cox lookup. Emits `ingest.mmr_worker_envelope_invalid` on future drift. Verified via direct probe: `POST /mmr/year-make-model` with trim `4D SUV` returns `mmr_value:32100`; without trim returns the documented null envelope (cox_ymm_requires_trim short-circuit).
-- Latest tav-aip-staging version (post-fix): `b0a6e1ff-0b19-439d-b1df-7ac125c3aefc`
+- `serializeError` extracts `status`, recursive `cause`, `attempts`, and recursive `lastError` so future fetch-layer failures and RetryExhaustedError chains land in logs with full diagnostic chain instead of bare wrapper messages.
+- `getMmrValueFromWorker` now unwraps the intel `okResponse` envelope (`{success, data, requestId, timestamp}` → inner `MmrResponseEnvelope`). Previously a silent contract mismatch nullified every successful Cox lookup. Emits `ingest.mmr_worker_envelope_invalid` on future drift.
+- Facebook adapter now extracts and validates VIN (`extractVin`, ISO 3779 17-char check, uppercased). Listings carrying a VIN now route through `/mmr/vin` instead of forced YMM fallback.
+- Worker-to-worker calls now go through Cloudflare Service Binding `INTEL_WORKER` (`[[env.<env>.services]]` in wrangler.toml). Avoids Cloudflare error 1042 that blocks public-URL fetches between Workers on the same account. Service-secret header still rides along as defense-in-depth. New `transport` log field distinguishes `service_binding` vs `public_fetch`.
+- Migration 0040 + canonical schema.sql + targeted staging DDL add the five MMR-distribution columns (`mmr_wholesale_avg/clean/rough`, `mmr_retail_clean`, `mmr_sample_count`) to `tav.valuation_snapshots`. Persistence inserts had been failing with PostgREST 42703 across all environments; production was masked by `MANHEIM_LOOKUP_MODE=direct` rarely producing non-null mmrResult.
+
+## Blockers fixed during this smoke (chronological)
+
+| # | Blocker                                                     | Resolution                                                                                                                |
+|---|-------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| 1 | `SUPABASE_URL` typo / wrong service-role key on staging     | Re-`wrangler secret put` correct values on both main and intel staging; redeploy                                          |
+| 2 | `tav.import_batches` missing on staging                     | Targeted DDL mirror of migration 0012                                                                                     |
+| 3 | Cox sandbox 401 on token refresh                            | Re-put `MANHEIM_CLIENT_ID` / `MANHEIM_CLIENT_SECRET` on intel staging after pre-validation curl against Cox token endpoint |
+| 4 | Intel persistence — `mmr_queries`, `mmr_cache`, `user_activity` missing on staging | Targeted DDL mirror of migrations 0027 / 0028 / 0029                                                                       |
+| 5 | Admin route returned Cloudflare 1101 on DB throw            | Wrap `handleAdmin` body in try/catch → JSON 503 `db_error` with `serializeError`                                          |
+| 6 | `MmrResponseEnvelope` contract drift between intel okResponse and main client | New `IntelOkEnvelopeSchema` wrapper; main now unwraps `data` field                                                        |
+| 7 | Facebook adapter ignored `vin` field                        | Added `extractVin` with ISO 3779 validation; vin propagates to `NormalizedListingInput`                                    |
+| 8 | Cloudflare 1042 blocking Worker→Worker public-URL fetch     | Cloudflare Service Binding `INTEL_WORKER`; main fetches via `env.INTEL_WORKER.fetch`                                       |
+| 9 | `valuation_snapshots` missing five distribution columns      | Migration 0040 + targeted staging DDL                                                                                     |
+
+## Deployed staging versions (final)
+
+| Worker | Version |
+|---|---|
+| tav-aip-staging                  | `a751f189-9a58-4133-b6f8-1d875dcf13c4` |
+| tav-intelligence-worker-staging  | `93941d87-87df-4f96-bbb6-b17a8f11f8ca` |
 
 
 Hardening side-fixes shipped during this run:
