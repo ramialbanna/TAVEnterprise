@@ -68,6 +68,53 @@ Resilience + correctness fixes shipped while diagnosing the outage and 404 (comm
 | tav-aip-staging                  | `a751f189-9a58-4133-b6f8-1d875dcf13c4` |
 | tav-intelligence-worker-staging  | `93941d87-87df-4f96-bbb6-b17a8f11f8ca` |
 
+## Production cutover — 2026-05-09 (PASS)
+
+Status: **production is now on `MANHEIM_LOOKUP_MODE=worker`**, routing through Cloudflare Service Binding `INTEL_WORKER` to `tav-intelligence-worker-production`. End-to-end smoke green.
+
+Cutover smoke RUN_ID `prod-smoke-20260509-124947`:
+- HTTP/2 200, processed=1, rejected=0
+- `ingest.started item_count=1`
+- `dedupe.linked identity_key=vin:1FT8W3BT1SEC27066`
+- `ingest.mmr_worker_called endpoint=/mmr/vin method=vin vin_present=true transport=service_binding`
+- `valuation.fetched mmr_value=68600 confidence=high kpi=true`
+- `ingest.complete processed=1 rejected=0 created_leads=0`
+- No `ingest.snapshot_failed`, no `ingest.mmr_worker_http_error`, no `mmr.persist.*_failed`
+
+### Sandbox-backed Cox MMR in production
+
+> Per Cox developer portal review (2026-05-09), Cox has not yet enabled true production MMR for the TAV Evaluation app. The Integration tab marks Manheim APIs unavailable; MMR rows show Environment=Sandbox.
+>
+> **`tav-intelligence-worker-production` therefore points at `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr`** using the TAV Evaluation Sandbox Bridge 2 credentials (CLIENT_ID `a390ecdd-f036-479a-92d8-7794bcdb6afa`, paired with the corresponding sandbox CLIENT_SECRET).
+>
+> All worker-mode lookups in Cloudflare prod env hit sandbox MMR data — identical pricing/coverage to staging; **NOT live Manheim production prices**. Step-4 mmr_value=68600 for sandbox VIN `1FT8W3BT1SEC27066` is the same value staging returns; this is expected.
+>
+> Switching to true Cox production MMR is a separate cutover, blocked on Cox enabling the production environment for the app (or migrating to a separate prod app). Tracked in followups.md.
+
+### Production deployed versions (final)
+
+| Worker | Version | Public URL |
+|---|---|---|
+| tav-aip-production                  | `ab34d529-25ae-4edd-9f10-566fda6447cf` | `https://tav-aip-production.rami-1a9.workers.dev` |
+| tav-intelligence-worker-production  | `edac5dbf-1010-4c75-a267-e0df5adc50eb` | **disabled** (workers_dev=false; Service Binding is the only access path)              |
+
+### Pre-cutover prod gates closed (in order)
+
+1. Migration 0040 applied to production Supabase (5 distribution columns added; valuation_snapshots column count = 24)
+2. `tav-intelligence-worker-production` first deploy (created the worker on Cloudflare so secrets could attach)
+3. Intel-prod 10 secrets uploaded — INTEL_SERVICE_SECRET (matches main-prod INTEL_WORKER_SECRET), 7 Cox sandbox config values, prod Supabase URL + service role key
+4. Intel-prod public URL temporarily enabled for direct smoke; all 4 checks PASS (health, VIN good mmr_value=68600, VIN no-data null envelope, placeholder rejection 401)
+5. Intel-prod public URL disabled (workers_dev=false; only Service Binding remains)
+6. Intel persistence audit on prod Supabase: tav.mmr_queries / mmr_cache / user_activity / set_updated_at / mmr_cache cache_key UNIQUE — all PRESENT (no DDL needed)
+7. Main-prod 5 secrets verified (ADMIN_API_SECRET, INTEL_WORKER_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WEBHOOK_HMAC_SECRET)
+8. Main-prod toml cutover edit committed (`MANHEIM_LOOKUP_MODE=worker`, INTEL_WORKER_URL set for diagnostic-log symmetry)
+9. Main-prod deploy → version `ab34d529`, Service Binding `INTEL_WORKER` bound at runtime
+10. End-to-end smoke green (above)
+
+### Rollback path (still available)
+
+Cloudflare dashboard → tav-aip-production → flip `MANHEIM_LOOKUP_MODE` back to `direct` (no redeploy required; CF hot-swaps env vars). Worker-mode branch goes dark; falls back to direct-mode which produces null mmrResult (no `MANHEIM_*` secrets on main-prod) — known-safe state within seconds. Intel-prod stays as-is.
+
 
 Hardening side-fixes shipped during this run:
 - `1267d9d` fail-closed secret validation + Retry-After + opt-in int tests + staging routing toggle

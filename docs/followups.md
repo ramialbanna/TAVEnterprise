@@ -156,3 +156,27 @@ Do NOT modify wrangler.toml IDs until the namespace is provisioned.
 
 - [x] 2026-05-08 supabase/migrations — apply migration 0033 (user_activity feed index + purge_expired_activity function)
       to remote before deploying production worker: `npx supabase db push` — DONE (confirmed via `supabase migration list`; remote is current through 0037)
+
+## 2026-05-09 — production cutover follow-ups
+
+- [ ] 2026-05-09 ops — distribute `WEBHOOK_HMAC_SECRET` (production) to Apify ingest team so they can sign /ingest payloads.
+      Value lives in `~/.tav-prod-secrets.local` on the operator machine; share via the team's secret-distribution channel
+      (1Password, Vault, etc.), not Slack/email plaintext.
+- [ ] 2026-05-09 ops — distribute `ADMIN_API_SECRET` (production) to admin-tooling owners. Same channel as above.
+- [ ] 2026-05-09 ops — once both above secrets are distributed, `shred -u ~/.tav-prod-secrets.local`
+      (or `rm -P` on macOS). File is mode 600 and outside the repo, but should not linger after distribution.
+- [ ] 2026-05-09 cox — production Cox MMR enablement is BLOCKED on Cox enabling the production environment for the
+      TAV Evaluation app, or migrating to a separate Cox production app. Until then,
+      `tav-intelligence-worker-production` runs against `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr`
+      using TAV Evaluation Sandbox Bridge 2 credentials (CLIENT_ID `a390ecdd-f036-479a-92d8-7794bcdb6afa`).
+      Swap path when Cox enables prod: re-put `MANHEIM_TOKEN_URL`, `MANHEIM_MMR_URL`, `MANHEIM_CLIENT_ID`,
+      `MANHEIM_CLIENT_SECRET`, optionally `MANHEIM_SCOPE` on intel-prod via `wrangler secret put` and redeploy.
+      No code change required; worker reads these dynamically.
+- [ ] 2026-05-09 wrangler.toml — `[env.production]` for `tav-intelligence-worker-production` keeps `workers_dev=false`
+      (set during cutover after direct smoke). Re-enable temporarily via `workers_dev = true` + redeploy if direct
+      diagnostic access is ever needed; revert after.
+- [ ] 2026-05-09 docs — author production runbook entry covering: cutover state, rollback path (dashboard env-var flip
+      to `MANHEIM_LOOKUP_MODE=direct`), and the sandbox-backed-Cox caveat. Reference docs/staging-smoke-2026-05-09.md
+      "Production cutover" section for narrative.
+- [ ] 2026-05-09 docs/manheim-uat-validation-plan.md — when Cox enables true prod MMR, append a prod-mode UAT
+      mirroring §3 with prod-real VINs (not sandbox `1FT8W3BT1SEC27066`).
