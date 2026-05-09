@@ -96,7 +96,9 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
 
   let run;
   try {
-    run = await upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length });
+    run = await withRetry(() =>
+      upsertSourceRun(db, { source, run_id, region, scraped_at, item_count: items.length }),
+    );
   } catch (err) {
     logError("persistence", "ingest.source_run_failed", err, ctx);
     return json({ ok: false, error: "service_unavailable" }, 503);
