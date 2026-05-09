@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { dispatch } from "../index";
 import type { Env } from "../../types/env";
 import type { ApiResponse } from "../../types/api";
+import { AuthError } from "../../errors";
 
 // Universal fluent chain mock. All chainable methods return `this`; terminal
 // async methods (range, maybeSingle) are controlled per-test. The chain is
@@ -73,6 +74,19 @@ describe("dispatch", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as ApiResponse<{ worker: string }>;
     expect(body.data?.worker).toBe("tav-intelligence-worker");
+  });
+
+  it("does not allow placeholder service secret to bypass Access auth", async () => {
+    const req = new Request("https://example.test/mmr/vin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tav-service-secret": "replace_me",
+      },
+      body: JSON.stringify({ vin: "1HGCM82633A123456" }),
+    });
+    await expect(dispatch(req, { ...env, INTEL_SERVICE_SECRET: "replace_me" }, "req-secret"))
+      .rejects.toBeInstanceOf(AuthError);
   });
 
   it("dispatches GET /kpis/summary when authenticated", async () => {

@@ -99,6 +99,26 @@ describe("retryWithBackoff", () => {
     expect(onRetry).toHaveBeenCalledTimes(2);
   });
 
+  it("uses an onRetry delay override when one is returned", async () => {
+    const sleeps: number[] = [];
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error("retry-after"))
+      .mockResolvedValueOnce("ok");
+
+    const result = await retryWithBackoff(fn, {
+      maxAttempts: 2,
+      baseDelayMs: 100,
+      maxDelayMs:  1000,
+      jitterRatio: 0,
+      shouldRetry: () => true,
+      onRetry: () => 2000,
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+
+    expect(result).toBe("ok");
+    expect(sleeps).toEqual([2000]);
+  });
+
   it("computes backoff = baseDelayMs * 2^(attempt-1) when jitter is 0", async () => {
     const sleeps: number[] = [];
     const fn = vi.fn(async () => { throw new Error("x"); });

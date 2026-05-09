@@ -12,6 +12,8 @@ import type { ImportRowInput } from "../persistence/importRows";
 import { upsertMarketExpense, getMarketExpensesByRegion } from "../persistence/marketExpenses";
 import { upsertMarketDemandIndex } from "../persistence/marketDemandIndex";
 import { withRetry } from "../persistence/retry";
+import { isConfiguredSecret } from "../types/envValidation";
+import { log } from "../logging/logger";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -22,10 +24,15 @@ function json(body: unknown, status = 200): Response {
 
 function verifyAdminAuth(request: Request, env: Env): boolean {
   const auth = request.headers.get("Authorization") ?? "";
+  if (!isConfiguredSecret(env.ADMIN_API_SECRET)) return false;
   return auth === `Bearer ${env.ADMIN_API_SECRET}`;
 }
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
+  if (!isConfiguredSecret(env.ADMIN_API_SECRET)) {
+    return json({ ok: false, error: "admin_auth_not_configured" }, 503);
+  }
+
   if (!verifyAdminAuth(request, env)) {
     return json({ ok: false, error: "unauthorized" }, 401);
   }
@@ -225,12 +232,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
         recomputed++;
       } catch (err) {
         errors++;
-        console.error(JSON.stringify({
-          event: "recompute.region_failed",
+        log("recompute.region_failed", {
           region,
           reason_code: "recompute_error",
           error: err instanceof Error ? err.message : String(err),
-        }));
+        });
       }
     }
 

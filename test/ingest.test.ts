@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types/env";
+import type * as LeadScoringModule from "../src/scoring/lead";
+import type * as WorkerClientModule from "../src/valuation/workerClient";
 
 // Mock the entire persistence layer so unit tests never touch a real DB.
 vi.mock("../src/persistence/supabase", () => ({
@@ -57,7 +59,7 @@ vi.mock("../src/alerts/alerts", () => ({
 }));
 
 vi.mock("../src/valuation/workerClient", async () => {
-  const actual = await vi.importActual<typeof import("../src/valuation/workerClient")>("../src/valuation/workerClient");
+  const actual = await vi.importActual<typeof WorkerClientModule>("../src/valuation/workerClient");
   return { ...actual, getMmrValueFromWorker: vi.fn().mockResolvedValue(null) };
 });
 
@@ -71,7 +73,7 @@ vi.mock("../src/persistence/vehicleEnrichments", () => ({
 
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
-  const actual = await vi.importActual<typeof import("../src/scoring/lead")>("../src/scoring/lead");
+  const actual = await vi.importActual<typeof LeadScoringModule>("../src/scoring/lead");
   return { ...actual, computeFinalScore: vi.fn().mockImplementation(actual.computeFinalScore) };
 });
 
@@ -207,6 +209,16 @@ describe("POST /ingest", () => {
     expect(body.error).toBe("unauthorized");
   });
 
+  it("returns 503 when the HMAC secret is not configured", async () => {
+    const misconfiguredEnv = { ...env, WEBHOOK_HMAC_SECRET: "" } as Env;
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), misconfiguredEnv, ctx);
+
+    expect(res.status).toBe(503);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.error).toBe("ingest_auth_not_configured");
+  });
+
   it("returns 401 for a wrong signature", async () => {
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, "sha256=badc0ffee"), env, ctx);
     expect(res.status).toBe(401);
@@ -271,6 +283,19 @@ describe("POST /ingest", () => {
   it("returns 404 for GET /ingest", async () => {
     const res = await worker.fetch(new Request("http://localhost/ingest"), env, ctx);
     expect(res.status).toBe(404);
+  });
+
+  it("returns 503 for /admin when the admin secret is not configured", async () => {
+    const misconfiguredEnv = { ...env, ADMIN_API_SECRET: "" } as Env;
+    const req = new Request("http://localhost/admin/import-batches", {
+      method: "GET",
+      headers: { Authorization: "Bearer " },
+    });
+    const res = await worker.fetch(req, misconfiguredEnv, ctx);
+
+    expect(res.status).toBe(503);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.error).toBe("admin_auth_not_configured");
   });
 
   it("existing GET /health still returns 200", async () => {

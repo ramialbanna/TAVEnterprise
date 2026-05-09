@@ -24,6 +24,12 @@ exclude: ["test/**/*.int.test.ts"],
 Integration tests stay in `test/` with the `.int.test.ts` suffix and
 run via `vitest.int.config.ts` (`npm run test:int`).
 
+Live Supabase integration tests are opt-in. Set
+`RUN_SUPABASE_INTEGRATION_TESTS=true` together with real
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` values when you intend to
+mutate the configured database. A local `.dev.vars` file alone is not enough
+to run live integration tests.
+
 ## Why co-located for new code
 
 - Faster to find — tests live next to the file they exercise.

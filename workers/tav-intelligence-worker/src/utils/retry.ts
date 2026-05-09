@@ -24,8 +24,12 @@ export interface RetryOptions {
   jitterRatio: number;
   /** Per-error decision. Returning `false` aborts retry and rethrows the error. */
   shouldRetry: (err: unknown, attempt: number) => boolean;
-  /** Optional hook fired before each retry. Useful for logging. */
-  onRetry?: (err: unknown, attempt: number, nextDelayMs: number) => void;
+  /**
+   * Optional hook fired before each retry. Useful for logging.
+   * Return a number to override the computed delay, for example to honor an
+   * upstream Retry-After header.
+   */
+  onRetry?: (err: unknown, attempt: number, nextDelayMs: number) => number | void;
   /** Override sleep — handy in tests. Defaults to `setTimeout`-based. */
   sleep?: (ms: number) => Promise<void>;
   /** Override randomness — handy in tests. Defaults to `Math.random`. */
@@ -66,8 +70,11 @@ export async function retryWithBackoff<T>(
       const jitter  = (random() * 2 - 1) * opts.jitterRatio;
       const delayMs = Math.max(0, Math.floor(exp * (1 + jitter)));
 
-      opts.onRetry?.(err, attempt, delayMs);
-      await sleep(delayMs);
+      const overrideDelayMs = opts.onRetry?.(err, attempt, delayMs);
+      const sleepDelayMs = typeof overrideDelayMs === "number"
+        ? Math.max(0, Math.floor(overrideDelayMs))
+        : delayMs;
+      await sleep(sleepDelayMs);
     }
   }
 

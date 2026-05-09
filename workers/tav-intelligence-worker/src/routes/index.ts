@@ -1,6 +1,7 @@
 import type { Env } from "../types/env";
 import { extractUserContext } from "../auth/userContext";
 import { errorResponse } from "../types/api";
+import { isConfiguredSecret } from "../../../../src/types/envValidation";
 
 import { handleHealth }            from "../handlers/health";
 import { handleMmrVin }            from "../handlers/mmrVin";
@@ -32,7 +33,7 @@ export async function dispatch(
   // CF Access JWTs are unavailable for direct worker-to-worker fetch calls.
   let userContext = extractUserContext(request);
   const serviceSecret = env.INTEL_SERVICE_SECRET;
-  if (serviceSecret && request.headers.get("x-tav-service-secret") === serviceSecret) {
+  if (isConfiguredSecret(serviceSecret) && request.headers.get("x-tav-service-secret") === serviceSecret) {
     userContext = { userId: "service@tav-internal", email: "service@tav-internal", name: "TAV Service", roles: [] };
   }
   const baseArgs: HandlerArgs = { request, env, requestId, userContext };

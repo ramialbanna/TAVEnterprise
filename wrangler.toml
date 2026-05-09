@@ -31,8 +31,8 @@ INTEL_WORKER_URL = ""
 name = "tav-aip-staging"
 [env.staging.vars]
 HYBRID_BUYBOX_ENABLED = "true"
-MANHEIM_LOOKUP_MODE = "direct"
-INTEL_WORKER_URL = ""
+MANHEIM_LOOKUP_MODE = "worker"
+INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.

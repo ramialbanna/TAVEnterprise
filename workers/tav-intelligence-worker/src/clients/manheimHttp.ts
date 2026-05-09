@@ -576,22 +576,20 @@ export class ManheimHttpClient implements ManheimClient {
           err instanceof RetryableHttpError || err instanceof NetworkError,
         onRetry: (err, attempt, nextDelayMs) => {
           // Honor Retry-After on 429: take whichever is larger.
-          if (err instanceof RetryableHttpError && pendingRetryAfterMs !== null) {
-            const honored = Math.max(nextDelayMs, pendingRetryAfterMs);
-            // We can't override the scheduled delay from here; emit a log so
-            // operators can see the requested floor. The retry helper's
-            // computed delay is a soft lower bound when backoff < Retry-After
-            // — in practice, with baseDelayMs=500 and ratios ≤2, the gap is
-            // never large enough to exceed Manheim's typical 1–5s asks.
+          const retryAfterMs = pendingRetryAfterMs;
+          pendingRetryAfterMs = null;
+          if (err instanceof RetryableHttpError && retryAfterMs !== null) {
+            const honored = Math.max(nextDelayMs, retryAfterMs);
             log("manheim.http.retry_after_observed", {
               requestId,
               attempt,
-              retry_after_ms: pendingRetryAfterMs,
+              retry_after_ms: retryAfterMs,
               scheduled_delay_ms: nextDelayMs,
               honored_delay_ms:   honored,
             });
+            return honored;
           }
-          pendingRetryAfterMs = null;
+          return undefined;
         },
       },
     ).catch((err) => {

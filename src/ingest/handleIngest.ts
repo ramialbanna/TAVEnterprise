@@ -33,6 +33,7 @@ import { getValuationLookupMode } from "../valuation/lookupMode";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../persistence/vehicleEnrichments";
+import { isConfiguredSecret } from "../types/envValidation";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import { sendExcellentLeadSummary } from "../alerts/alerts";
@@ -49,6 +50,11 @@ function json(body: unknown, status: number): Response {
 }
 
 export async function handleIngest(request: Request, env: Env, execCtx: ExecutionContext): Promise<Response> {
+  if (!isConfiguredSecret(env.WEBHOOK_HMAC_SECRET)) {
+    log("ingest.rejected", { reason: "hmac_secret_not_configured" });
+    return json({ ok: false, error: "ingest_auth_not_configured" }, 503);
+  }
+
   const declaredLength = Number(request.headers.get("content-length") ?? "0");
   if (declaredLength > MAX_BODY_BYTES) {
     log("ingest.rejected", { reason: "payload_too_large", declared_bytes: declaredLength });
@@ -396,4 +402,3 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
 
   return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: createdLeads }, 200);
 }
-

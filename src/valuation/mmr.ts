@@ -10,6 +10,7 @@
  */
 import type { Env } from "../types/env";
 import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } from "../types/domain";
+import { log } from "../logging/logger";
 
 export interface MmrResult {
   mmrValue: number;
@@ -131,7 +132,7 @@ async function getMmrByVin(
   });
 
   if (!res.ok) {
-    console.error(JSON.stringify({ event: "mmr.vin_http_error", status: res.status }));
+    log("mmr.vin_http_error", { status: res.status });
     return null;
   }
 
@@ -165,7 +166,7 @@ async function getMmrByYmm(
   });
 
   if (!res.ok) {
-    console.error(JSON.stringify({ event: "mmr.ymm_http_error", status: res.status }));
+    log("mmr.ymm_http_error", { status: res.status });
     return null;
   }
 
@@ -198,7 +199,7 @@ export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace):
       }
     } catch (err) {
       // VIN lookup failed — fall through to YMM
-      console.error(JSON.stringify({ event: "mmr.vin_failed", error: err instanceof Error ? err.message : String(err) }));
+      log("mmr.vin_failed", { error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -215,10 +216,10 @@ export async function getMmrValue(params: MmrParams, env: Env, kv: KVNamespace):
         return result;
       }
       // Token obtained but no extractable MMR value in response
-      console.error(JSON.stringify({ event: "mmr.ymm_no_value", year, make, model, mileage }));
+      log("mmr.ymm_no_value", { year, make, model, mileage });
     } catch (err) {
       // Log the real error so it surfaces in wrangler tail
-      console.error(JSON.stringify({ event: "mmr.ymm_failed", error: err instanceof Error ? err.message : String(err), year, make, model }));
+      log("mmr.ymm_failed", { error: err instanceof Error ? err.message : String(err), year, make, model });
     }
   }
 
