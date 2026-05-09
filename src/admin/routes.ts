@@ -13,7 +13,7 @@ import { upsertMarketExpense, getMarketExpensesByRegion } from "../persistence/m
 import { upsertMarketDemandIndex } from "../persistence/marketDemandIndex";
 import { withRetry } from "../persistence/retry";
 import { isConfiguredSecret } from "../types/envValidation";
-import { log } from "../logging/logger";
+import { log, serializeError } from "../logging/logger";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -48,7 +48,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       method: request.method,
       pathname,
       stage: "client_init",
-      error: err instanceof Error ? err.message : String(err),
+      error: serializeError(err),
     });
     return json({ ok: false, error: "db_error" }, 503);
   }
@@ -283,7 +283,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       method: request.method,
       pathname,
       stage: "route_handler",
-      error: err instanceof Error ? err.message : String(err),
+      error: serializeError(err),
     });
     return json({ ok: false, error: "db_error" }, 503);
   }
