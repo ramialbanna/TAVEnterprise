@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Env } from "../types/env";
 import type { MmrParams, MmrResult } from "./mmr";
 import { MmrResponseEnvelopeSchema } from "../types/intelligence";
@@ -6,6 +7,16 @@ import { getSupabaseClient } from "../persistence/supabase";
 import { loadMmrReferenceData } from "./loadMmrReferenceData";
 import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
+
+// tav-intelligence-worker wraps every successful response as
+//   { success: true, data: <MmrResponseEnvelope>, requestId, timestamp }
+// (see workers/tav-intelligence-worker/src/types/api.ts okResponse). The
+// inner envelope matches MmrResponseEnvelopeSchema. Parse the wrapper here
+// and drill into `data` so getMmrValueFromWorker sees the documented shape.
+const IntelOkEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data:    MmrResponseEnvelopeSchema,
+});
 
 const TIMEOUT_MS = 5_000;
 
@@ -153,10 +164,16 @@ export async function getMmrValueFromWorker(
     return null;
   }
 
-  const parsed = MmrResponseEnvelopeSchema.safeParse(data);
-  if (!parsed.success) return null;
+  const wrapped = IntelOkEnvelopeSchema.safeParse(data);
+  if (!wrapped.success) {
+    log("ingest.mmr_worker_envelope_invalid", {
+      endpoint,
+      issues: wrapped.error.issues.slice(0, 5),
+    });
+    return null;
+  }
 
-  const envelope = parsed.data;
+  const envelope = wrapped.data.data;
   if (!envelope.ok || envelope.mmr_value === null) return null;
 
   return {

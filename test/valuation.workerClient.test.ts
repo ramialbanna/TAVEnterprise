@@ -86,12 +86,34 @@ const ENVELOPE_NEGATIVE = {
   error_message: "upstream error",
 };
 
+// Wrap an MmrResponseEnvelope in the intel-worker okResponse shape:
+// { success: true, data: <envelope>, requestId, timestamp }.
+// Tests pass raw envelopes; mockFetch wraps them on 2xx so the wire shape
+// matches what tav-intelligence-worker actually returns.
+function wrapOkEnvelope(body: unknown) {
+  return {
+    success:   true,
+    data:      body,
+    requestId: "test-req",
+    timestamp: "2026-05-09T00:00:00.000Z",
+  };
+}
+
 function mockFetch(status: number, body: unknown) {
+  const isOk = status >= 200 && status < 300;
+  // Auto-wrap on 2xx; non-2xx bodies pass through (workerClient short-circuits
+  // before JSON parse on !res.ok), and unwrapped 200 bodies stay unwrapped to
+  // exercise the envelope-mismatch path.
+  const wireBody = isOk && isMmrEnvelopeShape(body) ? wrapOkEnvelope(body) : body;
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
+    ok:     isOk,
     status,
-    json: vi.fn().mockResolvedValue(body),
+    json:   vi.fn().mockResolvedValue(wireBody),
   }));
+}
+
+function isMmrEnvelopeShape(b: unknown): boolean {
+  return typeof b === "object" && b !== null && "ok" in (b as Record<string, unknown>) && "mmr_value" in (b as Record<string, unknown>);
 }
 
 beforeEach(() => {
@@ -414,5 +436,34 @@ describe("getMmrValueFromWorker — error cases", () => {
     mockFetch(200, { not: "an envelope" });
     const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
     expect(result).toBeNull();
+  });
+
+  it("rejects a raw (un-wrapped) MMR envelope — must be wrapped in intel okResponse shape", async () => {
+    // Regression for envelope contract drift between intel okResponse and main client.
+    // Pass the raw envelope as the wire body without auto-wrapping; assert main returns null.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(ENVELOPE_VIN),  // <-- not wrapped in {success, data}
+    }));
+    const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(result).toBeNull();
+  });
+
+  it("accepts the intel okResponse envelope shape and unwraps `data`", async () => {
+    // Explicit positive case for the wrapped shape — pinned to the actual intel
+    // okResponse contract, not just the auto-wrap helper used by other tests.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        success:   true,
+        data:      ENVELOPE_VIN,
+        requestId: "intel-req-1",
+        timestamp: "2026-05-09T00:00:00.000Z",
+      }),
+    }));
+    const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(result).toMatchObject({ mmrValue: 18_500, confidence: "high", method: "vin" });
   });
 });
