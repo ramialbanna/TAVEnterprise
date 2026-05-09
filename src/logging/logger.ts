@@ -22,12 +22,15 @@ export function serializeError(err: unknown): Record<string, unknown> {
   if (err instanceof Error) {
     const e = err as Error & Record<string, unknown>;
     const out: Record<string, unknown> = { name: e.name, message: e.message };
-    if (e["stack"]   !== undefined) out["stack"]   = e["stack"];
-    if (e["code"]    !== undefined) out["code"]    = e["code"];
-    if (e["details"] !== undefined) out["details"] = e["details"];
-    if (e["hint"]    !== undefined) out["hint"]    = e["hint"];
-    if (e["status"]  !== undefined) out["status"]  = e["status"];
-    if (e["cause"]   !== undefined) out["cause"]   = serializeError(e["cause"]);
+    if (e["stack"]     !== undefined) out["stack"]     = e["stack"];
+    if (e["code"]      !== undefined) out["code"]      = e["code"];
+    if (e["details"]   !== undefined) out["details"]   = e["details"];
+    if (e["hint"]      !== undefined) out["hint"]      = e["hint"];
+    if (e["status"]    !== undefined) out["status"]    = e["status"];
+    if (e["cause"]     !== undefined) out["cause"]     = serializeError(e["cause"]);
+    if (e["attempts"]  !== undefined) out["attempts"]  = e["attempts"];
+    // RetryExhaustedError carries the underlying PostgREST/Supabase error here.
+    if (e["lastError"] !== undefined) out["lastError"] = serializeError(e["lastError"]);
     return out;
   }
   if (err !== null && typeof err === "object") {

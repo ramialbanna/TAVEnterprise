@@ -156,9 +156,14 @@ CREATE TABLE tav.valuation_snapshots (
   make                  text,
   model                 text,
   trim                  text,
-  mileage_bucket_floor  integer,
+  mileage               integer,
   region                text,
   mmr_value             integer     CHECK (mmr_value >= 0),
+  mmr_wholesale_avg     numeric(10,2),
+  mmr_wholesale_clean   numeric(10,2),
+  mmr_wholesale_rough   numeric(10,2),
+  mmr_retail_clean      numeric(10,2),
+  mmr_sample_count      integer,
   confidence            text        NOT NULL
     CHECK (confidence IN ('high','medium','low','none')),
   valuation_method      text        NOT NULL
