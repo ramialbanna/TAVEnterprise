@@ -39,7 +39,21 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
   const url = new URL(request.url);
   const pathname = url.pathname;
-  const db = getSupabaseClient(env);
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("admin.error", {
+      method: request.method,
+      pathname,
+      stage: "client_init",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
 
   // POST /admin/import-outcomes
   if (request.method === "POST" && pathname === "/admin/import-outcomes") {
@@ -264,4 +278,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
 
   return json({ ok: false, error: "not_found" }, 404);
+  } catch (err) {
+    log("admin.error", {
+      method: request.method,
+      pathname,
+      stage: "route_handler",
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
 }

@@ -298,6 +298,21 @@ describe("POST /ingest", () => {
     expect(body.error).toBe("admin_auth_not_configured");
   });
 
+  it("returns JSON 503 (not a thrown 1101) when listImportBatches errors", async () => {
+    const ADMIN = "admin-test-secret";
+    const adminEnv = { ...env, ADMIN_API_SECRET: ADMIN } as Env;
+    const req = new Request("http://localhost/admin/import-batches", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${ADMIN}` },
+    });
+    const res = await worker.fetch(req, adminEnv, ctx);
+
+    expect(res.status).toBe(503);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("db_error");
+  });
+
   it("existing GET /health still returns 200", async () => {
     const res = await worker.fetch(new Request("http://localhost/health"), env, ctx);
     expect(res.status).toBe(200);
