@@ -7,6 +7,7 @@ import { getSupabaseClient } from "../persistence/supabase";
 import { loadMmrReferenceData } from "./loadMmrReferenceData";
 import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
+import { isConfiguredSecret } from "../types/envValidation";
 
 // tav-intelligence-worker wraps every successful response as
 //   { success: true, data: <MmrResponseEnvelope>, requestId, timestamp }
@@ -131,7 +132,19 @@ export async function getMmrValueFromWorker(
     return null;
   }
 
-  log("ingest.mmr_worker_called", { endpoint, method, vin_present: !!vin });
+  // Diagnostic-grade per-call log. body_keys lists fields without their values
+  // (vin/year/mileage are not secret, but listing the schema-shape is enough
+  // to compare against intel's expected request shape). service_secret_header
+  // is a presence boolean — never the value.
+  const serviceSecretConfigured = isConfiguredSecret(env.INTEL_WORKER_SECRET);
+  log("ingest.mmr_worker_called", {
+    endpoint,
+    http_method: "POST",
+    method,
+    vin_present:                   !!vin,
+    body_keys:                     Object.keys(body).sort(),
+    service_secret_header_present: serviceSecretConfigured,
+  });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -155,7 +168,27 @@ export async function getMmrValueFromWorker(
   }
 
   if (res.status === 429) throw new WorkerRateLimitError();
-  if (!res.ok) throw new WorkerUnavailableError(res.status);
+
+  if (!res.ok) {
+    // Read response body so the failure log captures intel's error envelope.
+    // Capped at 500 chars to keep log lines bounded; truncation is explicit.
+    let responseText = "";
+    try {
+      responseText = await res.text();
+      if (responseText.length > 500) responseText = responseText.slice(0, 500) + "...[truncated]";
+    } catch { /* body unreadable, log empty string */ }
+
+    log("ingest.mmr_worker_http_error", {
+      endpoint,
+      http_method:                   "POST",
+      status:                        res.status,
+      body_keys:                     Object.keys(body).sort(),
+      service_secret_header_present: serviceSecretConfigured,
+      response_text:                 responseText,
+    });
+
+    throw new WorkerUnavailableError(res.status);
+  }
 
   let data: unknown;
   try {
