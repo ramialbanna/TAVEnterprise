@@ -1,7 +1,7 @@
 # `/app/*` frontend API — deploy + smoke, 2026-05-11
 
 Bring-up of the `/app/*` product API layer (ADR 0002) on the main `tav-aip` Worker,
-in three deploy rounds the same day. Bearer `APP_API_SECRET` (rotated more than once
+in four deploy rounds the same day. Bearer `APP_API_SECRET` (rotated more than once
 during the session — once after an accidental exposure, again before Round 3;
 re-provisioned on both envs each time).
 
@@ -9,9 +9,11 @@ re-provisioned on both envs each time).
 - **Round 2** — `GET /app/import-batches`, `GET /app/historical-sales`, `POST /app/mmr/vin`.
 - **Round 3** — `GET /app/kpis` enriched with the global outcome rollup
   (`tav.v_outcome_summary_global`, migration 0041). No new endpoint, response shape change only.
+- **Round 4** — `GET /app/system-status` `staleSweep` backed by `tav.cron_runs` (migration 0042);
+  the daily `scheduled()` handler now records each stale-sweep run. Response shape change only.
 
 With Round 2, all five ADR-0002 `/app/*` endpoints were implemented and live on staging
-and production. Round 3 widened `/app/kpis` `outcomes.value`.
+and production. Rounds 3 & 4 widened `/app/kpis` and `/app/system-status` response bodies.
 
 ---
 
@@ -159,6 +161,58 @@ Both deploys confirmed bindings: `INTEL_WORKER` → `tav-intelligence-worker-<en
 
 ---
 
+# Round 4 — `/app/system-status` stale-sweep persistence (`cron_runs`)
+
+## Code
+
+- Commit: `1fbf7cb` feat: persist stale-sweep cron runs (migration `0042_cron_runs.sql` + `supabase/schema.sql` + new `src/persistence/cronRuns.ts` + `src/index.ts` `scheduled()` + `src/app/routes.ts` `handleSystemStatus` + tests `test/cronRuns.test.ts`, `test/scheduled.test.ts`, `test/app.routes.test.ts` + ADR 0002 + `docs/APP_API.md`).
+- `scheduled()` (daily `0 6 * * *`) now wraps `runStaleSweep` and records a `tav.cron_runs` row via `recordCronRunSafe` — `status:"ok"` + `detail:{updated}` on success; `status:"failed"` + `detail:{error}` then rethrow on failure. The audit write is best-effort (a failed insert is logged and swallowed — it never fails the cron). `handleSystemStatus` reads the latest `stale_sweep` row → `staleSweep` = `{ lastRunAt: finished_at ?? started_at, status, updated }`, or `{ lastRunAt:null, missingReason:"never_run" }` (no row), or `{ lastRunAt:null, missingReason:"db_error" }` (lookup/client failure) — independent of the `v_source_health` block.
+- Verification before deploy: `npm run typecheck` clean; `npx vitest run test/app.routes.test.ts test/cronRuns.test.ts test/scheduled.test.ts` 55/55; `npm test` 741/741 (52 files); `npm run test:int` 0 tests (Supabase int suite opt-in/env-gated; ran because `supabase/migrations/` touched). `npm run lint` exits 1 — pre-existing only (4 legacy root `.js` scripts, 97 errors; + 1 pre-existing warning at `test/app.routes.test.ts:55`). New files lint-clean.
+
+## Migration
+
+`supabase/migrations/0042_cron_runs.sql` applied manually in the Supabase SQL Editor
+against the linked project **TAV-AIP** (`fjnevgakkhnsrcimfivw`). Verified: `tav.cron_runs`
+exists with columns `id, job_name, started_at, finished_at, status, detail`; RLS enabled
+(no policies — the Worker uses the service_role key, which bypasses RLS); `select * from
+tav.cron_runs` → 0 rows.
+
+## Deploys
+
+| Env | Worker | Version ID | Command |
+|-----|--------|-----------|---------|
+| staging | `tav-aip-staging` | `157b83ee-7379-4b9f-b8fe-6d934b5baed4` | `npx wrangler deploy --config wrangler.toml --env staging` |
+| production | `tav-aip-production` | `4d73da7c-45ca-4e4e-a6ed-e0b1c73d2556` | `npx wrangler deploy --config wrangler.toml --env production` |
+
+Both deploys confirmed bindings: `INTEL_WORKER` → `tav-intelligence-worker-<env>`,
+`MANHEIM_LOOKUP_MODE="worker"`, `TAV_KV`, `INTEL_WORKER_URL` set, `HYBRID_BUYBOX_ENABLED="true"`.
+
+## Smoke — staging (`tav-aip-staging.rami-1a9.workers.dev`)
+
+| Check | Result |
+|-------|--------|
+| `GET /app/system-status` + Bearer | HTTP 200, `ok:true`, `db.ok:true`, `intelWorker.mode:"worker"`, `staleSweep` = `{ lastRunAt: null, missingReason: "never_run" }` |
+| `GET /app/system-status` no Bearer | HTTP 401 |
+| `GET /app/kpis` + Bearer (regression) | HTTP 200, `outcomes.value.totalOutcomes:12904`, field-set OK |
+
+**PASS** — all three.
+
+## Smoke — production (`tav-aip-production.rami-1a9.workers.dev`)
+
+| Check | Result |
+|-------|--------|
+| `GET /app/system-status` + Bearer | HTTP 200, `ok:true`, `db.ok:true`, `intelWorker.mode:"worker"`, `binding:true`, prod intel URL present, `staleSweep` = `{ lastRunAt: null, missingReason: "never_run" }` |
+| `GET /app/system-status` no Bearer | HTTP 401 |
+| `GET /app/kpis` + Bearer (regression) | HTTP 200, `outcomes.value.totalOutcomes:12904`, field-set OK |
+
+**PASS** — all three.
+
+Note: `staleSweep.lastRunAt` stays `null` / `missingReason:"never_run"` until the next
+06:00 UTC cron writes the first `tav.cron_runs` row — a one-time post-cron spot-check is
+logged in `docs/followups.md`.
+
+---
+
 ## Caveat
 
 `tav-intelligence-worker-production` remains sandbox-backed (Cox sandbox MMR) per
@@ -171,11 +225,13 @@ not the upstream MMR source. No new exposure of sandbox data via `/app/*`.
 - `APP_API_SECRET` is provisioned on staging + production.
 - All five ADR-0002 `/app/*` endpoints are implemented and live on both envs.
 - `docs/APP_API.md` contract doc — written (commit `28ef93a`).
-- Global outcome-rollup view `tav.v_outcome_summary_global` — shipped (Round 3, commit `9da9f00`; migration 0041 applied to the linked DB).
+- Global outcome-rollup view `tav.v_outcome_summary_global` — shipped (Round 3, commit `9da9f00`; migration 0041 applied).
+- Stale-sweep cron persistence `tav.cron_runs` — shipped (Round 4, commit `1fbf7cb`; migration 0042 applied).
+- Stale `.dev.vars.example` / `wrangler.toml` `MANHEIM_LOOKUP_MODE` comments — fixed (commit `731ea18`).
 - Still open (`docs/followups.md`): `sell_through_rate` is tautologically `1.0` while
-  `purchase_outcomes` holds only completed sales; persist stale-sweep run time (so
-  `/app/system-status` `staleSweep.lastRunAt` is non-null); fix the stale
-  `.dev.vars.example` `MANHEIM_LOOKUP_MODE` comment; legacy root-`.js` lint debt.
+  `purchase_outcomes` holds only completed sales (metric-semantics decision); one-time
+  post-cron spot-check that `tav.cron_runs` gets a `stale_sweep` row at the next 06:00 UTC
+  and `/app/system-status` `staleSweep.lastRunAt` goes non-null; legacy root-`.js` lint debt.
 
 Related: `docs/adr/0002-frontend-app-api-layer.md`, `docs/session-handoff-2026-05-09.md`,
 `docs/staging-smoke-2026-05-09.md`.

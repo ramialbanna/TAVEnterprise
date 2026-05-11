@@ -231,7 +231,12 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       `GET /app/system-status` `staleSweep` now `{ lastRunAt, status, updated }` from the latest `stale_sweep`
       row, or `{ lastRunAt:null, missingReason:"never_run"|"db_error" }`. Tests: `test/cronRuns.test.ts` (helper),
       `test/scheduled.test.ts` (write path), `test/app.routes.test.ts` (system-status read path). schema.sql + ADR
-      0002 + `docs/APP_API.md` updated. Worker deploy blocked on applying migration 0042 to the DB first.
+      0002 + `docs/APP_API.md` updated. Migration 0042 applied to the linked DB; deployed to `tav-aip-staging`
+      (Version `157b83ee`) + `tav-aip-production` (Version `4d73da7c`); smoke PASS both envs (`staleSweep` =
+      `{lastRunAt:null,missingReason:"never_run"}` pre-cron). See `docs/app-api-smoke-2026-05-11.md` "Round 4".
+- [ ] 2026-05-12 spot-check — after the first 06:00 UTC `scheduled()` run post-deploy, confirm `tav.cron_runs` has a
+      `job_name='stale_sweep'` row (`status`, `detail.updated`) and `GET /app/system-status` `staleSweep.lastRunAt`
+      is a real timestamp (not `null` / `missingReason:"never_run"`). One-time check; close once verified.
 - [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,
       envelope/conventions, all 5 endpoints, response shapes, worker config, frontend integration notes; ADR 0002
       "Consequences" updated to point at it as source of truth.
