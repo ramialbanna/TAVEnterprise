@@ -11,21 +11,37 @@
  *     in the body rather than failing the request.
  *   - This module never touches /ingest, /admin, or /health behaviour.
  *
- * Implemented here: GET /app/system-status, GET /app/kpis.
- * Planned (see docs/adr/0002-frontend-app-api-layer.md): GET /app/import-batches,
- * GET /app/historical-sales, POST /app/mmr/vin.
+ * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches.
+ * Planned (see docs/adr/0002-frontend-app-api-layer.md): GET /app/historical-sales,
+ * POST /app/mmr/vin.
  */
 import type { Env } from "../types/env";
 import { getSupabaseClient } from "../persistence/supabase";
+import { listImportBatches } from "../persistence/importBatches";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
+
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 100;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Parse a `?limit` query param: default 20, clamp to 100. Anything that is not
+ * a positive integer (missing, empty, zero, negative, fractional, non-numeric)
+ * falls back to the default.
+ */
+function parseLimitParam(raw: string | null): number {
+  if (raw === null) return DEFAULT_LIST_LIMIT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_LIST_LIMIT;
+  return Math.min(n, MAX_LIST_LIMIT);
 }
 
 function verifyAppAuth(request: Request, env: Env): boolean {
@@ -51,6 +67,9 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === "GET" && pathname === "/app/kpis") {
       return await handleKpis(env);
+    }
+    if (request.method === "GET" && pathname === "/app/import-batches") {
+      return await handleImportBatches(env, url);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -174,4 +193,32 @@ async function handleKpis(env: Env): Promise<Response> {
       listings,
     },
   });
+}
+
+/**
+ * GET /app/import-batches?limit=N — recent outcome-import batches, newest first.
+ *
+ * Thin read wrapper over persistence/importBatches.listImportBatches. `limit`
+ * defaults to 20 and is clamped to 100; an invalid limit falls back to 20.
+ * Returns 503 `db_error` if the Supabase client cannot be constructed or the
+ * query fails.
+ */
+async function handleImportBatches(env: Env, url: URL): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.import_batches.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  const limit = parseLimitParam(url.searchParams.get("limit"));
+
+  try {
+    const data = await listImportBatches(db, limit);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.import_batches.query_failed", { limit, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
 }

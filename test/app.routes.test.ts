@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types/env";
+import { listImportBatches } from "../src/persistence/importBatches";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -27,6 +28,12 @@ vi.mock("../src/persistence/supabase", () => ({
       }),
     };
   }),
+}));
+
+// persistence/importBatches.listImportBatches is mocked so /app/import-batches
+// tests can control its return value / force a query failure without a real DB.
+vi.mock("../src/persistence/importBatches", () => ({
+  listImportBatches: vi.fn(),
 }));
 
 const ctx = {
@@ -57,6 +64,8 @@ beforeEach(() => {
   dbState.throwOnInit = false;
   dbState.tables = {};
   vi.clearAllMocks();
+  vi.mocked(listImportBatches).mockReset();
+  vi.mocked(listImportBatches).mockResolvedValue([]);
 });
 
 describe("/app/* auth", () => {
@@ -211,5 +220,74 @@ describe("GET /app/kpis", () => {
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.ok).toBe(false);
     expect(body.error).toBe("db_error");
+  });
+});
+
+describe("GET /app/import-batches", () => {
+  it("requires a Bearer token", async () => {
+    const res = await worker.fetch(
+      new Request("http://localhost/app/import-batches"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(listImportBatches)).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 with the batch list and the default limit of 20", async () => {
+    vi.mocked(listImportBatches).mockResolvedValue([
+      { id: "b1" },
+      { id: "b2" },
+    ] as unknown as Awaited<ReturnType<typeof listImportBatches>>);
+
+    const res = await worker.fetch(authedReq("/app/import-batches"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Array<{ id: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual([{ id: "b1" }, { id: "b2" }]);
+    expect(vi.mocked(listImportBatches)).toHaveBeenCalledWith(expect.anything(), 20);
+  });
+
+  it("passes ?limit=5 through", async () => {
+    const res = await worker.fetch(authedReq("/app/import-batches?limit=5"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(listImportBatches)).toHaveBeenCalledWith(expect.anything(), 5);
+  });
+
+  it("clamps ?limit=500 to 100", async () => {
+    const res = await worker.fetch(authedReq("/app/import-batches?limit=500"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(listImportBatches)).toHaveBeenCalledWith(expect.anything(), 100);
+  });
+
+  it("falls back to 20 for invalid / zero / negative / fractional limits", async () => {
+    for (const bad of ["abc", "0", "-3", "2.5", ""]) {
+      vi.mocked(listImportBatches).mockClear();
+      const res = await worker.fetch(
+        authedReq(`/app/import-batches?limit=${encodeURIComponent(bad)}`),
+        makeEnv(),
+        ctx,
+      );
+      expect(res.status).toBe(200);
+      expect(vi.mocked(listImportBatches)).toHaveBeenCalledWith(expect.anything(), 20);
+    }
+  });
+
+  it("returns 503 db_error when listImportBatches throws", async () => {
+    vi.mocked(listImportBatches).mockRejectedValue(new Error("query failed"));
+    const res = await worker.fetch(authedReq("/app/import-batches"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("db_error");
+  });
+
+  it("returns 503 db_error when the Supabase client cannot be constructed", async () => {
+    dbState.throwOnInit = true;
+    const res = await worker.fetch(authedReq("/app/import-batches"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("db_error");
+    expect(vi.mocked(listImportBatches)).not.toHaveBeenCalled();
   });
 });

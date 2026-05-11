@@ -79,11 +79,18 @@ Always `200`. `staleSweep.lastRunAt` is `null` until cron-run times are persiste
 `503 {"error":"db_error"}` only if the Supabase client cannot be constructed;
 individual blocks degrade independently.
 
-### `GET /app/import-batches` — planned
+### `GET /app/import-batches` — implemented (2026-05-11)
 
-`?limit` (default 20, clamped ≤ 100). Thin wrapper over
-`persistence/importBatches.listImportBatches`. `{ ok, data: ImportBatch[] }`.
-Equivalent to `GET /admin/import-batches` but under `/app/*` auth.
+Thin read wrapper over `persistence/importBatches.listImportBatches` (recent
+outcome-import batches, newest first). Equivalent data to `GET /admin/import-batches`
+but under `/app/*` auth.
+
+- `?limit` — default `20`, clamped to `100`. Any value that is not a positive
+  integer (missing, empty, `0`, negative, fractional, non-numeric) falls back to
+  `20`.
+- Success → `200 { "ok": true, "data": ImportBatch[] }`.
+- Supabase client cannot be constructed → `503 { "ok": false, "error": "db_error" }`.
+- `listImportBatches` / underlying query throws → `503 { "ok": false, "error": "db_error" }`.
 
 ### `GET /app/historical-sales` — planned
 
