@@ -180,3 +180,22 @@ Do NOT modify wrangler.toml IDs until the namespace is provisioned.
       "Production cutover" section for narrative.
 - [ ] 2026-05-09 docs/manheim-uat-validation-plan.md — when Cox enables true prod MMR, append a prod-mode UAT
       mirroring §3 with prod-real VINs (not sandbox `1FT8W3BT1SEC27066`).
+
+- [ ] 2026-05-11 wrangler/secrets — provision `APP_API_SECRET` (Bearer for `/app/*` frontend API) on
+      `tav-aip-staging` and `tav-aip-production` via `wrangler secret put APP_API_SECRET` before the frontend
+      integrates. Unset ⇒ all `/app/*` calls return 503 `app_auth_not_configured`. See ADR 0002.
+- [ ] 2026-05-11 src/app/routes — implement remaining `/app/*` endpoints from ADR 0002: `GET /app/import-batches`
+      (wraps `listImportBatches`), `GET /app/historical-sales` (new `persistence/historicalSales.ts` over
+      `tav.historical_sales`), `POST /app/mmr/vin` (reuses `getMmrValueFromWorker`, non-blocking).
+- [ ] 2026-05-11 supabase — add a global outcome-rollup view (e.g. `v_outcome_summary_global` with
+      `COUNT(gross_profit)` so weighted averages are correct) so `GET /app/kpis` `outcomes.value` can expose true
+      cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.
+- [ ] 2026-05-11 src — persist stale-sweep cron run times (audit row on each `runStaleSweep`) so
+      `GET /app/system-status` `staleSweep.lastRunAt` stops returning `null` / `missingReason:"not_persisted"`.
+- [ ] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*` (currently the contract lives only
+      in ADR 0002).
+- [ ] 2026-05-11 .dev.vars.example — line ~48 comment still says `MANHEIM_LOOKUP_MODE` "worker (not yet implemented)";
+      worker mode is implemented and live in production. Update the comment.
+- [ ] 2026-05-11 lint — `npm run lint` exits 1 on 4 legacy root scripts (`test-mmr.js`, `backfill-mmr.js`,
+      `normalizer-worker.js`, `enrichment-worker.js`): ~97 errors (`no-undef`, `no-console`). Decide: gitignore /
+      delete the throwaway scripts, or add an eslint override. Pre-existing; unrelated to ADR 0002 work.
