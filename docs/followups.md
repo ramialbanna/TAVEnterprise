@@ -206,10 +206,11 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       `intel_worker_not_configured` / `no_mmr_value` / `intel_worker_timeout` / `intel_worker_rate_limited` /
       `intel_worker_unavailable` → `200 {ok:true,data:{mmrValue:null,missingReason}}`; bad body → 400; unexpected
       error → 503 `internal_error`). DONE 2026-05-11 — ADR 0002 marked implemented; tests in `test/app.routes.test.ts`.
-- [ ] 2026-05-11 deploy — all 5 `/app/*` endpoints implemented; `system-status` + `kpis` are live, but
-      `/app/import-batches`, `/app/historical-sales`, `/app/mmr/vin` are committed-not-deployed. Deploy `tav-aip-staging`
-      then `tav-aip-production` (`npx wrangler deploy --config wrangler.toml --env <env>`), smoke all three under Bearer
-      `APP_API_SECRET`, and record results (extend `docs/app-api-smoke-2026-05-11.md` or a new dated doc).
+- [x] 2026-05-11 deploy — all 5 `/app/*` endpoints implemented AND deployed. Round 2 (`import-batches`,
+      `historical-sales`, `mmr/vin`) deployed to `tav-aip-staging` (Version `f3c3c3d8`) then `tav-aip-production`
+      (Version `127f532a`); 6-check smoke PASS on both envs (incl. `POST /app/mmr/vin` `1FT8W3BT1SEC27066` →
+      `mmrValue:68600 confidence:high method:vin` on sandbox Cox). Recorded in `docs/app-api-smoke-2026-05-11.md`
+      "Round 2".
 - [ ] 2026-05-11 supabase — add a global outcome-rollup view (e.g. `v_outcome_summary_global` with
       `COUNT(gross_profit)` so weighted averages are correct) so `GET /app/kpis` `outcomes.value` can expose true
       cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.
