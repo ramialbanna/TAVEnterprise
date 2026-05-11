@@ -216,8 +216,9 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.
 - [ ] 2026-05-11 src — persist stale-sweep cron run times (audit row on each `runStaleSweep`) so
       `GET /app/system-status` `staleSweep.lastRunAt` stops returning `null` / `missingReason:"not_persisted"`.
-- [ ] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*` (currently the contract lives only
-      in ADR 0002).
+- [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,
+      envelope/conventions, all 5 endpoints, response shapes, worker config, frontend integration notes; ADR 0002
+      "Consequences" updated to point at it as source of truth.
 - [ ] 2026-05-11 .dev.vars.example — line ~48 comment still says `MANHEIM_LOOKUP_MODE` "worker (not yet implemented)";
       worker mode is implemented and live in production. Update the comment.
 - [ ] 2026-05-11 lint — `npm run lint` exits 1 on 4 legacy root scripts (`test-mmr.js`, `backfill-mmr.js`,

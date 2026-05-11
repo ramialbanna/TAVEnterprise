@@ -144,7 +144,7 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 - New Cloudflare secret `APP_API_SECRET` must be provisioned on `tav-aip-staging`
   and `tav-aip-production` (`wrangler secret put APP_API_SECRET`) before the
   frontend integrates. Unset ⇒ all `/app/*` calls `503`.
-- The contract above is the source of truth for the frontend until a dedicated
-  `docs/APP_API.md` is written (followup).
+- `docs/APP_API.md` is the source-of-truth contract for the frontend; this ADR
+  records the *decision and rationale*. Keep the two in sync when a route changes.
 - A future per-user authZ requirement would migrate `/app/*` to Cloudflare Access
   + `extractUserContext`; the route shapes above are designed to survive that.
