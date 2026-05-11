@@ -201,9 +201,15 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       `since` → `sale_date >=`; ordered `sale_date DESC`; 503 `db_error` on client-init or query failure).
       DONE 2026-05-11 — ADR 0002 §"Endpoint contracts" marked implemented; tests in `test/app.routes.test.ts`.
       Not yet deployed (batched with import-batches, awaiting deploy confirmation).
-- [ ] 2026-05-11 src/app/routes — `POST /app/mmr/vin` — last remaining `/app/*` endpoint from ADR 0002.
-      Zod body `{vin, year?, mileage?}`; reuses `getMmrValueFromWorker` (Service-Binding transport); non-blocking —
-      worker error / unconfigured intel worker → `200 { ok:true, data:{ mmrValue:null, missingReason } }`; bad body → 400.
+- [x] 2026-05-11 src/app/routes — `POST /app/mmr/vin` (Zod body `{vin, year?, mileage?}` — narrower than the intel
+      layer's `MmrVinLookupRequestSchema`; reuses `getMmrValueFromWorker`, Service-Binding transport; non-blocking —
+      `intel_worker_not_configured` / `no_mmr_value` / `intel_worker_timeout` / `intel_worker_rate_limited` /
+      `intel_worker_unavailable` → `200 {ok:true,data:{mmrValue:null,missingReason}}`; bad body → 400; unexpected
+      error → 503 `internal_error`). DONE 2026-05-11 — ADR 0002 marked implemented; tests in `test/app.routes.test.ts`.
+- [ ] 2026-05-11 deploy — all 5 `/app/*` endpoints implemented; `system-status` + `kpis` are live, but
+      `/app/import-batches`, `/app/historical-sales`, `/app/mmr/vin` are committed-not-deployed. Deploy `tav-aip-staging`
+      then `tav-aip-production` (`npx wrangler deploy --config wrangler.toml --env <env>`), smoke all three under Bearer
+      `APP_API_SECRET`, and record results (extend `docs/app-api-smoke-2026-05-11.md` or a new dated doc).
 - [ ] 2026-05-11 supabase — add a global outcome-rollup view (e.g. `v_outcome_summary_global` with
       `COUNT(gross_profit)` so weighted averages are correct) so `GET /app/kpis` `outcomes.value` can expose true
       cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.

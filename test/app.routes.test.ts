@@ -3,6 +3,12 @@ import worker from "../src/index";
 import type { Env } from "../src/types/env";
 import { listImportBatches } from "../src/persistence/importBatches";
 import { listHistoricalSales } from "../src/persistence/historicalSales";
+import {
+  getMmrValueFromWorker,
+  WorkerTimeoutError,
+  WorkerRateLimitError,
+  WorkerUnavailableError,
+} from "../src/valuation/workerClient";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -42,6 +48,14 @@ vi.mock("../src/persistence/historicalSales", () => ({
   listHistoricalSales: vi.fn(),
 }));
 
+// valuation/workerClient: only getMmrValueFromWorker is replaced; the Worker*Error
+// classes stay real so `instanceof` checks in handleMmrVin work and tests can
+// construct them.
+vi.mock("../src/valuation/workerClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/valuation/workerClient")>();
+  return { ...actual, getMmrValueFromWorker: vi.fn() };
+});
+
 const ctx = {
   waitUntil: (_p: Promise<unknown>) => {},
   passThroughOnException: () => {},
@@ -66,6 +80,14 @@ function authedReq(path: string, init: RequestInit = {}): Request {
   });
 }
 
+function authedPost(path: string, body: unknown): Request {
+  return authedReq(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
 beforeEach(() => {
   dbState.throwOnInit = false;
   dbState.tables = {};
@@ -74,6 +96,8 @@ beforeEach(() => {
   vi.mocked(listImportBatches).mockResolvedValue([]);
   vi.mocked(listHistoricalSales).mockReset();
   vi.mocked(listHistoricalSales).mockResolvedValue([]);
+  vi.mocked(getMmrValueFromWorker).mockReset();
+  vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
 });
 
 describe("/app/* auth", () => {
@@ -382,5 +406,142 @@ describe("GET /app/historical-sales", () => {
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("db_error");
     expect(vi.mocked(listHistoricalSales)).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /app/mmr/vin", () => {
+  const VIN = "1HGCM82633A004352"; // 17 chars
+
+  type MmrResultLike = Awaited<ReturnType<typeof getMmrValueFromWorker>>;
+  const mmrResult = (over: Partial<NonNullable<MmrResultLike>> = {}) =>
+    ({ mmrValue: 18500, confidence: "high", method: "vin", rawResponse: {}, ...over }) as MmrResultLike;
+
+  it("requires a Bearer token", async () => {
+    const res = await worker.fetch(
+      new Request("http://localhost/app/mmr/vin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vin: VIN }),
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 invalid_json for a non-JSON body", async () => {
+    const res = await worker.fetch(authedPost("/app/mmr/vin", "{not json"), makeEnv(), ctx);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_json");
+    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 invalid_body when vin is missing", async () => {
+    const res = await worker.fetch(authedPost("/app/mmr/vin", {}), makeEnv(), ctx);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_body");
+    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 invalid_body when vin is too short", async () => {
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: "abc" }), makeEnv(), ctx);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_body");
+  });
+
+  it("returns 200 with the valuation when the worker resolves a value", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult());
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { mmrValue: number | null; confidence: string | null; method: string | null };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual({ mmrValue: 18500, confidence: "high", method: "vin" });
+    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledWith({ vin: VIN }, expect.anything());
+  });
+
+  it("forwards optional year and mileage to the worker", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult());
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", { vin: VIN, year: 2020, mileage: 45000 }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledWith(
+      { vin: VIN, year: 2020, mileage: 45000 },
+      expect.anything(),
+    );
+  });
+
+  it("reports method:null when the worker result has no method", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult({ method: undefined }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    const body = (await res.json()) as { data: { method: string | null } };
+    expect(body.data.method).toBeNull();
+  });
+
+  it("returns 200 mmrValue:null + missingReason when the worker returns no value", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { mmrValue: number | null; missingReason: string };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual({ mmrValue: null, missingReason: "no_mmr_value" });
+  });
+
+  it("returns 200 mmrValue:null + intel_worker_not_configured when INTEL_WORKER_URL is empty", async () => {
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", { vin: VIN }),
+      makeEnv({ INTEL_WORKER_URL: "" }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { mmrValue: null; missingReason: string } };
+    expect(body.data).toEqual({ mmrValue: null, missingReason: "intel_worker_not_configured" });
+    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+
+  it("maps WorkerTimeoutError to a non-blocking 200 with missingReason", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerTimeoutError());
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { mmrValue: null; missingReason: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual({ mmrValue: null, missingReason: "intel_worker_timeout" });
+  });
+
+  it("maps WorkerRateLimitError to missingReason intel_worker_rate_limited", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerRateLimitError());
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { missingReason: string } };
+    expect(body.data.missingReason).toBe("intel_worker_rate_limited");
+  });
+
+  it("maps WorkerUnavailableError to missingReason intel_worker_unavailable", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerUnavailableError(503));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { missingReason: string } };
+    expect(body.data.missingReason).toBe("intel_worker_unavailable");
+  });
+
+  it("lets an unexpected worker error fall through to 503 internal_error", async () => {
+    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new Error("kaboom"));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("internal_error");
   });
 });

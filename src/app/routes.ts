@@ -12,20 +12,38 @@
  *   - This module never touches /ingest, /admin, or /health behaviour.
  *
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
- * GET /app/historical-sales.
- * Planned (see docs/adr/0002-frontend-app-api-layer.md): POST /app/mmr/vin.
+ * GET /app/historical-sales, POST /app/mmr/vin.
+ * (See docs/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
+import { z } from "zod";
 import type { Env } from "../types/env";
 import { getSupabaseClient } from "../persistence/supabase";
 import { listImportBatches } from "../persistence/importBatches";
 import { listHistoricalSales } from "../persistence/historicalSales";
 import type { HistoricalSalesFilter } from "../persistence/historicalSales";
+import {
+  getMmrValueFromWorker,
+  WorkerTimeoutError,
+  WorkerRateLimitError,
+  WorkerUnavailableError,
+} from "../valuation/workerClient";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+
+/**
+ * Body schema for POST /app/mmr/vin. Deliberately narrower than the intelligence
+ * layer's MmrVinLookupRequestSchema — the frontend supplies only the lookup key,
+ * never `force_refresh` or requester identity (those are intel-worker internal).
+ */
+const AppMmrVinRequestSchema = z.object({
+  vin: z.string().trim().min(11).max(17),
+  year: z.number().int().min(1900).max(2100).optional(),
+  mileage: z.number().int().nonnegative().max(2_000_000).optional(),
+});
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -75,6 +93,9 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === "GET" && pathname === "/app/historical-sales") {
       return await handleHistoricalSales(env, url);
+    }
+    if (request.method === "POST" && pathname === "/app/mmr/vin") {
+      return await handleMmrVin(request, env);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -269,5 +290,68 @@ async function handleHistoricalSales(env: Env, url: URL): Promise<Response> {
   } catch (err) {
     log("app.historical_sales.query_failed", { filter, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/mmr/vin — on-demand MMR valuation by VIN, proxied to
+ * tav-intelligence-worker via valuation/workerClient.getMmrValueFromWorker
+ * (which already picks Service-Binding vs public-fetch transport).
+ *
+ * Body: { vin: string (11–17 chars), year?: number, mileage?: number }.
+ * Malformed JSON or body → 400. Otherwise always 200 — an unavailable /
+ * rate-limited / timed-out / unconfigured intelligence worker, or a worker
+ * response with no value, is reported non-blockingly as
+ * `{ ok: true, data: { mmrValue: null, missingReason: "<code>" } }`.
+ */
+async function handleMmrVin(request: Request, env: Env): Promise<Response> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = AppMmrVinRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
+  }
+  const { vin, year, mileage } = parsed.data;
+
+  if (!env.INTEL_WORKER_URL) {
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
+  }
+
+  try {
+    const result = await getMmrValueFromWorker(
+      {
+        vin,
+        ...(year !== undefined && { year }),
+        ...(mileage !== undefined && { mileage }),
+      },
+      env,
+    );
+
+    if (result === null) {
+      // negative cache, insufficient params, or unparseable envelope — non-blocking
+      return json({ ok: true, data: { mmrValue: null, missingReason: "no_mmr_value" } });
+    }
+
+    return json({
+      ok: true,
+      data: {
+        mmrValue: result.mmrValue,
+        confidence: result.confidence,
+        method: result.method ?? null,
+      },
+    });
+  } catch (err) {
+    let missingReason: string;
+    if (err instanceof WorkerTimeoutError) missingReason = "intel_worker_timeout";
+    else if (err instanceof WorkerRateLimitError) missingReason = "intel_worker_rate_limited";
+    else if (err instanceof WorkerUnavailableError) missingReason = "intel_worker_unavailable";
+    else throw err; // unexpected — let handleApp's catch surface it as 503 internal_error
+    log("app.mmr_vin.worker_error", { missingReason, error: serializeError(err) });
+    return json({ ok: true, data: { mmrValue: null, missingReason } });
   }
 }

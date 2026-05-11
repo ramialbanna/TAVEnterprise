@@ -110,14 +110,34 @@ shape).
 - Supabase client cannot be constructed → `503 { "ok": false, "error": "db_error" }`.
 - `listHistoricalSales` / underlying query throws → `503 { "ok": false, "error": "db_error" }`.
 
-### `POST /app/mmr/vin` — planned
+### `POST /app/mmr/vin` — implemented (2026-05-11)
 
-Body `{ vin: string, year?: number, mileage?: number }` (Zod-validated). Calls
-`getMmrValueFromWorker({ vin, year, mileage }, env)`. Success →
-`{ ok, data: { mmrValue, confidence, method, ... } }`. Worker error
-(`WorkerTimeoutError | WorkerRateLimitError | WorkerUnavailableError`) or
-unconfigured intel worker → `{ ok: true, data: { mmrValue: null, missingReason: "<code>" } }`
-(non-blocking — never `5xx` for a downstream MMR hiccup). Bad body → `400`.
+On-demand MMR valuation by VIN, proxied to `tav-intelligence-worker` via
+`valuation/workerClient.getMmrValueFromWorker` (which already chooses Service-
+Binding vs public-fetch transport).
+
+- Body: `{ vin: string (11–17 chars, trimmed), year?: number (1900–2100),
+  mileage?: number (int, 0–2_000_000) }`, validated with a local Zod schema
+  (deliberately narrower than the intelligence layer's `MmrVinLookupRequestSchema`
+  — the frontend never sends `force_refresh` or requester identity).
+- Malformed JSON → `400 { "ok": false, "error": "invalid_json" }`.
+- Body fails validation → `400 { "ok": false, "error": "invalid_body", "issues": [...] }`.
+- Worker resolves a value → `200 { "ok": true, "data": { "mmrValue": <number>,
+  "confidence": "high"|"medium"|"low", "method": "vin"|"year_make_model"|null } }`.
+- Otherwise **always `200`** with `{ "ok": true, "data": { "mmrValue": null,
+  "missingReason": "<code>" } }` — non-blocking. `missingReason` codes:
+  - `intel_worker_not_configured` — `INTEL_WORKER_URL` is empty (checked before any call).
+  - `no_mmr_value` — worker call succeeded but returned a negative-cache envelope,
+    insufficient params, or an unparseable body (`getMmrValueFromWorker` → `null`).
+  - `intel_worker_timeout` — `WorkerTimeoutError` (5 s abort).
+  - `intel_worker_rate_limited` — `WorkerRateLimitError` (HTTP 429).
+  - `intel_worker_unavailable` — `WorkerUnavailableError` (other non-2xx).
+- An unexpected error (anything that is not one of the three `Worker*Error`
+  types) propagates to `handleApp`'s catch → `503 { "ok": false, "error": "internal_error" }`.
+
+Note: response is intentionally lean (`mmrValue`/`confidence`/`method`); MMR
+distribution fields (`wholesaleClean`, etc.) can be added later via
+`valuation/valuationResult.fromMmrResult` if the frontend needs them.
 
 ## Consequences
 
