@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types/env";
 import { listImportBatches } from "../src/persistence/importBatches";
+import { listHistoricalSales } from "../src/persistence/historicalSales";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -36,6 +37,11 @@ vi.mock("../src/persistence/importBatches", () => ({
   listImportBatches: vi.fn(),
 }));
 
+// Same for persistence/historicalSales.listHistoricalSales (/app/historical-sales).
+vi.mock("../src/persistence/historicalSales", () => ({
+  listHistoricalSales: vi.fn(),
+}));
+
 const ctx = {
   waitUntil: (_p: Promise<unknown>) => {},
   passThroughOnException: () => {},
@@ -66,6 +72,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(listImportBatches).mockReset();
   vi.mocked(listImportBatches).mockResolvedValue([]);
+  vi.mocked(listHistoricalSales).mockReset();
+  vi.mocked(listHistoricalSales).mockResolvedValue([]);
 });
 
 describe("/app/* auth", () => {
@@ -289,5 +297,90 @@ describe("GET /app/import-batches", () => {
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("db_error");
     expect(vi.mocked(listImportBatches)).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /app/historical-sales", () => {
+  it("requires a Bearer token", async () => {
+    const res = await worker.fetch(
+      new Request("http://localhost/app/historical-sales"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(listHistoricalSales)).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 with the sales list and the default limit of 20", async () => {
+    vi.mocked(listHistoricalSales).mockResolvedValue([
+      { id: "s1" },
+      { id: "s2" },
+    ] as unknown as Awaited<ReturnType<typeof listHistoricalSales>>);
+
+    const res = await worker.fetch(authedReq("/app/historical-sales"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Array<{ id: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual([{ id: "s1" }, { id: "s2" }]);
+    expect(vi.mocked(listHistoricalSales)).toHaveBeenCalledWith(expect.anything(), { limit: 20 });
+  });
+
+  it("passes ?limit=5 through", async () => {
+    const res = await worker.fetch(authedReq("/app/historical-sales?limit=5"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(listHistoricalSales)).toHaveBeenCalledWith(expect.anything(), { limit: 5 });
+  });
+
+  it("clamps ?limit=500 to 100", async () => {
+    const res = await worker.fetch(authedReq("/app/historical-sales?limit=500"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(listHistoricalSales)).toHaveBeenCalledWith(expect.anything(), { limit: 100 });
+  });
+
+  it("falls back to 20 for invalid / zero / negative / fractional limits", async () => {
+    for (const bad of ["abc", "0", "-3", "2.5", ""]) {
+      vi.mocked(listHistoricalSales).mockClear();
+      const res = await worker.fetch(
+        authedReq(`/app/historical-sales?limit=${encodeURIComponent(bad)}`),
+        makeEnv(),
+        ctx,
+      );
+      expect(res.status).toBe(200);
+      expect(vi.mocked(listHistoricalSales)).toHaveBeenCalledWith(expect.anything(), { limit: 20 });
+    }
+  });
+
+  it("applies year / make / model / since filters", async () => {
+    const res = await worker.fetch(
+      authedReq("/app/historical-sales?limit=7&year=2021&make=Honda&model=Civic&since=2024-01-01"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(listHistoricalSales)).toHaveBeenCalledWith(expect.anything(), {
+      limit: 7,
+      year: 2021,
+      make: "Honda",
+      model: "Civic",
+      since: "2024-01-01",
+    });
+  });
+
+  it("returns 503 db_error when listHistoricalSales throws", async () => {
+    vi.mocked(listHistoricalSales).mockRejectedValue(new Error("query failed"));
+    const res = await worker.fetch(authedReq("/app/historical-sales"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("db_error");
+  });
+
+  it("returns 503 db_error when the Supabase client cannot be constructed", async () => {
+    dbState.throwOnInit = true;
+    const res = await worker.fetch(authedReq("/app/historical-sales"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("db_error");
+    expect(vi.mocked(listHistoricalSales)).not.toHaveBeenCalled();
   });
 });

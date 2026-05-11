@@ -11,13 +11,15 @@
  *     in the body rather than failing the request.
  *   - This module never touches /ingest, /admin, or /health behaviour.
  *
- * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches.
- * Planned (see docs/adr/0002-frontend-app-api-layer.md): GET /app/historical-sales,
- * POST /app/mmr/vin.
+ * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
+ * GET /app/historical-sales.
+ * Planned (see docs/adr/0002-frontend-app-api-layer.md): POST /app/mmr/vin.
  */
 import type { Env } from "../types/env";
 import { getSupabaseClient } from "../persistence/supabase";
 import { listImportBatches } from "../persistence/importBatches";
+import { listHistoricalSales } from "../persistence/historicalSales";
+import type { HistoricalSalesFilter } from "../persistence/historicalSales";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
@@ -70,6 +72,9 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === "GET" && pathname === "/app/import-batches") {
       return await handleImportBatches(env, url);
+    }
+    if (request.method === "GET" && pathname === "/app/historical-sales") {
+      return await handleHistoricalSales(env, url);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -219,6 +224,50 @@ async function handleImportBatches(env: Env, url: URL): Promise<Response> {
     return json({ ok: true, data });
   } catch (err) {
     log("app.import_batches.query_failed", { limit, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/historical-sales?limit=N&year=&make=&model=&since= — historical
+ * sales, newest sale first.
+ *
+ * Thin read wrapper over persistence/historicalSales.listHistoricalSales.
+ * `limit` defaults to 20 and is clamped to 100; an invalid limit falls back to
+ * 20. `year` is included only if it parses to a finite number; `make`/`model`/
+ * `since` are passed through verbatim (exact-match; `since` → `sale_date >=`).
+ * Returns 503 `db_error` if the Supabase client cannot be constructed or the
+ * query fails.
+ */
+async function handleHistoricalSales(env: Env, url: URL): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.historical_sales.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  const filter: HistoricalSalesFilter = {
+    limit: parseLimitParam(url.searchParams.get("limit")),
+  };
+  const yearRaw = url.searchParams.get("year");
+  if (yearRaw !== null) {
+    const year = Number(yearRaw);
+    if (Number.isFinite(year)) filter.year = year;
+  }
+  const make = url.searchParams.get("make");
+  if (make !== null) filter.make = make;
+  const model = url.searchParams.get("model");
+  if (model !== null) filter.model = model;
+  const since = url.searchParams.get("since");
+  if (since !== null) filter.since = since;
+
+  try {
+    const data = await listHistoricalSales(db, filter);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.historical_sales.query_failed", { filter, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

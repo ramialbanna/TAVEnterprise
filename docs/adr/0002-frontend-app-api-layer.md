@@ -92,11 +92,23 @@ but under `/app/*` auth.
 - Supabase client cannot be constructed → `503 { "ok": false, "error": "db_error" }`.
 - `listImportBatches` / underlying query throws → `503 { "ok": false, "error": "db_error" }`.
 
-### `GET /app/historical-sales` — planned
+### `GET /app/historical-sales` — implemented (2026-05-11)
 
-Reads `tav.historical_sales` (migration 0025). `?limit` (default 20, clamped ≤ 100);
-optional `?year&make&model` and `?since=<date>` filters; ordered by `sale_date DESC`.
-Needs a new `persistence/historicalSales.ts` lister. `{ ok, data: HistoricalSale[] }`.
+Thin read wrapper over `persistence/historicalSales.listHistoricalSales`, reading
+`tav.historical_sales` (migration 0025), ordered by `sale_date DESC`. Rows are
+mapped to a camelCase `HistoricalSale` interface (defined in the new persistence
+file — there was no shared type; the intelligence layer only has the CSV *input*
+shape).
+
+- `?limit` — default `20`, clamped to `100`; non-positive-integer values fall back
+  to `20` (same rule as `/app/import-batches`).
+- `?year` — included only if it parses to a finite number (exact match).
+- `?make`, `?model` — passed through verbatim (exact match, v1).
+- `?since` — passed through verbatim; applied as `sale_date >= since` (ISO date
+  string; not validated server-side in v1).
+- Success → `200 { "ok": true, "data": HistoricalSale[] }`.
+- Supabase client cannot be constructed → `503 { "ok": false, "error": "db_error" }`.
+- `listHistoricalSales` / underlying query throws → `503 { "ok": false, "error": "db_error" }`.
 
 ### `POST /app/mmr/vin` — planned
 

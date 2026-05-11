@@ -196,9 +196,14 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       clamp 100, fallback 20 on bad/zero/negative/fractional/non-numeric; 503 `db_error` on client-init or query failure).
       DONE 2026-05-11 — ADR 0002 §"Endpoint contracts" marked implemented; tests in `test/app.routes.test.ts`.
       Not yet deployed (awaiting review).
-- [ ] 2026-05-11 src/app/routes — remaining `/app/*` endpoints from ADR 0002: `GET /app/historical-sales`
-      (new `persistence/historicalSales.ts` over `tav.historical_sales`), `POST /app/mmr/vin`
-      (reuses `getMmrValueFromWorker`, non-blocking).
+- [x] 2026-05-11 src/app/routes — `GET /app/historical-sales` (new `persistence/historicalSales.ts` over
+      `tav.historical_sales`; `?limit` default 20 / clamp 100 / fallback 20; optional exact-match `year`/`make`/`model`,
+      `since` → `sale_date >=`; ordered `sale_date DESC`; 503 `db_error` on client-init or query failure).
+      DONE 2026-05-11 — ADR 0002 §"Endpoint contracts" marked implemented; tests in `test/app.routes.test.ts`.
+      Not yet deployed (batched with import-batches, awaiting deploy confirmation).
+- [ ] 2026-05-11 src/app/routes — `POST /app/mmr/vin` — last remaining `/app/*` endpoint from ADR 0002.
+      Zod body `{vin, year?, mileage?}`; reuses `getMmrValueFromWorker` (Service-Binding transport); non-blocking —
+      worker error / unconfigured intel worker → `200 { ok:true, data:{ mmrValue:null, missingReason } }`; bad body → 400.
 - [ ] 2026-05-11 supabase — add a global outcome-rollup view (e.g. `v_outcome_summary_global` with
       `COUNT(gross_profit)` so weighted averages are correct) so `GET /app/kpis` `outcomes.value` can expose true
       cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.
