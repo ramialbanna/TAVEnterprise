@@ -34,6 +34,15 @@ export interface Env {
   // ── Admin auth ─────────────────────────────────────────────────────────────
   ADMIN_API_SECRET: string;
 
+  // ── Frontend app API auth ──────────────────────────────────────────────────
+  /**
+   * Bearer token guarding the GET/POST /app/* product API consumed by the
+   * TAV-owned frontend/dashboard (server-side). Distinct from ADMIN_API_SECRET
+   * so the frontend never holds an ops-grade credential. NEVER log this.
+   * Set via: wrangler secret put APP_API_SECRET
+   */
+  APP_API_SECRET: string;
+
   // ── Feature flags ──────────────────────────────────────────────────────────
   HYBRID_BUYBOX_ENABLED: string; // "true" | "false" — wrangler.toml [vars]
 

@@ -40,8 +40,10 @@ TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=replace_me
 ALERT_TO_NUMBER=replace_me
 
-# ── Admin ──────────────────────────────────────────────────────────────────────
+# ── Admin / frontend API ───────────────────────────────────────────────────────
 ADMIN_API_SECRET=replace_me
+# Bearer token for the /app/* frontend product API. Keep distinct from ADMIN_API_SECRET.
+APP_API_SECRET=replace_me
 
 # ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
 # HYBRID_BUYBOX_ENABLED=false

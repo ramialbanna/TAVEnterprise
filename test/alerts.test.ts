@@ -22,6 +22,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     ALERT_TO_NUMBER: "+12125559999",
     TAV_KV: {} as KVNamespace,
     ADMIN_API_SECRET: "admin-secret",
+    APP_API_SECRET: "app-secret",
     HYBRID_BUYBOX_ENABLED: "true",
     MANHEIM_LOOKUP_MODE: "direct",
     INTEL_WORKER_URL: "",

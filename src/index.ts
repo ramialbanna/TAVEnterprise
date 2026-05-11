@@ -1,11 +1,11 @@
 import type { Env } from "./types/env";
 import { handleIngest } from "./ingest/handleIngest";
 import { handleAdmin } from "./admin/routes";
+import { handleApp } from "./app/routes";
 import { getSupabaseClient } from "./persistence/supabase";
 import { runStaleSweep } from "./stale/engine";
 import { log } from "./logging/logger";
-
-const VERSION = "0.1.0";
+import { VERSION } from "./version";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -21,6 +21,10 @@ export default {
 
     if (url.pathname.startsWith("/admin")) {
       return handleAdmin(request, env);
+    }
+
+    if (url.pathname.startsWith("/app/")) {
+      return handleApp(request, env);
     }
 
     return new Response(JSON.stringify({ ok: false, error: "not_found" }), {

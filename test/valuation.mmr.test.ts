@@ -75,6 +75,7 @@ function makeEnv(): Env {
     ALERT_TO_NUMBER: "+15551111111",
     TAV_KV: null as unknown as KVNamespace,
     ADMIN_API_SECRET: "admin-secret",
+    APP_API_SECRET: "app-secret",
     HYBRID_BUYBOX_ENABLED: "false",
     MANHEIM_LOOKUP_MODE: "direct",
     INTEL_WORKER_URL: "",
