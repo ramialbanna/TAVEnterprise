@@ -85,12 +85,19 @@ Always `200`.
     "url": "<string>" | null                 // INTEL_WORKER_URL, or null if unset
   },
   "sources": [ /* rows from tav.v_source_health; [] if db unavailable */ ],
-  "staleSweep": { "lastRunAt": null, "missingReason": "not_persisted" }
+  "staleSweep": { "lastRunAt": "<ISO8601>", "status": "ok"|"failed", "updated": <int>|null }
+              | { "lastRunAt": null, "missingReason": "never_run" | "db_error" }
 }}
 ```
 
-- `db.ok=false` ⇒ `sources` is `[]` and `db.missingReason="db_error"`.
-- `staleSweep.lastRunAt` is `null` until cron-run times are persisted (follow-up; see `docs/followups.md`).
+- `db.ok=false` ⇒ `sources` is `[]` and `db.missingReason="db_error"`. If the Supabase
+  client itself can't be constructed, `staleSweep` is also `{ lastRunAt: null, missingReason: "db_error" }`.
+- `staleSweep` reports the latest daily stale-sweep cron run, read from `tav.cron_runs`
+  (job `stale_sweep`, written by the Worker's `scheduled()` handler — best-effort):
+  `lastRunAt` = the run's `finished_at`, falling back to `started_at`; `status` ∈ `ok`|`failed`;
+  `updated` = rows touched by the sweep, or `null` if the run recorded no count (e.g. a failed
+  run). `missingReason: "never_run"` ⇒ no run since `cron_runs` existed; `"db_error"` ⇒ the
+  `cron_runs` lookup (or the client) failed — independent of `db.ok` for `v_source_health`.
 
 ---
 
@@ -282,8 +289,9 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 
 Tracked in `docs/followups.md`:
 
-- Persist stale-sweep cron run times so `/app/system-status` `staleSweep.lastRunAt`
-  is non-null.
+- `sellThroughRate` in `/app/kpis` `outcomes.value` is tautologically `1.0` while
+  `tav.purchase_outcomes` holds only completed sales — a metric-semantics decision,
+  not a bug.
 
 ## Related docs
 

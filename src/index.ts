@@ -4,7 +4,8 @@ import { handleAdmin } from "./admin/routes";
 import { handleApp } from "./app/routes";
 import { getSupabaseClient } from "./persistence/supabase";
 import { runStaleSweep } from "./stale/engine";
-import { log } from "./logging/logger";
+import { recordCronRunSafe } from "./persistence/cronRuns";
+import { log, serializeError } from "./logging/logger";
 import { VERSION } from "./version";
 
 export default {
@@ -36,7 +37,27 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     log("cron.stale_sweep.started");
     const db = getSupabaseClient(env);
-    await runStaleSweep(db);
+    const startedAt = new Date().toISOString();
+    try {
+      const { updated } = await runStaleSweep(db);
+      await recordCronRunSafe(db, {
+        jobName: "stale_sweep",
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        status: "ok",
+        detail: { updated },
+      });
+    } catch (err) {
+      // runStaleSweep already logs the failure; record it (best-effort), then rethrow.
+      await recordCronRunSafe(db, {
+        jobName: "stale_sweep",
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        status: "failed",
+        detail: { error: serializeError(err) },
+      });
+      throw err;
+    }
   },
 };
 

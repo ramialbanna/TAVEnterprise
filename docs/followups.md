@@ -223,8 +223,15 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       or an inventory/acquisitions table, or redefine as time-to-sale). Surfaced via `/app/kpis` Round-3 smoke
       (2026-05-11) showing `sellThroughRate:1`. Left as-is for now — changing it is a metric-semantics decision, not
       a bug. Not an ADR-0002 blocker.
-- [ ] 2026-05-11 src — persist stale-sweep cron run times (audit row on each `runStaleSweep`) so
-      `GET /app/system-status` `staleSweep.lastRunAt` stops returning `null` / `missingReason:"not_persisted"`.
+- [x] 2026-05-11 src — persist stale-sweep cron run times. DONE 2026-05-11 — migration `0042_cron_runs.sql` adds
+      `tav.cron_runs` (job-agnostic audit log: `job_name`, `started_at`, `finished_at`, `status` ok|failed,
+      `detail` jsonb). `src/index.ts` `scheduled()` records each run via `recordCronRunSafe` (best-effort —
+      audit-write failure never fails the cron; failed sweeps still get a `status:"failed"` row + rethrow).
+      `src/persistence/cronRuns.ts` = new (`recordCronRun` / `recordCronRunSafe` / `getLastCronRun`).
+      `GET /app/system-status` `staleSweep` now `{ lastRunAt, status, updated }` from the latest `stale_sweep`
+      row, or `{ lastRunAt:null, missingReason:"never_run"|"db_error" }`. Tests: `test/cronRuns.test.ts` (helper),
+      `test/scheduled.test.ts` (write path), `test/app.routes.test.ts` (system-status read path). schema.sql + ADR
+      0002 + `docs/APP_API.md` updated. Worker deploy blocked on applying migration 0042 to the DB first.
 - [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,
       envelope/conventions, all 5 endpoints, response shapes, worker config, frontend integration notes; ADR 0002
       "Consequences" updated to point at it as source of truth.

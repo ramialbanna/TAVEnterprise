@@ -59,12 +59,16 @@ All responses are `application/json`. Authenticated success bodies are
   "db": { "ok": true } | { "ok": false, "missingReason": "db_error" },
   "intelWorker": { "mode": "worker" | "direct", "binding": true|false, "url": "<string>"|null },
   "sources": [ /* rows from tav.v_source_health */ ],
-  "staleSweep": { "lastRunAt": null, "missingReason": "not_persisted" }
+  "staleSweep": { "lastRunAt": "<ISO8601>", "status": "ok"|"failed", "updated": <int>|null }
+              | { "lastRunAt": null, "missingReason": "never_run" | "db_error" }
 }}
 ```
 
-Always `200`. `staleSweep.lastRunAt` is `null` until cron-run times are persisted
-(followup).
+Always `200`. `staleSweep` reflects the latest daily stale-sweep cron run, recorded in
+`tav.cron_runs` (migration 0042) by the Worker's `scheduled()` handler (best-effort —
+an audit-write failure never fails the cron). `missingReason: "never_run"` until the first
+post-migration run; `"db_error"` if the `cron_runs` lookup or the Supabase client fails.
+See `docs/APP_API.md`.
 
 ### `GET /app/kpis` — implemented (2026-05-11)
 

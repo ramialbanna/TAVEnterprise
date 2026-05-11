@@ -21,6 +21,7 @@ import { getSupabaseClient } from "../persistence/supabase";
 import { listImportBatches } from "../persistence/importBatches";
 import { listHistoricalSales } from "../persistence/historicalSales";
 import type { HistoricalSalesFilter } from "../persistence/historicalSales";
+import { getLastCronRun } from "../persistence/cronRuns";
 import {
   getMmrValueFromWorker,
   WorkerTimeoutError,
@@ -109,10 +110,15 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
   }
 }
 
+/** `staleSweep` block of GET /app/system-status. */
+type StaleSweepBlock =
+  | { lastRunAt: string; status: "ok" | "failed"; updated: number | null }
+  | { lastRunAt: null; missingReason: "never_run" | "db_error" };
+
 /**
  * GET /app/system-status — health snapshot for the dashboard header.
  * Always 200. Reports DB connectivity, intelligence-worker wiring, recent
- * source-run health, and (not yet persisted) last stale-sweep time.
+ * source-run health, and the last daily stale-sweep run (from tav.cron_runs).
  */
 async function handleSystemStatus(env: Env): Promise<Response> {
   const intelWorker = {
@@ -121,17 +127,45 @@ async function handleSystemStatus(env: Env): Promise<Response> {
     url: env.INTEL_WORKER_URL || null,
   };
 
+  let client: ReturnType<typeof getSupabaseClient> | null = null;
+  try {
+    client = getSupabaseClient(env);
+  } catch (err) {
+    log("app.system_status.client_init_failed", { error: serializeError(err) });
+    client = null;
+  }
+
   let db: { ok: true } | { ok: false; missingReason: string };
   let sources: unknown[] = [];
-  try {
-    const client = getSupabaseClient(env);
-    const { data, error } = await client.from("v_source_health").select("*");
-    if (error) throw error;
-    db = { ok: true };
-    sources = data ?? [];
-  } catch (err) {
-    log("app.system_status.db_unavailable", { error: serializeError(err) });
+  let staleSweep: StaleSweepBlock;
+
+  if (client === null) {
     db = { ok: false, missingReason: "db_error" };
+    staleSweep = { lastRunAt: null, missingReason: "db_error" };
+  } else {
+    try {
+      const { data, error } = await client.from("v_source_health").select("*");
+      if (error) throw error;
+      db = { ok: true };
+      sources = data ?? [];
+    } catch (err) {
+      log("app.system_status.db_unavailable", { error: serializeError(err) });
+      db = { ok: false, missingReason: "db_error" };
+    }
+
+    // Last stale-sweep run — independent of the v_source_health query above.
+    try {
+      const last = await getLastCronRun(client, "stale_sweep");
+      if (last === null) {
+        staleSweep = { lastRunAt: null, missingReason: "never_run" };
+      } else {
+        const updated = typeof last.detail.updated === "number" ? last.detail.updated : null;
+        staleSweep = { lastRunAt: last.finishedAt ?? last.startedAt, status: last.status, updated };
+      }
+    } catch (err) {
+      log("app.system_status.stale_sweep_unavailable", { error: serializeError(err) });
+      staleSweep = { lastRunAt: null, missingReason: "db_error" };
+    }
   }
 
   return json({
@@ -143,8 +177,7 @@ async function handleSystemStatus(env: Env): Promise<Response> {
       db,
       intelWorker,
       sources,
-      // Cron run times are not persisted yet — see docs/followups.md.
-      staleSweep: { lastRunAt: null, missingReason: "not_persisted" },
+      staleSweep,
     },
   });
 }

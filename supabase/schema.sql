@@ -700,6 +700,20 @@ CREATE TABLE tav.user_activity (
   created_at          timestamptz NOT NULL DEFAULT now()
 );
 
+-- ── cron_runs ─────────────────────────────────────────────────────────────────
+-- Audit log of scheduled-job runs (v1: daily stale-sweep). Job-agnostic.
+-- detail: { "updated": <n> } on success, { "error": <summary> } on failure.
+
+CREATE TABLE tav.cron_runs (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_name     text        NOT NULL,
+  started_at   timestamptz NOT NULL DEFAULT now(),
+  finished_at  timestamptz,
+  status       text        NOT NULL DEFAULT 'ok'
+    CHECK (status IN ('ok','failed')),
+  detail       jsonb       NOT NULL DEFAULT '{}'::jsonb
+);
+
 -- purchase_outcomes
 CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
   WHERE lead_id IS NOT NULL;
@@ -773,6 +787,9 @@ CREATE INDEX ON tav.user_activity (active_until) WHERE active_until IS NOT NULL;
 
 -- dead_letters
 CREATE INDEX ON tav.dead_letters (resolved, created_at) WHERE resolved = false;
+
+-- cron_runs
+CREATE INDEX ON tav.cron_runs (job_name, started_at DESC);
 
 -- =============================================================================
 -- Triggers

@@ -3,6 +3,7 @@ import worker from "../src/index";
 import type { Env } from "../src/types/env";
 import { listImportBatches } from "../src/persistence/importBatches";
 import { listHistoricalSales } from "../src/persistence/historicalSales";
+import { getLastCronRun } from "../src/persistence/cronRuns";
 import {
   getMmrValueFromWorker,
   WorkerTimeoutError,
@@ -46,6 +47,15 @@ vi.mock("../src/persistence/importBatches", () => ({
 // Same for persistence/historicalSales.listHistoricalSales (/app/historical-sales).
 vi.mock("../src/persistence/historicalSales", () => ({
   listHistoricalSales: vi.fn(),
+}));
+
+// persistence/cronRuns: getLastCronRun feeds /app/system-status' `staleSweep` block.
+// The record* helpers are stubbed too so importing src/index (whose scheduled() uses
+// recordCronRunSafe) doesn't pull in the real module / hit the fake DB client.
+vi.mock("../src/persistence/cronRuns", () => ({
+  getLastCronRun: vi.fn(),
+  recordCronRun: vi.fn(),
+  recordCronRunSafe: vi.fn(),
 }));
 
 // valuation/workerClient: only getMmrValueFromWorker is replaced; the Worker*Error
@@ -98,6 +108,8 @@ beforeEach(() => {
   vi.mocked(listHistoricalSales).mockResolvedValue([]);
   vi.mocked(getMmrValueFromWorker).mockReset();
   vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
+  vi.mocked(getLastCronRun).mockReset();
+  vi.mocked(getLastCronRun).mockResolvedValue(null);
 });
 
 describe("/app/* auth", () => {
@@ -141,7 +153,7 @@ describe("/app/* auth", () => {
 });
 
 describe("GET /app/system-status", () => {
-  it("returns 200 with db.ok=true and source health when DB is reachable", async () => {
+  it("returns 200 with db.ok=true, source health, and staleSweep never_run when no cron run yet", async () => {
     dbState.tables.v_source_health = {
       data: [{ source: "facebook", region: "dallas", status: "complete" }],
     };
@@ -155,7 +167,7 @@ describe("GET /app/system-status", () => {
         db: { ok: boolean };
         intelWorker: { mode: string; binding: boolean; url: string | null };
         sources: unknown[];
-        staleSweep: { lastRunAt: null; missingReason: string };
+        staleSweep: { lastRunAt: string | null; missingReason?: string; status?: string; updated?: number | null };
       };
     };
     expect(body.ok).toBe(true);
@@ -168,22 +180,83 @@ describe("GET /app/system-status", () => {
       binding: false,
       url: "https://intel.example.workers.dev",
     });
-    expect(body.data.staleSweep.lastRunAt).toBeNull();
-    expect(body.data.staleSweep.missingReason).toBe("not_persisted");
+    expect(body.data.staleSweep).toEqual({ lastRunAt: null, missingReason: "never_run" });
+    expect(vi.mocked(getLastCronRun)).toHaveBeenCalledWith(expect.anything(), "stale_sweep");
   });
 
-  it("still returns 200 with db.ok=false when the DB query errors", async () => {
+  it("reports staleSweep lastRunAt + status + updated from the latest stale_sweep cron run", async () => {
+    vi.mocked(getLastCronRun).mockResolvedValue({
+      id: "c1",
+      jobName: "stale_sweep",
+      startedAt: "2026-05-11T06:00:00.000Z",
+      finishedAt: "2026-05-11T06:00:03.500Z",
+      status: "ok",
+      detail: { updated: 42 },
+    });
+    const res = await worker.fetch(authedReq("/app/system-status"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { staleSweep: unknown } };
+    expect(body.data.staleSweep).toEqual({
+      lastRunAt: "2026-05-11T06:00:03.500Z",
+      status: "ok",
+      updated: 42,
+    });
+  });
+
+  it("falls back to startedAt and updated:null when finishedAt / detail.updated are absent (e.g. failed run)", async () => {
+    vi.mocked(getLastCronRun).mockResolvedValue({
+      id: "c2",
+      jobName: "stale_sweep",
+      startedAt: "2026-05-11T06:00:00.000Z",
+      finishedAt: null,
+      status: "failed",
+      detail: { error: { name: "Error", message: "rpc boom" } },
+    });
+    const res = await worker.fetch(authedReq("/app/system-status"), makeEnv(), ctx);
+    const body = (await res.json()) as { data: { staleSweep: unknown } };
+    expect(body.data.staleSweep).toEqual({
+      lastRunAt: "2026-05-11T06:00:00.000Z",
+      status: "failed",
+      updated: null,
+    });
+  });
+
+  it("reports staleSweep db_error when the cron_runs lookup throws (db itself still ok)", async () => {
+    dbState.tables.v_source_health = { data: [] };
+    vi.mocked(getLastCronRun).mockRejectedValue(new Error("relation cron_runs does not exist"));
+    const res = await worker.fetch(authedReq("/app/system-status"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { db: { ok: boolean }; staleSweep: unknown } };
+    expect(body.data.db.ok).toBe(true);
+    expect(body.data.staleSweep).toEqual({ lastRunAt: null, missingReason: "db_error" });
+  });
+
+  it("still returns 200 with db.ok=false when the v_source_health query errors (staleSweep still resolves)", async () => {
     dbState.tables.v_source_health = { error: { message: "boom" } };
     const res = await worker.fetch(authedReq("/app/system-status"), makeEnv(), ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       ok: boolean;
-      data: { db: { ok: boolean; missingReason?: string }; sources: unknown[] };
+      data: { db: { ok: boolean; missingReason?: string }; sources: unknown[]; staleSweep: unknown };
     };
     expect(body.ok).toBe(true);
     expect(body.data.db.ok).toBe(false);
     expect(body.data.db.missingReason).toBe("db_error");
     expect(body.data.sources).toEqual([]);
+    expect(body.data.staleSweep).toEqual({ lastRunAt: null, missingReason: "never_run" });
+  });
+
+  it("reports db_error for both db and staleSweep when the Supabase client cannot be constructed", async () => {
+    dbState.throwOnInit = true;
+    const res = await worker.fetch(authedReq("/app/system-status"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { db: { ok: boolean; missingReason?: string }; staleSweep: unknown };
+    };
+    expect(body.data.db.ok).toBe(false);
+    expect(body.data.db.missingReason).toBe("db_error");
+    expect(body.data.staleSweep).toEqual({ lastRunAt: null, missingReason: "db_error" });
+    expect(vi.mocked(getLastCronRun)).not.toHaveBeenCalled();
   });
 
   it("reports intelWorker.mode=direct and binding=true correctly", async () => {
