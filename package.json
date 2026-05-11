@@ -17,7 +17,7 @@
     "test:int": "vitest run --config vitest.int.config.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.4",
+    "@supabase/supabase-js": "^2.105.4",
     "zod": "^3.24.2"
   },
   "devDependencies": {
