@@ -216,6 +216,13 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       `region`, so a true global `AVG`, not a mean-of-region-means). `GET /app/kpis` `outcomes.value` now exposes
       `totalOutcomes` / `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` / `lastOutcomeAt` + `byRegion`; NULL
       aggregates (empty table) pass through as `null`. Schema snapshot + ADR 0002 + `docs/APP_API.md` updated.
+- [ ] 2026-05-11 supabase/product — `sell_through_rate` in `v_outcome_summary` / `v_outcome_summary_global` is
+      `COUNT(*) FILTER (sale_price IS NOT NULL) / COUNT(*)`, which is tautologically `1.0` because
+      `tav.purchase_outcomes` only ever holds *completed* sales (every row has a `sale_price`). To make the metric
+      meaningful it needs a denominator that includes not-yet-sold acquisitions (e.g. join against `historical_sales`
+      or an inventory/acquisitions table, or redefine as time-to-sale). Surfaced via `/app/kpis` Round-3 smoke
+      (2026-05-11) showing `sellThroughRate:1`. Left as-is for now — changing it is a metric-semantics decision, not
+      a bug. Not an ADR-0002 blocker.
 - [ ] 2026-05-11 src — persist stale-sweep cron run times (audit row on each `runStaleSweep`) so
       `GET /app/system-status` `staleSweep.lastRunAt` stops returning `null` / `missingReason:"not_persisted"`.
 - [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,
