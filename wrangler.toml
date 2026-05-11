@@ -1,29 +1,68 @@
 name = "tav-aip"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
-workers_dev = false
+workers_dev = true
 
 # KV namespace for valuation cache and DLQ overflow.
-# Run the following once, then replace the placeholder IDs below:
-#   wrangler kv namespace create TAV_KV
-#   wrangler kv namespace create TAV_KV --preview
+# REQUIRED before deploy — replace all placeholder IDs with real namespace IDs:
+#   wrangler kv namespace create TAV_KV          (copy `id` → id below)
+#   wrangler kv namespace create TAV_KV --preview (copy `id` → preview_id below)
+# Deploying with placeholder IDs binds to a nonexistent namespace — all KV ops fail at runtime.
 [[kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-preview_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+id = "e61e291003f647a5ad0ffce778ac6631"
+preview_id = "00464744d6e140799a9a88fe3247cc17"
 
 # Daily stale sweep at 06:00 UTC
 [triggers]
 crons = ["0 6 * * *"]
 
+[vars]
+HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "direct"
+# Base URL of tav-intelligence-worker. Empty = not configured; worker-path valuation skips.
+# Set to worker URL when enabling MANHEIM_LOOKUP_MODE="worker".
+INTEL_WORKER_URL = ""
+# ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET must be set as Cloudflare secrets:
+#   wrangler secret put ADMIN_API_SECRET   # ops admin API (/admin/*)
+#   wrangler secret put APP_API_SECRET      # frontend product API (/app/*) — separate blast radius
+#   wrangler secret put INTEL_WORKER_SECRET
+
 [env.staging]
 name = "tav-aip-staging"
+[env.staging.vars]
+HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "worker"
+INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+# Staging-only namespace — must not share with production.
+# To provision (if not yet live): wrangler kv namespace create TAV_KV --env staging
+id = "44c7dbe6bad5478cb51878b053758805"
+# Service binding to tav-intelligence-worker-staging — avoids Cloudflare
+# error 1042 that blocks worker-to-worker public-URL fetches on the same
+# account. workerClient prefers env.INTEL_WORKER.fetch() when this binding
+# is present and falls back to public fetch only if the binding is absent.
+[[env.staging.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-staging"
 
 [env.production]
 name = "tav-aip-production"
+[env.production.vars]
+HYBRID_BUYBOX_ENABLED = "true"
+MANHEIM_LOOKUP_MODE = "worker"
+# Service Binding INTEL_WORKER is the active transport for worker→intel calls.
+# This URL is kept for diagnostic logging (ingest.mmr_worker_called.endpoint)
+# and as a fallback if the binding is ever absent at runtime; the workerClient
+# never actually fetches it when env.INTEL_WORKER is bound.
+INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
-id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+id = "e61e291003f647a5ad0ffce778ac6631"
+# Active — MANHEIM_LOOKUP_MODE=worker (cutover 2026-05-09); worker→intel
+# calls go via the INTEL_WORKER service binding below (INTEL_WORKER_URL is
+# diagnostic/fallback only).
+[[env.production.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-production"

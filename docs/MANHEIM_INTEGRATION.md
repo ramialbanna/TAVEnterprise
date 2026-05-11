@@ -86,7 +86,7 @@ Do NOT overwrite old rows.
 ---
 
 ### Trigger
-Worker is called externally (Make scenario)
+Worker is called externally via direct HMAC-signed POST to `/ingest` (Apify webhook or other authorized caller). See `docs/adr/0001-drop-make-com.md`.
 
 ---
 

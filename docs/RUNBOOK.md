@@ -70,6 +70,66 @@ If CI or deploy are red, first check:
 
 ---
 
+## Intelligence Worker Staging Readiness
+
+Full UAT plan: [`docs/manheim-uat-validation-plan.md`](manheim-uat-validation-plan.md)
+Open blockers and provisioning commands: [`docs/followups.md`](followups.md) — "MANHEIM_LOOKUP_MODE=worker" section.
+
+### What is already done
+
+- `MANHEIM_LOOKUP_MODE="worker"` code path is implemented and tested (G.5.2).
+- tav-intelligence-worker KV namespace for staging is provisioned (`id = 80195f01a65c4431af1e3835f9bea933`).
+- `workers_dev = true` is set for the staging environment — the worker can be deployed.
+- Manheim reference normalization is complete (G.5.3): alias tables seeded, normalizeMmrParams wired into the YMM path, normalization metadata written to `tav.valuation_snapshots` and `tav.vehicle_enrichments`.
+- `MANHEIM_GRANT_TYPE` optional env var is wired: `"client_credentials"` uses HTTP Basic Auth and skips username/password; absent or `"password"` preserves legacy flow.
+- `MANHEIM_API_VENDOR` env var is wired: `"cox"` uses Cox sandbox URL templates, vendor media headers, and Bridge 2 Basic-Auth token flow; absent or `"manheim"` preserves the legacy Manheim flow.
+- `MANHEIM_SCOPE` env var is wired: appended to token request body when present (Cox uses `wholesale-valuations.vehicle.mmr-ext.get`).
+- `ingest.mmr_worker_called` structured log event fires before every worker fetch for observability.
+
+### Remaining blockers before staging UAT can start
+
+1. **Cox product-guide confirmation** (external): exact `/mmr` and `/mmr-lookup` calling conventions and response shape — see UAT plan §0.5.
+2. **Cox sandbox known-good test VINs and YMM combos** — needed to run V-01–V-03 / Y-01–Y-05.
+3. **`INTEL_WORKER_URL` + `INTEL_WORKER_SECRET`** — not yet provisioned on main worker staging.
+4. **`INTEL_SERVICE_SECRET`** — not yet provisioned on intelligence worker staging.
+
+### Staging deploy sequence (one-time)
+
+```
+# 1. Deploy intelligence worker to staging
+wrangler deploy --config workers/tav-intelligence-worker/wrangler.toml --env staging
+
+# 2. Provision service-to-service secrets (main worker)
+wrangler secret put INTEL_WORKER_URL        # staging URL of intelligence worker
+wrangler secret put INTEL_WORKER_SECRET     # shared secret (any strong random value)
+wrangler secret put INTEL_SERVICE_SECRET \
+  --config workers/tav-intelligence-worker/wrangler.toml --env staging
+
+# 3. Provision Cox sandbox secrets on intelligence worker (repeat for each)
+WRANGLER_FLAGS="--config workers/tav-intelligence-worker/wrangler.toml --env staging"
+wrangler secret put MANHEIM_API_VENDOR     $WRANGLER_FLAGS  # "cox"
+wrangler secret put MANHEIM_GRANT_TYPE     $WRANGLER_FLAGS  # "client_credentials"
+wrangler secret put MANHEIM_SCOPE          $WRANGLER_FLAGS  # "wholesale-valuations.vehicle.mmr-ext.get"
+wrangler secret put MANHEIM_CLIENT_ID      $WRANGLER_FLAGS
+wrangler secret put MANHEIM_CLIENT_SECRET  $WRANGLER_FLAGS
+wrangler secret put MANHEIM_TOKEN_URL      $WRANGLER_FLAGS  # https://authorize.coxautoinc.com/oauth2/.../v1/token
+wrangler secret put MANHEIM_MMR_URL        $WRANGLER_FLAGS  # https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+# MANHEIM_USERNAME / MANHEIM_PASSWORD: omit for client_credentials.
+# SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: existing.
+
+# 4. After UAT passes — enable worker mode in main worker staging
+# In wrangler.toml [env.staging.vars]: MANHEIM_LOOKUP_MODE = "worker"
+# Then: wrangler deploy --env staging
+```
+
+### Safety constraint
+
+Do **not** set `MANHEIM_LOOKUP_MODE="worker"` in `[env.production.vars]` during UAT.
+Production stays on `"direct"` until staging UAT completes and a production-readiness
+review is signed off.
+
+---
+
 ## Incident Response
 
 This section is the fast-response guide for production, staging, CI/CD, and data-integrity incidents in TAV-AIP. For full postmortems, use `docs/incidents/incident-template.md`.

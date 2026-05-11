@@ -95,6 +95,29 @@ export type DedupeResult =
   | { type: "new_listing" };
 
 export type ValuationConfidence = "high" | "medium" | "low" | "none";
+export type ValuationMethod = "vin" | "year_make_model";
+export type NormalizationConfidence = "exact" | "alias" | "partial" | "none";
+
+// Platform-agnostic structured valuation result. Carries the primary scalar
+// plus the full price distribution from the valuation source. Distribution
+// fields are null until a parsing path is implemented for that source.
+export interface ValuationResult {
+  mmrValue: number;
+  wholesaleAvg: number | null;
+  wholesaleClean: number | null;
+  wholesaleRough: number | null;
+  retailClean: number | null;
+  sampleCount: number | null;
+  confidence: ValuationConfidence;
+  valuationMethod: ValuationMethod;
+  fetchedAt: string;
+  rawResponse: unknown;
+  // G.5.3: normalization metadata — present on YMM-path results only
+  lookupMake?: string | null;
+  lookupModel?: string | null;
+  lookupTrim?: string | null;
+  normalizationConfidence?: NormalizationConfidence;
+}
 
 // ── Concept 4: Lead ───────────────────────────────────────────────────────────
 // The buyer-facing work item. Created only after scoring, stale-check, and
@@ -171,3 +194,153 @@ export interface NormalizedListingUpsertResult {
 export type AdapterResult =
   | { ok: true; listing: NormalizedListingInput }
   | { ok: false; reason: string; details?: unknown };
+
+// ── Condition grade ───────────────────────────────────────────────────────────
+
+export type ConditionGradeNormalized = "excellent" | "good" | "fair" | "poor" | "unknown";
+
+// ── Purchase outcome ──────────────────────────────────────────────────────────
+
+export interface PurchaseOutcome {
+  id: string;
+  leadId: string | null;
+  vehicleCandidateId?: string | null;
+  vin?: string | null;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  mileage?: number | null;
+  source?: string | null;
+  region?: string | null;
+  listedPrice?: number | null;
+  pricePaid?: number | null;
+  salePrice?: number | null;
+  grossProfit?: number | null;
+  holdDays?: number | null;
+  conditionGradeRaw?: string | null;
+  conditionGradeNormalized?: ConditionGradeNormalized | null;
+  purchaseChannel?: "auction" | "private" | "dealer" | null;
+  sellingChannel?: "retail" | "wholesale" | "auction" | null;
+  transportCost?: number | null;
+  auctionFee?: number | null;
+  miscOverhead?: number | null;
+  weekLabel?: string | null;
+  buyerId?: string | null;
+  closerId?: string | null;
+  cotCity?: string | null;
+  cotState?: string | null;
+  importBatchId?: string | null;
+  importFingerprint?: string | null;
+  createdAt: string;
+}
+
+// ── Import batch / rows ───────────────────────────────────────────────────────
+
+export type ImportBatchStatus = "pending" | "importing" | "complete" | "failed";
+export type ImportRowStatus = "imported" | "duplicate" | "rejected";
+
+export interface ImportBatch {
+  id: string;
+  createdAt: string;
+  weekLabel?: string | null;
+  rowCount: number;
+  importedCount: number;
+  duplicateCount: number;
+  rejectedCount: number;
+  status: ImportBatchStatus;
+  notes?: string | null;
+}
+
+export interface ImportRow {
+  id: string;
+  importBatchId: string;
+  rowIndex: number;
+  status: ImportRowStatus;
+  reasonCode?: string | null;
+  rawRow: unknown;
+  outcomeId?: string | null;
+  createdAt: string;
+}
+
+// ── Market expenses ───────────────────────────────────────────────────────────
+
+export type ExpenseType = "transport" | "auction_fee" | "misc_overhead";
+
+export interface MarketExpense {
+  id: string;
+  region: string;
+  city?: string | null;
+  expenseType: ExpenseType;
+  amountCents: number;
+  effectiveDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Market demand index ───────────────────────────────────────────────────────
+
+export interface MarketDemandIndex {
+  id: string;
+  region: string;
+  segmentKey?: string | null;
+  purchaseCount: number;
+  avgHoldDays?: number | null;
+  sellThroughRate?: number | null;
+  demandScore: number;
+  weekLabel: string;
+  computedAt: string;
+  createdAt: string;
+}
+
+// ── Buy-box score attribution ─────────────────────────────────────────────────
+
+export interface BuyBoxScoreAttribution {
+  id: string;
+  leadId: string;
+  ruleId?: string | null;
+  ruleVersion?: number | null;
+  ruleScore?: number | null;
+  segmentScore?: number | null;
+  demandScore?: number | null;
+  hybridScore: number;
+  components: Record<string, unknown>;
+  createdAt: string;
+}
+
+// ── Hybrid scoring ────────────────────────────────────────────────────────────
+
+export interface HybridBuyBoxScore {
+  hybridScore: number;
+  ruleScore: number;
+  segmentProfitScore: number;
+  regionDemandScore: number;
+}
+
+// ── Parsed import row (outcome of import.ts parsing) ─────────────────────────
+
+export interface ParsedOutcomeRow {
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  mileage?: number;
+  pricePaid: number;
+  salePrice?: number;
+  grossProfit?: number;
+  holdDays?: number;
+  conditionGradeRaw?: string;
+  conditionGradeNormalized: ConditionGradeNormalized;
+  purchaseChannel?: "auction" | "private" | "dealer";
+  sellingChannel?: "retail" | "wholesale" | "auction";
+  transportCost?: number;
+  auctionFee?: number;
+  miscOverhead?: number;
+  weekLabel?: string;
+  buyerId?: string;
+  closerId?: string;
+  region?: string;
+  cotCity?: string;
+  cotState?: string;
+  source?: string;
+  importFingerprint: string;
+}
