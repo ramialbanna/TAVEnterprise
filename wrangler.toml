@@ -60,8 +60,9 @@ INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
-# Bound but dormant — MANHEIM_LOOKUP_MODE=direct keeps the worker-mode
-# branch dark in prod until the cutover is greenlit.
+# Active — MANHEIM_LOOKUP_MODE=worker (cutover 2026-05-09); worker→intel
+# calls go via the INTEL_WORKER service binding below (INTEL_WORKER_URL is
+# diagnostic/fallback only).
 [[env.production.services]]
 binding = "INTEL_WORKER"
 service = "tav-intelligence-worker-production"

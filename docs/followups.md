@@ -228,8 +228,13 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
 - [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,
       envelope/conventions, all 5 endpoints, response shapes, worker config, frontend integration notes; ADR 0002
       "Consequences" updated to point at it as source of truth.
-- [ ] 2026-05-11 .dev.vars.example — line ~48 comment still says `MANHEIM_LOOKUP_MODE` "worker (not yet implemented)";
-      worker mode is implemented and live in production. Update the comment.
+- [x] 2026-05-11 .dev.vars.example — stale `MANHEIM_LOOKUP_MODE` comment ("worker (not yet implemented)"). DONE
+      2026-05-11 — comment rewritten to "direct = direct-to-Cox (code default, fine for local) / worker = via
+      tav-intelligence-worker, staging+prod run this (cutover 2026-05-09)". Also fixed the matching stale comment in
+      `wrangler.toml` (`[[env.production.kv_namespaces]]` block said "Bound but dormant … keeps worker-mode dark
+      until cutover greenlit" → now "Active — MANHEIM_LOOKUP_MODE=worker (cutover 2026-05-09); via INTEL_WORKER
+      binding"). Note: top-level `[vars] MANHEIM_LOOKUP_MODE = "direct"` left as-is — it's the base/local default and
+      both deployed envs override it to `"worker"`.
 - [ ] 2026-05-11 lint — `npm run lint` exits 1 on 4 legacy root scripts (`test-mmr.js`, `backfill-mmr.js`,
       `normalizer-worker.js`, `enrichment-worker.js`): ~97 errors (`no-undef`, `no-console`). Decide: gitignore /
       delete the throwaway scripts, or add an eslint override. Pre-existing; unrelated to ADR 0002 work.

@@ -47,4 +47,5 @@ APP_API_SECRET=replace_me
 
 # ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
 # HYBRID_BUYBOX_ENABLED=false
-# MANHEIM_LOOKUP_MODE=direct   # "direct" (default) | "worker" (not yet implemented)
+# MANHEIM_LOOKUP_MODE=direct   # "direct" = direct-to-Cox MMR (code default; fine for local dev — no intel worker needed)
+#                              # "worker" = MMR via tav-intelligence-worker — staging AND production run this (cutover 2026-05-09)
