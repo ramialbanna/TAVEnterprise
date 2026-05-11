@@ -188,9 +188,10 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
 - [ ] 2026-05-09 docs/manheim-uat-validation-plan.md — when Cox enables true prod MMR, append a prod-mode UAT
       mirroring §3 with prod-real VINs (not sandbox `1FT8W3BT1SEC27066`).
 
-- [ ] 2026-05-11 wrangler/secrets — provision `APP_API_SECRET` (Bearer for `/app/*` frontend API) on
-      `tav-aip-staging` and `tav-aip-production` via `wrangler secret put APP_API_SECRET` before the frontend
-      integrates. Unset ⇒ all `/app/*` calls return 503 `app_auth_not_configured`. See ADR 0002.
+- [x] 2026-05-11 wrangler/secrets — provision `APP_API_SECRET` (Bearer for `/app/*` frontend API) on
+      `tav-aip-staging` and `tav-aip-production`. DONE 2026-05-11 — both envs (rotated once after an accidental
+      exposure, re-provisioned). `/app/*` deployed (staging Version `870e4af2`, prod Version `888c99a3`) and
+      smoked PASS — see `docs/app-api-smoke-2026-05-11.md`. See ADR 0002.
 - [ ] 2026-05-11 src/app/routes — implement remaining `/app/*` endpoints from ADR 0002: `GET /app/import-batches`
       (wraps `listImportBatches`), `GET /app/historical-sales` (new `persistence/historicalSales.ts` over
       `tav.historical_sales`), `POST /app/mmr/vin` (reuses `getMmrValueFromWorker`, non-blocking).

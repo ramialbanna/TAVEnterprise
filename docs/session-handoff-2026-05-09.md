@@ -62,6 +62,10 @@ No redeploy required. This darkens the worker-mode path.
 4. Once Cox enables prod MMR, re-put intel-prod Cox secrets and rerun prod smoke.
 5. Write final production runbook page from `docs/staging-smoke-2026-05-09.md`.
 6. Build frontend-facing `/app/*` API layer for TAV-owned frontend/dashboard integration.
+   — IN PROGRESS: `GET /app/system-status` + `GET /app/kpis` shipped and smoked PASS on staging +
+   production 2026-05-11 (Bearer `APP_API_SECRET`); see `docs/adr/0002-frontend-app-api-layer.md` and
+   `docs/app-api-smoke-2026-05-11.md`. Remaining: `GET /app/import-batches`, `GET /app/historical-sales`,
+   `POST /app/mmr/vin`.
 
 ## Tomorrow starting point
 
