@@ -211,9 +211,11 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       (Version `127f532a`); 6-check smoke PASS on both envs (incl. `POST /app/mmr/vin` `1FT8W3BT1SEC27066` →
       `mmrValue:68600 confidence:high method:vin` on sandbox Cox). Recorded in `docs/app-api-smoke-2026-05-11.md`
       "Round 2".
-- [ ] 2026-05-11 supabase — add a global outcome-rollup view (e.g. `v_outcome_summary_global` with
-      `COUNT(gross_profit)` so weighted averages are correct) so `GET /app/kpis` `outcomes.value` can expose true
-      cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` instead of only `totalOutcomes` + per-region.
+- [x] 2026-05-11 supabase — global outcome-rollup view. DONE 2026-05-11 — migration `0041_outcome_summary_global_view.sql`
+      adds `tav.v_outcome_summary_global` (single-row, no GROUP BY; column formulas mirror `v_outcome_summary` sans
+      `region`, so a true global `AVG`, not a mean-of-region-means). `GET /app/kpis` `outcomes.value` now exposes
+      `totalOutcomes` / `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` / `lastOutcomeAt` + `byRegion`; NULL
+      aggregates (empty table) pass through as `null`. Schema snapshot + ADR 0002 + `docs/APP_API.md` updated.
 - [ ] 2026-05-11 src — persist stale-sweep cron run times (audit row on each `runStaleSweep`) so
       `GET /app/system-status` `staleSweep.lastRunAt` stops returning `null` / `missingReason:"not_persisted"`.
 - [x] 2026-05-11 docs — write `docs/APP_API.md` formal contract doc for `/app/*`. DONE 2026-05-11 — covers auth,

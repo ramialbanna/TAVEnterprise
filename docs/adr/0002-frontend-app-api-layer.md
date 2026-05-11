@@ -29,10 +29,11 @@ Conventions:
   `missingReason` sibling. The frontend never receives a fabricated number.
 - **`GET /app/system-status` never fails the request.** It reports unhealthy state
   in the body (`db.ok=false`, `sources: []`) and still returns `200`.
-- **Real Supabase/TAV data first.** No synthetic or estimated rollups. A correct
-  *global* outcome rollup needs a new view (`v_outcome_summary` is per-region only);
-  until that lands, only exact `COUNT` totals are surfaced at the top level — see
-  `docs/followups.md`.
+- **Real Supabase/TAV data first.** No synthetic or estimated rollups. The global
+  outcome rollup is `tav.v_outcome_summary_global` (migration 0041) — a single-row
+  view computing a true global `AVG` (not a mean of per-region means);
+  `v_outcome_summary` remains the per-region breakdown. `NULL` aggregates (empty
+  table) pass through as `null`, never fabricated.
 - **MMR proxying** goes through `getMmrValueFromWorker` (which already chooses
   Service-Binding vs public-fetch transport per ADR-era cutover); worker errors are
   non-blocking and surface as `mmrValue: null` + `missingReason`.
@@ -70,14 +71,20 @@ Always `200`. `staleSweep.lastRunAt` is `null` until cron-run times are persiste
 ```jsonc
 { "ok": true, "data": {
   "generatedAt": "<ISO8601>",
-  "outcomes": { "value": { "totalOutcomes": <int>, "byRegion": [ /* tav.v_outcome_summary rows */ ] } | null, "missingReason": "db_error" | null },
+  "outcomes": { "value": {
+      "totalOutcomes": <int>,                                  // tav.v_outcome_summary_global
+      "avgGrossProfit": <number>|null, "avgHoldDays": <number>|null,
+      "sellThroughRate": <number>|null, "lastOutcomeAt": "<ISO8601>"|null,
+      "byRegion": [ /* tav.v_outcome_summary rows */ ]
+    } | null, "missingReason": "db_error" | null },
   "leads":    { "value": { "total": <int> } | null, "missingReason": "db_error" | null },
   "listings": { "value": { "normalizedTotal": <int> } | null, "missingReason": "db_error" | null }
 }}
 ```
 
 `503 {"error":"db_error"}` only if the Supabase client cannot be constructed;
-individual blocks degrade independently.
+the three blocks degrade independently. The `outcomes` block degrades if either
+`v_outcome_summary_global` or `v_outcome_summary` errors. See `docs/APP_API.md`.
 
 ### `GET /app/import-batches` — implemented (2026-05-11)
 

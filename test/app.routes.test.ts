@@ -200,10 +200,18 @@ describe("GET /app/system-status", () => {
 
 describe("GET /app/kpis", () => {
   it("returns 200 with metric blocks populated from Supabase", async () => {
+    dbState.tables.v_outcome_summary_global = {
+      data: [{
+        total_outcomes: 12,
+        avg_gross_profit: 1500,
+        avg_hold_days: 21.5,
+        sell_through_rate: 0.9167,
+        last_outcome_at: "2026-05-01T00:00:00.000Z",
+      }],
+    };
     dbState.tables.v_outcome_summary = {
       data: [{ region: "dallas", total_outcomes: 12, avg_gross_profit: 1500 }],
     };
-    dbState.tables.purchase_outcomes = { count: 12 };
     dbState.tables.leads = { count: 47 };
     dbState.tables.normalized_listings = { count: 880 };
 
@@ -212,7 +220,17 @@ describe("GET /app/kpis", () => {
     const body = (await res.json()) as {
       ok: boolean;
       data: {
-        outcomes: { value: { totalOutcomes: number; byRegion: unknown[] } | null; missingReason: string | null };
+        outcomes: {
+          value: {
+            totalOutcomes: number;
+            avgGrossProfit: number | null;
+            avgHoldDays: number | null;
+            sellThroughRate: number | null;
+            lastOutcomeAt: string | null;
+            byRegion: unknown[];
+          } | null;
+          missingReason: string | null;
+        };
         leads: { value: { total: number } | null; missingReason: string | null };
         listings: { value: { normalizedTotal: number } | null; missingReason: string | null };
       };
@@ -221,13 +239,48 @@ describe("GET /app/kpis", () => {
     expect(body.data.outcomes.missingReason).toBeNull();
     expect(body.data.outcomes.value).toEqual({
       totalOutcomes: 12,
+      avgGrossProfit: 1500,
+      avgHoldDays: 21.5,
+      sellThroughRate: 0.9167,
+      lastOutcomeAt: "2026-05-01T00:00:00.000Z",
       byRegion: [{ region: "dallas", total_outcomes: 12, avg_gross_profit: 1500 }],
     });
     expect(body.data.leads.value).toEqual({ total: 47 });
     expect(body.data.listings.value).toEqual({ normalizedTotal: 880 });
   });
 
-  it("degrades a failing block to { value: null, missingReason } without failing the request", async () => {
+  it("passes NULL global aggregates through as null on an empty outcomes table", async () => {
+    dbState.tables.v_outcome_summary_global = {
+      data: [{
+        total_outcomes: 0,
+        avg_gross_profit: null,
+        avg_hold_days: null,
+        sell_through_rate: null,
+        last_outcome_at: null,
+      }],
+    };
+    dbState.tables.v_outcome_summary = { data: [] };
+    dbState.tables.leads = { count: 0 };
+    dbState.tables.normalized_listings = { count: 0 };
+
+    const res = await worker.fetch(authedReq("/app/kpis"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { outcomes: { value: Record<string, unknown> | null; missingReason: string | null } };
+    };
+    expect(body.data.outcomes.missingReason).toBeNull();
+    expect(body.data.outcomes.value).toEqual({
+      totalOutcomes: 0,
+      avgGrossProfit: null,
+      avgHoldDays: null,
+      sellThroughRate: null,
+      lastOutcomeAt: null,
+      byRegion: [],
+    });
+  });
+
+  it("degrades the outcomes block when the per-region view errors, without failing the request", async () => {
+    dbState.tables.v_outcome_summary_global = { data: [{ total_outcomes: 1 }] };
     dbState.tables.v_outcome_summary = { error: { message: "view missing" } };
     dbState.tables.leads = { count: 3 };
     dbState.tables.normalized_listings = { count: 9 };
@@ -243,6 +296,21 @@ describe("GET /app/kpis", () => {
     expect(body.data.outcomes.value).toBeNull();
     expect(body.data.outcomes.missingReason).toBe("db_error");
     expect(body.data.leads.value).toEqual({ total: 3 });
+  });
+
+  it("degrades the outcomes block when the global rollup view errors", async () => {
+    dbState.tables.v_outcome_summary_global = { error: { message: "view missing" } };
+    dbState.tables.v_outcome_summary = { data: [{ region: "dallas" }] };
+    dbState.tables.leads = { count: 5 };
+    dbState.tables.normalized_listings = { count: 11 };
+
+    const res = await worker.fetch(authedReq("/app/kpis"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { outcomes: { value: unknown; missingReason: string | null } };
+    };
+    expect(body.data.outcomes.value).toBeNull();
+    expect(body.data.outcomes.missingReason).toBe("db_error");
   });
 
   it("returns 503 when the Supabase client cannot be constructed", async () => {

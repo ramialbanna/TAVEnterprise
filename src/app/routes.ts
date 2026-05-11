@@ -167,10 +167,11 @@ async function block<T>(name: string, fn: () => Promise<T>): Promise<MetricBlock
 /**
  * GET /app/kpis — product KPIs sourced from Supabase.
  *
- * `outcomes.byRegion` comes straight from tav.v_outcome_summary (honest
- * per-region rollup). A correct *global* rollup view is a follow-up; until
- * then only `totalOutcomes` (an exact COUNT) is exposed at the top level —
- * no weighted-average estimate is fabricated.
+ * `outcomes.value` carries the global rollup from tav.v_outcome_summary_global
+ * (a single-row view — a true global AVG, not a mean of per-region means) plus
+ * the honest per-region breakdown in `byRegion` from tav.v_outcome_summary. Any
+ * aggregate that is NULL in the view (e.g. empty `purchase_outcomes`) is passed
+ * through as `null`, never fabricated.
  *
  * Returns 503 only if the Supabase client itself cannot be constructed;
  * individual KPI blocks degrade to `{ value: null, missingReason }`.
@@ -185,13 +186,24 @@ async function handleKpis(env: Env): Promise<Response> {
   }
 
   const outcomes = await block("outcomes", async () => {
-    const { data, error } = await db.from("v_outcome_summary").select("*");
-    if (error) throw error;
-    const { count, error: countErr } = await db
-      .from("purchase_outcomes")
-      .select("*", { count: "exact", head: true });
-    if (countErr) throw countErr;
-    return { totalOutcomes: count ?? 0, byRegion: data ?? [] };
+    const { data: globalRows, error: globalErr } = await db
+      .from("v_outcome_summary_global")
+      .select("*");
+    if (globalErr) throw globalErr;
+    const { data: regionRows, error: regionErr } = await db
+      .from("v_outcome_summary")
+      .select("*");
+    if (regionErr) throw regionErr;
+    // v_outcome_summary_global has no GROUP BY → always exactly one row.
+    const g = (globalRows?.[0] ?? {}) as Record<string, unknown>;
+    return {
+      totalOutcomes: (g.total_outcomes as number | null) ?? 0,
+      avgGrossProfit: (g.avg_gross_profit as number | null) ?? null,
+      avgHoldDays: (g.avg_hold_days as number | null) ?? null,
+      sellThroughRate: (g.sell_through_rate as number | null) ?? null,
+      lastOutcomeAt: (g.last_outcome_at as string | null) ?? null,
+      byRegion: regionRows ?? [],
+    };
   });
 
   const leads = await block("leads", async () => {

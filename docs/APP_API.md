@@ -106,7 +106,11 @@ Supabase client itself cannot be constructed.
   "generatedAt": "<ISO8601>",
   "outcomes": {
     "value": {
-      "totalOutcomes": 1234,                 // exact COUNT of tav.purchase_outcomes
+      "totalOutcomes": 1234,                 // COUNT(*) from tav.v_outcome_summary_global
+      "avgGrossProfit": 1500.0  | null,       // global AVG (NULL ⇒ null, e.g. empty table)
+      "avgHoldDays": 21.5       | null,
+      "sellThroughRate": 0.9167 | null,       // rows with sale_price ÷ total, 4 dp
+      "lastOutcomeAt": "<ISO8601>" | null,
       "byRegion": [ /* rows from tav.v_outcome_summary (per-region rollup) */ ]
     } | null,
     "missingReason": "db_error" | null
@@ -116,11 +120,13 @@ Supabase client itself cannot be constructed.
 }}
 ```
 
-- `outcomes.byRegion` is the honest per-region rollup from `tav.v_outcome_summary`.
-  A correct *global* rollup (cross-region weighted `avgGrossProfit` / `avgHoldDays` /
-  `sellThroughRate`) needs a new view — until then only `totalOutcomes` (an exact
-  `COUNT`) is exposed at the top level; no weighted-average estimate is fabricated.
-  Follow-up tracked in `docs/followups.md`.
+- The top-level `outcomes.value` aggregates come from `tav.v_outcome_summary_global`
+  (migration 0041) — a single-row view that computes a *true global* `AVG`, not a
+  mean of per-region means. `byRegion` is the honest per-region rollup from
+  `tav.v_outcome_summary`. Any aggregate that is `NULL` in the view (empty
+  `purchase_outcomes`) is passed through as `null` — no number is fabricated.
+- The `outcomes` block degrades to `{ "value": null, "missingReason": "db_error" }`
+  if *either* view query fails; the `leads` / `listings` blocks are independent.
 
 ---
 
@@ -276,8 +282,6 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 
 Tracked in `docs/followups.md`:
 
-- Global outcome-rollup view so `/app/kpis` `outcomes.value` can expose true
-  cross-region `avgGrossProfit` / `avgHoldDays` / `sellThroughRate`.
 - Persist stale-sweep cron run times so `/app/system-status` `staleSweep.lastRunAt`
   is non-null.
 

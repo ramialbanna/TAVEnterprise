@@ -833,6 +833,21 @@ SELECT
 FROM tav.purchase_outcomes
 GROUP BY region;
 
+-- v_outcome_summary_global: single-row global rollup (no GROUP BY) for /app/kpis.
+-- Formulas mirror v_outcome_summary exactly, sans `region`. Always one row.
+CREATE OR REPLACE VIEW tav.v_outcome_summary_global AS
+SELECT
+  COUNT(*)                                                    AS total_outcomes,
+  ROUND(AVG(gross_profit)::numeric, 2)                        AS avg_gross_profit,
+  ROUND(AVG(hold_days)::numeric, 2)                           AS avg_hold_days,
+  ROUND(
+    COUNT(*) FILTER (WHERE sale_price IS NOT NULL)::numeric /
+    NULLIF(COUNT(*), 0),
+    4
+  )                                                           AS sell_through_rate,
+  MAX(created_at)                                             AS last_outcome_at
+FROM tav.purchase_outcomes;
+
 -- v_segment_profit: YMM + mileage-bucket gross margin for buy-box tuning.
 CREATE OR REPLACE VIEW tav.v_segment_profit AS
 SELECT
