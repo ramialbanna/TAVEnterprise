@@ -78,7 +78,7 @@ See `docs/APP_API.md`.
   "outcomes": { "value": {
       "totalOutcomes": <int>,                                  // tav.v_outcome_summary_global
       "avgGrossProfit": <number>|null, "avgHoldDays": <number>|null,
-      "sellThroughRate": <number>|null, "lastOutcomeAt": "<ISO8601>"|null,
+      "lastOutcomeAt": "<ISO8601>"|null,
       "byRegion": [ /* tav.v_outcome_summary rows */ ]
     } | null, "missingReason": "db_error" | null },
   "leads":    { "value": { "total": <int> } | null, "missingReason": "db_error" | null },
@@ -88,7 +88,10 @@ See `docs/APP_API.md`.
 
 `503 {"error":"db_error"}` only if the Supabase client cannot be constructed;
 the three blocks degrade independently. The `outcomes` block degrades if either
-`v_outcome_summary_global` or `v_outcome_summary` errors. See `docs/APP_API.md`.
+`v_outcome_summary_global` or `v_outcome_summary` errors. `sell_through_rate` exists
+in the views but is intentionally omitted from this response — tautologically `1.0`
+until acquisition-time `purchase_outcomes` rows exist; see `docs/APP_API.md` /
+`docs/followups.md`.
 
 ### `GET /app/import-batches` — implemented (2026-05-11)
 

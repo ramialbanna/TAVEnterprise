@@ -116,7 +116,6 @@ Supabase client itself cannot be constructed.
       "totalOutcomes": 1234,                 // COUNT(*) from tav.v_outcome_summary_global
       "avgGrossProfit": 1500.0  | null,       // global AVG (NULL ⇒ null, e.g. empty table)
       "avgHoldDays": 21.5       | null,
-      "sellThroughRate": 0.9167 | null,       // rows with sale_price ÷ total, 4 dp
       "lastOutcomeAt": "<ISO8601>" | null,
       "byRegion": [ /* rows from tav.v_outcome_summary (per-region rollup) */ ]
     } | null,
@@ -132,6 +131,13 @@ Supabase client itself cannot be constructed.
   mean of per-region means. `byRegion` is the honest per-region rollup from
   `tav.v_outcome_summary`. Any aggregate that is `NULL` in the view (empty
   `purchase_outcomes`) is passed through as `null` — no number is fabricated.
+- **No `sellThroughRate`.** The views carry a `sell_through_rate` column
+  (`rows with sale_price ÷ total`), but it is **intentionally not surfaced** here:
+  `tav.purchase_outcomes` currently holds only sold/imported outcome rows (every row
+  has a `sale_price`), so the ratio is tautologically `1.0` and would mislead the
+  frontend. A real sell-through metric is blocked on TAV persisting acquisition-time
+  `purchase_outcomes` rows (i.e. inventory bought-but-not-yet-resold) — tracked in
+  `docs/followups.md`. The SQL views are left unchanged.
 - The `outcomes` block degrades to `{ "value": null, "missingReason": "db_error" }`
   if *either* view query fails; the `leads` / `listings` blocks are independent.
 
@@ -289,9 +295,10 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 
 Tracked in `docs/followups.md`:
 
-- `sellThroughRate` in `/app/kpis` `outcomes.value` is tautologically `1.0` while
-  `tav.purchase_outcomes` holds only completed sales — a metric-semantics decision,
-  not a bug.
+- A real `sellThroughRate` for `/app/kpis` is blocked on the lead→purchase /
+  acquisition-persistence workflow writing `purchase_outcomes` rows *before* resale
+  (so the denominator becomes "vehicles acquired", not "vehicles already sold").
+  The field is omitted from the contract until then.
 
 ## Related docs
 

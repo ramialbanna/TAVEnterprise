@@ -213,16 +213,22 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       "Round 2".
 - [x] 2026-05-11 supabase — global outcome-rollup view. DONE 2026-05-11 — migration `0041_outcome_summary_global_view.sql`
       adds `tav.v_outcome_summary_global` (single-row, no GROUP BY; column formulas mirror `v_outcome_summary` sans
-      `region`, so a true global `AVG`, not a mean-of-region-means). `GET /app/kpis` `outcomes.value` now exposes
-      `totalOutcomes` / `avgGrossProfit` / `avgHoldDays` / `sellThroughRate` / `lastOutcomeAt` + `byRegion`; NULL
-      aggregates (empty table) pass through as `null`. Schema snapshot + ADR 0002 + `docs/APP_API.md` updated.
-- [ ] 2026-05-11 supabase/product — `sell_through_rate` in `v_outcome_summary` / `v_outcome_summary_global` is
-      `COUNT(*) FILTER (sale_price IS NOT NULL) / COUNT(*)`, which is tautologically `1.0` because
-      `tav.purchase_outcomes` only ever holds *completed* sales (every row has a `sale_price`). To make the metric
-      meaningful it needs a denominator that includes not-yet-sold acquisitions (e.g. join against `historical_sales`
-      or an inventory/acquisitions table, or redefine as time-to-sale). Surfaced via `/app/kpis` Round-3 smoke
-      (2026-05-11) showing `sellThroughRate:1`. Left as-is for now — changing it is a metric-semantics decision, not
-      a bug. Not an ADR-0002 blocker.
+      `region`, so a true global `AVG`, not a mean-of-region-means). `GET /app/kpis` `outcomes.value` exposes
+      `totalOutcomes` / `avgGrossProfit` / `avgHoldDays` / `lastOutcomeAt` + `byRegion`; NULL aggregates (empty
+      table) pass through as `null`. Schema snapshot + ADR 0002 + `docs/APP_API.md` updated. (Initially also
+      exposed `sellThroughRate`; removed same day — see the sell-through item below.)
+- [x] 2026-05-11 product — `sellThroughRate` semantics for `/app/kpis`. RESOLVED 2026-05-11 (Option 1) — removed
+      `sellThroughRate` from the `/app/kpis` `outcomes.value` response. The SQL views (`v_outcome_summary` /
+      `v_outcome_summary_global`) keep their `sell_through_rate` column unchanged; it's simply not surfaced via the
+      frontend API. The formula is correct (`COUNT(*) FILTER (sale_price IS NOT NULL) / COUNT(*)`); the problem is
+      product semantics — `tav.purchase_outcomes` currently holds only sold/imported outcome rows (every row has a
+      `sale_price`), so the ratio is tautologically `1.0` and returning it would mislead the frontend. `handleKpis`
+      doc comment + `docs/APP_API.md` + ADR 0002 + test expectations updated. Pure API change — no migration, views
+      untouched.
+- [ ] product/data — build a true sell-through metric once the lead→purchase / acquisition-persistence workflow
+      writes `tav.purchase_outcomes` rows *before* resale (i.e. inventory bought-but-not-yet-sold; `sale_price IS NULL`
+      then means "in inventory"). At that point `sell_through_rate` becomes meaningful and can be re-surfaced via
+      `/app/kpis`. Blocked on that workflow — it is not a query change. (A normal follow-up; no /gsd-plant-seed.)
 - [x] 2026-05-11 src — persist stale-sweep cron run times. DONE 2026-05-11 — migration `0042_cron_runs.sql` adds
       `tav.cron_runs` (job-agnostic audit log: `job_name`, `started_at`, `finished_at`, `status` ok|failed,
       `detail` jsonb). `src/index.ts` `scheduled()` records each run via `recordCronRunSafe` (best-effort —

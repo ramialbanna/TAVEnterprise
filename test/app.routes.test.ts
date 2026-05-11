@@ -298,7 +298,6 @@ describe("GET /app/kpis", () => {
             totalOutcomes: number;
             avgGrossProfit: number | null;
             avgHoldDays: number | null;
-            sellThroughRate: number | null;
             lastOutcomeAt: string | null;
             byRegion: unknown[];
           } | null;
@@ -310,14 +309,16 @@ describe("GET /app/kpis", () => {
     };
     expect(body.ok).toBe(true);
     expect(body.data.outcomes.missingReason).toBeNull();
+    // sell_through_rate is present in the view row but intentionally NOT surfaced
+    // (tautologically 1.0 today — see handleKpis comment / docs/followups.md).
     expect(body.data.outcomes.value).toEqual({
       totalOutcomes: 12,
       avgGrossProfit: 1500,
       avgHoldDays: 21.5,
-      sellThroughRate: 0.9167,
       lastOutcomeAt: "2026-05-01T00:00:00.000Z",
       byRegion: [{ region: "dallas", total_outcomes: 12, avg_gross_profit: 1500 }],
     });
+    expect(body.data.outcomes.value).not.toHaveProperty("sellThroughRate");
     expect(body.data.leads.value).toEqual({ total: 47 });
     expect(body.data.listings.value).toEqual({ normalizedTotal: 880 });
   });
@@ -346,7 +347,6 @@ describe("GET /app/kpis", () => {
       totalOutcomes: 0,
       avgGrossProfit: null,
       avgHoldDays: null,
-      sellThroughRate: null,
       lastOutcomeAt: null,
       byRegion: [],
     });

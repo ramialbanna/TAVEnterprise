@@ -206,6 +206,12 @@ async function block<T>(name: string, fn: () => Promise<T>): Promise<MetricBlock
  * aggregate that is NULL in the view (e.g. empty `purchase_outcomes`) is passed
  * through as `null`, never fabricated.
  *
+ * `sell_through_rate` exists in those views but is deliberately *not* surfaced
+ * here: `tav.purchase_outcomes` currently holds only sold/imported outcome rows
+ * (every row has a `sale_price`), so the ratio is tautologically 1.0. A real
+ * sell-through metric needs acquisition-time `purchase_outcomes` rows written
+ * before resale — see docs/followups.md.
+ *
  * Returns 503 only if the Supabase client itself cannot be constructed;
  * individual KPI blocks degrade to `{ value: null, missingReason }`.
  */
@@ -233,7 +239,6 @@ async function handleKpis(env: Env): Promise<Response> {
       totalOutcomes: (g.total_outcomes as number | null) ?? 0,
       avgGrossProfit: (g.avg_gross_profit as number | null) ?? null,
       avgHoldDays: (g.avg_hold_days as number | null) ?? null,
-      sellThroughRate: (g.sell_through_rate as number | null) ?? null,
       lastOutcomeAt: (g.last_outcome_at as string | null) ?? null,
       byRegion: regionRows ?? [],
     };
