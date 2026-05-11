@@ -6,7 +6,7 @@ Red flags — salvage/rebuilt/flood title, mileage > 200k, price < $500, bot-pat
 
 Threshold for "qualified" — score ≥ 0.12 + no red flags + VIN decoded.
 
-Where it runs — the Make scenario calls a Cloudflare Worker that returns the score, OR a Postgres function does it on insert. Pick one before building.
+Where it runs — Cloudflare Worker computes the score inside the `/ingest` pipeline (pure function in `src/scoring/`). Make.com is not part of the target architecture; see `docs/adr/0001-drop-make-com.md`.
 
 How to retune — change weights → migrate historical scores → CHANGELOG entry.
 

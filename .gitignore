@@ -49,6 +49,9 @@ coverage/
 *.swo
 *~
 
+# --- Claude session memory (local only) ------------------------------------
+.claude-memory.md
+
 # --- Logs / scratch ---------------------------------------------------------
 *.log
 logs/
@@ -56,3 +59,4 @@ logs/
 *.tmp
 tmp/
 scratch/
+supabase/.temp/

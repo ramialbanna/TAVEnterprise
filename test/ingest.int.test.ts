@@ -4,16 +4,24 @@ import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRun
 import { insertRawListing } from "../src/persistence/rawListings";
 import type { Env } from "../src/types/env";
 
-// Skipped when .dev.vars is absent or contains the example placeholder.
+// Skipped unless explicitly enabled. These tests mutate a live Supabase DB, so
+// a local .dev.vars file alone must not opt the suite into network I/O.
+const RUN_INTEGRATION = process.env.RUN_SUPABASE_INTEGRATION_TESTS === "true";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
-const SKIP = !SUPABASE_URL || SUPABASE_URL.includes("your-project");
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+const SKIP =
+  !RUN_INTEGRATION ||
+  !SUPABASE_URL ||
+  SUPABASE_URL.includes("your-project") ||
+  !SUPABASE_SERVICE_ROLE_KEY ||
+  SUPABASE_SERVICE_ROLE_KEY === "replace_me";
 
 // Wrap in if(!SKIP) so getSupabaseClient is never called during collection
 // when credentials are absent — describe.skipIf still runs the factory callback.
 if (!SKIP) {
 const env = {
   SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  SUPABASE_SERVICE_ROLE_KEY,
 } as unknown as Env;
 
 const TEST_SOURCE = "facebook" as const;

@@ -7,9 +7,11 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "dev:intelligence": "wrangler dev --config workers/tav-intelligence-worker/wrangler.toml",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
-    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "deploy:intelligence": "wrangler deploy --config workers/tav-intelligence-worker/wrangler.toml",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"workers/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:int": "vitest run --config vitest.int.config.ts"
@@ -25,6 +27,6 @@
     "eslint": "^8.57.1",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9",
-    "wrangler": "^3.109.2"
+    "wrangler": "^4.90.0"
   }
 }

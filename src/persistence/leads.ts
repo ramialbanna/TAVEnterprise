@@ -8,13 +8,14 @@ export interface LeadInput {
   scored: ScoredLead;
   mmrValue?: number;
   matchedRuleDbId?: string;
+  scoreComponents?: Record<string, unknown>;
 }
 
 export async function upsertLead(
   db: SupabaseClient,
   input: LeadInput,
 ): Promise<{ id: string; created: boolean }> {
-  const { normalizedListingId, vehicleCandidateId, listing, scored, mmrValue, matchedRuleDbId } = input;
+  const { normalizedListingId, vehicleCandidateId, listing, scored, mmrValue, matchedRuleDbId, scoreComponents } = input;
 
   // Check for existing lead (normalized_listing_id is UNIQUE on leads)
   const { data: existing, error: selectErr } = await db
@@ -39,6 +40,7 @@ export async function upsertLead(
         reason_codes: scored.reasonCodes,
         mmr_value: mmrValue ?? null,
         valuation_confidence: scored.valuationConfidence ?? "none",
+        score_components: scoreComponents ?? null,
       })
       .eq("id", existing.id);
     if (updateErr) throw updateErr;
@@ -66,7 +68,7 @@ export async function upsertLead(
       deal_score: scored.dealScore,
       buy_box_score: scored.buyBoxScore,
       freshness_score: scored.freshnessScore,
-      region_score: 100,
+      region_score: scored.regionScore,
       source_confidence_score: scored.sourceConfidenceScore,
       final_score: scored.finalScore,
       reason_codes: scored.reasonCodes,
@@ -74,6 +76,7 @@ export async function upsertLead(
       matched_rule_version: scored.matchedRuleVersion ?? null,
       valuation_confidence: scored.valuationConfidence ?? "none",
       mmr_value: mmrValue ?? null,
+      score_components: scoreComponents ?? null,
     })
     .select("id")
     .single();

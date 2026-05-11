@@ -274,6 +274,68 @@ function extractSourceListingId(item: Record<string, unknown>): string | undefin
   return undefined;
 }
 
+// VIN is rare on Facebook listings but occasionally present in the description
+// or a side field. When provided, validate to a 17-char standard VIN (alphanumeric,
+// excluding I/O/Q per ISO 3779) and uppercase. Anything else returns undefined so
+// the YMM fallback path runs cleanly without polluting MMR with malformed input.
+const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
+
+function extractVin(item: Record<string, unknown>): string | undefined {
+  for (const key of ["vin", "VIN", "Vin"]) {
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const candidate = raw.trim().toUpperCase();
+    if (VIN_REGEX.test(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+// ── Schema drift detection ────────────────────────────────────────────────────
+// Fields the Facebook adapter actively reads or recognises as benign.
+// Any top-level key NOT in this set is reported as an unexpected_field drift event.
+
+const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
+  // URL aliases
+  "url", "listingUrl", "listing_url", "marketplaceUrl", "link",
+  // ID aliases
+  "id", "listingId", "listing_id", "fbId", "itemId",
+  // Core listing
+  "title", "Title",
+  // Price aliases
+  "price", "Price", "listing_price", "listingPrice",
+  // Mileage aliases
+  "mileage", "miles", "odometer", "Mileage",
+  // Vehicle identifiers
+  "vin", "VIN", "Vin",
+  // Descriptive fields
+  "description",
+  // Media
+  "images", "image",
+  // Location
+  "city", "state",
+  // Seller
+  "sellerName", "seller_name", "seller", "sellerUrl", "seller_url",
+  // Timing
+  "postedAt", "posted_at", "listedAt",
+]);
+
+export type SchemaDriftEvent = {
+  event_type: "unexpected_field";
+  field_path: string;
+  sample_value: unknown;
+};
+
+// Pure — no I/O. Returns one event per unrecognised top-level field.
+export function detectFacebookDrift(item: Record<string, unknown>): SchemaDriftEvent[] {
+  const events: SchemaDriftEvent[] = [];
+  for (const key of Object.keys(item)) {
+    if (!KNOWN_FACEBOOK_FIELDS.has(key)) {
+      events.push({ event_type: "unexpected_field", field_path: key, sample_value: item[key] });
+    }
+  }
+  return events;
+}
+
 // ── Public adapter ────────────────────────────────────────────────────────────
 
 export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterResult {
@@ -297,7 +359,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
 
     const year = extractYear(title);
     if (year === undefined) return fail("missing_ymm");
-    if (year < 1990 || year > 2035) return fail("invalid_year");
+    if (year < 2000 || year > 2035) return fail("invalid_year");
 
     const makeResult = extractMake(title, year);
     if (!makeResult) return fail("missing_ymm");
@@ -315,6 +377,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     const mileage = parseMileage(rec, title);
     const trim = extractTrim(remaining);
     const sourceListingId = extractSourceListingId(rec);
+    const vin = extractVin(rec);
 
     const listing: NormalizedListingInput = {
       source: "facebook",
@@ -330,6 +393,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
       ...(priceResult.price !== undefined && { price: priceResult.price }),
       ...(mileage !== undefined && { mileage }),
       ...(sourceListingId !== undefined && { sourceListingId }),
+      ...(vin !== undefined && { vin }),
     };
 
     return { ok: true, listing };

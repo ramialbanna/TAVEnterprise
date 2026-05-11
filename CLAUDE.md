@@ -1,3 +1,5 @@
+@.claude-memory.md
+
 # CLAUDE.md — TAV Enterprise Acquisition Intelligence Platform (TAV-AIP)
 
 > Tier 1 project memory. Always loaded. Keep this file lean — long-form lives in `@docs/`.

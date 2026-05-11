@@ -10,13 +10,28 @@ SUPABASE_SERVICE_ROLE_KEY=replace_me
 WEBHOOK_HMAC_SECRET=replace_me
 NORMALIZER_SECRET=replace_me
 
-# ── Manheim MMR API ────────────────────────────────────────────────────────────
+# ── Cox/Manheim Wholesale-Valuations API ──────────────────────────────────────
+# Current account is Cox Bridge 2 / client_credentials.
+# See docs/COX_API_INTEGRATION.md for full details.
+MANHEIM_API_VENDOR=cox
+MANHEIM_GRANT_TYPE=client_credentials
+MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get
 MANHEIM_CLIENT_ID=replace_me
 MANHEIM_CLIENT_SECRET=replace_me
-MANHEIM_USERNAME=replace_me
-MANHEIM_PASSWORD=replace_me
-MANHEIM_TOKEN_URL=replace_me
-MANHEIM_MMR_URL=replace_me
+# Cox sandbox endpoints. Copy MANHEIM_TOKEN_URL verbatim from the Cox app detail page;
+# the path segment after /oauth2/ is per-app and must not be guessed.
+MANHEIM_TOKEN_URL=https://authorize.coxautoinc.com/oauth2/REPLACE_AUTH_SERVER_ID/v1/token
+# Cox MMR 1.4 base URL — must end in /mmr; code appends /vin/{vin} or /search/{year}/{make}/{model}/{bodyname}
+MANHEIM_MMR_URL=https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+# Cox integration:  https://integration.api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+# Cox production:   https://api.coxautoinc.com/wholesale-valuations/vehicle/mmr
+#
+# Legacy Manheim password grant (deprecated — current account is Cox).
+# Revert by setting: MANHEIM_API_VENDOR=manheim, MANHEIM_GRANT_TYPE=password.
+# MANHEIM_USERNAME=replace_me
+# MANHEIM_PASSWORD=replace_me
+# MANHEIM_TOKEN_URL=https://api.manheim.com/oauth2/token.oauth2
+# MANHEIM_MMR_URL=https://api.manheim.com/valuations
 
 # ── Alerts ─────────────────────────────────────────────────────────────────────
 ALERT_WEBHOOK_URL=replace_me
@@ -24,3 +39,13 @@ TWILIO_ACCOUNT_SID=replace_me
 TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=replace_me
 ALERT_TO_NUMBER=replace_me
+
+# ── Admin / frontend API ───────────────────────────────────────────────────────
+ADMIN_API_SECRET=replace_me
+# Bearer token for the /app/* frontend product API. Keep distinct from ADMIN_API_SECRET.
+APP_API_SECRET=replace_me
+
+# ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
+# HYBRID_BUYBOX_ENABLED=false
+# MANHEIM_LOOKUP_MODE=direct   # "direct" = direct-to-Cox MMR (code default; fine for local dev — no intel worker needed)
+#                              # "worker" = MMR via tav-intelligence-worker — staging AND production run this (cutover 2026-05-09)
