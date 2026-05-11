@@ -228,7 +228,9 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
 - [ ] product/data — build a true sell-through metric once the lead→purchase / acquisition-persistence workflow
       writes `tav.purchase_outcomes` rows *before* resale (i.e. inventory bought-but-not-yet-sold; `sale_price IS NULL`
       then means "in inventory"). At that point `sell_through_rate` becomes meaningful and can be re-surfaced via
-      `/app/kpis`. Blocked on that workflow — it is not a query change. (A normal follow-up; no /gsd-plant-seed.)
+      `/app/kpis`; also strip the now-meaningful-or-not `sell_through_rate` column from the raw `byRegion` rows the
+      endpoint passes through (today they still carry it verbatim — see `docs/app-api-smoke-2026-05-11.md` Round 5).
+      Blocked on that workflow — it is not a query change. (A normal follow-up; no /gsd-plant-seed.)
 - [x] 2026-05-11 src — persist stale-sweep cron run times. DONE 2026-05-11 — migration `0042_cron_runs.sql` adds
       `tav.cron_runs` (job-agnostic audit log: `job_name`, `started_at`, `finished_at`, `status` ok|failed,
       `detail` jsonb). `src/index.ts` `scheduled()` records each run via `recordCronRunSafe` (best-effort —

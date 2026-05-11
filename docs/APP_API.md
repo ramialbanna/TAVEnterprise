@@ -129,15 +129,18 @@ Supabase client itself cannot be constructed.
 - The top-level `outcomes.value` aggregates come from `tav.v_outcome_summary_global`
   (migration 0041) — a single-row view that computes a *true global* `AVG`, not a
   mean of per-region means. `byRegion` is the honest per-region rollup from
-  `tav.v_outcome_summary`. Any aggregate that is `NULL` in the view (empty
-  `purchase_outcomes`) is passed through as `null` — no number is fabricated.
-- **No `sellThroughRate`.** The views carry a `sell_through_rate` column
-  (`rows with sale_price ÷ total`), but it is **intentionally not surfaced** here:
-  `tav.purchase_outcomes` currently holds only sold/imported outcome rows (every row
-  has a `sale_price`), so the ratio is tautologically `1.0` and would mislead the
-  frontend. A real sell-through metric is blocked on TAV persisting acquisition-time
-  `purchase_outcomes` rows (i.e. inventory bought-but-not-yet-resold) — tracked in
-  `docs/followups.md`. The SQL views are left unchanged.
+  `tav.v_outcome_summary`, passed through **verbatim** (so each row also carries the
+  raw `sell_through_rate`, `last_outcome_at`, etc. columns). Any aggregate that is
+  `NULL` in the view (empty `purchase_outcomes`) is passed through as `null` — no
+  number is fabricated.
+- **No top-level `sellThroughRate`.** The views carry a `sell_through_rate` column
+  (`rows with sale_price ÷ total`), but the synthesized top-level `outcomes.value.sellThroughRate`
+  is **intentionally not surfaced** (removed 2026-05-11, Round 5): `tav.purchase_outcomes`
+  currently holds only sold/imported outcome rows (every row has a `sale_price`), so the
+  ratio is tautologically `1.0` and would mislead the frontend. A real sell-through metric
+  is blocked on TAV persisting acquisition-time `purchase_outcomes` rows (i.e. inventory
+  bought-but-not-yet-resold) — tracked in `docs/followups.md`. The SQL views are unchanged,
+  and the raw per-region `sell_through_rate` still appears inside `byRegion` rows for now.
 - The `outcomes` block degrades to `{ "value": null, "missingReason": "db_error" }`
   if *either* view query fails; the `leads` / `listings` blocks are independent.
 

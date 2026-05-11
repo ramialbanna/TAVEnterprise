@@ -1,7 +1,7 @@
 # `/app/*` frontend API — deploy + smoke, 2026-05-11
 
 Bring-up of the `/app/*` product API layer (ADR 0002) on the main `tav-aip` Worker,
-in four deploy rounds the same day. Bearer `APP_API_SECRET` (rotated more than once
+in five deploy rounds the same day. Bearer `APP_API_SECRET` (rotated more than once
 during the session — once after an accidental exposure, again before Round 3;
 re-provisioned on both envs each time).
 
@@ -11,9 +11,11 @@ re-provisioned on both envs each time).
   (`tav.v_outcome_summary_global`, migration 0041). No new endpoint, response shape change only.
 - **Round 4** — `GET /app/system-status` `staleSweep` backed by `tav.cron_runs` (migration 0042);
   the daily `scheduled()` handler now records each stale-sweep run. Response shape change only.
+- **Round 5** — `GET /app/kpis` drops the top-level `outcomes.value.sellThroughRate` (tautologically
+  `1.0` today). No DB change; SQL views and raw `byRegion` rows unchanged. Response shape change only.
 
 With Round 2, all five ADR-0002 `/app/*` endpoints were implemented and live on staging
-and production. Rounds 3 & 4 widened `/app/kpis` and `/app/system-status` response bodies.
+and production. Rounds 3–5 adjusted `/app/kpis` and `/app/system-status` response bodies.
 
 ---
 
@@ -213,6 +215,51 @@ logged in `docs/followups.md`.
 
 ---
 
+# Round 5 — `/app/kpis` drops `sellThroughRate`
+
+## Code
+
+- Commit: `55007d1` feat(app): drop misleading sellThroughRate from app kpis (`src/app/routes.ts` `handleKpis` + `test/app.routes.test.ts` + `docs/APP_API.md` + ADR 0002 + `docs/followups.md`).
+- `handleKpis` no longer returns `sellThroughRate` in `outcomes.value`; remaining fields are `totalOutcomes`, `avgGrossProfit`, `avgHoldDays`, `lastOutcomeAt`, `byRegion`. Rationale: the SQL formula (`COUNT(*) FILTER (sale_price IS NOT NULL) / COUNT(*)`) is correct, but `tav.purchase_outcomes` currently holds only sold/imported outcome rows (every row has a `sale_price`), so the ratio is tautologically `1.0` and would mislead the frontend. A real sell-through metric is blocked on the lead→purchase / acquisition-persistence workflow writing `purchase_outcomes` rows before resale (logged in `docs/followups.md`).
+- **Scope:** product-API surface only. No migration. `tav.v_outcome_summary` / `tav.v_outcome_summary_global` keep their `sell_through_rate` column unchanged, and `outcomes.value.byRegion` still passes those raw per-region view rows through verbatim (so each `byRegion` row still carries a `sell_through_rate` field) — only the synthesized top-level `outcomes.value.sellThroughRate` was removed.
+- Verification before deploy: `npm run typecheck` clean; `npx vitest run test/app.routes.test.ts` 44/44; `npm test` 741/741 (52 files). `npm run lint` exits 1 — pre-existing only (4 legacy root `.js` scripts, 97 errors; + 1 pre-existing warning at `test/app.routes.test.ts:55`). `src/app/routes.ts` clean.
+
+## Deploys
+
+| Env | Worker | Version ID | Command |
+|-----|--------|-----------|---------|
+| staging | `tav-aip-staging` | `2b620bfd-e703-4500-9bc6-60a74a2e1933` | `npx wrangler deploy --config wrangler.toml --env staging` |
+| production | `tav-aip-production` | `fbfe2335-816a-48e8-b6f5-59f4a6033864` | `npx wrangler deploy --config wrangler.toml --env production` |
+
+Both deploys confirmed bindings: `INTEL_WORKER` → `tav-intelligence-worker-<env>`,
+`MANHEIM_LOOKUP_MODE="worker"`, `TAV_KV`, `INTEL_WORKER_URL` set, `HYBRID_BUYBOX_ENABLED="true"`.
+
+## Smoke — staging (`tav-aip-staging.rami-1a9.workers.dev`)
+
+| Check | Result |
+|-------|--------|
+| `GET /app/kpis` + Bearer | HTTP 200, `ok:true`, `outcomes.value` = `{ totalOutcomes:12904, avgGrossProfit, avgHoldDays, lastOutcomeAt, byRegion[…] }` — no top-level `sellThroughRate` |
+| field-set assertion (`== {totalOutcomes,avgGrossProfit,avgHoldDays,lastOutcomeAt,byRegion}`, `sellThroughRate` absent) | `OK 12904` |
+| `GET /app/kpis` no Bearer | HTTP 401 |
+
+**PASS** — all three.
+
+## Smoke — production (`tav-aip-production.rami-1a9.workers.dev`)
+
+| Check | Result |
+|-------|--------|
+| `GET /app/kpis` + Bearer | HTTP 200, `ok:true`, `outcomes.value` = `{ totalOutcomes:12904, avgGrossProfit, avgHoldDays, lastOutcomeAt, byRegion[…] }` — no top-level `sellThroughRate` |
+| field-set assertion | `OK 12904` |
+| `GET /app/kpis` no Bearer | HTTP 401 |
+
+**PASS** — all three.
+
+Note: `byRegion` rows still include the raw `sell_through_rate` column from `tav.v_outcome_summary`
+(raw view passthrough). Round 5 removed only the curated top-level `outcomes.value.sellThroughRate`.
+Stripping it from `byRegion` too can be folded into the future "real sell-through" work — see `docs/followups.md`.
+
+---
+
 ## Caveat
 
 `tav-intelligence-worker-production` remains sandbox-backed (Cox sandbox MMR) per
@@ -228,10 +275,11 @@ not the upstream MMR source. No new exposure of sandbox data via `/app/*`.
 - Global outcome-rollup view `tav.v_outcome_summary_global` — shipped (Round 3, commit `9da9f00`; migration 0041 applied).
 - Stale-sweep cron persistence `tav.cron_runs` — shipped (Round 4, commit `1fbf7cb`; migration 0042 applied).
 - Stale `.dev.vars.example` / `wrangler.toml` `MANHEIM_LOOKUP_MODE` comments — fixed (commit `731ea18`).
-- Still open (`docs/followups.md`): `sell_through_rate` is tautologically `1.0` while
-  `purchase_outcomes` holds only completed sales (metric-semantics decision); one-time
-  post-cron spot-check that `tav.cron_runs` gets a `stale_sweep` row at the next 06:00 UTC
-  and `/app/system-status` `staleSweep.lastRunAt` goes non-null; legacy root-`.js` lint debt.
+- Misleading `outcomes.value.sellThroughRate` — removed from `/app/kpis` (Round 5, commit `55007d1`); SQL views unchanged.
+- Still open (`docs/followups.md`): build a true sell-through metric once acquisition-time `purchase_outcomes`
+  rows exist (and at that point also strip `sell_through_rate` from the raw `byRegion` rows); one-time post-cron
+  spot-check that `tav.cron_runs` gets a `stale_sweep` row at the next 06:00 UTC and `/app/system-status`
+  `staleSweep.lastRunAt` goes non-null; legacy root-`.js` lint debt.
 
 Related: `docs/adr/0002-frontend-app-api-layer.md`, `docs/session-handoff-2026-05-09.md`,
 `docs/staging-smoke-2026-05-09.md`.
