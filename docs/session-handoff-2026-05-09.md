@@ -61,7 +61,7 @@ No redeploy required. This darkens the worker-mode path.
 3. Cox: enable true production MMR credentials.
 4. Once Cox enables prod MMR, re-put intel-prod Cox secrets and rerun prod smoke.
 5. Write final production runbook page from `docs/staging-smoke-2026-05-09.md`.
-6. Build frontend-facing `/app/*` API layer for Base44/front-end integration.
+6. Build frontend-facing `/app/*` API layer for TAV-owned frontend/dashboard integration.
 
 ## Tomorrow starting point
 

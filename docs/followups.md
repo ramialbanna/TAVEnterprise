@@ -130,8 +130,15 @@ wrangler secret put MANHEIM_MMR_URL        $WRANGLER_FLAGS
 
 ## Production deploy blockers — tav-intelligence-worker
 
-These must be completed before the intelligence worker can be deployed to production.
-Do NOT modify wrangler.toml IDs until the namespace is provisioned.
+> **SUPERSEDED / RESOLVED — 2026-05-09 production cutover.** `tav-intelligence-worker-production`
+> is deployed; the main worker runs `MANHEIM_LOOKUP_MODE=worker` via the `INTEL_WORKER` Service
+> Binding; production smoke passed (RUN_ID `prod-smoke-20260509-124947`, `transport=service_binding`,
+> `mmr_value=68600 confidence=high`). See `docs/staging-smoke-2026-05-09.md` ("Production cutover")
+> and `docs/session-handoff-2026-05-09.md`. The unchecked items below are kept for history only —
+> the still-live residue (Cox is sandbox-backed; `workers_dev=false` on intel-prod) is tracked in
+> the "2026-05-09 — production cutover follow-ups" section further down.
+
+These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs casually.
 
 - [ ] 2026-05-08 wrangler.toml — provision TAV_INTEL_KV production namespace and replace placeholder ID:
       `wrangler kv namespace create TAV_INTEL_KV_PRODUCTION --config workers/tav-intelligence-worker/wrangler.toml --env production`
