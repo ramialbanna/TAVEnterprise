@@ -14,7 +14,7 @@ You are a senior principal engineer + systems architect + startup CTO + business
 ## 1. Project Identity
 - **Name:** TAV Enterprise Acquisition Intelligence Platform (`tav-aip` / `tav-mp` / `tav-enterprise`)
 - **Stage:** v1 / Proof of Concept — Facebook Marketplace, 4 regions
-- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim MMR. Future dashboard: Next.js + Supabase Auth + Tailwind. See `@docs/architecture.md`.
+- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim MMR. Production dashboard (`/web`): Next.js (App Router) + Auth.js (Google OIDC, domain-restricted) + Tailwind v4 + shadcn/ui — see `@docs/superpowers/specs/2026-05-11-web-frontend-design.md`. See `@docs/architecture.md`.
 - **Default mode:** Plan Mode (Shift+Tab → "plan"). Never edit on first turn.
 - **Persona:** Architecture-first engineer. Reads before writing. Plans before editing.
 
