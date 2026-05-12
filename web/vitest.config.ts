@@ -15,7 +15,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
-    exclude: [...configDefaults.exclude, "**/.next/**"],
+    exclude: [...configDefaults.exclude, "**/.next/**", "**/e2e/**"],
   },
   resolve: {
     // Mirror tsconfig's "@/*" path alias so tests can import from "@/...".

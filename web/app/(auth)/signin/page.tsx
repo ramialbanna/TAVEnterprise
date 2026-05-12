@@ -50,7 +50,9 @@ export default async function SignInPage({
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-text-subtle">Use your Texas Auto Value Google account.</p>
+        <p className="mt-4 text-center text-xs text-text-subtle">
+          Use your <span className="font-medium">texasautovalue.com</span> Google account.
+        </p>
 
         <p className="mt-5 border-t border-border pt-4 text-center text-[11px] leading-relaxed text-text-subtle">
           Internal tool — access is restricted to TAV staff. Application data is protected, and
