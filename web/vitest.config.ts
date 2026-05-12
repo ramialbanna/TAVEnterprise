@@ -15,7 +15,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
-    exclude: [...configDefaults.exclude, "**/.next/**", "**/e2e/**"],
+    // Contract tests hit the live staging Worker — opt-in via `pnpm test:contract`
+    // (vitest.contract.config.ts), never collected by the default `pnpm test`.
+    exclude: [...configDefaults.exclude, "**/.next/**", "**/e2e/**", "**/test/contract/**"],
   },
   resolve: {
     // Mirror tsconfig's "@/*" path alias so tests can import from "@/...".
