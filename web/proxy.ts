@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 /**
- * Auth gate. Every request matched by `config.matcher` (see below) requires an
- * authenticated session, except:
+ * Auth gate (Next 16 "proxy" — the renamed middleware entry point). Every request matched
+ * by `config.matcher` (see below) requires an authenticated session, except:
  *   - /signin                 — the sign-in page itself (else: redirect loop)
  *   - /api/auth/*              — Auth.js routes (excluded in the matcher too)
  *   - Next internals & static  — excluded in the matcher
@@ -12,10 +12,13 @@ import { auth } from "@/lib/auth";
  *   - page request   → 307 redirect to /signin?callbackUrl=<original path + query>
  *   - /api/* request → 401 JSON `{ ok: false, error: "unauthorized" }` (never an HTML redirect —
  *     so client fetch()s fail cleanly instead of receiving the sign-in page)
+ *
+ * Next 16 requires this file to export a function named `proxy` (or a default function).
+ * We wrap the Auth.js `auth()` helper and export it under that name.
  */
 const PUBLIC_PAGE_PATHS = ["/signin"];
 
-export default auth((req) => {
+export const proxy = auth((req) => {
   const { pathname, search } = req.nextUrl;
 
   // Public pages (and anything nested under them) — let through regardless of session.
