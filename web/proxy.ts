@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import { auth } from "@/lib/auth";
 
 /**
@@ -14,11 +14,13 @@ import { auth } from "@/lib/auth";
  *     so client fetch()s fail cleanly instead of receiving the sign-in page)
  *
  * Next 16 requires this file to export a function named `proxy` (or a default function).
- * We wrap the Auth.js `auth()` helper and export it under that name.
+ * `lib/auth.ts` uses the lazy `NextAuth(() => config)` form, so its `auth()` helper is async:
+ * `auth(handler)` returns a Promise that resolves to the wrapped middleware. `proxy` therefore
+ * awaits it per request, then delegates. (`await` on the non-lazy form is a harmless no-op.)
  */
 const PUBLIC_PAGE_PATHS = ["/signin"];
 
-export const proxy = auth((req) => {
+const authGate = auth((req) => {
   const { pathname, search } = req.nextUrl;
 
   // Public pages (and anything nested under them) — let through regardless of session.
@@ -38,6 +40,14 @@ export const proxy = auth((req) => {
   signInUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
   return NextResponse.redirect(signInUrl);
 });
+
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
+  const handler = (await authGate) as unknown as (
+    request: NextRequest,
+    event: NextFetchEvent,
+  ) => Promise<Response>;
+  return handler(request, event);
+}
 
 export const config = {
   /*
