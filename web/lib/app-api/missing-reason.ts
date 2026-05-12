@@ -38,6 +38,7 @@ const CODE_MESSAGES: Record<string, string> = {
   proxy_misconfigured:
     "The dashboard is misconfigured on the server side (a Next.js/Vercel environment problem — not a TAV API error). Contact the operator.",
   upstream_unavailable: "The dashboard couldn't reach the TAV API — try again.",
+  client_fetch_failed: "The browser could not reach the dashboard API. Check your connection and try again.",
   upstream_non_json:
     "The TAV API gateway returned an unexpected (non-JSON) response — this is an infrastructure/proxy issue, not a data problem. Try again.",
 
