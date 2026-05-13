@@ -12,13 +12,16 @@ import { Label } from "@/components/ui/label";
  * Validation:
  *   - VIN required. Client-side trimmed + upper-cased. A-Z0-9 only. Length 11–17.
  *   - Mileage optional integer in [0, 2_000_000].
- *   - Year    optional integer in [1900, 2100].
+ *   - Year    optional integer in [1900, 2100] — CLIENT-ONLY: VIN is the canonical
+ *             identity for year/make/model, so the API payload deliberately omits it.
+ *             The year field stays on the form so HistoricalComparison can scope its
+ *             aggregates without round-tripping the VIN decoder.
  *
  * The form also carries an asking price + source + notes — these are CLIENT-ONLY fields
  * (asking price is used by the local recommendation; source/notes are scratchpad for the
- * operator). They never reach `/app/mmr/vin`. The `onLookup` callback receives only the
- * fields the API knows about: `{ vin, year, mileage }` plus the asking price as a separate
- * argument so the result panel can compute the spread.
+ * operator). They never reach `/app/mmr/vin`. The `onLookup` callback's `api` field
+ * contains only what the backend uses: `{ vin, mileage? }`. Client-only fields ride
+ * alongside on `submit` (askingPrice / year / make / model / trim).
  *
  * "Fill example" loads the canonical example VIN documented in `docs/APP_API.md` —
  * used for smoke checks against the live Cox MMR endpoint (production may return real
@@ -27,7 +30,6 @@ import { Label } from "@/components/ui/label";
 
 export type LookupApiPayload = {
   vin: string;
-  year?: number;
   mileage?: number;
 };
 
@@ -35,6 +37,8 @@ export type LookupSubmit = {
   api: LookupApiPayload;
   /** Client-only — passed alongside the API payload so the result panel can compute spread. */
   askingPrice: number | null;
+  /** Client-only model year — never sent to `/app/mmr/vin` (VIN is canonical). Drives HistoricalComparison. */
+  year: number | null;
   /** Client-only YMM — never sent to `/app/mmr/vin`. Drives the historical comparison panel. */
   make: string | null;
   model: string | null;
@@ -94,12 +98,12 @@ export function LookupForm({
     setError(null);
 
     const api: LookupApiPayload = { vin: cleanedVin };
-    if (yearNum !== null) api.year = yearNum;
     if (mileageNum !== null) api.mileage = mileageNum;
 
     onLookup({
       api,
       askingPrice: askingNum,
+      year: yearNum,
       make: nonBlank(make),
       model: nonBlank(model),
       trim: nonBlank(trim),
@@ -149,7 +153,12 @@ export function LookupForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="mmr-year">Year</Label>
+          <Label htmlFor="mmr-year">
+            Year{" "}
+            <span className="text-xs font-normal text-muted-foreground">
+              — local only (comparison scope; VIN carries year for MMR)
+            </span>
+          </Label>
           <Input
             id="mmr-year"
             name="year"

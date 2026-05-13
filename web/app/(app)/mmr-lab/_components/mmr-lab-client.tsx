@@ -21,8 +21,9 @@ import { HistoricalComparison } from "./historical-comparison";
  *   - `lookedUpAt`   — ISO timestamp captured at submit time (the lean MMR envelope
  *                      does not return one, so we record the client clock).
  *   - `pending`      — disables the submit button while a request is in flight.
- *   - YMM + trim     — captured from the form's client-only fields to drive
- *                      `HistoricalComparison`. Never reach `/app/mmr/vin`.
+ *   - YMM + trim + year — captured from the form's client-only fields to drive
+ *                      `HistoricalComparison`. Never reach `/app/mmr/vin` — VIN is the
+ *                      canonical identity for year/make/model on the MMR side.
  *
  * Retry is wired to re-run the same payload that produced the current result.
  */
@@ -43,7 +44,7 @@ export function MmrLabClient() {
     setMake(submit.make);
     setModel(submit.model);
     setTrim(submit.trim);
-    setYear(submit.api.year ?? null);
+    setYear(submit.year);
     setPending(true);
     setLookedUpAt(new Date().toISOString());
     const r = await postMmrVin(submit.api);

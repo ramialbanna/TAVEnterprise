@@ -29,7 +29,7 @@ describe("LookupForm", () => {
     expect(onLookup).not.toHaveBeenCalled();
   });
 
-  it("Fill example populates VIN, mileage, and year with the documented sandbox values", () => {
+  it("Fill example populates VIN, mileage, and year (year is local-only — not sent to API)", () => {
     const onLookup = vi.fn();
     render(<LookupForm onLookup={onLookup} />);
     fireEvent.click(screen.getByRole("button", { name: /fill example/i }));
@@ -37,19 +37,19 @@ describe("LookupForm", () => {
     expect((screen.getByLabelText(/^Mileage$/i) as HTMLInputElement).value).toBe(
       String(EXAMPLE_MILEAGE),
     );
-    expect((screen.getByLabelText(/^Year$/i) as HTMLInputElement).value).toBe(
+    expect((screen.getByLabelText(/^Year/i) as HTMLInputElement).value).toBe(
       String(EXAMPLE_YEAR),
     );
   });
 
-  it("submits only { vin, year, mileage } to the API and surfaces asking price separately (NOT in the API payload)", async () => {
+  it("submits only { vin, mileage } to the API and surfaces year/asking-price/YMM separately (NOT in the API payload)", async () => {
     const onLookup = vi.fn();
     const user = userEvent.setup();
     render(<LookupForm onLookup={onLookup} />);
 
     await user.type(screen.getByLabelText(/^VIN/i), EXAMPLE_VIN);
     await user.type(screen.getByLabelText(/^Mileage$/i), String(EXAMPLE_MILEAGE));
-    await user.type(screen.getByLabelText(/^Year$/i), String(EXAMPLE_YEAR));
+    await user.type(screen.getByLabelText(/^Year/i), String(EXAMPLE_YEAR));
     await user.type(screen.getByLabelText(/Asking price/i), "62000");
     await user.type(screen.getByLabelText(/^Source/i), "facebook");
     await user.type(screen.getByLabelText(/^Notes/i), "test note");
@@ -57,9 +57,12 @@ describe("LookupForm", () => {
 
     expect(onLookup).toHaveBeenCalledTimes(1);
     const submit = onLookup.mock.calls[0]?.[0];
-    expect(submit.api).toEqual({ vin: EXAMPLE_VIN, year: EXAMPLE_YEAR, mileage: EXAMPLE_MILEAGE });
+    // API payload — VIN + mileage only. VIN is canonical for year/make/model on MMR.
+    expect(submit.api).toEqual({ vin: EXAMPLE_VIN, mileage: EXAMPLE_MILEAGE });
     expect(submit.askingPrice).toBe(62000);
+    expect(submit.year).toBe(EXAMPLE_YEAR);
     // Belt-and-suspenders: the API payload must not carry any client-only field.
+    expect(submit.api).not.toHaveProperty("year");
     expect(submit.api).not.toHaveProperty("askingPrice");
     expect(submit.api).not.toHaveProperty("source");
     expect(submit.api).not.toHaveProperty("notes");
@@ -77,6 +80,7 @@ describe("LookupForm", () => {
     expect(onLookup).toHaveBeenCalledWith({
       api: { vin: EXAMPLE_VIN },
       askingPrice: null,
+      year: null,
       make: null,
       model: null,
       trim: null,
@@ -99,7 +103,7 @@ describe("LookupForm", () => {
     const user = userEvent.setup();
     render(<LookupForm onLookup={onLookup} />);
     await user.type(screen.getByLabelText(/^VIN/i), EXAMPLE_VIN);
-    await user.type(screen.getByLabelText(/^Year$/i), "1850");
+    await user.type(screen.getByLabelText(/^Year/i), "1850");
     await user.click(screen.getByRole("button", { name: /look up mmr/i }));
     expect(onLookup).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent(/Year must be 1900–2100/);
