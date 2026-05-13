@@ -22,10 +22,11 @@ describe("deriveIntelVerdict", () => {
     expect(v.label).toMatch(/unrouted/i);
   });
 
-  it("returns review (degraded) + direct-mode label when mode is direct", () => {
+  it("returns review (degraded) + 'intel worker bypassed' label when mode is direct", () => {
     const v = deriveIntelVerdict({ mode: "direct", binding: false, url: null });
     expect(v.status).toBe("review");
     expect(v.label).toMatch(/direct mode/i);
+    expect(v.label).toMatch(/intel worker bypassed/i);
   });
 });
 
@@ -42,9 +43,9 @@ describe("IntelWorker", () => {
     expect(screen.getByText(/intel\.example\.workers\.dev/i)).toBeInTheDocument();
   });
 
-  it("renders degraded pill + 'none' url when direct mode with no binding/url", () => {
+  it("renders degraded pill ('intel worker bypassed') + 'none' url when direct mode", () => {
     render(<IntelWorker data={{ mode: "direct", binding: false, url: null }} />);
-    expect(screen.getByText(/direct mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/direct mode — intel worker bypassed/i)).toBeInTheDocument();
     expect(screen.getByText("none")).toBeInTheDocument();
     expect(screen.getByText("No")).toBeInTheDocument();
   });

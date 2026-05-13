@@ -14,12 +14,14 @@ type Verdict = {
  * unit-test symmetry with `summarizeSystemStatus`.
  *
  * Phase-5 admin treats anything other than "routed worker mode" as a degraded pill so
- * the operator sees direct-mode + unrouted cases as actionable, not "fine".
+ * the operator sees direct-mode + unrouted cases as actionable, not "fine". Direct
+ * mode means MMR lookups bypass the intelligence worker entirely — an operational
+ * regression, not a steady state, so it's surfaced as review (degraded).
  *
  *   - mode="worker" + binding=true                 → healthy, service-binding label
  *   - mode="worker" + url !== null                 → healthy, HTTP-routed label
  *   - mode="worker" + no binding + no url          → review,  "Worker mode — unrouted"
- *   - mode="direct"                                → review,  "Direct mode — degraded"
+ *   - mode="direct"                                → review,  "Direct mode — intel worker bypassed"
  */
 export function deriveIntelVerdict(intel: IntelWorkerData): Verdict {
   if (intel.mode === "worker") {
@@ -31,7 +33,7 @@ export function deriveIntelVerdict(intel: IntelWorkerData): Verdict {
     }
     return { status: "review", label: "Worker mode — unrouted" };
   }
-  return { status: "review", label: "Direct mode — degraded" };
+  return { status: "review", label: "Direct mode — intel worker bypassed" };
 }
 
 export function IntelWorker({ data }: { data: IntelWorkerData }) {
