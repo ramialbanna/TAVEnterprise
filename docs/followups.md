@@ -271,3 +271,11 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       before `pnpm build` fails (`<Link href>` / `redirect()` to app routes resolve to `RouteImpl<...>`). Task 1.22's
       `web-ci` workflow runs lint→typecheck→build in that order — either reorder (build first, or a `next build`/types
       pre-step) or accept the dependency. (noticed by: claude)
+- [ ] 2026-05-13 web/dashboard — `bucketGrossByMonth` and its tests are currently dashboard-local at
+      `web/app/(app)/dashboard/_components/bucket-gross-by-month.{ts,test.ts}`. Promote to
+      `web/lib/historical-aggregate.ts` when Phase 4 (segment-trend chart) lands so the helper isn't duplicated.
+      (noticed by: user)
+- [ ] 2026-05-13 web/e2e — dashboard e2e currently asserts the happy-path surface only. Server-side first paint
+      (`appApiServer`) is driven by the gated `/api/e2e-mocks/app/*` route, and per-test scenario switching (e.g. db
+      down, outcomes unavailable) needs either a state-mutating mock endpoint or an env/header-driven scenario
+      picker. Add when a deferred case actually pays off in regression coverage. (noticed by: claude)

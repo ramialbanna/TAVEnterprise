@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   web:
-    name: lint / typecheck / test / build
+    name: lint / build / typecheck / test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -42,10 +42,9 @@ jobs:
 
       - run: pnpm lint
 
-      - run: pnpm typecheck
-
-      - run: pnpm test
-
+      # Build runs before typecheck so `typedRoutes: true` can emit `.next/types/**`.
+      # Without it, `tsc --noEmit` fails on `<Link href>` / `redirect()` to app routes
+      # because the generated `RouteImpl<...>` types do not exist yet on a clean checkout.
       # Placeholder build-time env so `next build` + `serverEnv()` stay strict but don't
       # fail in CI — these are NOT real credentials and the build exercises no live calls.
       - run: pnpm build
@@ -56,3 +55,7 @@ jobs:
           AUTH_GOOGLE_ID: ci
           AUTH_GOOGLE_SECRET: ci
           ALLOWED_EMAIL_DOMAIN: texasautovalue.com
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
