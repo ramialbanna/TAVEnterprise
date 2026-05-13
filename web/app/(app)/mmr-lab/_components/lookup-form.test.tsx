@@ -57,14 +57,15 @@ describe("LookupForm", () => {
 
     expect(onLookup).toHaveBeenCalledTimes(1);
     const submit = onLookup.mock.calls[0]?.[0];
-    expect(submit).toEqual({
-      api: { vin: EXAMPLE_VIN, year: EXAMPLE_YEAR, mileage: EXAMPLE_MILEAGE },
-      askingPrice: 62000,
-    });
-    // Belt-and-suspenders: the API payload must not carry asking/source/notes keys.
+    expect(submit.api).toEqual({ vin: EXAMPLE_VIN, year: EXAMPLE_YEAR, mileage: EXAMPLE_MILEAGE });
+    expect(submit.askingPrice).toBe(62000);
+    // Belt-and-suspenders: the API payload must not carry any client-only field.
     expect(submit.api).not.toHaveProperty("askingPrice");
     expect(submit.api).not.toHaveProperty("source");
     expect(submit.api).not.toHaveProperty("notes");
+    expect(submit.api).not.toHaveProperty("make");
+    expect(submit.api).not.toHaveProperty("model");
+    expect(submit.api).not.toHaveProperty("trim");
   });
 
   it("trims + upper-cases VINs before submitting", async () => {
@@ -76,6 +77,9 @@ describe("LookupForm", () => {
     expect(onLookup).toHaveBeenCalledWith({
       api: { vin: EXAMPLE_VIN },
       askingPrice: null,
+      make: null,
+      model: null,
+      trim: null,
     });
   });
 

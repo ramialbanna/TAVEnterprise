@@ -33,11 +33,19 @@ export type LookupSubmit = {
   api: LookupApiPayload;
   /** Client-only — passed alongside the API payload so the result panel can compute spread. */
   askingPrice: number | null;
+  /** Client-only YMM — never sent to `/app/mmr/vin`. Drives the historical comparison panel. */
+  make: string | null;
+  model: string | null;
+  /** Client-only trim — filtered client-side by the comparison panel; never an API param. */
+  trim: string | null;
 };
 
 export const EXAMPLE_VIN = "1FT8W3BT1SEC27066";
 export const EXAMPLE_MILEAGE = 50000;
 export const EXAMPLE_YEAR = 2025;
+export const EXAMPLE_MAKE = "Ford";
+export const EXAMPLE_MODEL = "F-350SD";
+export const EXAMPLE_TRIM = "";
 
 const VIN_RE = /^[A-Z0-9]{11,17}$/;
 
@@ -51,6 +59,9 @@ export function LookupForm({
   const [vin, setVin] = useState("");
   const [mileage, setMileage] = useState("");
   const [year, setYear] = useState("");
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [trim, setTrim] = useState("");
   const [askingPrice, setAskingPrice] = useState("");
   const [source, setSource] = useState("");
   const [notes, setNotes] = useState("");
@@ -84,13 +95,22 @@ export function LookupForm({
     if (yearNum !== null) api.year = yearNum;
     if (mileageNum !== null) api.mileage = mileageNum;
 
-    onLookup({ api, askingPrice: askingNum });
+    onLookup({
+      api,
+      askingPrice: askingNum,
+      make: nonBlank(make),
+      model: nonBlank(model),
+      trim: nonBlank(trim),
+    });
   }
 
   function fillExample() {
     setVin(EXAMPLE_VIN);
     setMileage(String(EXAMPLE_MILEAGE));
     setYear(String(EXAMPLE_YEAR));
+    setMake(EXAMPLE_MAKE);
+    setModel(EXAMPLE_MODEL);
+    setTrim(EXAMPLE_TRIM);
     setError(null);
   }
 
@@ -135,6 +155,48 @@ export function LookupForm({
             value={year}
             onChange={(e) => setYear(e.target.value)}
             placeholder="2025"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="mmr-make">
+            Make{" "}
+            <span className="text-xs font-normal text-muted-foreground">— local only</span>
+          </Label>
+          <Input
+            id="mmr-make"
+            name="make"
+            value={make}
+            onChange={(e) => setMake(e.target.value)}
+            placeholder="Ford"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="mmr-model">
+            Model{" "}
+            <span className="text-xs font-normal text-muted-foreground">— local only</span>
+          </Label>
+          <Input
+            id="mmr-model"
+            name="model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder="F-150"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="mmr-trim">
+            Trim{" "}
+            <span className="text-xs font-normal text-muted-foreground">— local only</span>
+          </Label>
+          <Input
+            id="mmr-trim"
+            name="trim"
+            value={trim}
+            onChange={(e) => setTrim(e.target.value)}
+            placeholder="XLT"
           />
         </div>
       </div>
@@ -204,6 +266,12 @@ export function LookupForm({
       </div>
     </form>
   );
+}
+
+/** Trim a string; treat all-whitespace / empty input as `null` so downstream filters omit it. */
+function nonBlank(raw: string): string | null {
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
 }
 
 /**
