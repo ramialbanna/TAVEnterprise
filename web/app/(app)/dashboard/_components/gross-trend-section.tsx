@@ -7,9 +7,9 @@ import type { ApiResult } from "@/lib/app-api";
 import type { HistoricalSale } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
 import { LineChartCard } from "@/components/charts";
-import { ErrorState } from "@/components/data-state";
 
 import { bucketGrossByMonth } from "./bucket-gross-by-month";
+import { renderApiResult } from "./render-api-result";
 
 const HISTORICAL_SALES_LIMIT = 100;
 
@@ -33,24 +33,25 @@ export function GrossTrendSection({ initial }: { initial: ApiResult<HistoricalSa
     initialData: initial,
   });
 
-  if (!query.data.ok) {
-    return <ErrorState error={query.data} onRetry={() => void query.refetch()} />;
-  }
+  return renderApiResult(
+    query.data,
+    (rows) => {
+      const buckets = bucketGrossByMonth(rows);
+      const series = buckets.map((b) => ({ label: b.month, value: b.avgGross }));
 
-  const rows = query.data.data;
-  const buckets = bucketGrossByMonth(rows);
-  const series = buckets.map((b) => ({ label: b.month, value: b.avgGross }));
-
-  return (
-    <LineChartCard
-      title="Gross trend (TAV historical sales — returned sample)"
-      caption={`Based on the most recent ${rows.length} historical-sales rows returned by the API — not a full-database aggregate.`}
-      data={series}
-      variant="area"
-      minPoints={2}
-      categoryLabel="Month"
-      valueLabel="Avg gross profit"
-      ariaLabel="Monthly average gross profit, returned sample"
-    />
+      return (
+        <LineChartCard
+          title="Gross trend (TAV historical sales — returned sample)"
+          caption={`Based on the most recent ${rows.length} historical-sales rows returned by the API — not a full-database aggregate.`}
+          data={series}
+          variant="area"
+          minPoints={2}
+          categoryLabel="Month"
+          valueLabel="Avg gross profit"
+          ariaLabel="Monthly average gross profit, returned sample"
+        />
+      );
+    },
+    { onRetry: () => void query.refetch() },
   );
 }

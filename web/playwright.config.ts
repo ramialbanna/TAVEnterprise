@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { E2E_AUTH_SECRET } from "./e2e/helpers/auth";
+
 /**
  * Playwright config for /web — Phase 1 e2e smoke (sign-in page + auth-gate behavior).
  *
@@ -39,7 +41,7 @@ export default defineConfig({
       APP_API_BASE_URL: `${BASE_URL}/api/e2e-mocks`,
       E2E_MOCKS: "1",
       APP_API_SECRET: "e2e-placeholder",
-      AUTH_SECRET: "e2e-secret",
+      AUTH_SECRET: E2E_AUTH_SECRET,
       AUTH_GOOGLE_ID: "e2e-google-id",
       AUTH_GOOGLE_SECRET: "e2e-google-secret",
       ALLOWED_EMAIL_DOMAIN: "texasautovalue.com",

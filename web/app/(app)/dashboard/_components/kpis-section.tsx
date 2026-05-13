@@ -7,7 +7,8 @@ import { metricBlockResult, type ApiResult } from "@/lib/app-api";
 import type { Kpis } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
 import { KpiCard, KpiGrid } from "@/components/kpi";
-import { ErrorState } from "@/components/data-state";
+
+import { renderApiResult } from "./render-api-result";
 
 /**
  * `/app/kpis` first paint, seeded from RSC. Renders three top-line metric tiles —
@@ -29,67 +30,68 @@ export function KpisSection({ initial }: { initial: ApiResult<Kpis> }) {
     initialData: initial,
   });
 
-  if (!query.data.ok) {
-    return <ErrorState error={query.data} onRetry={() => void query.refetch()} />;
-  }
+  return renderApiResult(
+    query.data,
+    (data) => {
+      const outcomesResult = metricBlockResult(data.outcomes);
+      const leadsResult = metricBlockResult(data.leads);
+      const listingsResult = metricBlockResult(data.listings);
 
-  const { outcomes, leads, listings } = query.data.data;
-  const outcomesResult = metricBlockResult(outcomes);
-  const leadsResult = metricBlockResult(leads);
-  const listingsResult = metricBlockResult(listings);
+      const outcomesState = outcomesResult.ok ? undefined : "unavailable";
+      const outcomesReason = outcomesResult.ok ? undefined : outcomesResult.error;
+      const leadsState = leadsResult.ok ? undefined : "unavailable";
+      const leadsReason = leadsResult.ok ? undefined : leadsResult.error;
+      const listingsState = listingsResult.ok ? undefined : "unavailable";
+      const listingsReason = listingsResult.ok ? undefined : listingsResult.error;
 
-  const outcomesState = outcomesResult.ok ? undefined : "unavailable";
-  const outcomesReason = outcomesResult.ok ? undefined : outcomesResult.error;
-  const leadsState = leadsResult.ok ? undefined : "unavailable";
-  const leadsReason = leadsResult.ok ? undefined : leadsResult.error;
-  const listingsState = listingsResult.ok ? undefined : "unavailable";
-  const listingsReason = listingsResult.ok ? undefined : listingsResult.error;
-
-  return (
-    <KpiGrid>
-      <KpiCard
-        label="Total outcomes"
-        format="number"
-        value={outcomesResult.ok ? outcomesResult.data.totalOutcomes : null}
-        state={outcomesState}
-        reason={outcomesReason}
-      />
-      <KpiCard
-        label="Avg gross profit"
-        format="money"
-        value={outcomesResult.ok ? outcomesResult.data.avgGrossProfit : null}
-        state={outcomesState}
-        reason={outcomesReason}
-      />
-      <KpiCard
-        label="Avg hold days"
-        format="number"
-        digits={1}
-        value={outcomesResult.ok ? outcomesResult.data.avgHoldDays : null}
-        state={outcomesState}
-        reason={outcomesReason}
-      />
-      <KpiCard
-        label="Last outcome at"
-        format="relativeDate"
-        value={outcomesResult.ok ? outcomesResult.data.lastOutcomeAt : null}
-        state={outcomesState}
-        reason={outcomesReason}
-      />
-      <KpiCard
-        label="Leads"
-        format="number"
-        value={leadsResult.ok ? leadsResult.data.total : null}
-        state={leadsState}
-        reason={leadsReason}
-      />
-      <KpiCard
-        label="Normalized listings"
-        format="number"
-        value={listingsResult.ok ? listingsResult.data.normalizedTotal : null}
-        state={listingsState}
-        reason={listingsReason}
-      />
-    </KpiGrid>
+      return (
+        <KpiGrid>
+          <KpiCard
+            label="Total outcomes"
+            format="number"
+            value={outcomesResult.ok ? outcomesResult.data.totalOutcomes : null}
+            state={outcomesState}
+            reason={outcomesReason}
+          />
+          <KpiCard
+            label="Avg gross profit"
+            format="money"
+            value={outcomesResult.ok ? outcomesResult.data.avgGrossProfit : null}
+            state={outcomesState}
+            reason={outcomesReason}
+          />
+          <KpiCard
+            label="Avg hold days"
+            format="number"
+            digits={1}
+            value={outcomesResult.ok ? outcomesResult.data.avgHoldDays : null}
+            state={outcomesState}
+            reason={outcomesReason}
+          />
+          <KpiCard
+            label="Last outcome at"
+            format="relativeDate"
+            value={outcomesResult.ok ? outcomesResult.data.lastOutcomeAt : null}
+            state={outcomesState}
+            reason={outcomesReason}
+          />
+          <KpiCard
+            label="Leads"
+            format="number"
+            value={leadsResult.ok ? leadsResult.data.total : null}
+            state={leadsState}
+            reason={leadsReason}
+          />
+          <KpiCard
+            label="Normalized listings"
+            format="number"
+            value={listingsResult.ok ? listingsResult.data.normalizedTotal : null}
+            state={listingsState}
+            reason={listingsReason}
+          />
+        </KpiGrid>
+      );
+    },
+    { onRetry: () => void query.refetch() },
   );
 }

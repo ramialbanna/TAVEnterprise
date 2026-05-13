@@ -139,7 +139,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /**
  * Best-effort pick of the most recently seen source from `data.sources`. Reads only
  * the documented `source` / `last_seen_at` columns; ignores any other field the view
- * may add so we never accidentally render an unexpected value.
+ * may add so we never accidentally render an unexpected value. Returns `null` if no
+ * row has a parseable `last_seen_at` — we don't guess "most recent" from row order.
  */
 function pickMostRecentSource(rows: SystemStatus["sources"]): string | null {
   let bestName: string | null = null;
@@ -153,7 +154,5 @@ function pickMostRecentSource(rows: SystemStatus["sources"]): string | null {
       bestName = name;
     }
   }
-  if (bestName) return bestName;
-  const first = rows[0];
-  return first && typeof first.source === "string" ? first.source : null;
+  return bestName;
 }

@@ -88,13 +88,28 @@ describe("GrossTrendSection", () => {
     expect(screen.getByText(/no data to display/i)).toBeInTheDocument();
   });
 
-  it("renders ErrorState with a Retry button for a retryable ApiResult failure", () => {
+  it("renders UnavailableState (not ErrorState) for an ApiResult of kind 'unavailable'", () => {
     renderSection({
       ok: false,
       kind: "unavailable",
       error: "db_error",
       status: 503,
       message: "The database is temporarily unavailable — try again.",
+    });
+
+    expect(screen.getByText(/not available/i)).toBeInTheDocument();
+    // UnavailableState is muted/non-alert — no role="alert", no Retry button.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+  });
+
+  it("renders ErrorState with Retry for an ApiResult of kind 'proxy'", () => {
+    renderSection({
+      ok: false,
+      kind: "proxy",
+      error: "upstream_non_json",
+      status: 502,
+      message: "Upstream non-JSON — try again.",
     });
 
     expect(screen.getByRole("alert")).toBeInTheDocument();

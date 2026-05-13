@@ -104,12 +104,16 @@ describe("SystemStatusSection", () => {
     const { container } = renderSection(ok(systemStatusHealthy));
     fireEvent.click(screen.getByRole("button", { name: /system status: operational/i }));
     const text = (container.textContent ?? "") + (document.body.textContent ?? "");
-    expect(text).not.toMatch(/bearer\s+/i);
-    expect(text).not.toMatch(/authorization/i);
+    // Match concrete credential leaks (`Bearer <token>`, `Authorization:` headers,
+    // `api_key=`, `password`, `service_role`) rather than the bare word "secret",
+    // so docs/UI copy can mention "secrets management" without tripping this.
+    expect(text).not.toMatch(/bearer\s+\S/i);
+    expect(text).not.toMatch(/authorization:/i);
     expect(text).not.toMatch(/api[_-]?key/i);
-    expect(text).not.toMatch(/secret/i);
-    // Long hex/base64-like strings that look like a token (>= 24 chars) — workers.dev URLs
-    // are fine, so we only flag bare token-shaped tokens.
+    expect(text).not.toMatch(/password/i);
+    expect(text).not.toMatch(/service[_-]?role/i);
+    // Long hex/base64-like strings that look like a token (>= 40 chars) — workers.dev
+    // URLs are fine, so we only flag bare token-shaped tokens.
     expect(text).not.toMatch(/\b[A-Za-z0-9_-]{40,}\b/);
   });
 });

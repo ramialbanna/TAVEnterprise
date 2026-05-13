@@ -16,6 +16,9 @@ export type SystemHealth = {
  *   - `review`  when DB is up but a subsystem is missing/misconfigured:
  *               · `intelWorker.mode === "worker"` with neither binding nor URL routed.
  *               · `staleSweep.missingReason` is `never_run` or `db_error`.
+ *               · `staleSweep` ran but reported `status === "failed"`. Stale-sweep
+ *                 regressions are product-critical (CLAUDE.md §9) and must not show
+ *                 as `healthy`.
  *   - `healthy` otherwise.
  *
  * Returns the reasons that triggered a non-healthy verdict so the UI can list them.
@@ -42,6 +45,8 @@ export function summarizeSystemStatus(data: SystemStatus): SystemHealth {
   if (sweep.lastRunAt === null) {
     if (sweep.missingReason === "never_run") reasons.push("stale_sweep_never_run");
     else if (sweep.missingReason === "db_error") reasons.push("stale_sweep_db_error");
+  } else if (sweep.status === "failed") {
+    reasons.push("stale_sweep_failed");
   }
 
   if (reasons.length > 0) {

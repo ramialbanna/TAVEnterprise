@@ -8,7 +8,7 @@ import { mockAppApi } from "./helpers/app-api-mocks";
  * mocked fixtures. Two mock layers cooperate:
  *
  *   1. Server-side first paint (`appApiServer`) is routed to the gated
- *      `/api/_e2e/app/*` handler via `APP_API_BASE_URL` in playwright.config.ts.
+ *      `/api/e2e-mocks/app/*` handler via `APP_API_BASE_URL` in playwright.config.ts.
  *   2. Browser-side TanStack refreshes go through the same-origin `/api/app/*`
  *      proxy. `mockAppApi(page)` registers `page.route` handlers so a refetch
  *      cannot accidentally escape to the live network.

@@ -95,16 +95,21 @@ function LiveAndPendingGrid({ data }: { data: SystemStatus }) {
         value={mmrMode}
         status={intel.mode === "worker" ? "healthy" : "neutral"}
       />
+      {/* DB-down → render source ingest as unavailable, not "0 configured". The
+          live row counts can't be trusted when the upstream is itself dark. */}
       <MetricTile
         label="Source ingest"
-        value={`${formatNumber(sourcesCount)} configured`}
-        status={sourcesStatus}
+        value={data.db.ok ? `${formatNumber(sourcesCount)} configured` : null}
+        status={data.db.ok ? sourcesStatus : undefined}
+        unavailableReason={data.db.ok ? undefined : "db_error"}
         sub={
-          mostRecent
-            ? `Most recent: ${mostRecent.source}${
-                mostRecent.lastSeen ? ` · ${formatRelativeTime(mostRecent.lastSeen)}` : ""
-              }`
-            : "No sources reporting"
+          data.db.ok
+            ? mostRecent
+              ? `Most recent: ${mostRecent.source}${
+                  mostRecent.lastSeen ? ` · ${formatRelativeTime(mostRecent.lastSeen)}` : ""
+                }`
+              : "No sources reporting"
+            : undefined
         }
       />
 

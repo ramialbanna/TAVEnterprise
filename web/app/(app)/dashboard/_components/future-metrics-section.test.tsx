@@ -62,9 +62,10 @@ describe("FutureMetricsSection", () => {
     const { container } = renderSection(ok(systemStatusDbDown));
 
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
-    // No-source-row fixture: the source ingest tile reports 0 configured + 'No sources'.
-    expect(screen.getByText(/0 configured/i)).toBeInTheDocument();
-    expect(screen.getByText(/no sources reporting/i)).toBeInTheDocument();
+    // Source-ingest must NOT present a real-looking '0 configured' when the upstream
+    // DB is itself down — fall through to the dashboard-wide UnavailableState instead.
+    expect(screen.queryByText(/0 configured/i)).toBeNull();
+    expect(screen.queryByText(/no sources reporting/i)).toBeNull();
     // No '$0' / number coercion anywhere.
     expect(container.textContent ?? "").not.toMatch(/\$0\b/);
   });
@@ -95,10 +96,13 @@ describe("FutureMetricsSection", () => {
   it("does not render secret-shaped values (bearer / authorization / api key / long opaque tokens)", () => {
     const { container } = renderSection(ok(systemStatusHealthy));
     const text = container.textContent ?? "";
-    expect(text).not.toMatch(/bearer\s+/i);
-    expect(text).not.toMatch(/authorization/i);
+    // Match concrete credential leaks rather than the bare word "secret", so any
+    // future copy that mentions "secrets management" can't false-positive this test.
+    expect(text).not.toMatch(/bearer\s+\S/i);
+    expect(text).not.toMatch(/authorization:/i);
     expect(text).not.toMatch(/api[_-]?key/i);
-    expect(text).not.toMatch(/secret/i);
+    expect(text).not.toMatch(/password/i);
+    expect(text).not.toMatch(/service[_-]?role/i);
     expect(text).not.toMatch(/\b[A-Za-z0-9_-]{40,}\b/);
   });
 });

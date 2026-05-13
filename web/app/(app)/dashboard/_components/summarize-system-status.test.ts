@@ -40,6 +40,16 @@ describe("summarizeSystemStatus", () => {
     expect(r.reasons).toContain("stale_sweep_db_error");
   });
 
+  it("returns review when staleSweep ran but reported status='failed' (stale-sweep regression)", () => {
+    const data: SystemStatus = {
+      ...systemStatusHealthy,
+      staleSweep: { lastRunAt: "2026-05-12T06:00:00.000Z", status: "failed", updated: 0 },
+    };
+    const r = summarizeSystemStatus(data);
+    expect(r.status).toBe("review");
+    expect(r.reasons).toContain("stale_sweep_failed");
+  });
+
   it("returns review when intel worker mode='worker' but neither bound nor URL routed", () => {
     const data: SystemStatus = {
       ...systemStatusHealthy,

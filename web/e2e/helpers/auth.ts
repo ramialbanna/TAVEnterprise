@@ -15,8 +15,12 @@ import { encode } from "@auth/core/jwt";
  */
 export const SESSION_COOKIE_NAME = "authjs.session-token";
 
-/** The shared dev/CI secret — must match `playwright.config.ts → webServer.env.AUTH_SECRET`. */
-const E2E_AUTH_SECRET = "e2e-secret";
+/**
+ * Shared dev/CI secret. Exported so `playwright.config.ts` can pass the same value
+ * to the spawned dev server via `webServer.env.AUTH_SECRET` — single source of truth.
+ * Obviously NOT a production credential.
+ */
+export const E2E_AUTH_SECRET = "e2e-secret";
 
 export type E2eUser = {
   email: string;

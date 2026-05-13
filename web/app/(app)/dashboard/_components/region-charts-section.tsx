@@ -7,9 +7,10 @@ import { metricBlockResult, type ApiResult } from "@/lib/app-api";
 import type { Kpis } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
 import { BarChartCard } from "@/components/charts";
-import { ErrorState, UnavailableState } from "@/components/data-state";
+import { UnavailableState } from "@/components/data-state";
 
 import { GROSS_VALUE_KEYS, HOLD_DAYS_VALUE_KEYS, normalizeByRegion } from "./by-region";
+import { renderApiResult } from "./render-api-result";
 
 /**
  * Two per-region charts derived from `outcomes.value.byRegion` on `/app/kpis`:
@@ -31,35 +32,37 @@ export function RegionChartsSection({ initial }: { initial: ApiResult<Kpis> }) {
     initialData: initial,
   });
 
-  if (!query.data.ok) {
-    return <ErrorState error={query.data} onRetry={() => void query.refetch()} />;
-  }
+  return renderApiResult(
+    query.data,
+    (data) => {
+      const outcomesResult = metricBlockResult(data.outcomes);
+      if (!outcomesResult.ok) {
+        return <UnavailableState code={outcomesResult.error} title="Region charts unavailable" />;
+      }
 
-  const outcomesResult = metricBlockResult(query.data.data.outcomes);
-  if (!outcomesResult.ok) {
-    return <UnavailableState code={outcomesResult.error} title="Region charts unavailable" />;
-  }
+      const grossData = normalizeByRegion(outcomesResult.data.byRegion, GROSS_VALUE_KEYS);
+      const holdDaysData = normalizeByRegion(outcomesResult.data.byRegion, HOLD_DAYS_VALUE_KEYS);
 
-  const grossData = normalizeByRegion(outcomesResult.data.byRegion, GROSS_VALUE_KEYS);
-  const holdDaysData = normalizeByRegion(outcomesResult.data.byRegion, HOLD_DAYS_VALUE_KEYS);
-
-  return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <BarChartCard
-        title="Gross by region"
-        data={grossData}
-        categoryLabel="Region"
-        valueLabel="Avg gross profit"
-        ariaLabel="Average gross profit by region"
-      />
-      <BarChartCard
-        title="Hold days by region"
-        data={holdDaysData}
-        categoryLabel="Region"
-        valueLabel="Avg hold days"
-        ariaLabel="Average hold days by region"
-        fill={2}
-      />
-    </div>
+      return (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <BarChartCard
+            title="Gross by region"
+            data={grossData}
+            categoryLabel="Region"
+            valueLabel="Avg gross profit"
+            ariaLabel="Average gross profit by region"
+          />
+          <BarChartCard
+            title="Hold days by region"
+            data={holdDaysData}
+            categoryLabel="Region"
+            valueLabel="Avg hold days"
+            ariaLabel="Average hold days by region"
+            fill={2}
+          />
+        </div>
+      );
+    },
+    { onRetry: () => void query.refetch() },
   );
 }
