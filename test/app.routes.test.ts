@@ -641,16 +641,38 @@ describe("POST /app/mmr/vin", () => {
     expect(body.data).toEqual({ mmrValue: null, missingReason: "no_mmr_value" });
   });
 
-  it("returns 200 mmrValue:null + intel_worker_not_configured when INTEL_WORKER_URL is empty", async () => {
+  it("returns 200 mmrValue:null + intel_worker_not_configured when neither INTEL_WORKER_URL nor INTEL_WORKER binding is configured", async () => {
     const res = await worker.fetch(
       authedPost("/app/mmr/vin", { vin: VIN }),
-      makeEnv({ INTEL_WORKER_URL: "" }),
+      makeEnv({ INTEL_WORKER_URL: "", INTEL_WORKER: undefined }),
       ctx,
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { mmrValue: null; missingReason: string } };
     expect(body.data).toEqual({ mmrValue: null, missingReason: "intel_worker_not_configured" });
     expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+  });
+
+  it("does NOT short-circuit when INTEL_WORKER service binding is present and INTEL_WORKER_URL is empty (prod config)", async () => {
+    vi.mocked(getMmrValueFromWorker).mockResolvedValue({
+      mmrValue: 27500,
+      confidence: "high",
+      method: "vin",
+      rawResponse: {},
+    });
+    // Service-binding-only production: INTEL_WORKER_URL empty, INTEL_WORKER stubbed.
+    const stubbedBinding = { fetch: vi.fn() } as unknown as Fetcher;
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", { vin: VIN }),
+      makeEnv({ INTEL_WORKER_URL: "", INTEL_WORKER: stubbedBinding }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { mmrValue: number; missingReason?: string } };
+    expect(body.data).toEqual({ mmrValue: 27500, confidence: "high", method: "vin" });
+    // Critical: the handler must have delegated to getMmrValueFromWorker, not
+    // short-circuited with intel_worker_not_configured.
+    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledTimes(1);
   });
 
   it("maps WorkerTimeoutError to a non-blocking 200 with missingReason", async () => {

@@ -368,7 +368,11 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
   }
   const { vin, year, mileage } = parsed.data;
 
-  if (!env.INTEL_WORKER_URL) {
+  // The intelligence worker can be reached over a public URL (`INTEL_WORKER_URL`) or a
+  // Cloudflare Service Binding (`INTEL_WORKER`). Production runs binding-only with no
+  // public URL (`workers_dev = false`); guarding on the URL alone misclassified that
+  // configuration as "not configured". Treat as configured if either path is present.
+  if (!env.INTEL_WORKER_URL && env.INTEL_WORKER === undefined) {
     return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
   }
 
