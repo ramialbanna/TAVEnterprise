@@ -54,7 +54,14 @@ export type MmrLookupInput =
   | {
       kind:    "vin";
       vin:     string;
-      year:    number;
+      /**
+       * Optional. The VIN itself is the canonical identity for year/make/model on the
+       * Cox MMR side — `lookupByVin` does NOT forward year to Cox. The field is kept
+       * for audit-log granularity and as an input to `getMmrMileageData` when mileage
+       * has to be inferred (only fires when `mileage` is also absent). Do NOT fabricate
+       * a year just to satisfy the type; pass through what the caller supplied.
+       */
+      year?:   number;
       mileage?: number;
     }
   | {
@@ -122,10 +129,19 @@ export async function performMmrLookup(
   const userCtx     = args.userContext ?? NULL_USER_CONTEXT;
 
   // 1. Resolve mileage (single source of truth — same as main worker).
+  // VIN-path year is optional (VIN carries the canonical YMM); only the inference
+  // branch in getMmrMileageData needs a year, and it only fires when mileage is
+  // absent. Fall back to the clock-derived current year locally so we don't pollute
+  // the audit log or Cox payload with a fabricated value.
+  const nowDate = args.now?.() ?? new Date();
+  const inferenceYear =
+    args.input.kind === "ymm"
+      ? args.input.year
+      : args.input.year ?? nowDate.getFullYear();
   const mileageData = getMmrMileageData(
-    args.input.year,
+    inferenceYear,
     args.input.mileage ?? null,
-    args.now?.() ?? new Date(),
+    nowDate,
   );
 
   // 2. Derive cache key.

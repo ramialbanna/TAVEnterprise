@@ -31,13 +31,17 @@ export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
     throw new AuthError("force_refresh requires manager role or allowlist membership");
   }
 
+  // VIN is the canonical identity for year/make/model on the Cox MMR side; we do NOT
+  // fabricate a current-year fallback here. `performMmrLookup` accepts an optional
+  // `year` on the VIN branch and only consults the clock locally if mileage inference
+  // has to run (which only fires when `mileage` is also absent).
   const envelope = await performMmrLookup(
     {
       input: {
         kind:    "vin",
         vin:     parsed.data.vin,
-        year:    parsed.data.year ?? new Date().getFullYear(),
-        mileage: parsed.data.mileage,
+        ...(parsed.data.year !== undefined ? { year: parsed.data.year } : {}),
+        ...(parsed.data.mileage !== undefined ? { mileage: parsed.data.mileage } : {}),
       },
       requestId:    args.requestId,
       forceRefresh: parsed.data.force_refresh,

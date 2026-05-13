@@ -38,7 +38,7 @@ test.describe("/mmr-lab (authenticated)", () => {
 
     await expect(page.getByLabel(/^VIN/i)).toHaveValue(EXAMPLE_VIN);
     await expect(page.getByLabel(/^Mileage$/i)).toHaveValue("50000");
-    await expect(page.getByLabel(/^Year$/i)).toHaveValue("2025");
+    await expect(page.getByLabel(/^Year/i)).toHaveValue("2025");
     await expect(page.getByLabel(/^Make/i)).toHaveValue("Ford");
     await expect(page.getByLabel(/^Model/i)).toHaveValue("F-350SD");
   });
