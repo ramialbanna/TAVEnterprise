@@ -12,7 +12,7 @@ import { ErrorState, UnavailableState } from "@/components/data-state";
  *   - any other failure kind          → `<ErrorState error onRetry>`.
  *
  * `CaveatBanner` is deliberately NOT used here — that primitive is reserved for persistent
- * product caveats (e.g. Cox sandbox notice), not transient transport/API errors.
+ * product caveats, not transient transport/API errors.
  */
 export function renderApiResult<T>(
   result: ApiResult<T>,

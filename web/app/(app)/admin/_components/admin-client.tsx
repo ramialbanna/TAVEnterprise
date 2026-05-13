@@ -9,7 +9,6 @@ import type { ApiResult } from "@/lib/app-api";
 import type { SystemStatus } from "@/lib/app-api/schemas";
 import { queryKeys, SYSTEM_STATUS_REFETCH_MS } from "@/lib/query";
 import { Button } from "@/components/ui/button";
-import { CaveatBanner } from "@/components/status";
 import {
   ErrorState,
   PendingBackendState,
@@ -24,14 +23,17 @@ import { SecretsChecklist } from "./secrets-checklist";
 import { FeatureFlags } from "./feature-flags";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export const COX_CAVEAT_TEXT =
-  "Cox MMR is currently sandbox-backed in production until Cox enables true production MMR credentials.";
-
 /**
  * Client wrapper around the live `/app/system-status` poll. Seeds TanStack Query with the
  * server-fetched initial result and renders every section that depends on it. The
  * "Refresh system status" button invalidates `queryKeys.systemStatus` only — no other
- * query is touched. Cox sandbox caveat is rendered persistently, never dismissible.
+ * query is touched.
+ *
+ * Cox MMR caveat history: a persistent sandbox-backed warning lived here until 2026-05-13,
+ * when Cox production MMR credentials went live on `tav-intelligence-worker-production`.
+ * The caveat was removed; the "Cox environment" label flipped to "Production-enabled".
+ * `/app/system-status` still does not expose a machine-readable vendor-environment flag —
+ * the label below reflects the operator-managed configuration state, not a runtime signal.
  */
 export function AdminClient({ initial }: { initial: ApiResult<SystemStatus> }) {
   const queryClient = useQueryClient();
@@ -59,21 +61,17 @@ export function AdminClient({ initial }: { initial: ApiResult<SystemStatus> }) {
         </Button>
       </div>
 
-      <CaveatBanner tone="caution" title="Cox / Manheim environment">
-        {COX_CAVEAT_TEXT}
-      </CaveatBanner>
-
       <Card>
         <CardHeader>
           <CardTitle>Cox / Manheim</CardTitle>
         </CardHeader>
         <CardContent className="text-sm">
           <p>
-            Cox environment: <span className="font-semibold">Sandbox-backed</span>
+            Cox environment: <span className="font-semibold">Production-enabled</span>
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            (No machine-readable Cox-environment flag is exposed by /app/system-status yet —
-            this label is tied to the standing caveat above.)
+            Reported by operator configuration — `/app/system-status` doesn&apos;t expose a
+            machine-readable vendor-environment flag.
           </p>
         </CardContent>
       </Card>

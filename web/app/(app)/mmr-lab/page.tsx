@@ -1,13 +1,13 @@
-import { CaveatBanner } from "@/components/status";
-
 import { MmrLabClient } from "./_components/mmr-lab-client";
 
 /**
  * `/mmr-lab` — VIN ➜ Cox MMR lookup workspace.
  *
- * Server component shell. Renders the persistent Cox-sandbox `CaveatBanner` (always
- * visible until Cox enables true production credentials) and mounts the client-side
- * lookup + result surface.
+ * Server component shell. Mounts the client-side lookup + result surface. The previous
+ * Cox-sandbox `CaveatBanner` was removed when Cox production MMR credentials went live
+ * (2026-05-13); see ADR / followups for the cutover note. No machine-readable Cox
+ * environment flag is exposed by `/app/system-status` yet — the page renders the same
+ * way regardless of vendor environment.
  */
 export default function MmrLabPage() {
   return (
@@ -19,11 +19,6 @@ export default function MmrLabPage() {
           from the spread against an asking price.
         </p>
       </header>
-
-      <CaveatBanner tone="caution" title="Cox sandbox — not production">
-        Cox MMR is currently sandbox-backed in production until Cox enables true
-        production MMR credentials.
-      </CaveatBanner>
 
       <MmrLabClient />
     </div>
