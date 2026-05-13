@@ -18,8 +18,9 @@ import { ErrorState } from "@/components/data-state";
  * reintroduce in the client). No fabricated zeroes — every missing block routes
  * through `UnavailableState`/`KpiCard.state="unavailable"`.
  *
- * Task 2.1 scope: top-line tiles only. By-region tiles, gross-trend charts, and
- * other detail surfaces come in Tasks 2.2–2.5.
+ * Cards (Task 2.2): Total outcomes, Avg gross profit, Avg hold days, Last outcome at,
+ * Leads total, Normalized listings. By-region tiles, gross-trend charts, and other
+ * detail surfaces come in Tasks 2.4–2.5.
  */
 export function KpisSection({ initial }: { initial: ApiResult<Kpis> }) {
   const query = useQuery({
@@ -37,35 +38,57 @@ export function KpisSection({ initial }: { initial: ApiResult<Kpis> }) {
   const leadsResult = metricBlockResult(leads);
   const listingsResult = metricBlockResult(listings);
 
+  const outcomesState = outcomesResult.ok ? undefined : "unavailable";
+  const outcomesReason = outcomesResult.ok ? undefined : outcomesResult.error;
+  const leadsState = leadsResult.ok ? undefined : "unavailable";
+  const leadsReason = leadsResult.ok ? undefined : leadsResult.error;
+  const listingsState = listingsResult.ok ? undefined : "unavailable";
+  const listingsReason = listingsResult.ok ? undefined : listingsResult.error;
+
   return (
     <KpiGrid>
-      <KpiCard
-        label="Avg gross profit"
-        format="money"
-        value={outcomesResult.ok ? outcomesResult.data.avgGrossProfit : null}
-        state={outcomesResult.ok ? undefined : "unavailable"}
-        reason={outcomesResult.ok ? undefined : outcomesResult.error}
-      />
       <KpiCard
         label="Total outcomes"
         format="number"
         value={outcomesResult.ok ? outcomesResult.data.totalOutcomes : null}
-        state={outcomesResult.ok ? undefined : "unavailable"}
-        reason={outcomesResult.ok ? undefined : outcomesResult.error}
+        state={outcomesState}
+        reason={outcomesReason}
+      />
+      <KpiCard
+        label="Avg gross profit"
+        format="money"
+        value={outcomesResult.ok ? outcomesResult.data.avgGrossProfit : null}
+        state={outcomesState}
+        reason={outcomesReason}
+      />
+      <KpiCard
+        label="Avg hold days"
+        format="number"
+        digits={1}
+        value={outcomesResult.ok ? outcomesResult.data.avgHoldDays : null}
+        state={outcomesState}
+        reason={outcomesReason}
+      />
+      <KpiCard
+        label="Last outcome at"
+        format="relativeDate"
+        value={outcomesResult.ok ? outcomesResult.data.lastOutcomeAt : null}
+        state={outcomesState}
+        reason={outcomesReason}
       />
       <KpiCard
         label="Leads"
         format="number"
         value={leadsResult.ok ? leadsResult.data.total : null}
-        state={leadsResult.ok ? undefined : "unavailable"}
-        reason={leadsResult.ok ? undefined : leadsResult.error}
+        state={leadsState}
+        reason={leadsReason}
       />
       <KpiCard
         label="Normalized listings"
         format="number"
         value={listingsResult.ok ? listingsResult.data.normalizedTotal : null}
-        state={listingsResult.ok ? undefined : "unavailable"}
-        reason={listingsResult.ok ? undefined : listingsResult.error}
+        state={listingsState}
+        reason={listingsReason}
       />
     </KpiGrid>
   );

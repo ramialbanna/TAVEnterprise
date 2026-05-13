@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { KpiCard } from "./kpi-card";
@@ -39,5 +39,46 @@ describe("KpiCard", () => {
   it("supports the percent format (decimal ratio)", () => {
     render(<KpiCard label="Rate" value={0.42} format="percent" />);
     expect(screen.getByText("42%")).toBeInTheDocument();
+  });
+
+  it("respects digits={1} for format='number' (e.g. avg hold days)", () => {
+    render(<KpiCard label="Avg hold days" value={21.5} format="number" digits={1} />);
+    expect(screen.getByText("21.5")).toBeInTheDocument();
+  });
+
+  it("renders a relative time for format='relativeDate' with a valid ISO timestamp", () => {
+    const now = new Date("2026-05-12T12:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      render(<KpiCard label="Last outcome at" value="2026-05-10T12:00:00.000Z" format="relativeDate" />);
+      // Intl.RelativeTimeFormat numeric:"auto" → "2 days ago" for a 2-day delta.
+      expect(screen.getByText(/days? ago|yesterday/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders 'Not available' (not the em-dash) when format='relativeDate' receives an unparseable string", () => {
+    const { container } = render(
+      <KpiCard label="Last outcome at" value="not-a-date" format="relativeDate" />,
+    );
+    expect(screen.getByText(/not available/i)).toBeInTheDocument();
+    // The em-dash sentinel from format.ts must not leak into the value slot.
+    const valueNode = container.querySelector("p.tabular-nums");
+    expect(valueNode).toBeNull();
+  });
+
+  it("accepts a Date instance for format='relativeDate'", () => {
+    const now = new Date("2026-05-12T12:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+      render(<KpiCard label="Last outcome at" value={tenMinutesAgo} format="relativeDate" />);
+      expect(screen.getByText(/minutes? ago/i)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
