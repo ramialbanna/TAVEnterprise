@@ -22,6 +22,7 @@ import {
   serverFilter,
   type FilterState,
 } from "./historical-filters";
+import { SalesCharts } from "./sales-charts";
 import { SalesTable } from "./sales-table";
 
 /**
@@ -93,12 +94,15 @@ export function HistoricalClient({ initial }: { initial: ApiResult<HistoricalSal
       />
 
       {query.data && query.data.ok ? (
-        <SalesTable
-          rows={filteredRows ?? []}
-          loading={query.isLoading}
-          emptyTitle="No matching sales"
-          emptyHint="Adjust the filters above — the server returned rows but none match the client-side filters."
-        />
+        <>
+          <SalesCharts rows={filteredRows ?? []} />
+          <SalesTable
+            rows={filteredRows ?? []}
+            loading={query.isLoading}
+            emptyTitle="No matching sales"
+            emptyHint="Adjust the filters above — the server returned rows but none match the client-side filters."
+          />
+        </>
       ) : null}
     </div>
   );
