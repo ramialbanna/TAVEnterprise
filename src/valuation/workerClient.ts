@@ -45,14 +45,30 @@ export class WorkerUnavailableError extends Error {
 }
 
 /**
+ * Internal placeholder host used when only the `INTEL_WORKER` service binding is wired
+ * and `INTEL_WORKER_URL` is empty. Cloudflare's Service Binding `Fetcher.fetch` requires
+ * a parseable absolute URL but ignores the host portion — the request is dispatched to
+ * the bound worker directly by name. Any reserved-looking host works; this one is
+ * obviously internal so it doesn't get mistaken for a real production URL in logs.
+ */
+const SERVICE_BINDING_PLACEHOLDER_BASE = "https://tav-intelligence-worker.internal";
+
+/**
  * Call tav-intelligence-worker for an MMR valuation lookup.
  *
  * Tries the VIN endpoint first if a VIN is present (bypasses normalization).
  * Falls back to the YMM endpoint when year+make+model+mileage are available;
  * normalizes make/model against reference data before sending.
  *
+ * Transport selection:
+ *   - `INTEL_WORKER` (Service Binding) present → dispatched via the binding; the
+ *     `baseUrl` host is ignored by Cloudflare's `Fetcher.fetch`, so an internal
+ *     placeholder is used when `INTEL_WORKER_URL` is empty.
+ *   - No Service Binding but `INTEL_WORKER_URL` set → public fetch with that base.
+ *   - Neither present → not configured; return null.
+ *
  * Returns null when:
- *   - INTEL_WORKER_URL is empty (not configured)
+ *   - both INTEL_WORKER_URL and INTEL_WORKER are absent (not configured)
  *   - params are insufficient to form any request
  *   - the worker returns a negative-cache envelope (ok=false or mmr_value=null)
  *   - the response body cannot be parsed as MmrResponseEnvelope
@@ -64,7 +80,9 @@ export async function getMmrValueFromWorker(
   params: MmrParams,
   env: Env,
 ): Promise<MmrResult | null> {
-  const baseUrl = env.INTEL_WORKER_URL;
+  const hasServiceBinding = env.INTEL_WORKER !== undefined;
+  const baseUrl =
+    env.INTEL_WORKER_URL || (hasServiceBinding ? SERVICE_BINDING_PLACEHOLDER_BASE : "");
   if (!baseUrl) return null;
 
   const { vin, year, make, model, mileage } = params;
@@ -135,7 +153,9 @@ export async function getMmrValueFromWorker(
   // Prefer Cloudflare Service Binding when configured. Public-URL fetch
   // between Workers on the same account is blocked by Cloudflare with
   // error 1042; the binding routes internally and bypasses that limit.
-  const useServiceBinding = env.INTEL_WORKER !== undefined;
+  // `hasServiceBinding` was computed above to decide whether the placeholder
+  // baseUrl is valid; reuse the same predicate to avoid divergence.
+  const useServiceBinding = hasServiceBinding;
 
   // Diagnostic-grade per-call log. body_keys lists fields without their values
   // (vin/year/mileage are not secret, but listing the schema-shape is enough

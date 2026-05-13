@@ -123,11 +123,15 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-// ── INTEL_WORKER_URL not configured ───────────────────────────────────────────
+// ── transport configuration ───────────────────────────────────────────────────
 
 describe("getMmrValueFromWorker — not configured", () => {
-  it("returns null immediately when INTEL_WORKER_URL is empty", async () => {
-    const env = { ...BASE_ENV, INTEL_WORKER_URL: "" } as unknown as Env;
+  it("returns null when BOTH INTEL_WORKER_URL is empty AND no service binding is present", async () => {
+    const env = {
+      ...BASE_ENV,
+      INTEL_WORKER_URL: "",
+      INTEL_WORKER: undefined,
+    } as unknown as Env;
     vi.stubGlobal("fetch", vi.fn());
     const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, env);
     expect(result).toBeNull();
@@ -139,6 +143,42 @@ describe("getMmrValueFromWorker — not configured", () => {
     const result = await getMmrValueFromWorker({ year: 2020, make: "Toyota" }, BASE_ENV);
     expect(result).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("getMmrValueFromWorker — service-binding-only transport", () => {
+  it("uses env.INTEL_WORKER.fetch when binding is present and INTEL_WORKER_URL is empty (prod config)", async () => {
+    const bindingFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ success: true, data: ENVELOPE_VIN }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const env = {
+      ...BASE_ENV,
+      INTEL_WORKER_URL: "",
+      INTEL_WORKER: { fetch: bindingFetch } as unknown as Fetcher,
+    } as unknown as Env;
+    // Global fetch must NOT be hit — the service binding owns this transport.
+    const globalFetch = vi.fn();
+    vi.stubGlobal("fetch", globalFetch);
+
+    const result = await getMmrValueFromWorker(
+      { vin: "1HGCM82633A004352", mileage: 45_000 },
+      env,
+    );
+
+    expect(result).toMatchObject({ mmrValue: 18_500, confidence: "high", method: "vin" });
+    expect(bindingFetch).toHaveBeenCalledTimes(1);
+    expect(globalFetch).not.toHaveBeenCalled();
+
+    // URL passed to the binding must be a parseable absolute URL — Cloudflare's
+    // Fetcher.fetch ignores the host but still requires URL syntax.
+    const firstCall = bindingFetch.mock.calls[0] as unknown as [string, RequestInit];
+    const endpoint = firstCall[0];
+    expect(() => new URL(endpoint)).not.toThrow();
+    expect(endpoint.endsWith("/mmr/vin")).toBe(true);
   });
 });
 
