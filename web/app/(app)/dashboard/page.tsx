@@ -9,6 +9,7 @@ import { KpisSection } from "./_components/kpis-section";
 import { RegionChartsSection } from "./_components/region-charts-section";
 import { GrossTrendSection } from "./_components/gross-trend-section";
 import { HistoricalSalesSection } from "./_components/historical-sales-section";
+import { FutureMetricsSection } from "./_components/future-metrics-section";
 
 /**
  * `/dashboard` — Phase 2 Task 2.1 shell.
@@ -56,6 +57,10 @@ export default async function DashboardPage() {
 
       <section aria-label="Recent sales">
         <HistoricalSalesSection initial={historicalSales} />
+      </section>
+
+      <section aria-label="Future metrics">
+        <FutureMetricsSection initial={systemStatus} />
       </section>
     </div>
   );
