@@ -183,10 +183,10 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       (set during cutover after direct smoke). Re-enable temporarily via `workers_dev = true` + redeploy if direct
       diagnostic access is ever needed; revert after.
 - [ ] 2026-05-09 docs — author production runbook entry covering: cutover state, rollback path (dashboard env-var flip
-      to `MANHEIM_LOOKUP_MODE=direct`), and the sandbox-backed-Cox caveat. Reference docs/staging-smoke-2026-05-09.md
-      "Production cutover" section for narrative.
-- [ ] 2026-05-09 docs/manheim-uat-validation-plan.md — when Cox enables true prod MMR, append a prod-mode UAT
-      mirroring §3 with prod-real VINs (not sandbox `1FT8W3BT1SEC27066`).
+      to `MANHEIM_LOOKUP_MODE=direct`). Cox sandbox caveat is no longer relevant (Cox production live 2026-05-13).
+      Reference docs/staging-smoke-2026-05-09.md "Production cutover" section for narrative.
+- [ ] 2026-05-13 docs/manheim-uat-validation-plan.md — Cox production MMR is live; append a prod-mode UAT mirroring
+      §3 with prod-real VINs (not example VIN `1FT8W3BT1SEC27066`). Promoted from "when Cox enables" to active item.
 
 - [x] 2026-05-11 wrangler/secrets — provision `APP_API_SECRET` (Bearer for `/app/*` frontend API) on
       `tav-aip-staging` and `tav-aip-production`. DONE 2026-05-11 — both envs (rotated once after an accidental
@@ -271,11 +271,24 @@ These were the blockers *before* the cutover. Do NOT modify wrangler.toml IDs ca
       before `pnpm build` fails (`<Link href>` / `redirect()` to app routes resolve to `RouteImpl<...>`). Task 1.22's
       `web-ci` workflow runs lint→typecheck→build in that order — either reorder (build first, or a `next build`/types
       pre-step) or accept the dependency. (noticed by: claude)
-- [ ] 2026-05-13 web/dashboard — `bucketGrossByMonth` and its tests are currently dashboard-local at
+- [x] 2026-05-13 web/dashboard — `bucketGrossByMonth` and its tests are currently dashboard-local at
       `web/app/(app)/dashboard/_components/bucket-gross-by-month.{ts,test.ts}`. Promote to
       `web/lib/historical-aggregate.ts` when Phase 4 (segment-trend chart) lands so the helper isn't duplicated.
-      (noticed by: user)
+      (noticed by: user) — DONE in Phase 4; helper lives at `web/lib/historical-aggregate.ts`.
 - [ ] 2026-05-13 web/e2e — dashboard e2e currently asserts the happy-path surface only. Server-side first paint
       (`appApiServer`) is driven by the gated `/api/e2e-mocks/app/*` route, and per-test scenario switching (e.g. db
       down, outcomes unavailable) needs either a state-mutating mock endpoint or an env/header-driven scenario
       picker. Add when a deferred case actually pays off in regression coverage. (noticed by: claude)
+- [x] 2026-05-13 Cox MMR production cutover — `tav-intelligence-worker-production` rotated from Cox sandbox to Cox
+      production credentials (`MANHEIM_CLIENT_ID`, `MANHEIM_CLIENT_SECRET`, `MANHEIM_TOKEN_URL`, `MANHEIM_MMR_URL`).
+      Dashboard sandbox copy removed in `codex/fix-cox-production-copy`: `web/app/(app)/mmr-lab/page.tsx`
+      `CaveatBanner` deleted; `web/app/(app)/admin/_components/admin-client.tsx` Cox-sandbox `CaveatBanner` + label
+      flipped to "Production-enabled"; example-VIN "Fill example (sandbox VIN)" → "Fill example"; admin/mmr-lab e2e
+      assertions updated; `docs/APP_API.md`, `docs/superpowers/specs/2026-05-11-web-frontend-design.md`,
+      `docs/superpowers/plans/2026-05-11-web-frontend.md` updated. No machine-readable Cox-environment flag exists in
+      `/app/system-status` yet — admin label is operator-managed config state. Follow-up: add
+      `system-status.cox.environment` so the label can be a runtime signal.
+- [ ] 2026-05-13 backend — add `cox.environment` (or equivalent) field to `GET /app/system-status` so the dashboard
+      can self-detect Cox vendor environment instead of carrying a static operator-managed label. (noticed by: claude)
+- [ ] 2026-05-13 ops — confirm `pnpm test:contract` against staging still passes after Cox prod cutover. Staging Cox
+      account remains sandbox; only production was rotated. Run once after deploy; close if green.

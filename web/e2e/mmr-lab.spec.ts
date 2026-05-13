@@ -8,26 +8,28 @@ import { setAuthCookie } from "./helpers/auth";
  * dashboard spec; no global mocks (each scenario installs only the routes it needs).
  *
  * Assertions intentionally target user-facing copy (`$68,600`, `Strong Buy`,
- * `Headroom $6,600`, the exact Cox-sandbox caveat) rather than internal class names
- * or component selectors — the spec is testing what the operator sees, not how it's
- * wired underneath.
+ * `Headroom $6,600`) rather than internal class names or component selectors — the
+ * spec is testing what the operator sees, not how it's wired underneath.
+ *
+ * The Cox-sandbox caveat banner was removed 2026-05-13 once Cox production MMR
+ * credentials went live; assertions for that copy are intentionally gone.
  */
 
 const EXAMPLE_VIN = "1FT8W3BT1SEC27066";
-
-const CAVEAT_TEXT =
-  /Cox MMR is currently sandbox-backed in production until Cox enables true production MMR credentials\./i;
 
 test.describe("/mmr-lab (authenticated)", () => {
   test.beforeEach(async ({ context }) => {
     await setAuthCookie(context);
   });
 
-  test("loads while authenticated and shows the Cox sandbox caveat banner", async ({ page }) => {
+  test("loads while authenticated and renders the lab heading", async ({ page }) => {
     await page.goto("/mmr-lab");
     const main = page.getByRole("main");
     await expect(main.getByRole("heading", { name: /VIN \/ MMR Lab/i })).toBeVisible();
-    await expect(main.getByText(CAVEAT_TEXT)).toBeVisible();
+    // No sandbox caveat banner should remain on the page.
+    await expect(
+      main.getByText(/sandbox-backed/i),
+    ).toHaveCount(0);
   });
 
   test("Fill example populates VIN, mileage, year, make, and model", async ({ page }) => {

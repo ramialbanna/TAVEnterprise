@@ -20,7 +20,9 @@ import { Label } from "@/components/ui/label";
  * fields the API knows about: `{ vin, year, mileage }` plus the asking price as a separate
  * argument so the result panel can compute the spread.
  *
- * "Fill example" loads the validated Cox sandbox VIN documented in `docs/APP_API.md`.
+ * "Fill example" loads the canonical example VIN documented in `docs/APP_API.md` —
+ * used for smoke checks against the live Cox MMR endpoint (production may return real
+ * data or a no-match `MmrVinUnavailable`; the form renders both honestly).
  */
 
 export type LookupApiPayload = {
@@ -258,10 +260,10 @@ export function LookupForm({
           {pending ? "Looking up…" : "Look up MMR"}
         </Button>
         <Button type="button" variant="outline" onClick={fillExample}>
-          Fill example (sandbox VIN)
+          Fill example
         </Button>
         <span className="text-xs text-muted-foreground">
-          Example loads the Cox sandbox VIN <code>{EXAMPLE_VIN}</code> for testing only.
+          Example loads VIN <code>{EXAMPLE_VIN}</code> against the live Cox MMR endpoint.
         </span>
       </div>
     </form>

@@ -5,9 +5,6 @@ import type { SystemStatus } from "@/lib/app-api/schemas";
 import { setAuthCookie, DEFAULT_E2E_USER } from "./helpers/auth";
 import { E2E_SYSTEM_STATUS, mockAppApi } from "./helpers/app-api-mocks";
 
-const COX_CAVEAT =
-  "Cox MMR is currently sandbox-backed in production until Cox enables true production MMR credentials.";
-
 const NEVER_RUN_STATUS: SystemStatus = {
   ...E2E_SYSTEM_STATUS,
   staleSweep: { lastRunAt: null, missingReason: "never_run" },
@@ -24,10 +21,13 @@ const DB_DOWN_STATUS: SystemStatus = {
  * Admin/integrations e2e — gates `/admin` behind the playwright auth cookie and stubs
  * `/api/app/system-status` (both the SSR first paint via `/api/e2e-mocks/app/*` and the
  * client refetch via `page.route`). Asserts the section surface the operator sees:
- * signed-in email, environment label, the verbatim Cox-sandbox caveat string, a row of
- * the v_source_health fixture, the stale-sweep line, the secrets checklist (names only,
+ * signed-in email, environment label, the Cox "Production-enabled" label, a row of the
+ * v_source_health fixture, the stale-sweep line, the secrets checklist (names only,
  * "not visible here", no secret values), and the Refresh button. Two failure variants —
  * `never_run` and `db.ok:false` — assert the degraded copy paths.
+ *
+ * The Cox-sandbox caveat banner was removed 2026-05-13 (Cox production MMR cutover);
+ * the spec asserts the sandbox copy is absent.
  */
 test.describe("/admin (authenticated + mocked /api/app/*)", () => {
   test.beforeEach(async ({ context }) => {
@@ -49,10 +49,10 @@ test.describe("/admin (authenticated + mocked /api/app/*)", () => {
     await expect(main.getByText("LOCAL").first()).toBeVisible();
     await expect(main.getByText(/^127\.0\.0\.1:3000$/)).toBeVisible();
 
-    // Cox/Manheim caveat — exact verbatim string.
-    await expect(main.getByText(COX_CAVEAT, { exact: true })).toBeVisible();
+    // Cox/Manheim — production-enabled label, no sandbox caveat banner.
     await expect(main.getByText(/Cox environment:/i)).toBeVisible();
-    await expect(main.getByText("Sandbox-backed", { exact: true })).toBeVisible();
+    await expect(main.getByText("Production-enabled", { exact: true })).toBeVisible();
+    await expect(main.getByText(/sandbox-backed/i)).toHaveCount(0);
 
     // API health — db Healthy + service/version.
     await expect(main.getByText(/^Healthy$/).first()).toBeVisible();

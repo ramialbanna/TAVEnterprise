@@ -268,10 +268,10 @@ Response is intentionally lean (`mmrValue` / `confidence` / `method`). MMR
 distribution fields (`wholesaleClean`, etc.) can be added later via
 `valuation/valuationResult.fromMmrResult` if the frontend needs them.
 
-> Caveat: `tav-intelligence-worker-production` is currently sandbox-backed (Cox
-> sandbox MMR) per the 2026-05-09 cutover note — production `/app/mmr/vin` values
-> are sandbox figures until the live Cox account is provisioned. `/app/kpis` reads
-> Supabase directly (not MMR), so its data is real.
+> History: `tav-intelligence-worker-production` was Cox-sandbox-backed between the
+> 2026-05-09 cutover and the 2026-05-13 Cox production credential rotation. Production
+> `/app/mmr/vin` now hits the live Cox MMR endpoint. `/app/kpis` reads Supabase
+> directly (not MMR), unaffected by the rotation.
 
 ## Worker config (operator reference)
 

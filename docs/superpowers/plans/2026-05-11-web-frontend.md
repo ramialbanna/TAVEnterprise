@@ -807,7 +807,7 @@ jobs:
 - [ ] Environment badge correct per Vercel environment.
 - [ ] Every data region has loading / empty / error / pending-backend states. No fake operational numbers in normal mode (Demo Mode is v2).
 - [ ] Admin shows the signed-in user's email.
-- [ ] Admin shows the Cox sandbox-backed production caveat string verbatim.
+- [x] Admin renders the Cox vendor-environment label (was "Sandbox-backed" verbatim caveat; flipped to "Production-enabled" on 2026-05-13 once Cox production MMR credentials went live — see `codex/fix-cox-production-copy`).
 - [ ] Dark mode works and is not visually broken.
 - [ ] `web-ci` green.
 - [ ] Playwright v1 smoke/key-flow suite (depth (ii)) passes.
