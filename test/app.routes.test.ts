@@ -10,6 +10,7 @@ import {
   WorkerRateLimitError,
   WorkerUnavailableError,
 } from "../src/valuation/workerClient";
+import type * as WorkerClientModule from "../src/valuation/workerClient";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -62,7 +63,7 @@ vi.mock("../src/persistence/cronRuns", () => ({
 // classes stay real so `instanceof` checks in handleMmrVin work and tests can
 // construct them.
 vi.mock("../src/valuation/workerClient", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/valuation/workerClient")>();
+  const actual = await importOriginal<typeof WorkerClientModule>();
   return { ...actual, getMmrValueFromWorker: vi.fn() };
 });
 
