@@ -22,6 +22,7 @@ import {
   serverFilter,
   type FilterState,
 } from "./historical-filters";
+import { SalesTable } from "./sales-table";
 
 /**
  * Client wrapper for `/historical`. Owns the merged filter state, calls
@@ -90,6 +91,15 @@ export function HistoricalClient({ initial }: { initial: ApiResult<HistoricalSal
         filteredCount={filteredRows ? filteredRows.length : null}
         onRetry={() => void query.refetch()}
       />
+
+      {query.data && query.data.ok ? (
+        <SalesTable
+          rows={filteredRows ?? []}
+          loading={query.isLoading}
+          emptyTitle="No matching sales"
+          emptyHint="Adjust the filters above — the server returned rows but none match the client-side filters."
+        />
+      ) : null}
     </div>
   );
 }
@@ -163,9 +173,6 @@ function SummaryLine({
       ) : (
         <p className="text-xs text-muted-foreground">No active filters.</p>
       )}
-      <p className="text-xs text-muted-foreground">
-        Sortable / filterable table arrives in a follow-up task.
-      </p>
     </div>
   );
 }

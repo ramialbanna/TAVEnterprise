@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -39,6 +39,12 @@ export interface DataTableProps<TData> {
   density?: Density;
   /** Per-column text filter inputs (case-insensitive `includesString`). Default: on. */
   enableColumnFilters?: boolean;
+  /**
+   * Optional row-click handler. When supplied, every body row becomes a focusable
+   * button-role element that calls `onRowClick(row.original)` on click or Enter.
+   * Unsupplied → rows remain plain (no-op hover only).
+   */
+  onRowClick?: (data: TData) => void;
   className?: string;
 }
 
@@ -71,6 +77,7 @@ export function DataTable<TData>({
   pageSize = 25,
   density: initialDensity = "comfortable",
   enableColumnFilters = true,
+  onRowClick,
   className,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -164,15 +171,37 @@ export function DataTable<TData>({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/40">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className={cn("align-middle", cellPad)}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              rows.map((row) => {
+                const clickable = onRowClick !== undefined;
+                return (
+                  <tr
+                    key={row.id}
+                    {...(clickable
+                      ? {
+                          role: "button",
+                          tabIndex: 0,
+                          onClick: () => onRowClick(row.original),
+                          onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick(row.original);
+                            }
+                          },
+                        }
+                      : {})}
+                    className={cn(
+                      "border-b border-border last:border-0 hover:bg-muted/40",
+                      clickable && "cursor-pointer focus:outline-none focus-visible:bg-muted/60",
+                    )}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className={cn("align-middle", cellPad)}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
