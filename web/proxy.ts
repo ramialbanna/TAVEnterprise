@@ -54,7 +54,12 @@ export const config = {
    * Run on all request paths EXCEPT:
    *   - _next/*            Next.js internals (static chunks, image optimizer)
    *   - api/auth/*         Auth.js routes (handled by their own route handler)
+   *   - api/e2e-mocks/*    E2E fixture handler — its `route.ts` is itself gated by
+   *                        `E2E_MOCKS === "1"` and returns 404 in any non-test
+   *                        environment, so it is safe (and necessary) to skip the
+   *                        auth gate here. Server-side first-paint fetches in
+   *                        Playwright go through this path with no cookies.
    *   - paths with a dot   static assets in public/ (favicon.ico, *.svg, *.png, ...)
    */
-  matcher: ["/((?!_next|api/auth|.*\\..*).*)"],
+  matcher: ["/((?!_next|api/auth|api/e2e-mocks|.*\\..*).*)"],
 };

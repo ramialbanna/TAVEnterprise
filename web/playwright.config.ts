@@ -33,7 +33,11 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
     env: {
-      APP_API_BASE_URL: "https://tav-aip-staging.rami-1a9.workers.dev",
+      // Point SSR at the in-process e2e fixture handler (`/api/e2e-mocks/app/*`).
+      // `E2E_MOCKS=1` activates that handler; without the flag it returns 404, so
+      // this configuration is inert outside Playwright.
+      APP_API_BASE_URL: `${BASE_URL}/api/e2e-mocks`,
+      E2E_MOCKS: "1",
       APP_API_SECRET: "e2e-placeholder",
       AUTH_SECRET: "e2e-secret",
       AUTH_GOOGLE_ID: "e2e-google-id",
