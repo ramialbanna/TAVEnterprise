@@ -8,7 +8,8 @@ import type { HistoricalSale } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
 import { LineChartCard } from "@/components/charts";
 
-import { bucketGrossByMonth } from "./bucket-gross-by-month";
+import { bucketGrossByMonth } from "@/lib/historical-aggregate";
+
 import { renderApiResult } from "./render-api-result";
 
 const HISTORICAL_SALES_LIMIT = 100;
