@@ -7,6 +7,7 @@ import {
 import { SystemStatusSection } from "./_components/system-status-section";
 import { KpisSection } from "./_components/kpis-section";
 import { RegionChartsSection } from "./_components/region-charts-section";
+import { GrossTrendSection } from "./_components/gross-trend-section";
 import { HistoricalSalesSection } from "./_components/historical-sales-section";
 
 /**
@@ -47,6 +48,10 @@ export default async function DashboardPage() {
 
       <section aria-label="Regional outcomes">
         <RegionChartsSection initial={kpis} />
+      </section>
+
+      <section aria-label="Gross trend">
+        <GrossTrendSection initial={historicalSales} />
       </section>
 
       <section aria-label="Recent sales">
