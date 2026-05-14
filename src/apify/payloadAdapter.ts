@@ -18,6 +18,11 @@
 
 const FB_MARKETPLACE_ITEM_URL_PREFIX = "https://www.facebook.com/marketplace/item/";
 
+// 17-char standard VIN (alphanumeric, excluding I/O/Q per ISO 3779). Mirrors
+// the regex in src/sources/facebook.ts so detail-mode VINs follow the same
+// validation contract.
+const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
+
 interface RaidrApiListingPrice {
   amount?: unknown;
   amount_with_offset_in_currency?: unknown;
@@ -136,5 +141,140 @@ export function mapRaidrApiItem(item: unknown): unknown {
     }
   }
 
+  // ── Detail-mode fields (fetchDetailedItems: true) ─────────────────────────
+  // When the Apify task config enables fetchDetailedItems, raidr-api populates
+  // extraListingData with structured per-listing detail (mileage, VIN,
+  // make/model/trim, description, exact location). When the flag is off these
+  // fields are absent / null; the basic-mode mappings above cover what's
+  // available from the search-results-only payload.
+  const eld = rec.extraListingData;
+  if (eld && typeof eld === "object" && !Array.isArray(eld)) {
+    const detail = eld as Record<string, unknown>;
+
+    // mileage — vehicle_odometer_data.{unit, value}. Only MILES unit; KM
+    // ignored so we never silently misreport a 100,000 km listing as 100,000
+    // mi against `tav.buy_box_rules.max_mileage`.
+    if (typeof rec.mileage !== "number") {
+      const odo = detail.vehicle_odometer_data;
+      if (odo && typeof odo === "object" && !Array.isArray(odo)) {
+        const o = odo as { unit?: unknown; value?: unknown };
+        if (o.unit === "MILES" && typeof o.value === "number" && Number.isFinite(o.value) && o.value >= 0) {
+          out.mileage = o.value;
+        }
+      }
+    }
+
+    // VIN — vehicle_identification_number. Validate against the same 17-char
+    // standard VIN regex the Facebook adapter uses; uppercase it.
+    if (readString(rec.vin) === undefined && readString(rec.VIN) === undefined && readString(rec.Vin) === undefined) {
+      const vinRaw = readString(detail.vehicle_identification_number);
+      if (vinRaw !== undefined) {
+        const upper = vinRaw.toUpperCase();
+        if (VIN_REGEX.test(upper)) out.vin = upper;
+      }
+    }
+
+    // make / model / trim — preserved on the output for downstream tooling.
+    // The Facebook adapter still re-parses these from the title; this PR
+    // does not change adapter rejection semantics. Future work can teach
+    // the adapter (or a normalization layer) to prefer these canonical
+    // FB-supplied strings when present.
+    if (readString(rec.make) === undefined) {
+      const mk = readString(detail.vehicle_make_display_name);
+      if (mk) out.make = mk;
+    }
+    if (readString(rec.model) === undefined) {
+      const md = readString(detail.vehicle_model_display_name);
+      if (md) out.model = md;
+    }
+    if (readString(rec.trim) === undefined) {
+      const tm = readString(detail.vehicle_trim_display_name);
+      if (tm) out.trim = tm;
+    }
+
+    // description — sellers commonly include mileage / condition / VIN in the
+    // free-text description. Preserve it for future title-style fallback work.
+    if (readString(rec.description) === undefined) {
+      const desc = readString(detail.description);
+      if (desc) out.description = desc;
+    }
+
+    // city / state — extraListingData.location is flat ({city, state, …}).
+    if (readString(rec.city) === undefined || readString(rec.state) === undefined) {
+      const loc = detail.location;
+      if (loc && typeof loc === "object" && !Array.isArray(loc)) {
+        const l = loc as Record<string, unknown>;
+        if (readString(rec.city) === undefined) {
+          const city = readString(l.city);
+          if (city) out.city = city;
+        }
+        if (readString(rec.state) === undefined) {
+          const state = readString(l.state);
+          if (state) out.state = state;
+        }
+      }
+    }
+  }
+
+  // Basic-mode city/state fallback — top-level `location.reverse_geocode`
+  // structure is what the search-results-only payload provides.
+  if (readString(rec.city) === undefined && readString(out.city as unknown) === undefined) {
+    const topLoc = rec.location;
+    if (topLoc && typeof topLoc === "object" && !Array.isArray(topLoc)) {
+      const rg = (topLoc as { reverse_geocode?: unknown }).reverse_geocode;
+      if (rg && typeof rg === "object" && !Array.isArray(rg)) {
+        const r = rg as Record<string, unknown>;
+        const city = readString(r.city);
+        if (city) out.city = city;
+        const state = readString(r.state);
+        if (state) out.state = state;
+      }
+    }
+  }
+
+  // ── Subtitle mileage fallback (basic mode only) ───────────────────────────
+  // Basic-mode dataset items frequently carry mileage in the rendered subtitle
+  // (e.g. "64K miles", "129K miles · Dealership"). Used ONLY when extraListing-
+  // Data is absent — detail-mode items have a structured odometer field with
+  // an explicit unit, and trusting the subtitle when detail data is present
+  // risks reporting kilometres as miles.
+  const detailModeOdometerPresent =
+    eld && typeof eld === "object" && !Array.isArray(eld) &&
+    (eld as Record<string, unknown>).vehicle_odometer_data !== undefined;
+  if (typeof out.mileage !== "number" && !detailModeOdometerPresent) {
+    const fromSub = extractMileageFromSubtitles(rec.custom_sub_titles_with_rendering_flags);
+    if (fromSub !== undefined) out.mileage = fromSub;
+  }
+
   return out;
+}
+
+interface SubtitleEntry {
+  subtitle?: unknown;
+}
+
+function extractMileageFromSubtitles(value: unknown): number | undefined {
+  if (!Array.isArray(value)) return undefined;
+  for (const entry of value as SubtitleEntry[]) {
+    const text = readString(entry?.subtitle);
+    if (!text) continue;
+    const parsed = parseSubtitleMileage(text);
+    if (parsed !== undefined) return parsed;
+  }
+  return undefined;
+}
+
+function parseSubtitleMileage(text: string): number | undefined {
+  // "64K miles", "129K miles · Dealership", "84k Miles", "2,500 miles"
+  const kMatch = text.match(/(\d+(?:\.\d+)?)\s*[kK]\s*miles?\b/);
+  if (kMatch) {
+    const n = parseFloat(kMatch[1]!);
+    if (Number.isFinite(n) && n >= 0) return Math.round(n * 1000);
+  }
+  const plain = text.match(/(\d{1,3}(?:,\d{3})+|\d{1,7})\s*miles?\b/i);
+  if (plain) {
+    const n = parseInt(plain[1]!.replace(/,/g, ""), 10);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return undefined;
 }
