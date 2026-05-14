@@ -316,6 +316,47 @@ describe("POST /apify-webhook — empty dataset", () => {
   });
 });
 
+// ── 5b. Raidr-api payload mapping ────────────────────────────────────────────
+
+describe("POST /apify-webhook — raidr-api payload mapping", () => {
+  it("maps Apify dataset items through payloadAdapter before ingestCore", async () => {
+    vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({
+      items: [
+        {
+          __typename: "MarketplaceListing",
+          id: "1686857085840236",
+          marketplace_listing_title: "2020 Toyota Camry SE 62k miles",
+          custom_title: "2020 Toyota Camry SE 62k miles",
+          listing_price: { amount: "18500.00", formatted_amount: "$18,500" },
+          listing_date_ms: 1778443122000,
+          marketplace_listing_seller: { name: "Dealer Joe" },
+          location: { reverse_geocode: { city: "Boerne", state: "TX" } },
+          is_live: true,
+        },
+      ],
+      truncated: false,
+    });
+
+    const env = makeEnv();
+    const req = makeRequest(succeededPayload(), { Authorization: `Bearer ${APIFY_SECRET}` });
+    const res = await worker.fetch(req, env, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    expect(envelope.items).toHaveLength(1);
+    const mapped = envelope.items[0] as Record<string, unknown>;
+    expect(mapped.url).toBe("https://www.facebook.com/marketplace/item/1686857085840236/");
+    expect(mapped.title).toBe("2020 Toyota Camry SE 62k miles");
+    expect(mapped.price).toBe("18500.00");
+    expect(mapped.sellerName).toBe("Dealer Joe");
+    expect(mapped.postedAt).toBe(new Date(1778443122000).toISOString());
+    // Original raidr-api keys preserved for audit / drift
+    expect(mapped.id).toBe("1686857085840236");
+    expect(mapped.marketplace_listing_title).toBe("2020 Toyota Camry SE 62k miles");
+  });
+});
+
 // ── 6. Happy path ─────────────────────────────────────────────────────────────
 
 describe("POST /apify-webhook — happy path", () => {

@@ -9,6 +9,7 @@ import {
   ApifyDatasetFetchError,
   MAX_ITEMS_PER_RUN,
 } from "./datasetFetch";
+import { mapRaidrApiItem } from "./payloadAdapter";
 import { ingestCore } from "../ingest/handleIngest";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log, logError } from "../logging/logger";
@@ -152,16 +153,23 @@ export async function handleApifyWebhook(
     return json({ ok: true, skipped: "empty_dataset", run_id: runId, dataset_id: datasetId }, 200);
   }
 
-  // 8. Build envelope and dispatch to ingestCore. scraped_at falls back to now()
-  //    when Apify didn't stamp finishedAt (defensive — finishedAt should always
-  //    be present on a SUCCEEDED run).
+  // 8. Map each raidr-api dataset item into the v1 flat shape the Facebook
+  //    adapter expects. Without this, every item rejects at the adapter's
+  //    extractUrl gate with missing_identifier because the rented actor
+  //    emits Facebook GraphQL fields (marketplace_listing_title,
+  //    listing_price.amount, listing_date_ms, …) instead of url/title/price.
+  const mappedItems = items.map(mapRaidrApiItem);
+
+  // 9. Build envelope and dispatch to ingestCore. scraped_at falls back to
+  //    now() when Apify didn't stamp finishedAt (defensive — finishedAt
+  //    should always be present on a SUCCEEDED run).
   const scrapedAt = resource.finishedAt ?? new Date().toISOString();
   const envelope: IngestRequest = {
     source:     "facebook",
     run_id:     runId,
     region,
     scraped_at: scrapedAt,
-    items,
+    items: mappedItems,
   };
 
   log("apify.bridge.dispatched", {
