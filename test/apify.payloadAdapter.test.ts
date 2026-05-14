@@ -378,11 +378,12 @@ describe("mapRaidrApiItem — detail-mode VIN", () => {
 });
 
 describe("mapRaidrApiItem — detail-mode make/model/trim", () => {
-  it("extracts make/model/trim from extraListingData.vehicle_*_display_name fields", () => {
+  it("extracts make/model/trim from extraListingData.vehicle_*_display_name fields (trim cleaned of body suffix)", () => {
     const out = mapRaidrApiItem(detailItem()) as Record<string, unknown>;
     expect(out.make).toBe("Toyota");
     expect(out.model).toBe("Camry");
-    expect(out.trim).toBe("SE Sedan 4D");
+    // "SE Sedan 4D" → cleaned to "SE" via cleanTrim (strips body words + door tag)
+    expect(out.trim).toBe("SE");
   });
 
   it("leaves make/model/trim flat fields untouched when extraListingData is absent (basic-mode)", () => {
@@ -396,6 +397,75 @@ describe("mapRaidrApiItem — detail-mode make/model/trim", () => {
     const item = detailItem({ make: "Honda" });
     const out = mapRaidrApiItem(item) as Record<string, unknown>;
     expect(out.make).toBe("Honda");
+  });
+});
+
+describe("mapRaidrApiItem — cleanTrim on vehicle_trim_display_name", () => {
+  function trimFor(displayName: string): unknown {
+    const item = detailItem({
+      extraListingData: { vehicle_trim_display_name: displayName },
+    });
+    return (mapRaidrApiItem(item) as Record<string, unknown>).trim;
+  }
+
+  it('"LT Sport Utility 4D" → "LT"', () => {
+    expect(trimFor("LT Sport Utility 4D")).toBe("LT");
+  });
+
+  it('"Lariat Pickup 4D 5 ft" → "Lariat"', () => {
+    expect(trimFor("Lariat Pickup 4D 5 ft")).toBe("Lariat");
+  });
+
+  it('"Unlimited Sport S SUV 4D" → "Unlimited Sport S"', () => {
+    expect(trimFor("Unlimited Sport S SUV 4D")).toBe("Unlimited Sport S");
+  });
+
+  it('"Denali" preserved as "Denali"', () => {
+    expect(trimFor("Denali")).toBe("Denali");
+  });
+
+  it('"Custom" preserved as "Custom"', () => {
+    expect(trimFor("Custom")).toBe("Custom");
+  });
+
+  it('"Long Bed" preserved as "Long Bed" (no body-word match)', () => {
+    expect(trimFor("Long Bed")).toBe("Long Bed");
+  });
+
+  it('"TRD Off-Road Pickup 4D 5 ft" → "TRD Off-Road"', () => {
+    expect(trimFor("TRD Off-Road Pickup 4D 5 ft")).toBe("TRD Off-Road");
+  });
+
+  it('"SEL Premium" preserved as "SEL Premium"', () => {
+    expect(trimFor("SEL Premium")).toBe("SEL Premium");
+  });
+
+  it('"Calligraphy Sport Utility 4D" → "Calligraphy"', () => {
+    expect(trimFor("Calligraphy Sport Utility 4D")).toBe("Calligraphy");
+  });
+
+  it("falls back to undefined when the cleaned trim is empty", () => {
+    // Adversarial: a string that is body-words only would clean to empty.
+    // cleanTrim must return the original (or undefined) rather than ""
+    // to avoid producing an empty-string trim that downstream code
+    // would treat as present-but-invalid.
+    const item = detailItem({
+      extraListingData: { vehicle_trim_display_name: "" },
+    });
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.trim).toBeUndefined();
+  });
+
+  it("does not mutate marketplace_listing_title or custom_title", () => {
+    const item = detailItem({
+      marketplace_listing_title: "2018 Chevrolet Suburban 1500 LT Sport Utility 4D",
+      custom_title: "Custom Title Preserved",
+      extraListingData: { vehicle_trim_display_name: "LT Sport Utility 4D" },
+    });
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.marketplace_listing_title).toBe("2018 Chevrolet Suburban 1500 LT Sport Utility 4D");
+    expect(out.custom_title).toBe("Custom Title Preserved");
+    expect(out.trim).toBe("LT");
   });
 });
 

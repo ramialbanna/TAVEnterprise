@@ -420,7 +420,15 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     if ("invalid" in priceResult) return fail("invalid_price", { raw: priceRaw });
 
     const mileage = parseMileage(rec, title);
-    const trim = extractTrim(remaining);
+    const titleTrim = extractTrim(remaining);
+    // Allow upstream payload mappers (e.g. src/apify/payloadAdapter.ts) to
+    // override the title-parsed trim with a canonical value when the source
+    // payload supplies a structured trim field. This is the Apify detail-mode
+    // path — `rec.trim` carries `vehicle_trim_display_name` cleaned to a bare
+    // bodyname. Empty/whitespace/non-string `rec.trim` falls back to the title
+    // parse. Make/model parsing is intentionally unchanged in this PR.
+    const explicitTrimRaw = typeof rec["trim"] === "string" ? (rec["trim"] as string).trim() : "";
+    const trim = explicitTrimRaw.length > 0 ? explicitTrimRaw.toLowerCase() : titleTrim;
     const sourceListingId = extractSourceListingId(rec);
     const vin = extractVin(rec);
 

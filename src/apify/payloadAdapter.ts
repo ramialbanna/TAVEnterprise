@@ -188,8 +188,11 @@ export function mapRaidrApiItem(item: unknown): unknown {
       if (md) out.model = md;
     }
     if (readString(rec.trim) === undefined) {
-      const tm = readString(detail.vehicle_trim_display_name);
-      if (tm) out.trim = tm;
+      const raw = readString(detail.vehicle_trim_display_name);
+      if (raw) {
+        const cleaned = cleanTrim(raw);
+        if (cleaned) out.trim = cleaned;
+      }
     }
 
     // description — sellers commonly include mileage / condition / VIN in the
@@ -262,6 +265,63 @@ function extractMileageFromSubtitles(value: unknown): number | undefined {
     if (parsed !== undefined) return parsed;
   }
   return undefined;
+}
+
+/**
+ * Cox MMR 1.4 YMMT requires `bodyname` (trim) as a bare canonical token
+ * ("LT", "Lariat", "Denali"). raidr-api's `vehicle_trim_display_name` is
+ * verbose — typically "<trim> <body words> <door tag> <bed length>" — and
+ * a verbatim hand-off causes Cox 404s. cleanTrim strips trailing body /
+ * configuration words and dimensional suffixes greedily until the string
+ * stabilises, preserving the leading trim string itself.
+ *
+ * Returns the original input when stripping would yield an empty string.
+ */
+const BODY_WORDS: readonly string[] = [
+  // 2-word forms first (greedy match)
+  "Sport Utility", "Crew Cab", "Mega Cab", "Double Cab", "Quad Cab",
+  "Cargo Van", "Passenger Van", "Regular Cab",
+  "SuperCrew", "SuperCab",
+  // single-word body styles
+  "Pickup", "Sedan", "Coupe", "Hatchback", "Convertible", "Van", "Wagon",
+  "SUV", "Truck", "Minivan", "Crossover", "Roadster",
+];
+
+export function cleanTrim(raw: string): string {
+  const original = raw.trim();
+  if (original.length === 0) return original;
+
+  let t = original;
+
+  // 1. Strip trailing bed/cargo length: "5 ft", "6 1/3 ft", "8 ft.", etc.
+  t = t.replace(/\s+\d+(?:\s+\d+\/\d+)?\s*ft\.?$/i, "").trim();
+
+  // 2. Iteratively strip door tags ("4D", "2D") and body words from the end.
+  //    Two passes through the loop are typically enough; cap to defend
+  //    against pathological inputs.
+  for (let i = 0; i < 8; i++) {
+    let changed = false;
+
+    const afterDoor = t.replace(/\s+\d+D$/, "").trim();
+    if (afterDoor !== t && afterDoor.length > 0) {
+      t = afterDoor;
+      changed = true;
+    }
+
+    for (const word of BODY_WORDS) {
+      const re = new RegExp(`\\s+${word.replace(/\s+/g, "\\s+")}$`, "i");
+      const stripped = t.replace(re, "").trim();
+      if (stripped !== t && stripped.length > 0) {
+        t = stripped;
+        changed = true;
+        break;
+      }
+    }
+
+    if (!changed) break;
+  }
+
+  return t.length > 0 ? t : original;
 }
 
 function parseSubtitleMileage(text: string): number | undefined {
