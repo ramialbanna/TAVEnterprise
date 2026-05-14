@@ -41,6 +41,11 @@ name = "tav-aip-staging"
 HYBRID_BUYBOX_ENABLED = "true"
 MANHEIM_LOOKUP_MODE = "worker"
 INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev"
+# Apify bridge enabled in staging for the controlled smoke. Production stays
+# at the top-level "false" default until staging validates end-to-end.
+# Cloudflare does not inherit top-level [vars] into [env.*.vars], so this
+# must be set explicitly per environment.
+APIFY_WEBHOOK_ENABLED = "true"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
