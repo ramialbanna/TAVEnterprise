@@ -1,5 +1,6 @@
 import type { Env } from "./types/env";
 import { handleIngest } from "./ingest/handleIngest";
+import { handleApifyWebhook } from "./apify/webhookHandler";
 import { handleAdmin } from "./admin/routes";
 import { handleApp } from "./app/routes";
 import { getSupabaseClient } from "./persistence/supabase";
@@ -18,6 +19,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return handleIngest(request, env, ctx);
+    }
+
+    if (request.method === "POST" && url.pathname === "/apify-webhook") {
+      return handleApifyWebhook(request, env, ctx);
     }
 
     if (url.pathname.startsWith("/admin")) {

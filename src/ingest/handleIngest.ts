@@ -1,7 +1,7 @@
 import type { Env } from "../types/env";
 import type { BuyBoxRule, ScoredLead } from "../types/domain";
 import { verifyHmac } from "../auth/hmac";
-import { IngestRequestSchema } from "../validate";
+import { IngestRequestSchema, type IngestRequest } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
 import { withRetry } from "../persistence/retry";
 import { upsertSourceRun, completeSourceRun } from "../persistence/sourceRuns";
@@ -90,7 +90,25 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
     return json({ ok: false, error: "invalid_payload", details: parsed.error.flatten() }, 400);
   }
 
-  const { source, run_id, region, scraped_at, items } = parsed.data;
+  return ingestCore(parsed.data, env, execCtx);
+}
+
+/**
+ * Post-auth ingest pipeline. Accepts an already-validated IngestRequest and
+ * executes the source-run idempotency check, raw → normalized → candidate →
+ * valuation → scoring → lead loop. Returns the same Response shape as the
+ * /ingest route would, so internal callers (e.g. the Apify bridge) can re-emit it.
+ *
+ * Callers are responsible for authenticating the request and validating the
+ * payload against IngestRequestSchema before invoking this function — it does
+ * NOT perform HMAC verification or schema parsing.
+ */
+export async function ingestCore(
+  payload: IngestRequest,
+  env: Env,
+  execCtx: ExecutionContext,
+): Promise<Response> {
+  const { source, run_id, region, scraped_at, items } = payload;
   const ctx: LogContext = { runId: run_id, source, region };
 
   log("ingest.started", { item_count: items.length }, ctx);
