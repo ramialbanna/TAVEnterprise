@@ -4,7 +4,7 @@ import { verifyHmac } from "../auth/hmac";
 import { IngestRequestSchema, type IngestRequest } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
 import { withRetry } from "../persistence/retry";
-import { upsertSourceRun, completeSourceRun } from "../persistence/sourceRuns";
+import { upsertSourceRun, completeSourceRunSafe } from "../persistence/sourceRuns";
 import { insertRawListing } from "../persistence/rawListings";
 import { writeDeadLetter } from "../persistence/deadLetter";
 import { writeFilteredOut } from "../persistence/filteredOut";
@@ -44,6 +44,14 @@ import type { ExcellentLeadSummary } from "../alerts/alerts";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const BATCH_TIMEOUT_MS = 25_000;
+/**
+ * Reserved post-loop wall-clock for the `completeSourceRunSafe` update and
+ * any cleanup logs. The loop breaks BEFORE consuming this reserve so the
+ * source_runs row reliably transitions out of `running` even on a deadline
+ * hit, instead of getting stuck while the Worker runtime cancels the
+ * inflight Supabase fetch.
+ */
+const COMPLETION_RESERVE_MS = 1_500;
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -130,8 +138,11 @@ export async function ingestCore(
     return json({ ok: true, source, run_id, processed: run.processed, rejected: run.rejected, created_leads: run.created_leads }, 200);
   }
 
-  const controller = new AbortController();
-  const batchTimer = setTimeout(() => controller.abort(), BATCH_TIMEOUT_MS);
+  // Deadline-aware loop. We compute a single deadline at loop entry and
+  // re-check it BEFORE starting each item — so we never abort an inflight
+  // Supabase / Cox call mid-flight, and the `completeSourceRunSafe` write
+  // at the bottom always has at least `COMPLETION_RESERVE_MS` to land.
+  const loopDeadline = Date.now() + BATCH_TIMEOUT_MS - COMPLETION_RESERVE_MS;
 
   const adapterCtx: AdapterContext = { region, scrapedAt: scraped_at, sourceRunId: run.id };
 
@@ -142,6 +153,8 @@ export async function ingestCore(
   let rejected = 0;
   let createdLeads = 0;
   let itemIndex = 0;
+  let truncated = false;
+  let itemsSkipped = 0;
   const excellentLeads: ExcellentLeadSummary[] = [];
 
   try {
@@ -149,12 +162,19 @@ export async function ingestCore(
       const i = itemIndex++;
       const itemCtx: LogContext = { ...ctx, itemIndex: i };
 
-      if (controller.signal.aborted) {
-        try {
-          await writeDeadLetter(db, env, { source, region, run_id, item_index: i, reason_code: "batch_timeout", payload: item, error_message: "batch loop aborted: timeout exceeded" });
-        } catch { /* never throws */ }
-        rejected++;
-        continue;
+      // Hard pre-item deadline check. Items past this point are NOT counted
+      // in `rejected` — they simply never attempted. The completion row will
+      // record them via `error_message` and `truncated` status instead.
+      if (Date.now() >= loopDeadline) {
+        truncated = true;
+        itemsSkipped = items.length - i;
+        log("ingest.batch_deadline_hit", {
+          remaining:        itemsSkipped,
+          processed_so_far: rawInserted,
+          rejected_so_far:  rejected,
+          kpi:              true,
+        }, ctx);
+        break;
       }
 
       // A: raw insert
@@ -439,20 +459,46 @@ export async function ingestCore(
       rawInserted++;
     }
   } finally {
-    clearTimeout(batchTimer);
+    // Always emit a terminal source_runs row, even on truncation or
+    // mid-loop throw. waitUntil keeps the Worker alive past the response
+    // so completion has the reserved post-deadline budget.
+    const status        = truncated ? "truncated" : "completed";
+    const error_message = truncated ? `batch_truncated:${itemsSkipped}_items_skipped` : null;
+    execCtx.waitUntil(
+      completeSourceRunSafe(
+        db,
+        run.id,
+        {
+          processed:     rawInserted,
+          rejected,
+          created_leads: createdLeads,
+          status,
+          error_message,
+        },
+        (event, fields) => log(event, fields ?? {}, ctx),
+      ),
+    );
   }
 
-  try {
-    await withRetry(() => completeSourceRun(db, run.id, { processed: rawInserted, rejected, created_leads: createdLeads }));
-  } catch (err) {
-    logError("persistence", "ingest.run_complete_failed", err, ctx);
-  }
-
-  log("ingest.complete", { processed: rawInserted, rejected, created_leads: createdLeads, kpi: true }, ctx);
+  log("ingest.complete", {
+    processed: rawInserted,
+    rejected,
+    created_leads: createdLeads,
+    ...(truncated && { truncated: true, items_skipped: itemsSkipped }),
+    kpi: true,
+  }, ctx);
 
   if (excellentLeads.length > 0) {
     execCtx.waitUntil(sendExcellentLeadSummary(env, excellentLeads, { runId: run_id, source }));
   }
 
-  return json({ ok: true, source, run_id, processed: rawInserted, rejected, created_leads: createdLeads }, 200);
+  return json({
+    ok: true,
+    source,
+    run_id,
+    processed: rawInserted,
+    rejected,
+    created_leads: createdLeads,
+    ...(truncated && { truncated: true, items_skipped: itemsSkipped }),
+  }, 200);
 }
