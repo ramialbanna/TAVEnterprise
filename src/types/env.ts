@@ -78,4 +78,30 @@ export interface Env {
    * Absent on local/dev where INTEL_WORKER_URL public fetch is acceptable.
    */
   INTEL_WORKER?: Fetcher;
+
+  // ── Apify bridge ───────────────────────────────────────────────────────────
+  /**
+   * Bearer token Apify webhooks must present in the Authorization header to be
+   * accepted at POST /apify-webhook. Distinct from WEBHOOK_HMAC_SECRET — the
+   * Apify webhook UI cannot compute HMAC over the body, so we use a static
+   * bearer for the bridge ingress and rely on the bridge to construct the
+   * canonical /ingest envelope from the Apify dataset. NEVER log this.
+   * Set via: wrangler secret put APIFY_WEBHOOK_SECRET
+   */
+  APIFY_WEBHOOK_SECRET: string;
+
+  /**
+   * Apify Personal Access Token used to read dataset items via GET
+   * /v2/datasets/{id}/items and fetch run detail when defaultDatasetId is
+   * missing from the webhook payload. NEVER log this.
+   * Set via: wrangler secret put APIFY_TOKEN
+   */
+  APIFY_TOKEN: string;
+
+  /**
+   * Master switch for POST /apify-webhook. When not exactly "true", the route
+   * returns 503 immediately so we can disable the bridge without redeploying
+   * code. Set in wrangler.toml [vars].
+   */
+  APIFY_WEBHOOK_ENABLED: string;
 }

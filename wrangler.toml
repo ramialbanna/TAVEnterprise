@@ -23,10 +23,17 @@ MANHEIM_LOOKUP_MODE = "direct"
 # Base URL of tav-intelligence-worker. Empty = not configured; worker-path valuation skips.
 # Set to worker URL when enabling MANHEIM_LOOKUP_MODE="worker".
 INTEL_WORKER_URL = ""
-# ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET must be set as Cloudflare secrets:
-#   wrangler secret put ADMIN_API_SECRET   # ops admin API (/admin/*)
-#   wrangler secret put APP_API_SECRET      # frontend product API (/app/*) — separate blast radius
-#   wrangler secret put INTEL_WORKER_SECRET
+# Apify bridge master switch. "true" enables POST /apify-webhook; any other
+# value (including "false") causes the route to return 503 — used to disable
+# the bridge without redeploying code.
+APIFY_WEBHOOK_ENABLED = "false"
+# ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET, APIFY_WEBHOOK_SECRET,
+# APIFY_TOKEN must be set as Cloudflare secrets:
+#   wrangler secret put ADMIN_API_SECRET     # ops admin API (/admin/*)
+#   wrangler secret put APP_API_SECRET       # frontend product API (/app/*) — separate blast radius
+#   wrangler secret put INTEL_WORKER_SECRET  # worker→intel auth
+#   wrangler secret put APIFY_WEBHOOK_SECRET # bearer for Apify → /apify-webhook ingress
+#   wrangler secret put APIFY_TOKEN          # Apify PAT for dataset reads
 
 [env.staging]
 name = "tav-aip-staging"

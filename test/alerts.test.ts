@@ -27,6 +27,9 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     MANHEIM_LOOKUP_MODE: "direct",
     INTEL_WORKER_URL: "",
     INTEL_WORKER_SECRET: "",
+    APIFY_WEBHOOK_SECRET: "",
+    APIFY_TOKEN: "",
+    APIFY_WEBHOOK_ENABLED: "false",
     ...overrides,
   };
 }
