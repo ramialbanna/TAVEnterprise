@@ -61,22 +61,68 @@ export async function upsertSourceRun(
   return toRecord(data);
 }
 
+export type SourceRunTerminalStatus = "completed" | "failed" | "truncated";
+
+export interface SourceRunCompletion {
+  processed:      number;
+  rejected:       number;
+  created_leads:  number;
+  /** Terminal status. Defaults to 'completed' for callers that have not been updated. */
+  status?:        SourceRunTerminalStatus;
+  /** Free-text annotation; common pattern: `batch_truncated:N_items_skipped`. */
+  error_message?: string | null;
+}
+
 export async function completeSourceRun(
   db: SupabaseClient,
   id: string,
-  counts: { processed: number; rejected: number; created_leads: number },
+  counts: SourceRunCompletion,
 ): Promise<void> {
   const { error } = await db
     .from("source_runs")
     .update({
-      status: "completed",
-      processed: counts.processed,
-      rejected: counts.rejected,
+      status:        counts.status ?? "completed",
+      processed:     counts.processed,
+      rejected:      counts.rejected,
       created_leads: counts.created_leads,
+      error_message: counts.error_message ?? null,
     })
     .eq("id", id);
 
   if (error) throw error;
+}
+
+/**
+ * Best-effort wrapper around completeSourceRun. Retries transient failures
+ * via withRetry and swallows non-retryable / exhausted errors so a failed
+ * completion never escapes into the request response. Intended for
+ * execCtx.waitUntil call sites where the request response has already
+ * been sent and any thrown error would surface as an unhandled rejection
+ * in the Worker runtime.
+ */
+export async function completeSourceRunSafe(
+  db: SupabaseClient,
+  id: string,
+  counts: SourceRunCompletion,
+  logger: (event: string, fields?: Record<string, unknown>) => void,
+): Promise<void> {
+  const { withRetry } = await import("./retry");
+  try {
+    await withRetry(() => completeSourceRun(db, id, counts));
+    logger("ingest.source_run_completed", {
+      source_run_id: id,
+      status: counts.status ?? "completed",
+      processed: counts.processed,
+      rejected: counts.rejected,
+      created_leads: counts.created_leads,
+    });
+  } catch (err) {
+    logger("ingest.source_run_complete_failed", {
+      source_run_id: id,
+      status: counts.status ?? "completed",
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 function toRecord(row: Record<string, unknown>): SourceRunRecord {

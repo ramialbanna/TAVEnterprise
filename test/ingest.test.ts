@@ -12,6 +12,7 @@ vi.mock("../src/persistence/supabase", () => ({
 vi.mock("../src/persistence/sourceRuns", () => ({
   upsertSourceRun: vi.fn(),
   completeSourceRun: vi.fn(),
+  completeSourceRunSafe: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/persistence/rawListings", () => ({
@@ -82,7 +83,7 @@ vi.mock("../src/scoring/lead", async () => {
   return { ...actual, computeFinalScore: vi.fn().mockImplementation(actual.computeFinalScore) };
 });
 
-import { upsertSourceRun, completeSourceRun } from "../src/persistence/sourceRuns";
+import { upsertSourceRun, completeSourceRun, completeSourceRunSafe } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
 import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
 import { upsertVehicleCandidate } from "../src/persistence/vehicleCandidates";
@@ -116,6 +117,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(upsertSourceRun).mockResolvedValue(RUNNING_RUN);
   vi.mocked(completeSourceRun).mockResolvedValue(undefined);
+  vi.mocked(completeSourceRunSafe).mockResolvedValue(undefined);
   vi.mocked(insertRawListing).mockResolvedValue({ id: "raw-uuid" });
   vi.mocked(upsertNormalizedListing).mockResolvedValue({ id: "norm-uuid", isNew: true, priceChanged: false, mileageChanged: false });
   vi.mocked(upsertVehicleCandidate).mockResolvedValue({ id: "vc-uuid", isNew: true });
@@ -388,7 +390,9 @@ describe("POST /ingest", () => {
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
 
     expect(vi.mocked(sendExcellentLeadSummary)).not.toHaveBeenCalled();
-    expect(waitUntilSpy).not.toHaveBeenCalled();
+    // waitUntil is still called once — for completeSourceRunSafe. The
+    // assertion is that no excellent-lead alert went out.
+    expect(waitUntilSpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -575,5 +579,117 @@ describe("POST /ingest — vehicle_enrichments normalization write", () => {
     expect(body.ok).toBe(true);
     // Snapshot still written despite enrichment failure
     expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Deadline-aware truncation ────────────────────────────────────────────────
+
+describe("POST /ingest — deadline-aware truncation", () => {
+  // Build a multi-item payload so we can simulate per-item deadline checks.
+  function manyItemPayload(n: number): string {
+    return JSON.stringify({
+      source: "facebook",
+      run_id: "run-deadline",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: Array.from({ length: n }, (_, i) => ({
+        url: `https://fb.com/d/${i}`,
+        title: `2020 Toyota Camry SE, ${50 + i}k miles, $${15000 + i}`,
+      })),
+    });
+  }
+
+  it("normal run: completes with status='completed', no truncated/items_skipped in response", async () => {
+    const payload = manyItemPayload(3);
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.processed).toBe(3);
+    expect(body).not.toHaveProperty("truncated");
+    expect(body).not.toHaveProperty("items_skipped");
+    // Source-run completion routed through waitUntil with status='completed'
+    expect(vi.mocked(completeSourceRunSafe)).toHaveBeenCalledOnce();
+    const [, , completion] = vi.mocked(completeSourceRunSafe).mock.calls[0]!;
+    expect(completion.status).toBe("completed");
+    expect(completion.error_message).toBeNull();
+    expect(completion.processed).toBe(3);
+  });
+
+  it("deadline hit mid-loop: breaks, marks remaining as items_skipped, status='truncated'", async () => {
+    // After the first item's raw insert, jump the clock past the deadline so
+    // the next loop iteration trips. The deadline is computed once at loop
+    // entry from real Date.now(); the per-item advancement we apply later
+    // does not affect that initial computation, which is the point.
+    let advanced = false;
+    vi.mocked(insertRawListing).mockImplementation(async () => {
+      if (!advanced) {
+        advanced = true;
+        const futureNow = Date.now() + 60_000;
+        vi.spyOn(Date, "now").mockReturnValue(futureNow);
+      }
+      return { id: "raw-uuid" };
+    });
+
+    const payload = manyItemPayload(5);
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    vi.spyOn(Date, "now").mockRestore();
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.truncated).toBe(true);
+    expect(body.items_skipped).toBeGreaterThan(0);
+    // Items skipped should NOT be counted as rejected.
+    expect((body.processed as number) + (body.rejected as number) + (body.items_skipped as number)).toBe(5);
+
+    expect(vi.mocked(completeSourceRunSafe)).toHaveBeenCalledOnce();
+    const [, , completion] = vi.mocked(completeSourceRunSafe).mock.calls[0]!;
+    expect(completion.status).toBe("truncated");
+    expect(completion.error_message).toMatch(/^batch_truncated:\d+_items_skipped$/);
+  });
+
+  it("truncated counts: items_skipped is exactly items.length - itemIndex at break", async () => {
+    // Same advancement pattern, but verify the arithmetic: 1 processed +
+    // 4 skipped = 5 total; rejected stays 0; items_skipped reflects the
+    // un-iterated tail, not adapter rejections.
+    let advanced = false;
+    vi.mocked(insertRawListing).mockImplementation(async () => {
+      if (!advanced) {
+        advanced = true;
+        vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+      }
+      return { id: "raw-uuid" };
+    });
+
+    const payload = manyItemPayload(5);
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    vi.spyOn(Date, "now").mockRestore();
+
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.processed).toBe(1);
+    expect(body.rejected).toBe(0);
+    expect(body.items_skipped).toBe(4);
+  });
+
+  it("completeSourceRunSafe is invoked via execCtx.waitUntil", async () => {
+    const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+    expect(waitUntilSpy).toHaveBeenCalled();
+    expect(vi.mocked(completeSourceRunSafe)).toHaveBeenCalledOnce();
+  });
+
+  it("response shape: no truncated/items_skipped fields when deadline is not hit", async () => {
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).not.toHaveProperty("truncated");
+    expect(body).not.toHaveProperty("items_skipped");
   });
 });
