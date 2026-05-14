@@ -60,11 +60,16 @@ vi.mock("../src/alerts/alerts", () => ({
 
 vi.mock("../src/valuation/workerClient", async () => {
   const actual = await vi.importActual<typeof WorkerClientModule>("../src/valuation/workerClient");
-  return { ...actual, getMmrValueFromWorker: vi.fn().mockResolvedValue(null) };
+  return {
+    ...actual,
+    getMmrValueFromWorker: vi.fn().mockResolvedValue(null),
+    getMmrLookupOutcome: vi.fn().mockResolvedValue({ kind: "miss", reason: "not_configured", method: null }),
+  };
 });
 
 vi.mock("../src/persistence/valuationSnapshots", () => ({
-  writeValuationSnapshot: vi.fn().mockResolvedValue(undefined),
+  writeValuationSnapshot:     vi.fn().mockResolvedValue(undefined),
+  writeValuationMissSnapshot: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/persistence/vehicleEnrichments", () => ({
@@ -88,8 +93,8 @@ import { writeSchemaDrift } from "../src/persistence/schemaDrift";
 import { sendExcellentLeadSummary } from "../src/alerts/alerts";
 import { computeFinalScore } from "../src/scoring/lead";
 import { insertBuyBoxScoreAttribution } from "../src/persistence/buyBoxScoreAttributions";
-import { getMmrValueFromWorker, WorkerTimeoutError, WorkerRateLimitError } from "../src/valuation/workerClient";
-import { writeValuationSnapshot } from "../src/persistence/valuationSnapshots";
+import { getMmrValueFromWorker, getMmrLookupOutcome } from "../src/valuation/workerClient";
+import { writeValuationSnapshot, writeValuationMissSnapshot } from "../src/persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
@@ -120,7 +125,9 @@ beforeEach(() => {
   vi.mocked(writeSchemaDrift).mockResolvedValue(undefined);
   vi.mocked(insertBuyBoxScoreAttribution).mockResolvedValue("attr-uuid");
   vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
+  vi.mocked(getMmrLookupOutcome).mockResolvedValue({ kind: "miss", reason: "not_configured", method: null });
   vi.mocked(writeValuationSnapshot).mockResolvedValue(undefined);
+  vi.mocked(writeValuationMissSnapshot).mockResolvedValue(undefined);
   vi.mocked(writeVehicleEnrichment).mockResolvedValue(undefined);
 });
 
@@ -405,21 +412,22 @@ const workerEnv = {
 
 describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
   it("calls intelligence worker and writes valuation snapshot when worker returns a value", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_MMR_RESULT);
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_MMR_RESULT });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledOnce();
+    expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledOnce();
     expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
     expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ valuation: expect.objectContaining({ mmrValue: 18_500, confidence: "high" }) }),
     );
+    expect(vi.mocked(writeValuationMissSnapshot)).not.toHaveBeenCalled();
   });
 
-  it("falls back gracefully (returns 200, no snapshot) when worker call times out", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValueOnce(new WorkerTimeoutError());
+  it("falls back gracefully (returns 200) when worker call times out and persists miss with reason 'cox_timeout'", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_timeout", method: "year_make_model" });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
@@ -427,10 +435,15 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(vi.mocked(writeValuationSnapshot)).not.toHaveBeenCalled();
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ missingReason: "cox_timeout" }),
+    );
   });
 
-  it("falls back gracefully (returns 200, no snapshot) when worker returns 429", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValueOnce(new WorkerRateLimitError());
+  it("falls back gracefully (returns 200) when worker returns 429 and persists miss with reason 'cox_rate_limited'", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_rate_limited", method: "year_make_model" });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
@@ -438,14 +451,59 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(vi.mocked(writeValuationSnapshot)).not.toHaveBeenCalled();
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledOnce();
   });
 
-  it("direct mode does not call getMmrValueFromWorker", async () => {
+  it("persists miss with reason 'trim_missing' when adapter produced no trim", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "trim_missing", method: "year_make_model" });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ missingReason: "trim_missing", method: "year_make_model" }),
+    );
+  });
+
+  it("persists miss with reason 'mileage_missing' when adapter produced no mileage", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "mileage_missing", method: "year_make_model" });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ missingReason: "mileage_missing" }),
+    );
+  });
+
+  it("persists miss with reason 'cox_no_data' when worker returned a negative envelope", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_no_data", method: "vin" });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ missingReason: "cox_no_data", method: "vin" }),
+    );
+  });
+
+  it("miss-snapshot persistence failure does not fail ingest", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_no_data", method: "vin" });
+    vi.mocked(writeValuationMissSnapshot).mockRejectedValueOnce(new Error("db constraint"));
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+  });
+
+  it("direct mode does not call getMmrLookupOutcome and does not write miss snapshots", async () => {
     const sig = await sign(VALID_PAYLOAD, SECRET);
     // env has no MANHEIM_LOOKUP_MODE → treated as "direct"
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
 
-    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+    expect(vi.mocked(getMmrLookupOutcome)).not.toHaveBeenCalled();
+    expect(vi.mocked(writeValuationMissSnapshot)).not.toHaveBeenCalled();
   });
 });
 
@@ -465,7 +523,7 @@ const WORKER_YMM_MMR_RESULT = {
 
 describe("POST /ingest — vehicle_enrichments normalization write", () => {
   it("writes vehicle_enrichments for YMM worker mode when vcId is available", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_YMM_MMR_RESULT);
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_YMM_MMR_RESULT });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
@@ -488,7 +546,7 @@ describe("POST /ingest — vehicle_enrichments normalization write", () => {
 
   it("does not write vehicle_enrichments for VIN-path worker result", async () => {
     // WORKER_MMR_RESULT has method: "vin" — should not trigger enrichment
-    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_MMR_RESULT);
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_MMR_RESULT });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
@@ -498,7 +556,7 @@ describe("POST /ingest — vehicle_enrichments normalization write", () => {
   it("does not write vehicle_enrichments in direct mode (YMM result without normalization metadata)", async () => {
     // Direct-mode MmrResult has no normalizationConfidence field
     const directYmmResult = { mmrValue: 16_000, confidence: "medium" as const, method: "year_make_model" as const, rawResponse: {} };
-    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(directYmmResult);
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: directYmmResult });
     const sig = await sign(VALID_PAYLOAD, SECRET);
     // Even with workerEnv, if normalizationConfidence is absent the guard fails
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
@@ -507,7 +565,7 @@ describe("POST /ingest — vehicle_enrichments normalization write", () => {
   });
 
   it("enrichment write failure does not fail ingest (returns 200) and logs event", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValueOnce(WORKER_YMM_MMR_RESULT);
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_YMM_MMR_RESULT });
     vi.mocked(writeVehicleEnrichment).mockRejectedValueOnce(new Error("db constraint"));
     const sig = await sign(VALID_PAYLOAD, SECRET);
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);

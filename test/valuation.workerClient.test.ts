@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getMmrValueFromWorker,
+  getMmrLookupOutcome,
   WorkerTimeoutError,
   WorkerRateLimitError,
   WorkerUnavailableError,
@@ -241,7 +242,7 @@ describe("getMmrValueFromWorker — YMM path", () => {
   it("calls /mmr/year-make-model and returns MmrResult with confidence 'medium'", async () => {
     mockFetch(200, ENVELOPE_YMM);
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result).toMatchObject({ mmrValue: 16_000, confidence: "medium", method: "year_make_model" });
@@ -266,7 +267,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     await getMmrValueFromWorker(
-      { year: 2019, make: "chevy", model: "Malibu", mileage: 60_000 },
+      { year: 2019, make: "chevy", model: "Malibu", trim: "LT", mileage: 60_000 },
       BASE_ENV,
     );
 
@@ -279,7 +280,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
   it("exact make/model keeps confidence 'medium'", async () => {
     mockFetch(200, ENVELOPE_YMM);
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.confidence).toBe("medium");
@@ -291,7 +292,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "chevy", model: "Malibu", mileage: 60_000 },
+      { year: 2019, make: "chevy", model: "Malibu", trim: "LT", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.confidence).toBe("medium");
@@ -304,7 +305,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Chevrolet", model: "FakeTruck", mileage: 60_000 },
+      { year: 2019, make: "Chevrolet", model: "FakeTruck", trim: "LT", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.confidence).toBe("low");
@@ -316,7 +317,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Porsche", model: "911", mileage: 60_000 },
+      { year: 2019, make: "Porsche", model: "911", trim: "Carrera", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.confidence).toBe("low");
@@ -328,7 +329,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
       BASE_ENV,
     );
 
@@ -343,7 +344,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     mockFetch(200, ENVELOPE_YMM);
 
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.normalizationConfidence).toBe("none");
@@ -366,30 +367,24 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     expect(sentBody.trim).toBe("XSE");
   });
 
-  it("trim is omitted from the YMM request body when absent", async () => {
-    mockFetch(200, ENVELOPE_YMM);
-
-    await getMmrValueFromWorker(
+  it("missing trim short-circuits before fetch (Cox YMMT requires bodyname)", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const result = await getMmrValueFromWorker(
       { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
       BASE_ENV,
     );
-
-    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
-    expect(sentBody).not.toHaveProperty("trim");
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("whitespace-only trim is omitted from the YMM request body", async () => {
-    mockFetch(200, ENVELOPE_YMM);
-
-    await getMmrValueFromWorker(
+  it("whitespace-only trim short-circuits before fetch", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const result = await getMmrValueFromWorker(
       { year: 2019, make: "Toyota", model: "Camry", trim: "   ", mileage: 60_000 },
       BASE_ENV,
     );
-
-    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
-    expect(sentBody).not.toHaveProperty("trim");
+    expect(result).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("trim from params is present on result as lookupTrim", async () => {
@@ -402,21 +397,11 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
     expect(result?.lookupTrim).toBe("XSE");
   });
 
-  it("lookupTrim is null when trim is not provided", async () => {
-    mockFetch(200, ENVELOPE_YMM);
-
-    const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
-      BASE_ENV,
-    );
-    expect(result?.lookupTrim).toBeNull();
-  });
-
   it("normalization metadata present on YMM exact-match result", async () => {
     mockFetch(200, ENVELOPE_YMM);
 
     const result = await getMmrValueFromWorker(
-      { year: 2019, make: "Toyota", model: "Camry", mileage: 60_000 },
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
       BASE_ENV,
     );
     expect(result?.lookupMake).toBe("Toyota");
@@ -505,6 +490,136 @@ describe("getMmrValueFromWorker — error cases", () => {
     }));
     const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
     expect(result).toMatchObject({ mmrValue: 18_500, confidence: "high", method: "vin" });
+  });
+
+  it("OUTCOME: getMmrLookupOutcome returns hit for VIN path", async () => {
+    mockFetch(200, ENVELOPE_VIN);
+    const outcome = await getMmrLookupOutcome(
+      { vin: "1HGCM82633A004352", year: 2020, mileage: 45_000 },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+    expect(outcome.result.mmrValue).toBe(18_500);
+    expect(outcome.result.method).toBe("vin");
+  });
+
+  it("OUTCOME: VIN negative envelope yields miss reason 'cox_no_data'", async () => {
+    mockFetch(200, ENVELOPE_NEGATIVE);
+    const outcome = await getMmrLookupOutcome(
+      { vin: "1HGCM82633A004352", mileage: 45_000 },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("cox_no_data");
+    expect(outcome.method).toBe("vin");
+  });
+
+  it("OUTCOME: unconfigured worker yields miss reason 'not_configured'", async () => {
+    const env = {
+      ...BASE_ENV,
+      INTEL_WORKER_URL: "",
+      INTEL_WORKER: undefined,
+    } as unknown as Env;
+    vi.stubGlobal("fetch", vi.fn());
+    const outcome = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, env);
+    expect(outcome).toEqual({ kind: "miss", reason: "not_configured", method: null });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("OUTCOME: YMM path with missing mileage yields miss reason 'mileage_missing' without calling worker", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const outcome = await getMmrLookupOutcome(
+      { year: 2020, make: "Toyota", model: "Camry", trim: "SE" },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("mileage_missing");
+    expect(outcome.method).toBe("year_make_model");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("OUTCOME: YMM path with missing trim yields miss reason 'trim_missing' without calling worker (Cox YMMT requires bodyname)", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const outcome = await getMmrLookupOutcome(
+      { year: 2020, make: "Toyota", model: "Camry", mileage: 45_000 },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("trim_missing");
+    expect(outcome.method).toBe("year_make_model");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("OUTCOME: incomplete YMM (no make) yields miss reason 'insufficient_params'", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const outcome = await getMmrLookupOutcome(
+      { year: 2020, model: "Camry", mileage: 45_000, trim: "SE" },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("insufficient_params");
+    expect(outcome.method).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("OUTCOME: YMM path with full inputs returns hit on success", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+    const outcome = await getMmrLookupOutcome(
+      { year: 2019, make: "Toyota", model: "Camry", trim: "XSE", mileage: 60_000 },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+    expect(outcome.result.mmrValue).toBe(16_000);
+    expect(outcome.result.method).toBe("year_make_model");
+  });
+
+  it("OUTCOME: worker 503 surfaces miss reason 'cox_unavailable' instead of throwing", async () => {
+    mockFetch(503, { ok: false, error: "unavailable" });
+    const outcome = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("cox_unavailable");
+  });
+
+  it("OUTCOME: worker 429 surfaces miss reason 'cox_rate_limited' instead of throwing", async () => {
+    mockFetch(429, { ok: false, error: "rate_limited" });
+    const outcome = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("cox_rate_limited");
+  });
+
+  it("OUTCOME: worker timeout surfaces miss reason 'cox_timeout' instead of throwing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
+      const err = new Error("The operation was aborted");
+      err.name = "AbortError";
+      return Promise.reject(err);
+    }));
+    const outcome = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("cox_timeout");
+  });
+
+  it("OUTCOME: invalid envelope shape surfaces miss reason 'envelope_invalid'", async () => {
+    mockFetch(200, { not: "a valid envelope" });
+    const outcome = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("envelope_invalid");
+  });
+
+  it("OUTCOME: existing getMmrValueFromWorker null behaviour is preserved", async () => {
+    // Regression — the old null-return adapter must still flatten misses to null.
+    mockFetch(200, ENVELOPE_NEGATIVE);
+    const result = await getMmrValueFromWorker({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(result).toBeNull();
   });
 
   it("uses env.INTEL_WORKER service binding when bound (avoids CF 1042)", async () => {

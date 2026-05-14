@@ -9,6 +9,40 @@ import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 
+/**
+ * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
+ * via the MmrLookupOutcome miss branch — never inferred from a null result.
+ *
+ *   not_configured       — neither INTEL_WORKER binding nor INTEL_WORKER_URL set
+ *   insufficient_params  — no VIN and incomplete YMM (year/make/model missing)
+ *   mileage_missing      — YMM path requires mileage; not provided
+ *   trim_missing         — Cox YMMT requires bodyname (trim) as path segment
+ *   cox_no_data          — worker returned a negative envelope (ok=false or mmr_value=null)
+ *   cox_unavailable      — worker returned a non-2xx response
+ *   cox_rate_limited     — worker returned 429
+ *   cox_timeout          — request exceeded TIMEOUT_MS
+ *   envelope_invalid     — worker returned 2xx but body did not match the contract
+ */
+export type MmrMissReason =
+  | "not_configured"
+  | "insufficient_params"
+  | "mileage_missing"
+  | "trim_missing"
+  | "cox_no_data"
+  | "cox_unavailable"
+  | "cox_rate_limited"
+  | "cox_timeout"
+  | "envelope_invalid";
+
+export type MmrLookupOutcome =
+  | { kind: "hit"; result: MmrResult }
+  | {
+      kind: "miss";
+      reason: MmrMissReason;
+      method: ValuationMethod | null;
+      normalizationConfidence?: NormalizationConfidence;
+    };
+
 // tav-intelligence-worker wraps every successful response as
 //   { success: true, data: <MmrResponseEnvelope>, requestId, timestamp }
 // (see workers/tav-intelligence-worker/src/types/api.ts okResponse). The
@@ -76,14 +110,21 @@ const SERVICE_BINDING_PLACEHOLDER_BASE = "https://tav-intelligence-worker.intern
  * Throws WorkerTimeoutError, WorkerRateLimitError, or WorkerUnavailableError
  * for error conditions — callers must catch and treat as non-blocking.
  */
-export async function getMmrValueFromWorker(
+/**
+ * Internal shape: outcome plus optional HTTP status carried out of the wire
+ * call so the legacy throw-on-error adapter can build a WorkerUnavailableError
+ * with the right status. The exported `MmrLookupOutcome` strips httpStatus.
+ */
+type MmrLookupOutcomeInternal = MmrLookupOutcome & { httpStatus?: number };
+
+async function performMmrCall(
   params: MmrParams,
   env: Env,
-): Promise<MmrResult | null> {
+): Promise<MmrLookupOutcomeInternal> {
   const hasServiceBinding = env.INTEL_WORKER !== undefined;
   const baseUrl =
     env.INTEL_WORKER_URL || (hasServiceBinding ? SERVICE_BINDING_PLACEHOLDER_BASE : "");
-  if (!baseUrl) return null;
+  if (!baseUrl) return { kind: "miss", reason: "not_configured", method: null };
 
   const { vin, year, make, model, mileage } = params;
 
@@ -110,8 +151,20 @@ export async function getMmrValueFromWorker(
     };
     confidence = "high";
     method = "vin";
-  } else if (year !== undefined && make && model && mileage !== undefined) {
-    // YMM path — normalize make/model via reference data before sending
+  } else if (year !== undefined && make && model) {
+    // YMM path — gate on mileage and trim BEFORE the network call so misses
+    // are diagnosable. Cox MMR 1.4 YMMT requires `odometer` query param and
+    // `bodyname` (trim) path segment; missing either yields a 404 (cox_no_data)
+    // that hides the real cause. Pre-checking surfaces the specific reason.
+    if (mileage === undefined) {
+      return { kind: "miss", reason: "mileage_missing", method: "year_make_model" };
+    }
+    const preTrim = params.trim?.trim();
+    if (!preTrim) {
+      return { kind: "miss", reason: "trim_missing", method: "year_make_model" };
+    }
+
+    // Normalize make/model via reference data before sending
     const db = getSupabaseClient(env);
     const ref = await loadMmrReferenceData(db);
     const normalized = normalizeMmrParams(
@@ -125,10 +178,6 @@ export async function getMmrValueFromWorker(
 
     endpoint = `${baseUrl}/mmr/year-make-model`;
     body = { year, make: sendMake, model: sendModel, mileage };
-    // Cox MMR 1.4 YMMT requires bodyname (trim) as a path segment, so trim
-    // must cross the boundary when present. normalized.trim is pass-through
-    // today (no trim alias table); when alias work lands, it plugs in here
-    // without changing the wire format.
     const sendTrim = normalized.trim?.trim();
     if (sendTrim) body.trim = sendTrim;
 
@@ -147,20 +196,13 @@ export async function getMmrValueFromWorker(
       normalizationConfidence: normalized.normalizationConfidence,
     };
   } else {
-    return null;
+    return { kind: "miss", reason: "insufficient_params", method: null };
   }
 
-  // Prefer Cloudflare Service Binding when configured. Public-URL fetch
-  // between Workers on the same account is blocked by Cloudflare with
-  // error 1042; the binding routes internally and bypasses that limit.
-  // `hasServiceBinding` was computed above to decide whether the placeholder
-  // baseUrl is valid; reuse the same predicate to avoid divergence.
+  // Prefer Cloudflare Service Binding when configured (avoids CF 1042 between
+  // same-account Workers on public URLs).
   const useServiceBinding = hasServiceBinding;
 
-  // Diagnostic-grade per-call log. body_keys lists fields without their values
-  // (vin/year/mileage are not secret, but listing the schema-shape is enough
-  // to compare against intel's expected request shape). service_secret_header
-  // is a presence boolean — never the value.
   const serviceSecretConfigured = isConfiguredSecret(env.INTEL_WORKER_SECRET);
   log("ingest.mmr_worker_called", {
     endpoint,
@@ -191,13 +233,22 @@ export async function getMmrValueFromWorker(
       ? await env.INTEL_WORKER!.fetch(endpoint, requestInit)
       : await fetch(endpoint, requestInit);
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw new WorkerTimeoutError();
+    if (err instanceof Error && err.name === "AbortError") {
+      return {
+        kind: "miss",
+        reason: "cox_timeout",
+        method,
+        ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+      };
+    }
     throw err;
   } finally {
     clearTimeout(timer);
   }
 
-  if (res.status === 429) throw new WorkerRateLimitError();
+  if (res.status === 429) {
+    return { kind: "miss", reason: "cox_rate_limited", method };
+  }
 
   if (!res.ok) {
     // Read response body so the failure log captures intel's error envelope.
@@ -217,14 +268,14 @@ export async function getMmrValueFromWorker(
       response_text:                 responseText,
     });
 
-    throw new WorkerUnavailableError(res.status);
+    return { kind: "miss", reason: "cox_unavailable", method, httpStatus: res.status };
   }
 
   let data: unknown;
   try {
     data = await res.json();
   } catch {
-    return null;
+    return { kind: "miss", reason: "envelope_invalid", method };
   }
 
   const wrapped = IntelOkEnvelopeSchema.safeParse(data);
@@ -233,17 +284,68 @@ export async function getMmrValueFromWorker(
       endpoint,
       issues: wrapped.error.issues.slice(0, 5),
     });
-    return null;
+    return { kind: "miss", reason: "envelope_invalid", method };
   }
 
   const envelope = wrapped.data.data;
-  if (!envelope.ok || envelope.mmr_value === null) return null;
+  if (!envelope.ok || envelope.mmr_value === null) {
+    return {
+      kind: "miss",
+      reason: "cox_no_data",
+      method,
+      ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+    };
+  }
 
-  return {
+  const result: MmrResult = {
     mmrValue: envelope.mmr_value,
     confidence,
     method,
     rawResponse: envelope.mmr_payload ?? {},
     ...normalizationMeta,
   };
+  return { kind: "hit", result };
+}
+
+/**
+ * Outcome-shaped MMR lookup. Returns a discriminated union of hit or miss
+ * with a structured reason — never throws for expected non-blocking
+ * failures (timeouts, 429, 5xx, envelope mismatch). Used by ingest for
+ * per-listing valuation-miss observability so misses can be persisted
+ * with a `missing_reason` instead of disappearing silently.
+ */
+export async function getMmrLookupOutcome(
+  params: MmrParams,
+  env: Env,
+): Promise<MmrLookupOutcome> {
+  const raw = await performMmrCall(params, env);
+  if (raw.kind === "hit") return { kind: "hit", result: raw.result };
+  // Strip the internal httpStatus from the exported outcome shape.
+  return {
+    kind: "miss",
+    reason: raw.reason,
+    method: raw.method,
+    ...(raw.normalizationConfidence && { normalizationConfidence: raw.normalizationConfidence }),
+  };
+}
+
+/**
+ * Legacy null/throw-shape adapter preserved for /app/mmr/vin and any caller
+ * that has not adopted the outcome shape. Internally delegates to
+ * performMmrCall; translates miss reasons cox_timeout / cox_rate_limited /
+ * cox_unavailable back into the historical thrown errors so the public
+ * contract is unchanged.
+ */
+export async function getMmrValueFromWorker(
+  params: MmrParams,
+  env: Env,
+): Promise<MmrResult | null> {
+  const outcome = await performMmrCall(params, env);
+  if (outcome.kind === "hit") return outcome.result;
+  switch (outcome.reason) {
+    case "cox_timeout":      throw new WorkerTimeoutError();
+    case "cox_rate_limited": throw new WorkerRateLimitError();
+    case "cox_unavailable":  throw new WorkerUnavailableError(outcome.httpStatus ?? 0);
+    default:                 return null;
+  }
 }

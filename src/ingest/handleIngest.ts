@@ -13,6 +13,7 @@ import { upsertVehicleCandidate } from "../persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
 import { upsertLead } from "../persistence/leads";
+import { writeValuationMissSnapshot } from "../persistence/valuationSnapshots";
 import { parseFacebookItem, detectFacebookDrift } from "../sources/facebook";
 import type { AdapterContext } from "../sources/facebook";
 import { writeSchemaDrift } from "../persistence/schemaDrift";
@@ -28,7 +29,9 @@ import { getSegmentAvgMarginPct } from "../persistence/purchaseOutcomes";
 import { getDemandScoreForRegion } from "../persistence/marketDemandIndex";
 import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttributions";
 import { getMmrValue } from "../valuation/mmr";
-import { getMmrValueFromWorker } from "../valuation/workerClient";
+import { getMmrLookupOutcome } from "../valuation/workerClient";
+import type { MmrMissReason } from "../valuation/workerClient";
+import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
 import { getValuationLookupMode } from "../valuation/lookupMode";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
@@ -206,7 +209,12 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
       // MANHEIM_LOOKUP_MODE gates which path runs:
       //   "direct"  → legacy inline Manheim call via src/valuation/mmr.ts (default)
       //   "worker"  → tav-intelligence-worker via src/valuation/workerClient.ts
+      //
+      // Worker mode returns a discriminated outcome so misses can be persisted
+      // with a structured `missing_reason` (mileage_missing, trim_missing,
+      // cox_no_data, cox_unavailable, etc.) instead of disappearing silently.
       let mmrResult = null;
+      let workerMiss: { reason: MmrMissReason; method: ValuationMethod | null; normalizationConfidence?: NormalizationConfidence } | null = null;
       if (getValuationLookupMode(env) === "direct") {
         try {
           mmrResult = await getMmrValue(
@@ -219,12 +227,38 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
         }
       } else {
         try {
-          mmrResult = await getMmrValueFromWorker(
+          const outcome = await getMmrLookupOutcome(
             { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage },
             env,
           );
+          if (outcome.kind === "hit") {
+            mmrResult = outcome.result;
+          } else {
+            workerMiss = {
+              reason: outcome.reason,
+              method: outcome.method,
+              ...(outcome.normalizationConfidence && { normalizationConfidence: outcome.normalizationConfidence }),
+            };
+          }
         } catch (err) {
           logError("valuation", "ingest.mmr_worker_failed", err, listingCtx);
+        }
+      }
+
+      if (!mmrResult && workerMiss) {
+        // Persist the miss for triage. Best-effort — never block ingest.
+        try {
+          await writeValuationMissSnapshot(db, {
+            normalizedListingId: normResult.id,
+            vehicleCandidateId:  vcId,
+            listing,
+            missingReason:       workerMiss.reason,
+            method:              workerMiss.method,
+            ...(workerMiss.normalizationConfidence && { normalizationConfidence: workerMiss.normalizationConfidence }),
+          });
+          log("valuation.miss", { missing_reason: workerMiss.reason, method: workerMiss.method, kpi: true }, listingCtx);
+        } catch (err) {
+          logError("valuation", "ingest.miss_snapshot_failed", err, listingCtx);
         }
       }
 

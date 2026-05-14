@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { writeValuationSnapshot } from "../valuationSnapshots";
+import { writeValuationSnapshot, writeValuationMissSnapshot } from "../valuationSnapshots";
 import type { SupabaseClient } from "../supabase";
 import type { ValuationResult } from "../../types/domain";
 
@@ -196,6 +196,113 @@ describe("writeValuationSnapshot — normalization columns", () => {
     expect(payload.lookup_make).toBe("Toyota");
     expect(payload.lookup_model).toBeNull();
     expect(payload.normalization_confidence).toBe("partial");
+  });
+});
+
+describe("writeValuationMissSnapshot", () => {
+  it("writes mmr_value=null, confidence='none', and missing_reason set", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-1",
+      listing: BASE_LISTING,
+      missingReason: "trim_missing",
+      method: "year_make_model",
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.mmr_value).toBeNull();
+    expect(payload.confidence).toBe("none");
+    expect(payload.missing_reason).toBe("trim_missing");
+    expect(payload.valuation_method).toBe("year_make_model");
+    expect(payload.normalized_listing_id).toBe("nl-miss-1");
+  });
+
+  it("preserves listing identity (vin/ymm/mileage) on the miss row", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-2",
+      listing: BASE_LISTING,
+      missingReason: "mileage_missing",
+      method: "year_make_model",
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.vin).toBe("1HGCM82633A123456");
+    expect(payload.year).toBe(2020);
+    expect(payload.make).toBe("Honda");
+    expect(payload.model).toBe("Civic");
+    expect(payload.mileage).toBe(55_000);
+  });
+
+  it("nulls distribution and raw_response columns on miss", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-3",
+      listing: BASE_LISTING,
+      missingReason: "cox_no_data",
+      method: "vin",
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.mmr_wholesale_avg).toBeNull();
+    expect(payload.mmr_wholesale_clean).toBeNull();
+    expect(payload.mmr_wholesale_rough).toBeNull();
+    expect(payload.mmr_retail_clean).toBeNull();
+    expect(payload.mmr_sample_count).toBeNull();
+    expect(payload.raw_response).toBeNull();
+  });
+
+  it("falls back to valuation_method='year_make_model' when method is null", async () => {
+    // The valuation_method column is NOT NULL with a CHECK constraint
+    // ('vin'|'year_make_model'). When no path was selected (e.g.
+    // not_configured / insufficient_params), default to ymm so the row lands.
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-4",
+      listing: BASE_LISTING,
+      missingReason: "not_configured",
+      method: null,
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.valuation_method).toBe("year_make_model");
+  });
+
+  it("propagates normalization metadata when supplied", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-5",
+      listing: BASE_LISTING,
+      missingReason: "cox_no_data",
+      method: "year_make_model",
+      normalizationConfidence: "partial",
+      lookupMake: "Honda",
+      lookupModel: null,
+      lookupTrim: null,
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.normalization_confidence).toBe("partial");
+    expect(payload.lookup_make).toBe("Honda");
+    expect(payload.lookup_model).toBeNull();
+  });
+
+  it("throws when Supabase returns an error", async () => {
+    const dbError = { code: "23514", message: "check constraint violation" };
+    const { db } = makeDb(dbError);
+    await expect(
+      writeValuationMissSnapshot(db, {
+        normalizedListingId: "nl-miss-6",
+        listing: BASE_LISTING,
+        missingReason: "trim_missing",
+        method: "year_make_model",
+      }),
+    ).rejects.toEqual(dbError);
   });
 });
 
