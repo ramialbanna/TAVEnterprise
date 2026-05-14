@@ -669,6 +669,124 @@ describe("parseFacebookItem — no VIN (Facebook norm)", () => {
   });
 });
 
+// ── Group E2: rec.trim override (Apify detail-mode) ───────────────────────────
+
+describe("parseFacebookItem — rec.trim override", () => {
+  it("E2.1: rec.trim overrides title-parsed trim (and lowercases)", () => {
+    // Title has no KNOWN_TRIMS match, so adapter's extractTrim would return undefined.
+    // rec.trim is supplied (typical detail-mode flow via payloadAdapter).
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-1",
+        title: "2018 Chevrolet Suburban 1500",
+        trim: "LT",
+        price: "$18,600",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("lt");
+  });
+
+  it("E2.2: rec.trim preferred over title-parsed trim when both present", () => {
+    // Title contains "lariat" which IS in KNOWN_TRIMS; rec.trim says otherwise.
+    // Override wins.
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-2",
+        title: "2019 Ford Ranger Lariat 100k miles",
+        trim: "King Ranch",
+        price: "$19,988",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("king ranch");
+  });
+
+  it("E2.3: rec.trim absent → title-parsed trim is unchanged behavior", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-3",
+        title: "2019 Ford Ranger Lariat 100k miles",
+        price: "$19,988",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("lariat");
+  });
+
+  it("E2.4: empty/whitespace rec.trim falls back to title parse", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-4",
+        title: "2019 Ford Ranger Lariat 100k miles",
+        trim: "   ",
+        price: "$19,988",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("lariat");
+  });
+
+  it("E2.5: non-string rec.trim ignored, title parse used", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-5",
+        title: "2018 Honda Civic EX 50k miles",
+        trim: 42,
+        price: "$10,800",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("ex");
+  });
+
+  it("E2.6: make/model parsing unaffected by rec.make/rec.model (scope guard)", () => {
+    // This PR does NOT introduce make/model override. Adapter must continue
+    // parsing make/model from title regardless of rec.make/rec.model.
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-6",
+        title: "2020 Toyota Camry SE 45k miles",
+        make: "BOGUSMAKE",
+        model: "bogusmodel",
+        trim: "SE",
+        price: "$18,000",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("toyota"); // from title, not rec.make
+    expect(r.listing.model).toBe("camry"); // from title, not rec.model
+    expect(r.listing.trim).toBe("se");     // matches both rec.trim and title parse
+  });
+
+  it("E2.7: missing_ymm rejection still fires when title lacks a canonical make, even if rec.trim is set", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e2-7",
+        title: "2017 Heartland Elkridge X-Treme Light E365",
+        trim: "X-Treme",
+        price: "$19,990",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("missing_ymm");
+  });
+});
+
 // ── Group F: Schema drift detection ──────────────────────────────────────────
 
 describe("detectFacebookDrift", () => {
