@@ -183,6 +183,68 @@ describe("parseFacebookItem — valid cases", () => {
     if (!r.ok) return;
     expect(r.listing.mileage).toBeUndefined();
   });
+
+  // ── Drivetrain / engine-config cleanup (Cox YMM vocab match) ────────────────
+  // Cox MMR YMMT path matches model strings to its vocabulary. Drivetrain tokens
+  // (awd/2wd/4wd/rwd/fwd/4x4/4x2) and engine-config tokens (4c/v6/v8/i4/i6) in
+  // the model field cause 404s. The adapter must stop model extraction at these
+  // tokens. Legitimate model suffixes that look numeric (e.g. "1500" in
+  // "Silverado 1500") must be preserved.
+
+  it("A16: model — drops trailing AWD drivetrain token", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/16", title: "2025 Acura ADX AWD 12k miles", price: "$38,500" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("acura");
+    expect(r.listing.model).toBe("adx");
+  });
+
+  it("A17: model — drops trailing 2WD drivetrain token", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/17", title: "2020 Ford Explorer 2WD 4C 80k miles", price: "$22,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("ford");
+    expect(r.listing.model).toBe("explorer");
+  });
+
+  it("A18: model — drops 4x4 drivetrain marker", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/18", title: "2022 Toyota Tacoma 4x4 60k miles", price: "$30,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("toyota");
+    expect(r.listing.model).toBe("tacoma");
+  });
+
+  it("A19: model — preserves numeric model suffix (Silverado 1500)", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/19", title: "2022 Chevrolet Silverado 1500 80k miles", price: "$32,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("chevrolet");
+    expect(r.listing.model).toBe("silverado 1500");
+  });
+
+  it("A20: model — drops V6 engine-config token", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/20", title: "2021 Honda Accord V6 50k miles", price: "$22,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("honda");
+    expect(r.listing.model).toBe("accord");
+  });
 });
 
 // ── Group B: Edge cases ───────────────────────────────────────────────────────

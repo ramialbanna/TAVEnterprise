@@ -70,6 +70,17 @@ const TRIM_STOP_SET: ReadonlySet<string> = new Set(
   KNOWN_TRIMS.filter(t => !t.includes(" ")),
 );
 
+// Drivetrain and engine-config tokens that bleed into Facebook model strings
+// (e.g. "Acura ADX AWD" → "adx awd"). Cox MMR YMMT vocab does not accept these
+// suffixes, causing 404s on otherwise-valid lookups. Stop model extraction here.
+const DRIVETRAIN_STOP_SET: ReadonlySet<string> = new Set([
+  "awd", "2wd", "4wd", "rwd", "fwd", "4x4", "4x2", "4wd/4x4",
+]);
+
+const ENGINE_CONFIG_STOP_SET: ReadonlySet<string> = new Set([
+  "4c", "6c", "8c", "v4", "v6", "v8", "i4", "i6", "ev", "phev", "hybrid", "diesel",
+]);
+
 const MODEL_STOP_RE =
   /\b(miles?|mi|km|clean|great|excellent|good|nice|runs?|asking|obo|firm|negotiable|priced)\b/i;
 
@@ -164,6 +175,8 @@ function extractModel(
     if (/^\d{5,}$/.test(tok)) break;    // bare 5-digit mileage
     if (/^\d+k$/i.test(tok)) break;     // "82k"
     if (TRIM_STOP_SET.has(tok)) break;  // trim token signals end of model
+    if (DRIVETRAIN_STOP_SET.has(tok)) break;
+    if (ENGINE_CONFIG_STOP_SET.has(tok)) break;
     modelTokens.push(tok);
     if (modelTokens.length === 2) break;
   }
