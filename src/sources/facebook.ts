@@ -325,11 +325,43 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   // Media
   "images", "image",
   // Location
-  "city", "state",
+  "city", "state", "location",
   // Seller
   "sellerName", "seller_name", "seller", "sellerUrl", "seller_url",
   // Timing
   "postedAt", "posted_at", "listedAt",
+  // ── raidr-api/facebook-marketplace-vehicle-scraper fields ─────────────────
+  // The rented Apify actor (hHO9oVnraeiFBfwW3) emits Facebook GraphQL-style
+  // nested fields. They are pre-mapped into the flat shape above by
+  // src/apify/payloadAdapter.ts, but the original keys ride along so that
+  // detectFacebookDrift does not generate noise on every Apify-sourced row.
+  "__typename",
+  "__isMarketplaceListingRenderable",
+  "__isMarketplaceListingWithChildListings",
+  "__isMarketplaceListingWithDeliveryOptions",
+  "_fetchedAt",
+  "marketplace_listing_title",
+  "custom_title",
+  "custom_sub_titles_with_rendering_flags",
+  "marketplace_listing_seller",
+  "marketplace_listing_category_id",
+  "listing_date",
+  "listing_date_ms",
+  "listing_video",
+  "max_listing_price",
+  "min_listing_price",
+  "strikethrough_price",
+  "primary_listing_photo",
+  "parent_listing",
+  "extraListingData",
+  "if_gk_just_listed_tag_on_search_feed",
+  "is_hidden",
+  "is_live",
+  "is_pending",
+  "is_sold",
+  "is_viewer_seller",
+  "delivery_types",
+  "origin_group",
 ]);
 
 export type SchemaDriftEvent = {
