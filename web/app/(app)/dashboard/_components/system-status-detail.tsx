@@ -16,8 +16,8 @@ import type { SystemHealth } from "./summarize-system-status";
  *
  * Only documented fields are rendered. The Cloudflare-internal `intelWorker.url`
  * (a `*.workers.dev` URL, public by design) is shown for ops visibility; nothing
- * here is a secret. The `sources` payload is intentionally narrowed to two columns
- * (`source`, `last_seen_at`) so any future v_source_health additions can't leak.
+ * here is a secret. The `sources` payload is intentionally narrowed to source name
+ * plus run timestamp so future v_source_health additions can't leak.
  */
 export function SystemStatusDetail({
   data,
@@ -138,16 +138,16 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 /**
  * Best-effort pick of the most recently seen source from `data.sources`. Reads only
- * the documented `source` / `last_seen_at` columns; ignores any other field the view
- * may add so we never accidentally render an unexpected value. Returns `null` if no
- * row has a parseable `last_seen_at` — we don't guess "most recent" from row order.
+ * the documented source / run timestamp columns; ignores any other field the view may
+ * add so we never accidentally render an unexpected value. Returns `null` if no row
+ * has a parseable timestamp — we don't guess "most recent" from row order.
  */
 function pickMostRecentSource(rows: SystemStatus["sources"]): string | null {
   let bestName: string | null = null;
   let bestSeen = -Infinity;
   for (const row of rows) {
     const name = typeof row.source === "string" ? row.source : null;
-    const seenRaw = row.last_seen_at;
+    const seenRaw = row.scraped_at ?? row.last_seen_at;
     const seen = typeof seenRaw === "string" ? Date.parse(seenRaw) : NaN;
     if (name && Number.isFinite(seen) && seen > bestSeen) {
       bestSeen = seen;

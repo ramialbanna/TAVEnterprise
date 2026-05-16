@@ -24,7 +24,17 @@ export const systemStatusHealthy: SystemStatus = {
     url: "https://tav-intelligence-worker.example.workers.dev",
   },
   sources: [
-    { source: "facebook", normalized_count: 42, last_seen_at: "2026-05-12T11:00:00.000Z" },
+    {
+      source: "facebook",
+      region: "dallas_tx",
+      run_id: "fixture-run-1",
+      scraped_at: "2026-05-12T11:00:00.000Z",
+      item_count: 50,
+      processed: 42,
+      rejected: 8,
+      created_leads: 3,
+      status: "completed",
+    },
   ],
   staleSweep: { lastRunAt: "2026-05-12T06:00:00.000Z", status: "ok", updated: 7 },
 };

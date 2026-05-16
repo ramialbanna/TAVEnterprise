@@ -131,7 +131,7 @@ function pickMostRecentSource(
   for (const row of rows) {
     const source = typeof row.source === "string" ? row.source : null;
     if (!source) continue;
-    const seenRaw = row.last_seen_at;
+    const seenRaw = row.scraped_at ?? row.last_seen_at;
     const seenStr = typeof seenRaw === "string" ? seenRaw : null;
     const seen = seenStr ? Date.parse(seenStr) : -Infinity;
     if (!best || (Number.isFinite(seen) && seen > best.seen)) {

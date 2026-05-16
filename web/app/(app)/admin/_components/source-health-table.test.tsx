@@ -23,17 +23,25 @@ describe("SourceHealthTable", () => {
       sources: [
         {
           source: "facebook",
-          normalized_count: 4242,
-          raw_count: 7373,
-          filtered_count: 5858,
-          last_seen_at: "2026-05-12T11:00:00.000Z",
+          region: "dallas_tx",
+          run_id: "aEhX3Np1OQcmlOk4D",
+          scraped_at: "2026-05-12T11:00:00.000Z",
+          item_count: 7373,
+          processed: 4242,
+          rejected: 5858,
+          created_leads: 12,
+          status: "completed",
         },
       ],
     });
     render(<SourceHealthTable data={data} />);
     expect(screen.getByText("facebook")).toBeInTheDocument();
+    expect(screen.getByText("dallas_tx")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
+    expect(screen.getByText("aEhX3Np1OQcmlOk4D")).toBeInTheDocument();
     expect(screen.getByText("4,242")).toBeInTheDocument();
     expect(screen.getByText("7,373")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
   });
 
   it("renders the unavailable empty state when db is down", () => {
@@ -53,8 +61,8 @@ describe("SourceHealthTable", () => {
       sources: [
         {
           source: "facebook",
-          normalized_count: 1,
-          last_seen_at: "2026-05-12T11:00:00.000Z",
+          processed: 1,
+          scraped_at: "2026-05-12T11:00:00.000Z",
           // Defensive: any extra column (e.g. service_role_key leak) must not appear.
           secret_value: "leaked-token-abc123",
         },
