@@ -27,12 +27,21 @@ export type HistoricalSalesKeyFilter = {
   since?: string;
 };
 
+export type IngestRunsKeyFilter = {
+  limit?: number;
+  source?: string;
+  region?: string;
+  status?: string;
+};
+
 /** Stable query-key factory. Object/array identity is irrelevant to TanStack — it deep-compares. */
 export const queryKeys = {
   systemStatus: ["system-status"] as const,
   kpis: ["kpis"] as const,
   importBatches: (limit?: number) => ["import-batches", limit ?? null] as const,
   historicalSales: (filter?: HistoricalSalesKeyFilter) => ["historical-sales", filter ?? {}] as const,
+  ingestRuns: (filter?: IngestRunsKeyFilter) => ["ingest-runs", filter ?? {}] as const,
+  ingestRun: (id: string) => ["ingest-run", id] as const,
 } as const;
 
 function looksLikeApiError(error: unknown): error is { ok: false; kind: string } {

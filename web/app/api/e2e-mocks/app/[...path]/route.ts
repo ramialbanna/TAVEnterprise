@@ -95,6 +95,48 @@ const HISTORICAL_SALES = [
   makeSale(6, "2026-05-10", 1700),
 ];
 
+const INGEST_RUNS = [
+  {
+    id: "sr_e2e_2",
+    source: "facebook",
+    run_id: "4NyscgfxEA39sJcIY",
+    region: "dallas_tx",
+    status: "completed",
+    item_count: 4,
+    processed: 3,
+    rejected: 1,
+    created_leads: 0,
+    scraped_at: "2026-05-16T20:11:42.247Z",
+    created_at: "2026-05-16T20:11:49.596Z",
+    error_message: null,
+  },
+  {
+    id: "sr_e2e_1",
+    source: "facebook",
+    run_id: "aEhX3Np1OQcmlOk4D",
+    region: "dallas_tx",
+    status: "truncated",
+    item_count: 600,
+    processed: 500,
+    rejected: 100,
+    created_leads: 2,
+    scraped_at: "2026-05-15T18:50:21.413Z",
+    created_at: "2026-05-15T18:50:32.003Z",
+    error_message: "batch_truncated:100_items_skipped",
+  },
+];
+
+const INGEST_DETAIL = {
+  run: INGEST_RUNS[0],
+  rawListingCount: 4,
+  normalizedListingCount: 3,
+  filteredOutByReason: { missing_identifier: 1 },
+  valuationMissByReason: { trim_missing: 2 },
+  schemaDriftByType: {},
+  createdLeadCount: 0,
+  createdLeadIds: [],
+};
+
 function notFound() {
   return NextResponse.json({ ok: false, error: "not_found" }, { status: 404 });
 }
@@ -114,7 +156,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ path: string[]
       return ok(KPIS);
     case "historical-sales":
       return ok(HISTORICAL_SALES);
+    case "ingest-runs":
+      return ok(INGEST_RUNS);
     default:
+      if (key.startsWith("ingest-runs/")) {
+        const id = decodeURIComponent(key.slice("ingest-runs/".length));
+        const match = INGEST_RUNS.find((r) => r.id === id);
+        if (!match) return notFound();
+        return ok({ ...INGEST_DETAIL, run: match });
+      }
       return notFound();
   }
 }

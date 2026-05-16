@@ -2,11 +2,15 @@ import type { z } from "zod";
 import {
   HistoricalSaleListSchema,
   ImportBatchListSchema,
+  IngestRunSummaryListSchema,
+  IngestRunDetailSchema,
   KpisSchema,
   MmrVinOkSchema,
   SystemStatusSchema,
   type HistoricalSale,
   type ImportBatch,
+  type IngestRunSummary,
+  type IngestRunDetail,
   type Kpis,
   type MmrVinOk,
   type SystemStatus,
@@ -153,6 +157,14 @@ export function parseImportBatches(status: number, json: unknown): ApiResult<Imp
 
 export function parseHistoricalSales(status: number, json: unknown): ApiResult<HistoricalSale[]> {
   return interpret(status, json, HistoricalSaleListSchema);
+}
+
+export function parseIngestRuns(status: number, json: unknown): ApiResult<IngestRunSummary[]> {
+  return interpret(status, json, IngestRunSummaryListSchema);
+}
+
+export function parseIngestRunDetail(status: number, json: unknown): ApiResult<IngestRunDetail> {
+  return interpret(status, json, IngestRunDetailSchema);
 }
 
 /**

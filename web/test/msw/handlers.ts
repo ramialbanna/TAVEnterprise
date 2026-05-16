@@ -3,6 +3,8 @@ import { http, HttpResponse } from "msw";
 import {
   historicalSales,
   importBatches,
+  ingestRuns,
+  ingestRunDetail,
   kpisFull,
   mmrVinOk,
   mmrVinUnavailable,
@@ -48,6 +50,18 @@ export const handlers = [
     if (since) rows = rows.filter((r) => r.saleDate >= since);
     if (Number.isFinite(limitRaw) && limitRaw > 0) rows = rows.slice(0, limitRaw);
     return ok(rows);
+  }),
+
+  http.get("/api/app/ingest-runs", ({ request }) => {
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? "");
+    const rows = Number.isFinite(limit) && limit > 0 ? ingestRuns.slice(0, limit) : ingestRuns;
+    return ok(rows);
+  }),
+
+  http.get("/api/app/ingest-runs/:id", ({ params }) => {
+    const match = ingestRuns.find((r) => r.id === params.id);
+    if (!match) return err(404, "not_found");
+    return ok({ ...ingestRunDetail, run: match });
   }),
 
   http.post("/api/app/mmr/vin", async ({ request }) => {

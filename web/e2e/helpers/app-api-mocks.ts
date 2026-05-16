@@ -2,6 +2,8 @@ import type { Page, Route } from "@playwright/test";
 
 import type {
   HistoricalSale,
+  IngestRunSummary,
+  IngestRunDetail,
   Kpis,
   SystemStatus,
 } from "@/lib/app-api/schemas";
@@ -78,10 +80,54 @@ function makeSale(i: number, saleDate: string, gross: number): HistoricalSale {
   };
 }
 
+export const E2E_INGEST_RUNS: IngestRunSummary[] = [
+  {
+    id: "sr_e2e_2",
+    source: "facebook",
+    run_id: "4NyscgfxEA39sJcIY",
+    region: "dallas_tx",
+    status: "completed",
+    item_count: 4,
+    processed: 3,
+    rejected: 1,
+    created_leads: 0,
+    scraped_at: "2026-05-16T20:11:42.247Z",
+    created_at: "2026-05-16T20:11:49.596Z",
+    error_message: null,
+  },
+  {
+    id: "sr_e2e_1",
+    source: "facebook",
+    run_id: "aEhX3Np1OQcmlOk4D",
+    region: "dallas_tx",
+    status: "truncated",
+    item_count: 600,
+    processed: 500,
+    rejected: 100,
+    created_leads: 2,
+    scraped_at: "2026-05-15T18:50:21.413Z",
+    created_at: "2026-05-15T18:50:32.003Z",
+    error_message: "batch_truncated:100_items_skipped",
+  },
+];
+
+export const E2E_INGEST_DETAIL: IngestRunDetail = {
+  run: E2E_INGEST_RUNS[0]!,
+  rawListingCount: 4,
+  normalizedListingCount: 3,
+  filteredOutByReason: { missing_identifier: 1 },
+  valuationMissByReason: { trim_missing: 2 },
+  schemaDriftByType: {},
+  createdLeadCount: 0,
+  createdLeadIds: [],
+};
+
 export type AppApiOverrides = {
   systemStatus?: SystemStatus | { status: number; body: unknown };
   kpis?: Kpis | { status: number; body: unknown };
   historicalSales?: HistoricalSale[] | { status: number; body: unknown };
+  ingestRuns?: IngestRunSummary[] | { status: number; body: unknown };
+  ingestRunDetail?: IngestRunDetail | { status: number; body: unknown };
 };
 
 /**
@@ -95,9 +141,18 @@ export async function mockAppApi(page: Page, overrides: AppApiOverrides = {}): P
   const kpis = overrides.kpis ?? E2E_KPIS;
   const historicalSales = overrides.historicalSales ?? E2E_HISTORICAL_SALES;
 
+  const ingestRunsValue = overrides.ingestRuns ?? E2E_INGEST_RUNS;
+  const ingestRunDetailValue = overrides.ingestRunDetail ?? E2E_INGEST_DETAIL;
+
   await page.route("**/api/app/system-status", (route) => respond(route, systemStatus));
   await page.route("**/api/app/kpis", (route) => respond(route, kpis));
   await page.route("**/api/app/historical-sales*", (route) => respond(route, historicalSales));
+  // Playwright gives the most-recently-registered matching route priority.
+  // The list URL (`/ingest-runs?limit=`) only matches `ingest-runs*`; the
+  // detail URL (`/ingest-runs/<id>`) matches both — register the list first so
+  // the later-registered detail handler wins for the detail path.
+  await page.route("**/api/app/ingest-runs*", (route) => respond(route, ingestRunsValue));
+  await page.route("**/api/app/ingest-runs/*", (route) => respond(route, ingestRunDetailValue));
 }
 
 function respond(route: Route, value: unknown): Promise<void> {

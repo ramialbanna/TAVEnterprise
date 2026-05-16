@@ -1,6 +1,8 @@
 import type {
   HistoricalSale,
   ImportBatch,
+  IngestRunSummary,
+  IngestRunDetail,
   Kpis,
   MmrVinOk,
   MmrVinUnavailable,
@@ -150,4 +152,47 @@ export const mmrVinOk: MmrVinOk = { mmrValue: 68600, confidence: "high", method:
 export const mmrVinUnavailable: MmrVinUnavailable = {
   mmrValue: null,
   missingReason: "intel_worker_timeout",
+};
+
+// ── GET /app/ingest-runs ───────────────────────────────────────────────────────
+export const ingestRuns: IngestRunSummary[] = [
+  {
+    id: "sr_2",
+    source: "facebook",
+    run_id: "4NyscgfxEA39sJcIY",
+    region: "dallas_tx",
+    status: "completed",
+    item_count: 4,
+    processed: 3,
+    rejected: 1,
+    created_leads: 0,
+    scraped_at: "2026-05-16T20:11:42.247Z",
+    created_at: "2026-05-16T20:11:49.596Z",
+    error_message: null,
+  },
+  {
+    id: "sr_1",
+    source: "facebook",
+    run_id: "aEhX3Np1OQcmlOk4D",
+    region: "dallas_tx",
+    status: "truncated",
+    item_count: 600,
+    processed: 500,
+    rejected: 100,
+    created_leads: 2,
+    scraped_at: "2026-05-15T18:50:21.413Z",
+    created_at: "2026-05-15T18:50:32.003Z",
+    error_message: "batch_truncated:100_items_skipped",
+  },
+];
+
+export const ingestRunDetail: IngestRunDetail = {
+  run: ingestRuns[0]!,
+  rawListingCount: 4,
+  normalizedListingCount: 3,
+  filteredOutByReason: { missing_identifier: 1 },
+  valuationMissByReason: { trim_missing: 2 },
+  schemaDriftByType: {},
+  createdLeadCount: 0,
+  createdLeadIds: [],
 };

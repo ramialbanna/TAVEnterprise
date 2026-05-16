@@ -14,6 +14,8 @@ import { serverEnv, type ServerEnv } from "@/lib/env";
 import {
   parseHistoricalSales,
   parseImportBatches,
+  parseIngestRuns,
+  parseIngestRunDetail,
   parseKpis,
   parseMmrVin,
   parseSystemStatus,
@@ -22,10 +24,20 @@ import {
 import {
   historicalSalesQuery,
   importBatchesQuery,
+  ingestRunsQuery,
   type HistoricalSalesFilter,
+  type IngestRunsFilter,
   type MmrVinRequest,
 } from "./client";
-import type { HistoricalSale, ImportBatch, Kpis, MmrVinOk, SystemStatus } from "./schemas";
+import type {
+  HistoricalSale,
+  ImportBatch,
+  IngestRunSummary,
+  IngestRunDetail,
+  Kpis,
+  MmrVinOk,
+  SystemStatus,
+} from "./schemas";
 
 export type { HistoricalSalesFilter, MmrVinRequest } from "./client";
 
@@ -120,6 +132,18 @@ export async function listHistoricalSales(
 ): Promise<ApiResult<HistoricalSale[]>> {
   const { status, json } = await getJson(`historical-sales${historicalSalesQuery(filter)}`);
   return parseHistoricalSales(status, json);
+}
+
+export async function listIngestRuns(
+  filter: IngestRunsFilter = {},
+): Promise<ApiResult<IngestRunSummary[]>> {
+  const { status, json } = await getJson(`ingest-runs${ingestRunsQuery(filter)}`);
+  return parseIngestRuns(status, json);
+}
+
+export async function getIngestRun(id: string): Promise<ApiResult<IngestRunDetail>> {
+  const { status, json } = await getJson(`ingest-runs/${encodeURIComponent(id)}`);
+  return parseIngestRunDetail(status, json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
