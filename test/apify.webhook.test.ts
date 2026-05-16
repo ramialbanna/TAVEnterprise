@@ -35,6 +35,7 @@ import {
   ApifyDatasetFetchError,
 } from "../src/apify/datasetFetch";
 import { ingestCore } from "../src/ingest/handleIngest";
+import { MAX_INGEST_ITEMS } from "../src/validate";
 
 const ctx = {
   waitUntil: (_p: Promise<unknown>) => {},
@@ -464,5 +465,26 @@ describe("POST /apify-webhook — body validation", () => {
     );
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(400);
+  });
+});
+
+// ── 9. Ingest contract — bridge must not bypass IngestRequestSchema max ────────
+
+describe("POST /apify-webhook — ingest item cap", () => {
+  it("caps dataset items at MAX_INGEST_ITEMS before calling ingestCore", async () => {
+    const overflow = Array.from({ length: MAX_INGEST_ITEMS + 1 }, (_, i) => ({
+      url: `https://fb.com/${i}`,
+      title: `Vehicle ${i}`,
+    }));
+    vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({ items: overflow, truncated: true });
+
+    const env = makeEnv();
+    const req = makeRequest(succeededPayload(), { Authorization: `Bearer ${APIFY_SECRET}` });
+    const res = await worker.fetch(req, env, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    expect(envelope.items).toHaveLength(MAX_INGEST_ITEMS);
   });
 });

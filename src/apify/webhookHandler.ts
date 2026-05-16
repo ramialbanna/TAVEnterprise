@@ -1,5 +1,5 @@
 import type { Env } from "../types/env";
-import type { IngestRequest } from "../validate";
+import { IngestRequestSchema, MAX_INGEST_ITEMS, type IngestRequest } from "../validate";
 import { ApifyWebhookPayloadSchema, isSucceededEvent } from "./payloadSchema";
 import { mapApifyTaskToRegion } from "./regionMap";
 import {
@@ -12,6 +12,7 @@ import {
 import { mapRaidrApiItem } from "./payloadAdapter";
 import { ingestCore } from "../ingest/handleIngest";
 import { isConfiguredSecret } from "../types/envValidation";
+import { verifyBearer } from "../auth/bearerAuth";
 import { log, logError } from "../logging/logger";
 
 function json(body: unknown, status: number): Response {
@@ -19,22 +20,6 @@ function json(body: unknown, status: number): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-/**
- * Constant-time string comparison. Avoids early-exit timing leaks when
- * validating the bearer token. Both inputs are coerced to fixed-length
- * Uint8Arrays via TextEncoder so unequal lengths don't short-circuit.
- */
-function constantTimeEqual(a: string, b: string): boolean {
-  const aa = new TextEncoder().encode(a);
-  const bb = new TextEncoder().encode(b);
-  const len = Math.max(aa.length, bb.length);
-  let diff = aa.length ^ bb.length;
-  for (let i = 0; i < len; i++) {
-    diff |= (aa[i] ?? 0) ^ (bb[i] ?? 0);
-  }
-  return diff === 0;
 }
 
 /**
@@ -71,15 +56,9 @@ export async function handleApifyWebhook(
     return json({ ok: false, error: "apify_auth_not_configured" }, 503);
   }
 
-  // 1c. Verify Authorization: Bearer <APIFY_WEBHOOK_SECRET> (constant-time).
-  const authHeader = request.headers.get("Authorization") ?? "";
-  const prefix = "Bearer ";
-  if (!authHeader.startsWith(prefix)) {
-    log("apify.bridge.rejected", { reason: "missing_bearer" });
-    return json({ ok: false, error: "unauthorized" }, 401);
-  }
-  const provided = authHeader.slice(prefix.length);
-  if (!constantTimeEqual(provided, env.APIFY_WEBHOOK_SECRET)) {
+  // 1c. Verify Authorization: Bearer <APIFY_WEBHOOK_SECRET> via the shared
+  //     constant-time helper.
+  if (!verifyBearer(request, env.APIFY_WEBHOOK_SECRET)) {
     log("apify.bridge.rejected", { reason: "bad_bearer" });
     return json({ ok: false, error: "unauthorized" }, 401);
   }
@@ -160,22 +139,49 @@ export async function handleApifyWebhook(
   //    listing_price.amount, listing_date_ms, …) instead of url/title/price.
   const mappedItems = items.map(mapRaidrApiItem);
 
-  // 9. Build envelope and dispatch to ingestCore. scraped_at falls back to
-  //    now() when Apify didn't stamp finishedAt (defensive — finishedAt
-  //    should always be present on a SUCCEEDED run).
+  // 9. Enforce the shared ingest contract. The bridge previously handed up to
+  //    MAX_ITEMS_PER_RUN items straight to ingestCore, bypassing
+  //    IngestRequestSchema's MAX_INGEST_ITEMS cap. Cap here, log when we do,
+  //    then validate the envelope through the same schema the HTTP /ingest
+  //    path uses so the bridge can never silently exceed the limit.
+  const cappedItems =
+    mappedItems.length > MAX_INGEST_ITEMS
+      ? mappedItems.slice(0, MAX_INGEST_ITEMS)
+      : mappedItems;
+  if (mappedItems.length > MAX_INGEST_ITEMS) {
+    log("apify.bridge.item_cap_applied", {
+      run_id:     runId,
+      dataset_id: datasetId,
+      received:   mappedItems.length,
+      cap:        MAX_INGEST_ITEMS,
+    });
+  }
+
+  // scraped_at falls back to now() when Apify didn't stamp finishedAt
+  // (defensive — finishedAt should always be present on a SUCCEEDED run).
   const scrapedAt = resource.finishedAt ?? new Date().toISOString();
-  const envelope: IngestRequest = {
+  const candidate = {
     source:     "facebook",
     run_id:     runId,
     region,
     scraped_at: scrapedAt,
-    items: mappedItems,
+    items:      cappedItems,
   };
+
+  const validated = IngestRequestSchema.safeParse(candidate);
+  if (!validated.success) {
+    log("apify.bridge.contract_violation", {
+      run_id: runId,
+      issues: validated.error.issues.slice(0, 5),
+    });
+    return json({ ok: false, error: "ingest_contract_violation", run_id: runId }, 400);
+  }
+  const envelope: IngestRequest = validated.data;
 
   log("apify.bridge.dispatched", {
     run_id:     runId,
     region,
-    item_count: items.length,
+    item_count: envelope.items.length,
     dataset_id: datasetId,
   });
 
