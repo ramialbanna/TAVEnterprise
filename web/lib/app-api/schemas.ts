@@ -124,3 +124,39 @@ export const MmrVinUnavailableSchema = z.object({
 });
 export type MmrVinOk = z.infer<typeof MmrVinOkSchema>;
 export type MmrVinUnavailable = z.infer<typeof MmrVinUnavailableSchema>;
+
+// ── GET /app/ingest-runs ───────────────────────────────────────────────────────
+// Snake_case fields — the Worker returns tav.source_runs columns verbatim
+// (see docs/APP_API.md → IngestRunSummary). Do NOT camel-case these.
+export const IngestRunSummarySchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  run_id: z.string(),
+  region: z.string(),
+  status: z.enum(["running", "completed", "failed", "truncated"]),
+  item_count: z.number().nullable(),
+  processed: z.number().nullable(),
+  rejected: z.number().nullable(),
+  created_leads: z.number().nullable(),
+  scraped_at: z.string(),
+  created_at: z.string(),
+  error_message: z.string().nullable(),
+});
+export const IngestRunSummaryListSchema = z.array(IngestRunSummarySchema);
+export type IngestRunSummary = z.infer<typeof IngestRunSummarySchema>;
+
+// ── GET /app/ingest-runs/:id ───────────────────────────────────────────────────
+// `run` mirrors IngestRunSummary; grouped diagnostics are camelCase records
+// keyed by reason_code / missing_reason / event_type. dead_letters is absent by
+// design (no source_run_id in schema — see docs/APP_API.md).
+export const IngestRunDetailSchema = z.object({
+  run: IngestRunSummarySchema,
+  rawListingCount: z.number(),
+  normalizedListingCount: z.number(),
+  filteredOutByReason: z.record(z.string(), z.number()),
+  valuationMissByReason: z.record(z.string(), z.number()),
+  schemaDriftByType: z.record(z.string(), z.number()),
+  createdLeadCount: z.number(),
+  createdLeadIds: z.array(z.string()),
+});
+export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;

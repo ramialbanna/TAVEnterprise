@@ -14,13 +14,43 @@
 import {
   parseHistoricalSales,
   parseImportBatches,
+  parseIngestRuns,
+  parseIngestRunDetail,
   parseKpis,
   parseMmrVin,
   parseSystemStatus,
   type ApiResult,
 } from "./parse";
 import { codeMessage } from "./missing-reason";
-import type { HistoricalSale, ImportBatch, Kpis, MmrVinOk, SystemStatus } from "./schemas";
+import type {
+  HistoricalSale,
+  ImportBatch,
+  IngestRunSummary,
+  IngestRunDetail,
+  Kpis,
+  MmrVinOk,
+  SystemStatus,
+} from "./schemas";
+
+/** Query filter for `GET /app/ingest-runs` (all optional; see `docs/APP_API.md`). */
+export type IngestRunsFilter = {
+  /** Default 20, clamped to 100 by the Worker. */
+  limit?: number;
+  source?: string;
+  region?: string;
+  status?: string;
+};
+
+/** `?...` query string for `ingest-runs`; empty when no params. */
+export function ingestRunsQuery(filter: IngestRunsFilter = {}): string {
+  const params = new URLSearchParams();
+  if (filter.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter.source) params.set("source", filter.source);
+  if (filter.region) params.set("region", filter.region);
+  if (filter.status) params.set("status", filter.status);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
 
 /** Query filter for `GET /app/historical-sales` (all fields optional; see `docs/APP_API.md`). */
 export type HistoricalSalesFilter = {
@@ -127,6 +157,20 @@ export async function listHistoricalSales(
   const r = await getJson(`historical-sales${historicalSalesQuery(filter)}`);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseHistoricalSales(r.status, r.json);
+}
+
+export async function listIngestRuns(
+  filter: IngestRunsFilter = {},
+): Promise<ApiResult<IngestRunSummary[]>> {
+  const r = await getJson(`ingest-runs${ingestRunsQuery(filter)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseIngestRuns(r.status, r.json);
+}
+
+export async function getIngestRun(id: string): Promise<ApiResult<IngestRunDetail>> {
+  const r = await getJson(`ingest-runs/${encodeURIComponent(id)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseIngestRunDetail(r.status, r.json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
