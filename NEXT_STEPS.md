@@ -1,79 +1,86 @@
-# NEXT SESSION START POINT — TAV Platform
+# NEXT SESSION START POINT — TAV-AIP
 
 ## Where We Are
-Scale foundation complete. Pipeline runs end-to-end:
-Apify → Cloudflare Worker → raw_listings → normalized_listings → vehicle_candidates → leads
 
-## What Is Done (Phase 4 complete)
-- [x] Canonical vehicle schema (TS types + SQL)
-- [x] Validation + rejection logic (adapter-level + reason_codes)
-- [x] Deduplication system (identity_key fingerprinting, vehicle_candidates, duplicate_groups)
-- [x] Raw payload storage (raw_listings table, always written first)
-- [x] Structured logging (src/logging/logger.ts — log, logError, error categories)
-- [x] Atomic normalized listing upsert (migration 0004 — tracks price changes, scrape_count)
-- [x] Freshness scoring + stale detection (src/stale/scorer.ts + daily cron via migration 0005)
-- [x] Buy-box rule matching (src/scoring/buybox.ts + 3 default rules via migration 0006)
-- [x] Lead creation pipeline (src/persistence/leads.ts — grade != pass → upsert lead)
-- [x] Deal scoring, final scoring, grade calculation
-- [x] Real region scoring — computeRegionScore() with 3-tier market priority (migration 0007 for year constraint)
-- [x] Year validation aligned — business rule 2000–2035 enforced in TS adapter + SQL CHECK
-- [x] Schema drift detection — detectFacebookDrift() + writeSchemaDrift() wired into ingest, non-blocking
-- [x] 153 unit tests passing
+TAV-AIP v1 is live, and the Apify production ingestion path is working.
 
-## Migrations Still Needed in Supabase SQL Editor
-Run in this order:
-1. supabase/migrations/0004_normalized_listing_upsert_fn.sql
-2. supabase/migrations/0005_stale_sweep_fn.sql
-3. supabase/migrations/0006_buy_box_seed.sql
+Production path:
 
-## Next Tasks (Priority Order)
+```text
+Apify -> /apify-webhook -> ingestCore -> Supabase
+```
 
-### Phase 5 — Valuation (Manheim MMR)
-- Wire MANHEIM_* env vars into src/valuation/mmr.ts
-- Fetch MMR by VIN (high confidence) or YMM+mileage bucket (medium confidence)
-- Write result to valuation_snapshots table
-- Feed mmrValue into computeDealScore() — currently returns 0 without MMR
-- Add MMR cache in Cloudflare KV (TTL: 24h per VIN, 6h per YMM bucket)
+Current product gap:
 
-### Phase 6 — Replay Endpoint
-- POST /replay?run_id=<id> — re-normalizes raw_listings without re-scraping
-- Auth via NORMALIZER_SECRET header
-- Useful after adapter improvements or bug fixes
-- Already reserved in src/types/env.ts
+```text
+Supabase source_runs/raw/normalized/rejections -> /app/ingest-runs -> /ingest UI
+```
 
-### Phase 7 — Zero-Result Alerting
-- Alert when a source_run completes with 0 processed items
-- Alert when freshness_status='stale_confirmed' > threshold for a region
-- Delivery: ALERT_WEBHOOK_URL (already in env) or Twilio SMS (already in env)
+The second path does not exist yet. That is why Apify feels invisible in the frontend. Admin/Integrations shows latest source-run health only; it is not the Apify results screen.
 
-### Phase 8 — Multi-Source Adapters
-- src/sources/craigslist.ts
-- src/sources/autotrader.ts
-- src/sources/cars_com.ts
-- src/sources/offerup.ts
-- Each returns AdapterResult (same contract as facebook.ts)
-- Wire into handleIngest.ts source dispatch
+## Active Roadmap
 
-## Important IDs / Config (fill in)
-APIFY:
-- actorTaskId:
-- datasetId:
-- webhook:
+Use the current execution roadmap:
 
-SUPABASE:
-- URL: (in .dev.vars)
-- schema: tav
-- project: (Supabase dashboard)
+[`docs/roadmap-2026-05-16-v15-v2-execution-plan.md`](docs/roadmap-2026-05-16-v15-v2-execution-plan.md)
 
-WORKERS:
-- ingest endpoint: POST /ingest (running on Cloudflare)
-- cron: daily 06:00 UTC → tav.run_stale_sweep()
+Strategic decision: do not start v2 yet. Finish v1.5 Ingest Monitor first.
 
-## Notes
-- Apify is the current scraping layer — system is source-agnostic by design
-- MMR is the biggest data quality gap right now (deal scores are all 0 without it)
-- Buy-box rules are seeded but may need tuning once real MMR data flows
-- Facebook VIN is always absent — YMM path is the norm, not the exception
+Target sequence:
 
-## First Command Next Session
-"Run migrations 0004, 0005, 0006 in Supabase, then start Phase 5 — Manheim MMR integration."
+```text
+Stabilize -> Ingest Visibility -> Lead Diagnosis -> v2 Read-Only Lead Review -> v2 Workflow Mutations
+```
+
+## Current Production State
+
+- Vercel frontend is live.
+- Worker `/app/*` API is live.
+- Apify bridge is enabled in production.
+- `tav-tx-east` Apify task is scheduled every 5 minutes and verified end-to-end.
+- `tav-tx-west`, `tav-tx-south`, and `tav-ok` remain disabled pending separate soaks.
+- Latest source-run health may show only one processed item because it represents the latest run, not cumulative Apify results.
+
+## Next Claude Code Task
+
+Implement Phase 0 and Phase 1 only.
+
+Scope:
+
+- Sync `supabase/schema.sql` with migrations `0043` and `0044`.
+- Add a shared constant-time bearer auth helper and use it in app/admin/apify auth paths.
+- Fix the Apify bridge ingest contract mismatch by validating or chunking so it no longer bypasses `IngestRequestSchema` max item limits.
+- Add fetch timeouts to Apify dataset/run fetches.
+- Expand CI secret scan for `APP_API_SECRET`, `APIFY_TOKEN`, `APIFY_WEBHOOK_SECRET`, `AUTH_SECRET`, `AUTH_GOOGLE_SECRET`, and `apify_api_` tokens.
+- Add focused tests.
+- Do not build `/ingest` yet.
+- Do not touch v2 lead workflow yet.
+
+## Codex Review Gate
+
+Codex reviews each Claude Code PR for:
+
+- architecture boundaries
+- four-concept integrity: Raw, Normalized, Vehicle Candidate, Lead
+- schema discipline
+- security posture
+- product usefulness
+- operational risk
+- test adequacy
+
+## Validation Baseline From Review
+
+Passed on 2026-05-16:
+
+```bash
+npm run typecheck
+npm run lint
+npm test -- --run
+npm run build
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+Note: `npm run build` completed the Wrangler dry-run, but Wrangler could not write its local log file under `~/.wrangler/logs` from the sandbox.
