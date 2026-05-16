@@ -11,6 +11,7 @@ import {
   WorkerUnavailableError,
 } from "../src/valuation/workerClient";
 import type * as WorkerClientModule from "../src/valuation/workerClient";
+import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -48,6 +49,12 @@ vi.mock("../src/persistence/importBatches", () => ({
 // Same for persistence/historicalSales.listHistoricalSales (/app/historical-sales).
 vi.mock("../src/persistence/historicalSales", () => ({
   listHistoricalSales: vi.fn(),
+}));
+
+// persistence/ingestRuns backs GET /app/ingest-runs[/:id].
+vi.mock("../src/persistence/ingestRuns", () => ({
+  listSourceRuns: vi.fn(),
+  getSourceRunDetail: vi.fn(),
 }));
 
 // persistence/cronRuns: getLastCronRun feeds /app/system-status' `staleSweep` block.
@@ -111,6 +118,10 @@ beforeEach(() => {
   vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
   vi.mocked(getLastCronRun).mockReset();
   vi.mocked(getLastCronRun).mockResolvedValue(null);
+  vi.mocked(listSourceRuns).mockReset();
+  vi.mocked(listSourceRuns).mockResolvedValue([]);
+  vi.mocked(getSourceRunDetail).mockReset();
+  vi.mocked(getSourceRunDetail).mockResolvedValue(null);
 });
 
 describe("/app/* auth", () => {
@@ -707,5 +718,126 @@ describe("POST /app/mmr/vin", () => {
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.ok).toBe(false);
     expect(body.error).toBe("internal_error");
+  });
+});
+
+// ── GET /app/ingest-runs ──────────────────────────────────────────────────────
+
+const RUN_SUMMARY = {
+  id: "11111111-1111-1111-1111-111111111111",
+  source: "facebook",
+  run_id: "4NyscgfxEA39sJcIY",
+  region: "dallas_tx",
+  status: "completed",
+  item_count: 4,
+  processed: 3,
+  rejected: 1,
+  created_leads: 0,
+  scraped_at: "2026-05-16T20:11:42.247Z",
+  created_at: "2026-05-16T20:11:49.596Z",
+  error_message: null,
+};
+
+describe("GET /app/ingest-runs", () => {
+  it("returns the run list in an { ok, data } envelope", async () => {
+    vi.mocked(listSourceRuns).mockResolvedValue([RUN_SUMMARY]);
+    const res = await worker.fetch(authedReq("/app/ingest-runs"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual([RUN_SUMMARY]);
+  });
+
+  it("defaults limit to 20 and clamps to 100", async () => {
+    await worker.fetch(authedReq("/app/ingest-runs"), makeEnv(), ctx);
+    expect(vi.mocked(listSourceRuns).mock.calls[0]![1].limit).toBe(20);
+    vi.mocked(listSourceRuns).mockClear();
+    await worker.fetch(authedReq("/app/ingest-runs?limit=500"), makeEnv(), ctx);
+    expect(vi.mocked(listSourceRuns).mock.calls[0]![1].limit).toBe(100);
+  });
+
+  it("passes valid source/region/status filters through", async () => {
+    await worker.fetch(
+      authedReq("/app/ingest-runs?source=facebook&region=dallas_tx&status=completed"),
+      makeEnv(),
+      ctx,
+    );
+    expect(vi.mocked(listSourceRuns).mock.calls[0]![1]).toMatchObject({
+      source: "facebook",
+      region: "dallas_tx",
+      status: "completed",
+    });
+  });
+
+  it("rejects an invalid filter value with 400 invalid_filter", async () => {
+    const res = await worker.fetch(
+      authedReq("/app/ingest-runs?status=bogus"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_filter");
+    expect(vi.mocked(listSourceRuns)).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 db_error when the query fails", async () => {
+    vi.mocked(listSourceRuns).mockRejectedValue(new Error("db down"));
+    const res = await worker.fetch(authedReq("/app/ingest-runs"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("db_error");
+  });
+
+  it("requires auth (401 without bearer)", async () => {
+    const res = await worker.fetch(
+      new Request("http://localhost/app/ingest-runs"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /app/ingest-runs/:id", () => {
+  it("returns the detail in an { ok, data } envelope", async () => {
+    vi.mocked(getSourceRunDetail).mockResolvedValue({
+      run: RUN_SUMMARY,
+      rawListingCount: 4,
+      normalizedListingCount: 3,
+      filteredOutByReason: { missing_identifier: 1 },
+      valuationMissByReason: { trim_missing: 2 },
+      schemaDriftByType: {},
+      createdLeadCount: 0,
+      createdLeadIds: [],
+    });
+    const res = await worker.fetch(
+      authedReq("/app/ingest-runs/11111111-1111-1111-1111-111111111111"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { rawListingCount: number } };
+    expect(body.ok).toBe(true);
+    expect(body.data.rawListingCount).toBe(4);
+    expect(vi.mocked(getSourceRunDetail).mock.calls[0]![1]).toBe(
+      "11111111-1111-1111-1111-111111111111",
+    );
+  });
+
+  it("returns 404 not_found when the run does not exist", async () => {
+    vi.mocked(getSourceRunDetail).mockResolvedValue(null);
+    const res = await worker.fetch(authedReq("/app/ingest-runs/missing-id"), makeEnv(), ctx);
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("not_found");
+  });
+
+  it("returns 503 db_error when detail query fails", async () => {
+    vi.mocked(getSourceRunDetail).mockRejectedValue(new Error("db down"));
+    const res = await worker.fetch(authedReq("/app/ingest-runs/x"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("db_error");
   });
 });

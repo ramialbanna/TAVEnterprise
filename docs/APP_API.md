@@ -228,6 +228,78 @@ Failure: Supabase client cannot be constructed, or the query throws →
 
 ---
 
+### `GET /app/ingest-runs`
+
+Recent source runs (Apify/scraper ingest), newest first. Read-only. Thin
+wrapper over `persistence/ingestRuns.listSourceRuns`. Backs the v1.5 Ingest
+Monitor.
+
+Query params (all optional):
+
+| Param | Behaviour |
+|-------|-----------|
+| `limit` | Default `20`, clamped to `100`; non-positive-integer values fall back to `20` (same rule as `/app/import-batches`). |
+| `source` | Exact match. Validated against the schema enum (`facebook`, `craigslist`, `autotrader`, `cars_com`, `offerup`). Unknown value → `400 invalid_filter`. |
+| `region` | Exact match. Validated against the region enum (`dallas_tx`, `houston_tx`, `austin_tx`, `san_antonio_tx`). Unknown value → `400 invalid_filter`. |
+| `status` | Exact match. One of `running`, `completed`, `failed`, `truncated`. Unknown value → `400 invalid_filter`. |
+
+Success → `200 { "ok": true, "data": IngestRunSummary[] }` where:
+
+```jsonc
+// IngestRunSummary (src/persistence/ingestRuns.ts)
+{
+  "id": "<uuid>",                 // source_runs.id
+  "source": "facebook",
+  "run_id": "<apify run id>",
+  "region": "dallas_tx",
+  "status": "completed" | "running" | "failed" | "truncated",
+  "item_count": 0 | null,
+  "processed": 0 | null,
+  "rejected": 0 | null,
+  "created_leads": 0 | null,
+  "scraped_at": "<ISO8601>",
+  "created_at": "<ISO8601>",
+  "error_message": "<string>" | null
+}
+```
+
+Failure: invalid filter → `400 { "ok": false, "error": "invalid_filter" }`.
+Supabase client cannot be constructed, or the query throws →
+`503 { "ok": false, "error": "db_error" }`.
+
+---
+
+### `GET /app/ingest-runs/:id`
+
+One source run plus diagnostic detail assembled from data already present in
+the current schema. `:id` is `source_runs.id` (uuid). Read-only.
+
+Success → `200 { "ok": true, "data": IngestRunDetail }` where:
+
+```jsonc
+// IngestRunDetail (src/persistence/ingestRuns.ts)
+{
+  "run": { /* IngestRunSummary, as above */ },
+  "rawListingCount": 0,           // tav.raw_listings by source_run_id (uuid)
+  "normalizedListingCount": 0,    // tav.normalized_listings by source_run_id (uuid)
+  "filteredOutByReason": { "<reason_code>": 0 },      // tav.filtered_out, grouped
+  "valuationMissByReason": { "<missing_reason>": 0 }, // tav.valuation_snapshots (via normalized_listings), grouped
+  "schemaDriftByType": { "<event_type>": 0 },         // tav.schema_drift_events, grouped
+  "createdLeadCount": 0,
+  "createdLeadIds": ["<uuid>"]    // tav.leads via normalized_listings.source_run_id
+}
+```
+
+Note: `tav.dead_letters` has no `source_run_id` column in the current schema,
+so dead letters are intentionally **not** reported per-run. Surfacing them
+would require a schema change and is out of scope for v1.5.
+
+Failure: unknown run id → `404 { "ok": false, "error": "not_found" }`.
+Supabase client cannot be constructed, or any diagnostic query throws →
+`503 { "ok": false, "error": "db_error" }`.
+
+---
+
 ### `POST /app/mmr/vin`
 
 On-demand MMR valuation by VIN, proxied to `tav-intelligence-worker` via

@@ -12,7 +12,8 @@
  *   - This module never touches /ingest, /admin, or /health behaviour.
  *
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
- * GET /app/historical-sales, POST /app/mmr/vin.
+ * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
+ * GET /app/ingest-runs/:id.
  * (See docs/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
@@ -22,6 +23,10 @@ import { listImportBatches } from "../persistence/importBatches";
 import { listHistoricalSales } from "../persistence/historicalSales";
 import type { HistoricalSalesFilter } from "../persistence/historicalSales";
 import { getLastCronRun } from "../persistence/cronRuns";
+import { listSourceRuns, getSourceRunDetail } from "../persistence/ingestRuns";
+import type { IngestRunListFilter } from "../persistence/ingestRuns";
+import { SOURCE_NAMES } from "../validate";
+import { REGION_KEYS } from "../types/domain";
 import {
   getMmrValueFromWorker,
   WorkerTimeoutError,
@@ -96,6 +101,13 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === "POST" && pathname === "/app/mmr/vin") {
       return await handleMmrVin(request, env);
+    }
+    if (request.method === "GET" && pathname === "/app/ingest-runs") {
+      return await handleIngestRunsList(env, url);
+    }
+    if (request.method === "GET" && pathname.startsWith("/app/ingest-runs/")) {
+      const id = decodeURIComponent(pathname.slice("/app/ingest-runs/".length));
+      return await handleIngestRunDetail(env, id);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -406,5 +418,81 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
     else throw err; // unexpected — let handleApp's catch surface it as 503 internal_error
     log("app.mmr_vin.worker_error", { missingReason, error: serializeError(err) });
     return json({ ok: true, data: { mmrValue: null, missingReason } });
+  }
+}
+
+/** Valid source_run statuses — mirrors the CHECK in supabase/schema.sql. */
+const SOURCE_RUN_STATUSES = ["running", "completed", "failed", "truncated"] as const;
+
+/**
+ * GET /app/ingest-runs?limit=&source=&region=&status= — recent source runs,
+ * newest first. Read-only. `limit` defaults to 20, clamped to 100. Optional
+ * source/region/status filters are validated against the schema enums; an
+ * unknown value → 400 `invalid_filter`. 503 `db_error` on client/query failure.
+ */
+async function handleIngestRunsList(env: Env, url: URL): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.ingest_runs.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  const filter: IngestRunListFilter = {
+    limit: parseLimitParam(url.searchParams.get("limit")),
+  };
+  const source = url.searchParams.get("source");
+  const region = url.searchParams.get("region");
+  const status = url.searchParams.get("status");
+  if (source !== null) {
+    if (!(SOURCE_NAMES as readonly string[]).includes(source)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.source = source;
+  }
+  if (region !== null) {
+    if (!(REGION_KEYS as readonly string[]).includes(region)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.region = region;
+  }
+  if (status !== null) {
+    if (!(SOURCE_RUN_STATUSES as readonly string[]).includes(status)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.status = status;
+  }
+
+  try {
+    const data = await listSourceRuns(db, filter);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.ingest_runs.query_failed", { filter, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/ingest-runs/:id — one source run plus diagnostic detail that
+ * already exists in the current schema. Read-only. 404 `not_found` when the
+ * run id is unknown; 503 `db_error` on client/query failure.
+ */
+async function handleIngestRunDetail(env: Env, id: string): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.ingest_run_detail.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await getSourceRunDetail(db, id);
+    if (data === null) return json({ ok: false, error: "not_found" }, 404);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.ingest_run_detail.query_failed", { id, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
   }
 }
