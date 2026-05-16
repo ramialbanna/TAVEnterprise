@@ -286,7 +286,31 @@ Success → `200 { "ok": true, "data": IngestRunDetail }` where:
   "valuationMissByReason": { "<missing_reason>": 0 }, // tav.valuation_snapshots (via normalized_listings), grouped
   "schemaDriftByType": { "<event_type>": 0 },         // tav.schema_drift_events, grouped
   "createdLeadCount": 0,
-  "createdLeadIds": ["<uuid>"]    // tav.leads via normalized_listings.source_run_id
+  "createdLeadIds": ["<uuid>"],   // tav.leads via normalized_listings.source_run_id
+  // Phase 4a — one entry per normalized listing in the run, joined to its
+  // latest valuation snapshot and its lead (if any).
+  "listings": [
+    {
+      "normalized_listing_id": "<uuid>",
+      "title": "<string>" | null,
+      "listing_url": "<string>" | null,
+      "year": 0 | null,
+      "make": "<string>" | null,
+      "model": "<string>" | null,
+      "trim": "<string>" | null,
+      "price": 0 | null,
+      "mileage": 0 | null,
+      "vin": "<string>" | null,
+      "valuation_status": "hit" | "miss" | null,
+      "valuation_missing_reason": "<missing_reason>" | null, // set when miss
+      "mmr_value": 0 | null,                                  // set when hit
+      "lead_id": "<uuid>" | null,
+      "lead_grade": "excellent"|"good"|"fair"|"pass" | null,
+      "lead_final_score": 0 | null,
+      "lead_score_components": { } | null,
+      "vehicle_candidate_id": "<uuid>" | null  // lead's, else valuation's
+    }
+  ]
 }
 ```
 

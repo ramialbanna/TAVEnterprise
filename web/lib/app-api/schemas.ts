@@ -149,6 +149,29 @@ export type IngestRunSummary = z.infer<typeof IngestRunSummarySchema>;
 // `run` mirrors IngestRunSummary; grouped diagnostics are camelCase records
 // keyed by reason_code / missing_reason / event_type. dead_letters is absent by
 // design (no source_run_id in schema — see docs/APP_API.md).
+// Phase 4a — per-normalized-listing diagnostics. Snake_case mirrors the Worker.
+export const ListingDiagnosticSchema = z.object({
+  normalized_listing_id: z.string(),
+  title: z.string().nullable(),
+  listing_url: z.string().nullable(),
+  year: z.number().nullable(),
+  make: z.string().nullable(),
+  model: z.string().nullable(),
+  trim: z.string().nullable(),
+  price: z.number().nullable(),
+  mileage: z.number().nullable(),
+  vin: z.string().nullable(),
+  valuation_status: z.enum(["hit", "miss"]).nullable(),
+  valuation_missing_reason: z.string().nullable(),
+  mmr_value: z.number().nullable(),
+  lead_id: z.string().nullable(),
+  lead_grade: z.string().nullable(),
+  lead_final_score: z.number().nullable(),
+  lead_score_components: z.unknown().nullable(),
+  vehicle_candidate_id: z.string().nullable(),
+});
+export type ListingDiagnostic = z.infer<typeof ListingDiagnosticSchema>;
+
 export const IngestRunDetailSchema = z.object({
   run: IngestRunSummarySchema,
   rawListingCount: z.number(),
@@ -158,5 +181,8 @@ export const IngestRunDetailSchema = z.object({
   schemaDriftByType: z.record(z.string(), z.number()),
   createdLeadCount: z.number(),
   createdLeadIds: z.array(z.string()),
+  // Backward-compatible while Worker and Vercel deploy separately: old Worker
+  // versions omit the Phase 4a field, so the drawer simply shows an empty table.
+  listings: z.array(ListingDiagnosticSchema).default([]),
 });
 export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;

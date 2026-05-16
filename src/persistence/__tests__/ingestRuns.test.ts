@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   countByKey,
+  buildListingDiagnostics,
   listSourceRuns,
   getSourceRunDetail,
 } from "../ingestRuns";
@@ -117,5 +118,98 @@ describe("getSourceRunDetail", () => {
     expect(detail!.valuationMissByReason).toEqual({ trim_missing: 1 });
     expect(detail!.createdLeadCount).toBe(2);
     expect(detail!.createdLeadIds).toEqual(["lead-1", "lead-2"]);
+    // No normalized rows scripted → empty per-listing diagnostics.
+    expect(detail!.listings).toEqual([]);
+  });
+
+  it("returns per-listing diagnostics joined to valuation + lead", async () => {
+    const { db } = makeDb({
+      source_runs: { data: RUN },
+      raw_listings: { count: 2 },
+      normalized_listings: {
+        count: 2,
+        data: [
+          {
+            id: "nl_hit",
+            title: "2020 Toyota Camry SE",
+            listing_url: "https://fb.com/1",
+            year: 2020,
+            make: "Toyota",
+            model: "Camry",
+            trim: "SE",
+            price: 18500,
+            mileage: 62000,
+            vin: "VIN_HIT",
+          },
+          {
+            id: "nl_miss",
+            title: "2019 Honda Civic",
+            listing_url: "https://fb.com/2",
+            year: 2019,
+            make: "Honda",
+            model: "Civic",
+            trim: null,
+            price: 16000,
+            mileage: null,
+            vin: null,
+          },
+        ],
+      },
+      filtered_out: { data: [] },
+      schema_drift_events: { data: [] },
+      valuation_snapshots: {
+        data: [
+          { normalized_listing_id: "nl_hit", mmr_value: 19000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T20:00:00Z" },
+          { normalized_listing_id: "nl_hit", mmr_value: 19500, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T21:00:00Z" },
+          { normalized_listing_id: "nl_miss", mmr_value: null, missing_reason: "trim_missing", vehicle_candidate_id: null, fetched_at: "2026-05-16T20:30:00Z" },
+        ],
+      },
+      leads: {
+        data: [
+          { id: "lead_hit", normalized_listing_id: "nl_hit", vehicle_candidate_id: "vc_1", grade: "good", final_score: 78, score_components: { deal: 40 } },
+        ],
+      },
+    });
+    const detail = await getSourceRunDetail(db, RUN.id);
+    expect(detail!.listings).toHaveLength(2);
+
+    const hit = detail!.listings.find((l) => l.normalized_listing_id === "nl_hit")!;
+    expect(hit.valuation_status).toBe("hit");
+    expect(hit.mmr_value).toBe(19500); // latest snapshot by fetched_at
+    expect(hit.valuation_missing_reason).toBeNull();
+    expect(hit.lead_id).toBe("lead_hit");
+    expect(hit.lead_grade).toBe("good");
+    expect(hit.lead_final_score).toBe(78);
+    expect(hit.vehicle_candidate_id).toBe("vc_1");
+
+    const miss = detail!.listings.find((l) => l.normalized_listing_id === "nl_miss")!;
+    expect(miss.valuation_status).toBe("miss");
+    expect(miss.valuation_missing_reason).toBe("trim_missing");
+    expect(miss.mmr_value).toBeNull();
+    expect(miss.lead_id).toBeNull();
+  });
+});
+
+describe("buildListingDiagnostics", () => {
+  it("marks a listing with no valuation and no lead as status null", () => {
+    const out = buildListingDiagnostics(
+      [{ id: "nl1", title: "T", listing_url: null, year: null, make: null, model: null, trim: null, price: null, mileage: null, vin: null }],
+      [],
+      [],
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]!.valuation_status).toBeNull();
+    expect(out[0]!.lead_id).toBeNull();
+    expect(out[0]!.vehicle_candidate_id).toBeNull();
+  });
+
+  it("prefers the lead's vehicle_candidate_id over the valuation's", () => {
+    const out = buildListingDiagnostics(
+      [{ id: "nl1" }],
+      [{ normalized_listing_id: "nl1", mmr_value: 100, missing_reason: null, vehicle_candidate_id: "vc_val", fetched_at: "2026-01-01T00:00:00Z" }],
+      [{ id: "L1", normalized_listing_id: "nl1", vehicle_candidate_id: "vc_lead", grade: "fair", final_score: 50, score_components: null }],
+    );
+    expect(out[0]!.vehicle_candidate_id).toBe("vc_lead");
+    expect(out[0]!.valuation_status).toBe("hit");
   });
 });

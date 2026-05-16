@@ -48,6 +48,13 @@ test.describe("/ingest (authenticated + mocked /api/app/*)", () => {
     await expect(dialog.getByRole("heading", { name: /dead letters/i })).toBeVisible();
     await expect(dialog.getByText(/missing_identifier/i)).toBeVisible();
 
+    // Phase 4a — per-listing diagnostics table.
+    await expect(dialog.getByRole("heading", { name: /^Listings \(/i })).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "2020 Toyota Camry SE" })).toBeVisible();
+    await expect(dialog.getByText(/miss · trim_missing/i)).toBeVisible();
+    await expect(dialog.getByRole("link", { name: "2019 Honda Civic EX" })).toBeVisible();
+    await expect(dialog.getByText(/hit · \$17,200/i)).toBeVisible();
+
     await page.screenshot({
       path: "docs/ingest-screenshots/ingest-detail.png",
       fullPage: true,
