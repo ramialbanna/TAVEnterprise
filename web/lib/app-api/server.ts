@@ -10,7 +10,7 @@ import "server-only";
  * imports "server-only" and reads `serverEnv()`, the secret/Worker URL never reach the
  * browser. Always `cache: "no-store"` — these are live operational reads.
  */
-import { serverEnv } from "@/lib/env";
+import { serverEnv, type ServerEnv } from "@/lib/env";
 import {
   parseHistoricalSales,
   parseImportBatches,
@@ -29,6 +29,8 @@ import type { HistoricalSale, ImportBatch, Kpis, MmrVinOk, SystemStatus } from "
 
 export type { HistoricalSalesFilter, MmrVinRequest } from "./client";
 
+const SERVER_FETCH_TIMEOUT_MS = 12_000;
+
 async function readJson(res: Response): Promise<unknown> {
   try {
     return await res.json();
@@ -37,22 +39,65 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-function bearerHeaders(extra?: Record<string, string>): HeadersInit {
-  const { APP_API_SECRET } = serverEnv();
-  return { authorization: `Bearer ${APP_API_SECRET}`, accept: "application/json", ...extra };
+function bearerHeaders(env: ServerEnv, extra?: Record<string, string>): HeadersInit {
+  return { authorization: `Bearer ${env.APP_API_SECRET}`, accept: "application/json", ...extra };
 }
 
-function appUrl(pathWithQuery: string): string {
-  return `${serverEnv().APP_API_BASE_URL}/app/${pathWithQuery}`;
+function proxyMisconfigured(): { status: number; json: unknown } {
+  return { status: 500, json: { ok: false, error: "proxy_misconfigured" } };
+}
+
+function upstreamUnavailable(): { status: number; json: unknown } {
+  return { status: 503, json: { ok: false, error: "upstream_unavailable" } };
+}
+
+type RequestJsonInit = {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+};
+
+async function requestJson(
+  pathWithQuery: string,
+  init: RequestJsonInit = {},
+): Promise<{ status: number; json: unknown }> {
+  let env: ServerEnv;
+  try {
+    env = serverEnv();
+  } catch (err) {
+    console.error("[app-api/server] environment invalid:", err instanceof Error ? err.message : String(err));
+    return proxyMisconfigured();
+  }
+
+  const method = init.method ?? "GET";
+  const pathForLog = `/app/${pathWithQuery.split("?")[0]}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SERVER_FETCH_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${env.APP_API_BASE_URL}/app/${pathWithQuery}`, {
+      method,
+      headers: bearerHeaders(env, init.headers),
+      cache: "no-store",
+      ...(init.body !== undefined && { body: init.body }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    console.error(
+      `[app-api/server] ${method} ${pathForLog} -> upstream_unavailable`,
+      err instanceof Error ? err.name : "",
+    );
+    return upstreamUnavailable();
+  } finally {
+    clearTimeout(timer);
+  }
+
+  return { status: res.status, json: await readJson(res) };
 }
 
 async function getJson(pathWithQuery: string): Promise<{ status: number; json: unknown }> {
-  const res = await fetch(appUrl(pathWithQuery), {
-    method: "GET",
-    headers: bearerHeaders(),
-    cache: "no-store",
-  });
-  return { status: res.status, json: await readJson(res) };
+  return requestJson(pathWithQuery);
 }
 
 export async function getSystemStatus(): Promise<ApiResult<SystemStatus>> {
@@ -78,11 +123,10 @@ export async function listHistoricalSales(
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
-  const res = await fetch(appUrl("mmr/vin"), {
+  const { status, json } = await requestJson("mmr/vin", {
     method: "POST",
-    headers: bearerHeaders({ "content-type": "application/json" }),
-    cache: "no-store",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  return parseMmrVin(res.status, await readJson(res));
+  return parseMmrVin(status, json);
 }
