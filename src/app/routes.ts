@@ -29,6 +29,7 @@ import {
   WorkerUnavailableError,
 } from "../valuation/workerClient";
 import { isConfiguredSecret } from "../types/envValidation";
+import { verifyBearer } from "../auth/bearerAuth";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
 
@@ -66,9 +67,7 @@ function parseLimitParam(raw: string | null): number {
 }
 
 function verifyAppAuth(request: Request, env: Env): boolean {
-  const auth = request.headers.get("Authorization") ?? "";
-  if (!isConfiguredSecret(env.APP_API_SECRET)) return false;
-  return auth === `Bearer ${env.APP_API_SECRET}`;
+  return verifyBearer(request, env.APP_API_SECRET);
 }
 
 export async function handleApp(request: Request, env: Env): Promise<Response> {

@@ -13,6 +13,7 @@ import { upsertMarketExpense, getMarketExpensesByRegion } from "../persistence/m
 import { upsertMarketDemandIndex } from "../persistence/marketDemandIndex";
 import { withRetry } from "../persistence/retry";
 import { isConfiguredSecret } from "../types/envValidation";
+import { verifyBearer } from "../auth/bearerAuth";
 import { log, serializeError } from "../logging/logger";
 
 function json(body: unknown, status = 200): Response {
@@ -23,9 +24,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 function verifyAdminAuth(request: Request, env: Env): boolean {
-  const auth = request.headers.get("Authorization") ?? "";
-  if (!isConfiguredSecret(env.ADMIN_API_SECRET)) return false;
-  return auth === `Bearer ${env.ADMIN_API_SECRET}`;
+  return verifyBearer(request, env.ADMIN_API_SECRET);
 }
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {

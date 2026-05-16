@@ -86,13 +86,19 @@ jobs:
       - name: Refuse committed secrets
         run: |
           set -e
-          PATTERN='^(SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_HMAC_SECRET|NORMALIZER_SECRET|MANHEIM_(CLIENT_SECRET|PASSWORD)|TWILIO_AUTH_TOKEN)='
-          OFFENDERS=$(git grep -nE "$PATTERN" -- ':!.dev.vars.example' ':!docs/' ':!.github/' || true)
+          PATTERN='^(SUPABASE_SERVICE_ROLE_KEY|WEBHOOK_HMAC_SECRET|NORMALIZER_SECRET|MANHEIM_(CLIENT_SECRET|PASSWORD)|TWILIO_AUTH_TOKEN|APP_API_SECRET|APIFY_TOKEN|APIFY_WEBHOOK_SECRET|AUTH_SECRET|AUTH_GOOGLE_SECRET)='
+          APIFY_LITERAL='apify_api_[A-Za-z0-9]{20,}'
+          EXCLUDES=(':!.dev.vars.example' ':!web/.env.example' ':!docs/' ':!.github/')
+          OFFENDERS=$(git grep -nE "$PATTERN" -- "${EXCLUDES[@]}" || true)
+          APIFY_HITS=$(git grep -nE "$APIFY_LITERAL" -- "${EXCLUDES[@]}" || true)
           BAD_EXAMPLE=$(grep -nE "$PATTERN" .dev.vars.example 2>/dev/null | grep -vE '=replace_me$' || true)
-          if [[ -n "$OFFENDERS" || -n "$BAD_EXAMPLE" ]]; then
+          BAD_WEB_EXAMPLE=$(grep -nE "$PATTERN" web/.env.example 2>/dev/null | grep -vE '=replace_me$' || true)
+          if [[ -n "$OFFENDERS" || -n "$APIFY_HITS" || -n "$BAD_EXAMPLE" || -n "$BAD_WEB_EXAMPLE" ]]; then
             echo "::error::Possible committed secret detected"
             [[ -n "$OFFENDERS" ]] && echo "$OFFENDERS"
+            [[ -n "$APIFY_HITS" ]] && echo "apify token literal: $APIFY_HITS"
             [[ -n "$BAD_EXAMPLE" ]] && echo ".dev.vars.example has non-placeholder value: $BAD_EXAMPLE"
+            [[ -n "$BAD_WEB_EXAMPLE" ]] && echo "web/.env.example has non-placeholder value: $BAD_WEB_EXAMPLE"
             exit 1
           fi
           echo "secret-scan: clean"

@@ -41,6 +41,20 @@ function authHeaders(env: AuthRequiredEnv): Record<string, string> {
 }
 
 /**
+ * Per-request timeout for every Apify API call. Without this a hung Apify
+ * connection would consume the whole Worker request budget and the
+ * source_runs row would never reach a terminal state.
+ */
+const FETCH_TIMEOUT_MS = 10_000;
+
+function reqInit(env: AuthRequiredEnv): RequestInit {
+  return {
+    headers: authHeaders(env),
+    signal:  AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  };
+}
+
+/**
  * Fetches the run record for `runId` and returns its `defaultDatasetId`.
  * Used as a fallback when the inbound webhook payload omits the dataset id.
  *
@@ -56,7 +70,7 @@ export async function fetchApifyRunDefaultDataset(
   }
 
   const url = `${APIFY_API_BASE}/actor-runs/${encodeURIComponent(runId)}`;
-  const res = await fetch(url, { headers: authHeaders(env) });
+  const res = await fetch(url, reqInit(env));
 
   if (res.status === 401 || res.status === 403) {
     log("apify.bridge.run_auth_failed", { run_id: runId, status: res.status });
@@ -104,7 +118,7 @@ export async function fetchApifyDatasetItems(
       `${APIFY_API_BASE}/datasets/${encodeURIComponent(datasetId)}/items` +
       `?clean=true&format=json&limit=${limit}&offset=${offset}`;
 
-    const res = await fetch(url, { headers: authHeaders(env) });
+    const res = await fetch(url, reqInit(env));
     if (res.status === 401 || res.status === 403) {
       log("apify.bridge.dataset_auth_failed", { dataset_id: datasetId, status: res.status });
       throw new ApifyAuthError(res.status);
@@ -140,7 +154,7 @@ export async function fetchApifyDatasetItems(
       `${APIFY_API_BASE}/datasets/${encodeURIComponent(datasetId)}/items` +
       `?clean=true&format=json&limit=1&offset=${MAX_ITEMS_PER_RUN}`;
     try {
-      const res = await fetch(probeUrl, { headers: authHeaders(env) });
+      const res = await fetch(probeUrl, reqInit(env));
       if (res.ok) {
         const probe = await res.json();
         if (Array.isArray(probe) && probe.length > 0) truncated = true;

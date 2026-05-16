@@ -43,7 +43,7 @@ CREATE TABLE tav.source_runs (
   rejected      integer,
   created_leads integer,
   status        text        NOT NULL
-    CHECK (status IN ('running','completed','failed')),
+    CHECK (status IN ('running','completed','failed','truncated')),
   error_message text,
   created_at    timestamptz NOT NULL DEFAULT now(),
 
@@ -158,7 +158,7 @@ CREATE TABLE tav.valuation_snapshots (
   trim                  text,
   mileage               integer,
   region                text,
-  mmr_value             integer     CHECK (mmr_value >= 0),
+  mmr_value             integer     CHECK (mmr_value IS NULL OR mmr_value > 0),
   mmr_wholesale_avg     numeric(10,2),
   mmr_wholesale_clean   numeric(10,2),
   mmr_wholesale_rough   numeric(10,2),
@@ -176,8 +176,16 @@ CREATE TABLE tav.valuation_snapshots (
   lookup_trim           text,
   normalization_confidence text
     CHECK (normalization_confidence IN ('exact', 'alias', 'partial', 'none')),
+  -- Miss observability (migration 0043): NULL on hit rows, set on miss rows.
+  missing_reason        text,
 
-  CHECK (normalized_listing_id IS NOT NULL OR vehicle_candidate_id IS NOT NULL)
+  CHECK (normalized_listing_id IS NOT NULL OR vehicle_candidate_id IS NOT NULL),
+  -- Exactly one of mmr_value / missing_reason is set (hit XOR miss).
+  CHECK (
+    (mmr_value IS NOT NULL AND missing_reason IS NULL)
+    OR
+    (mmr_value IS NULL AND missing_reason IS NOT NULL)
+  )
 );
 
 -- ── buy_box_rules ─────────────────────────────────────────────────────────────
@@ -389,6 +397,9 @@ CREATE UNIQUE INDEX ON tav.duplicate_groups (vehicle_candidate_id)
 -- valuation_snapshots
 CREATE INDEX ON tav.valuation_snapshots (vehicle_candidate_id);
 CREATE INDEX ON tav.valuation_snapshots (vehicle_candidate_id, fetched_at DESC);
+-- Roll up miss distributions without scanning the hit-heavy table (0043).
+CREATE INDEX ON tav.valuation_snapshots (missing_reason)
+  WHERE missing_reason IS NOT NULL;
 
 -- leads
 CREATE INDEX ON tav.leads (status);

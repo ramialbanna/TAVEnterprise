@@ -71,6 +71,12 @@ describe("fetchApifyRunDefaultDataset", () => {
     await expect(fetchApifyRunDefaultDataset("run-1", { APIFY_TOKEN: "" }))
       .rejects.toBeInstanceOf(ApifyAuthError);
   });
+
+  it("attaches an AbortSignal timeout to the run fetch", async () => {
+    const { calls } = mockFetchSequence([{ status: 200, body: { data: { defaultDatasetId: "ds-x" } } }]);
+    await fetchApifyRunDefaultDataset("run-1", ENV);
+    expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+  });
 });
 
 describe("fetchApifyDatasetItems", () => {
@@ -137,5 +143,11 @@ describe("fetchApifyDatasetItems", () => {
   it("throws ApifyAuthError when APIFY_TOKEN is empty", async () => {
     await expect(fetchApifyDatasetItems("ds-1", { APIFY_TOKEN: "" }))
       .rejects.toBeInstanceOf(ApifyAuthError);
+  });
+
+  it("attaches an AbortSignal timeout to dataset fetches", async () => {
+    const { calls } = mockFetchSequence([{ status: 200, body: [{ url: "https://fb.com/1" }] }]);
+    await fetchApifyDatasetItems("ds-1", ENV);
+    expect(calls[0]!.init?.signal).toBeInstanceOf(AbortSignal);
   });
 });
