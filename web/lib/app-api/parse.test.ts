@@ -3,6 +3,7 @@ import {
   metricBlockResult,
   parseHistoricalSales,
   parseImportBatches,
+  parseIngestRunDetail,
   parseKpis,
   parseMmrVin,
   parseSystemStatus,
@@ -204,6 +205,39 @@ describe("parse — /web proxy error envelopes (not Worker errors)", () => {
 });
 
 describe("parse — malformed / unknown", () => {
+  it("defaults missing ingest detail listings to [] for staggered Worker/Vercel deploys", () => {
+    const r = parseIngestRunDetail(200, {
+      ok: true,
+      data: {
+        run: {
+          id: "11111111-1111-1111-1111-111111111111",
+          source: "facebook",
+          run_id: "Ci2n6ph1CkdCu6pUI",
+          region: "dallas_tx",
+          status: "completed",
+          item_count: 3,
+          processed: 3,
+          rejected: 0,
+          created_leads: 0,
+          scraped_at: "2026-05-16T23:01:00.000Z",
+          created_at: "2026-05-16T23:02:00.000Z",
+          error_message: null,
+        },
+        rawListingCount: 3,
+        normalizedListingCount: 3,
+        filteredOutByReason: {},
+        valuationMissByReason: { cox_unavailable: 2, trim_missing: 1 },
+        schemaDriftByType: { unexpected_field: 19 },
+        createdLeadCount: 0,
+        createdLeadIds: [],
+      },
+    });
+
+    expect(r).toMatchObject({ ok: true, status: 200 });
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.listings).toEqual([]);
+  });
+
   it("maps a schema mismatch on ok:true data to invalid", () => {
     const r = parseKpis(200, { ok: true, data: { totally: "wrong" } });
     expect(r).toMatchObject({ ok: false, kind: "invalid", error: "schema_mismatch", status: 200 });

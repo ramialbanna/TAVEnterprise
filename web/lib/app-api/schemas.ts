@@ -181,6 +181,8 @@ export const IngestRunDetailSchema = z.object({
   schemaDriftByType: z.record(z.string(), z.number()),
   createdLeadCount: z.number(),
   createdLeadIds: z.array(z.string()),
-  listings: z.array(ListingDiagnosticSchema),
+  // Backward-compatible while Worker and Vercel deploy separately: old Worker
+  // versions omit the Phase 4a field, so the drawer simply shows an empty table.
+  listings: z.array(ListingDiagnosticSchema).default([]),
 });
 export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;
