@@ -4,9 +4,13 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getIngestRun } from "@/lib/app-api/client";
-import type { IngestRunSummary, IngestRunDetail } from "@/lib/app-api/schemas";
+import type {
+  IngestRunSummary,
+  IngestRunDetail,
+  ListingDiagnostic,
+} from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
-import { formatNumber, formatDateTime } from "@/lib/format";
+import { formatNumber, formatMoney, formatDateTime } from "@/lib/format";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import {
   Sheet,
@@ -121,6 +125,8 @@ function Diagnostics({ detail }: { detail: IngestRunDetail }) {
         )}
       </section>
 
+      <ListingsTable listings={detail.listings} />
+
       <section className="space-y-1">
         <SectionTitle>Dead letters</SectionTitle>
         <p className="text-xs text-muted-foreground">
@@ -129,6 +135,101 @@ function Diagnostics({ detail }: { detail: IngestRunDetail }) {
         </p>
       </section>
     </>
+  );
+}
+
+function ListingsTable({ listings }: { listings: ListingDiagnostic[] }) {
+  return (
+    <section className="space-y-2">
+      <SectionTitle>Listings ({formatNumber(listings.length)})</SectionTitle>
+      {listings.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No normalized listings recorded for this run.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded border border-border">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/50 text-left text-muted-foreground">
+              <tr>
+                <th className="px-2 py-1.5 font-medium">Listing</th>
+                <th className="px-2 py-1.5 font-medium">Price</th>
+                <th className="px-2 py-1.5 font-medium">Valuation</th>
+                <th className="px-2 py-1.5 font-medium">Lead</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listings.map((l) => (
+                <tr key={l.normalized_listing_id} className="border-t border-border align-top">
+                  <td className="px-2 py-1.5">
+                    <ListingCell listing={l} />
+                  </td>
+                  <td className="px-2 py-1.5 tabular-nums">{formatMoney(l.price)}</td>
+                  <td className="px-2 py-1.5">
+                    <ValuationCell listing={l} />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <LeadCell listing={l} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ListingCell({ listing }: { listing: ListingDiagnostic }) {
+  const ymm = [listing.year, listing.make, listing.model, listing.trim]
+    .filter((x) => x !== null && x !== "")
+    .join(" ");
+  const label = listing.title ?? (ymm || listing.normalized_listing_id);
+  return (
+    <div className="space-y-0.5">
+      {listing.listing_url ? (
+        <a
+          href={listing.listing_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2"
+        >
+          {label}
+        </a>
+      ) : (
+        <span>{label}</span>
+      )}
+      <div className="text-muted-foreground">
+        {ymm || "—"} · VIN {listing.vin ?? "—"} ·{" "}
+        {listing.mileage !== null ? `${formatNumber(listing.mileage)} mi` : "— mi"}
+      </div>
+    </div>
+  );
+}
+
+function ValuationCell({ listing }: { listing: ListingDiagnostic }) {
+  if (listing.valuation_status === "hit") {
+    return <span className="text-foreground">hit · {formatMoney(listing.mmr_value)}</span>;
+  }
+  if (listing.valuation_status === "miss") {
+    return (
+      <span className="text-muted-foreground">
+        miss · {listing.valuation_missing_reason ?? "—"}
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground">—</span>;
+}
+
+function LeadCell({ listing }: { listing: ListingDiagnostic }) {
+  if (!listing.lead_id) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  return (
+    <span className="text-foreground">
+      {listing.lead_grade ?? "—"}
+      {listing.lead_final_score !== null ? ` · ${formatNumber(listing.lead_final_score)}` : ""}
+    </span>
   );
 }
 

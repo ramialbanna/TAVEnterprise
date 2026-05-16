@@ -32,6 +32,28 @@ export interface IngestRunListFilter {
   status?: string;
 }
 
+/** One normalized listing in a run + why it did/did not become a lead. */
+export interface ListingDiagnostic {
+  normalized_listing_id: string;
+  title: string | null;
+  listing_url: string | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  trim: string | null;
+  price: number | null;
+  mileage: number | null;
+  vin: string | null;
+  valuation_status: "hit" | "miss" | null;
+  valuation_missing_reason: string | null;
+  mmr_value: number | null;
+  lead_id: string | null;
+  lead_grade: string | null;
+  lead_final_score: number | null;
+  lead_score_components: unknown | null;
+  vehicle_candidate_id: string | null;
+}
+
 export interface IngestRunDetail {
   run: IngestRunSummary;
   rawListingCount: number;
@@ -41,8 +63,97 @@ export interface IngestRunDetail {
   schemaDriftByType: Record<string, number>;
   createdLeadCount: number;
   createdLeadIds: string[];
+  /** Per-normalized-listing diagnostics for this run (Phase 4a). */
+  listings: ListingDiagnostic[];
   // dead_letters has no source_run linkage in the current schema, so it is
   // intentionally not reported per-run. See docs/APP_API.md.
+}
+
+type ValAgg = {
+  mmr_value: number | null;
+  missing_reason: string | null;
+  vehicle_candidate_id: string | null;
+  fetched_at: string;
+};
+type LeadAgg = {
+  id: string;
+  vehicle_candidate_id: string | null;
+  grade: string | null;
+  final_score: number | null;
+  score_components: unknown;
+};
+
+/**
+ * Pure assembly of per-listing diagnostics. For each normalized listing it joins
+ * the latest valuation snapshot (by `fetched_at`) and the lead (if any —
+ * `leads.normalized_listing_id` is UNIQUE). No I/O.
+ */
+export function buildListingDiagnostics(
+  normalized: Array<Record<string, unknown>>,
+  valuations: Array<Record<string, unknown>>,
+  leads: Array<Record<string, unknown>>,
+): ListingDiagnostic[] {
+  const valByListing = new Map<string, ValAgg>();
+  for (const v of valuations) {
+    const nlId = v.normalized_listing_id as string | null;
+    if (!nlId) continue;
+    const fetchedAt = (v.fetched_at as string | null) ?? "";
+    const prev = valByListing.get(nlId);
+    if (prev && prev.fetched_at >= fetchedAt) continue;
+    valByListing.set(nlId, {
+      mmr_value: (v.mmr_value as number | null) ?? null,
+      missing_reason: (v.missing_reason as string | null) ?? null,
+      vehicle_candidate_id: (v.vehicle_candidate_id as string | null) ?? null,
+      fetched_at: fetchedAt,
+    });
+  }
+
+  const leadByListing = new Map<string, LeadAgg>();
+  for (const l of leads) {
+    const nlId = l.normalized_listing_id as string | null;
+    if (!nlId) continue;
+    leadByListing.set(nlId, {
+      id: l.id as string,
+      vehicle_candidate_id: (l.vehicle_candidate_id as string | null) ?? null,
+      grade: (l.grade as string | null) ?? null,
+      final_score: (l.final_score as number | null) ?? null,
+      score_components: l.score_components ?? null,
+    });
+  }
+
+  return normalized.map((n) => {
+    const nlId = n.id as string;
+    const val = valByListing.get(nlId);
+    const lead = leadByListing.get(nlId);
+
+    let valuationStatus: "hit" | "miss" | null = null;
+    if (val) {
+      if (val.mmr_value !== null) valuationStatus = "hit";
+      else if (val.missing_reason !== null) valuationStatus = "miss";
+    }
+
+    return {
+      normalized_listing_id: nlId,
+      title: (n.title as string | null) ?? null,
+      listing_url: (n.listing_url as string | null) ?? null,
+      year: (n.year as number | null) ?? null,
+      make: (n.make as string | null) ?? null,
+      model: (n.model as string | null) ?? null,
+      trim: (n.trim as string | null) ?? null,
+      price: (n.price as number | null) ?? null,
+      mileage: (n.mileage as number | null) ?? null,
+      vin: (n.vin as string | null) ?? null,
+      valuation_status: valuationStatus,
+      valuation_missing_reason: valuationStatus === "miss" ? val!.missing_reason : null,
+      mmr_value: valuationStatus === "hit" ? val!.mmr_value : null,
+      lead_id: lead?.id ?? null,
+      lead_grade: lead?.grade ?? null,
+      lead_final_score: lead?.final_score ?? null,
+      lead_score_components: lead?.score_components ?? null,
+      vehicle_candidate_id:
+        lead?.vehicle_candidate_id ?? val?.vehicle_candidate_id ?? null,
+    };
+  });
 }
 
 /** Tally occurrences of `key` across rows. Rows with a null/undefined key are skipped. */
@@ -161,6 +272,35 @@ export async function getSourceRunDetail(
     .map((r) => r.id as string)
     .filter((x): x is string => typeof x === "string");
 
+  // Per-listing diagnostics (Phase 4a): every normalized listing in this run
+  // joined to its latest valuation snapshot and its lead (if any).
+  const { data: normRows, error: nErr } = await db
+    .from("normalized_listings")
+    .select("id, title, listing_url, year, make, model, trim, price, mileage, vin")
+    .eq("source_run_id", run.id);
+  if (nErr) throw nErr;
+
+  const normList = (normRows ?? []) as Array<Record<string, unknown>>;
+  const normIds = normList.map((r) => r.id as string).filter((x) => typeof x === "string");
+
+  let valRows: Array<Record<string, unknown>> = [];
+  let leadDiagRows: Array<Record<string, unknown>> = [];
+  if (normIds.length > 0) {
+    const { data: vData, error: vDErr } = await db
+      .from("valuation_snapshots")
+      .select("normalized_listing_id, mmr_value, missing_reason, vehicle_candidate_id, fetched_at")
+      .in("normalized_listing_id", normIds);
+    if (vDErr) throw vDErr;
+    valRows = (vData ?? []) as Array<Record<string, unknown>>;
+
+    const { data: lData, error: lDErr } = await db
+      .from("leads")
+      .select("id, normalized_listing_id, vehicle_candidate_id, grade, final_score, score_components")
+      .in("normalized_listing_id", normIds);
+    if (lDErr) throw lDErr;
+    leadDiagRows = (lData ?? []) as Array<Record<string, unknown>>;
+  }
+
   return {
     run,
     rawListingCount,
@@ -170,5 +310,6 @@ export async function getSourceRunDetail(
     schemaDriftByType: countByKey((drift ?? []) as Array<Record<string, unknown>>, "event_type"),
     createdLeadCount: createdLeadIds.length,
     createdLeadIds,
+    listings: buildListingDiagnostics(normList, valRows, leadDiagRows),
   };
 }

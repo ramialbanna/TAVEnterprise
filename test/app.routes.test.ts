@@ -810,6 +810,7 @@ describe("GET /app/ingest-runs/:id", () => {
       schemaDriftByType: {},
       createdLeadCount: 0,
       createdLeadIds: [],
+      listings: [],
     });
     const res = await worker.fetch(
       authedReq("/app/ingest-runs/11111111-1111-1111-1111-111111111111"),

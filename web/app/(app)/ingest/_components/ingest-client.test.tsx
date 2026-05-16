@@ -54,6 +54,28 @@ function okDetail(over: Partial<IngestRunDetail> = {}): ApiResult<IngestRunDetai
       schemaDriftByType: {},
       createdLeadCount: 0,
       createdLeadIds: [],
+      listings: [
+        {
+          normalized_listing_id: "nl_1",
+          title: "2020 Toyota Camry SE",
+          listing_url: "https://fb.com/1",
+          year: 2020,
+          make: "Toyota",
+          model: "Camry",
+          trim: "SE",
+          price: 18500,
+          mileage: 62000,
+          vin: null,
+          valuation_status: "miss",
+          valuation_missing_reason: "trim_missing",
+          mmr_value: null,
+          lead_id: null,
+          lead_grade: null,
+          lead_final_score: null,
+          lead_score_components: null,
+          vehicle_candidate_id: null,
+        },
+      ],
       ...over,
     },
   };
@@ -150,6 +172,10 @@ describe("IngestClient", () => {
     expect(screen.getByRole("heading", { name: /valuation misses/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /schema drift/i })).toBeInTheDocument();
     expect(screen.getByText(/missing_identifier/i)).toBeInTheDocument();
+    // Phase 4a per-listing diagnostics table.
+    expect(screen.getByRole("heading", { name: /^listings \(/i })).toBeInTheDocument();
+    expect(screen.getByText("2020 Toyota Camry SE")).toBeInTheDocument();
+    expect(screen.getByText(/miss · trim_missing/i)).toBeInTheDocument();
     // dead_letters explicitly unavailable per current schema
     expect(screen.getByRole("heading", { name: /dead letters/i })).toBeInTheDocument();
   });
