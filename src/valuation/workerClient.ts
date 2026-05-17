@@ -9,6 +9,7 @@ import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
+import { selectCatalogStyleForListing } from "./selectCatalogStyle";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -104,6 +105,16 @@ const IntelOkEnvelopeSchema = z.object({
   data:    MmrResponseEnvelopeSchema,
 });
 
+const IntelCatalogEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    items: z.array(z.string()),
+    catalogState: z.enum(["connected", "not_connected"]),
+    cached: z.boolean(),
+    reason: z.string().nullable(),
+  }),
+});
+
 const TIMEOUT_MS = 5_000;
 
 export class WorkerTimeoutError extends Error {
@@ -137,6 +148,60 @@ export class WorkerUnavailableError extends Error {
  * obviously internal so it doesn't get mistaken for a real production URL in logs.
  */
 const SERVICE_BINDING_PLACEHOLDER_BASE = "https://tav-intelligence-worker.internal";
+
+async function fetchCatalogStyles(args: {
+  baseUrl: string;
+  env: Env;
+  useServiceBinding: boolean;
+  year: number;
+  make: string;
+  model: string;
+  serviceSecretConfigured: boolean;
+}): Promise<string[] | null> {
+  const path =
+    `/catalog/years/${encodeURIComponent(String(args.year))}` +
+    `/makes/${encodeURIComponent(args.make)}` +
+    `/models/${encodeURIComponent(args.model)}/styles`;
+  const endpoint = `${args.baseUrl}${path}`;
+  const requestInit: RequestInit = {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "x-tav-service-secret": args.env.INTEL_WORKER_SECRET,
+    },
+  };
+
+  try {
+    const res = args.useServiceBinding
+      ? await args.env.INTEL_WORKER!.fetch(endpoint, requestInit)
+      : await fetch(endpoint, requestInit);
+    if (!res.ok) {
+      log("ingest.mmr_catalog_styles_http_error", {
+        endpoint,
+        status: res.status,
+        service_secret_header_present: args.serviceSecretConfigured,
+      });
+      return null;
+    }
+    const raw = await res.json();
+    const parsed = IntelCatalogEnvelopeSchema.safeParse(raw);
+    if (!parsed.success) {
+      log("ingest.mmr_catalog_styles_envelope_invalid", {
+        endpoint,
+        issues: parsed.error.issues.slice(0, 5),
+      });
+      return null;
+    }
+    if (parsed.data.data.catalogState !== "connected") return null;
+    return parsed.data.data.items;
+  } catch (err) {
+    log("ingest.mmr_catalog_styles_fetch_failed", {
+      endpoint,
+      error: err instanceof Error ? err.name : String(err),
+    });
+    return null;
+  }
+}
 
 /**
  * Call tav-intelligence-worker for an MMR valuation lookup.
@@ -178,6 +243,8 @@ async function performMmrCall(
   if (!baseUrl) return { kind: "miss", reason: "not_configured", method: null };
 
   const { vin, year, make, model, mileage } = params;
+  const useServiceBinding = hasServiceBinding;
+  const serviceSecretConfigured = isConfiguredSecret(env.INTEL_WORKER_SECRET);
 
   let endpoint: string;
   let body: Record<string, unknown>;
@@ -239,7 +306,46 @@ async function performMmrCall(
 
     endpoint = `${baseUrl}/mmr/year-make-model`;
     body = { year, make: sendMake, model: sendModel, mileage };
-    const sendTrim = normalized.trim?.trim() || effectiveTrim;
+    let sendTrim = normalized.trim?.trim() || effectiveTrim;
+    const catalogStyles = await fetchCatalogStyles({
+      baseUrl,
+      env,
+      useServiceBinding,
+      year,
+      make: sendMake,
+      model: sendModel,
+      serviceSecretConfigured,
+    });
+    if (catalogStyles !== null) {
+      const selected = selectCatalogStyleForListing({
+        styles: catalogStyles,
+        title: params.title,
+        trim: sendTrim,
+      });
+      if (!selected) {
+        log("ingest.mmr_catalog_style_unmatched", {
+          year,
+          make: sendMake,
+          model: sendModel,
+          style_count: catalogStyles.length,
+          trim_present: sendTrim.length > 0,
+          title_present: typeof params.title === "string" && params.title.trim().length > 0,
+        });
+        return {
+          kind: "miss",
+          reason: "trim_missing",
+          method: "year_make_model",
+          normalizationConfidence: normalized.normalizationConfidence,
+        };
+      }
+      sendTrim = selected.style;
+      log("ingest.mmr_catalog_style_selected", {
+        year,
+        make: sendMake,
+        model: sendModel,
+        matched_signals: selected.matchedSignals,
+      });
+    }
     if (sendTrim) body.trim = sendTrim;
 
     // exact and alias both yield "medium"; partial/none degrades to "low"
@@ -262,9 +368,6 @@ async function performMmrCall(
 
   // Prefer Cloudflare Service Binding when configured (avoids CF 1042 between
   // same-account Workers on public URLs).
-  const useServiceBinding = hasServiceBinding;
-
-  const serviceSecretConfigured = isConfiguredSecret(env.INTEL_WORKER_SECRET);
   log("ingest.mmr_worker_called", {
     endpoint,
     http_method: "POST",
