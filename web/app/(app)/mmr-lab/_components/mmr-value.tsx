@@ -7,7 +7,9 @@ import { formatMoney } from "@/lib/format";
 export const DASH = "--";
 
 export function MmrMoney({ value }: { value: number | null | undefined }) {
-  return <span>{typeof value === "number" ? formatMoney(value) : DASH}</span>;
+  // Number.isFinite (not typeof) so NaN/Infinity also fall to DASH and can
+  // never reach formatMoney's em-dash branch — keeps the empty token "--".
+  return <span>{Number.isFinite(value) ? formatMoney(value as number) : DASH}</span>;
 }
 
 export function MmrRange({
@@ -17,7 +19,7 @@ export function MmrRange({
   low: number | null | undefined;
   high: number | null | undefined;
 }) {
-  if (typeof low !== "number" || typeof high !== "number") {
+  if (!Number.isFinite(low) || !Number.isFinite(high)) {
     return <span>{DASH}</span>;
   }
   return (

@@ -19,6 +19,16 @@ describe("MmrMoney / MmrRange — honest empty", () => {
     expect(screen.getByText("$48,600")).toBeInTheDocument();
   });
 
+  it("renders $0 for a real zero (not collapsed to --)", () => {
+    render(<MmrMoney value={0} />);
+    expect(screen.getByText("$0")).toBeInTheDocument();
+  });
+
+  it("renders -- for NaN (never the em-dash from formatMoney)", () => {
+    render(<MmrMoney value={NaN} />);
+    expect(screen.getByText("--")).toBeInTheDocument();
+  });
+
   it("range renders -- when either bound missing", () => {
     const { rerender } = render(<MmrRange low={null} high={51600} />);
     expect(screen.getByText("--")).toBeInTheDocument();
