@@ -1,84 +1,83 @@
 "use client";
 
 import { useCallback, useState } from "react";
-
 import { postMmrVin } from "@/lib/app-api/client";
-import type { ApiResult } from "@/lib/app-api";
-import type { MmrVinOk } from "@/lib/app-api/schemas";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-import { LookupForm, type LookupSubmit } from "./lookup-form";
-import { ResultPanel } from "./result-panel";
-import { HistoricalComparison } from "./historical-comparison";
+import { ErrorState, type ApiErrorResult } from "@/components/data-state";
+import { SearchPanel } from "./search-panel";
+import { ResultBand } from "./result-band";
+import { DataSections } from "./data-sections";
 
 /**
- * Client wrapper for the MMR Lab.
+ * MMR Lab client surface.
  *
- * Owns the local interaction state:
- *   - `result`       — most recent `ApiResult<MmrVinOk>` from `postMmrVin` (or `null`).
- *   - `askingPrice`  — client-only field used by `ResultPanel` to compute spread &
- *                      recommendation; NEVER sent to the API.
- *   - `lookedUpAt`   — ISO timestamp captured at submit time (the lean MMR envelope
- *                      does not return one, so we record the client clock).
- *   - `pending`      — disables the submit button while a request is in flight.
- *   - YMM + trim + year — captured from the form's client-only fields to drive
- *                      `HistoricalComparison`. Never reach `/app/mmr/vin` — VIN is the
- *                      canonical identity for year/make/model on the MMR side.
- *
- * Retry is wired to re-run the same payload that produced the current result.
+ * VIN is the ONLY valuation path: browser → postMmrVin → /api/app/mmr/vin →
+ * Worker. The lean envelope returns valuation only, so only Base MMR is ever
+ * populated; every other zone stays honest `--`. Year/Make/Model/Style is
+ * rendered DISABLED ("live catalog not connected") — there is no hardcoded
+ * catalog and no scraping; official metadata + YMM valuation are tracked in
+ * issue #45. No dummy prefill, no client-only YMM/asking/spread state.
  */
-export function MmrLabClient() {
-  const [result, setResult] = useState<ApiResult<MmrVinOk> | null>(null);
-  const [askingPrice, setAskingPrice] = useState<number | null>(null);
-  const [lookedUpAt, setLookedUpAt] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [lastSubmit, setLastSubmit] = useState<LookupSubmit | null>(null);
-  const [year, setYear] = useState<number | null>(null);
-  const [make, setMake] = useState<string | null>(null);
-  const [model, setModel] = useState<string | null>(null);
-  const [trim, setTrim] = useState<string | null>(null);
+type View =
+  | { kind: "empty" }
+  | { kind: "loading" }
+  | {
+      kind: "ok";
+      baseMmr: number;
+      confidence: "high" | "medium" | "low" | null;
+      method: string | null;
+    }
+  | { kind: "unavailable"; reason: string }
+  | { kind: "error"; error: ApiErrorResult };
 
-  const runLookup = useCallback(async (submit: LookupSubmit) => {
-    setLastSubmit(submit);
-    setAskingPrice(submit.askingPrice);
-    setMake(submit.make);
-    setModel(submit.model);
-    setTrim(submit.trim);
-    setYear(submit.year);
-    setPending(true);
-    setLookedUpAt(new Date().toISOString());
-    const r = await postMmrVin(submit.api);
-    setResult(r);
-    setPending(false);
+export function MmrLabClient() {
+  const [view, setView] = useState<View>({ kind: "empty" });
+  const [lastVin, setLastVin] = useState<string | null>(null);
+
+  const onVinSubmit = useCallback(async (vin: string) => {
+    setLastVin(vin);
+    setView({ kind: "loading" });
+    const res = await postMmrVin({ vin });
+    if (res.ok) {
+      setView({
+        kind: "ok",
+        baseMmr: res.data.mmrValue,
+        confidence: res.data.confidence ?? null,
+        method: res.data.method ?? null,
+      });
+    } else if (res.kind === "unavailable") {
+      setView({ kind: "unavailable", reason: res.error });
+    } else {
+      setView({ kind: "error", error: res });
+    }
   }, []);
 
-  const handleRetry = useCallback(() => {
-    if (lastSubmit) void runLookup(lastSubmit);
-  }, [lastSubmit, runLookup]);
-
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Lookup
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <LookupForm onLookup={(s) => void runLookup(s)} pending={pending} />
-          </CardContent>
-        </Card>
+    <div className="space-y-6">
+      <SearchPanel onVinSubmit={(v) => void onVinSubmit(v)} vinPending={view.kind === "loading"} />
 
-        <ResultPanel
-          result={result}
-          askingPrice={askingPrice}
-          lookedUpAt={lookedUpAt}
-          onRetry={lastSubmit ? handleRetry : undefined}
+      {lastVin && view.kind !== "empty" ? (
+        <div className="px-6 text-sm text-muted-foreground">
+          VIN: <span className="font-mono">{lastVin}</span>
+        </div>
+      ) : null}
+
+      {view.kind === "error" ? (
+        <div className="px-6">
+          <ErrorState
+            error={view.error}
+            onRetry={lastVin ? () => void onVinSubmit(lastVin) : undefined}
+          />
+        </div>
+      ) : (
+        <ResultBand
+          baseMmr={view.kind === "ok" ? view.baseMmr : null}
+          confidence={view.kind === "ok" ? view.confidence : null}
+          method={view.kind === "ok" ? view.method : null}
+          unavailableReason={view.kind === "unavailable" ? view.reason : null}
         />
-      </div>
+      )}
 
-      <HistoricalComparison year={year} make={make} model={model} trim={trim} />
+      <DataSections />
     </div>
   );
 }

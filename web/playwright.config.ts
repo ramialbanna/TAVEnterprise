@@ -15,6 +15,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // Failure artifacts (traces/auto-screenshots) — gitignored via `/test-results`.
+  // Deliberate state screenshots are written by specs to the committed
+  // `e2e/__screenshots__/` path instead.
+  outputDir: "test-results",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -23,6 +27,7 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
