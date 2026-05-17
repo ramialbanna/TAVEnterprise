@@ -117,6 +117,12 @@ function isMmrEnvelopeShape(b: unknown): boolean {
   return typeof b === "object" && b !== null && "ok" in (b as Record<string, unknown>) && "mmr_value" in (b as Record<string, unknown>);
 }
 
+function findFetchCallContaining(path: string): [string, RequestInit] {
+  const call = (fetch as ReturnType<typeof vi.fn>).mock.calls.find(([url]) => String(url).includes(path));
+  expect(call).toBeDefined();
+  return call as [string, RequestInit];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Default: YMM tests get a reference that exact-matches Toyota/Camry and Honda/Civic
@@ -246,7 +252,7 @@ describe("getMmrValueFromWorker — YMM path", () => {
       BASE_ENV,
     );
     expect(result).toMatchObject({ mmrValue: 16_000, confidence: "medium", method: "year_make_model" });
-    expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toContain("/mmr/year-make-model");
+    expect(findFetchCallContaining("/mmr/year-make-model")[0]).toContain("/mmr/year-make-model");
   });
 
   it("prefers VIN over YMM when both are present", async () => {
@@ -271,7 +277,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
 
-    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const [, opts] = findFetchCallContaining("/mmr/year-make-model");
     const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
     expect(sentBody.make).toBe("Chevrolet");
     expect(sentBody.model).toBe("Malibu");
@@ -333,7 +339,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
 
-    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const [, opts] = findFetchCallContaining("/mmr/year-make-model");
     const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
     expect(sentBody.make).toBe("Toyota");
     expect(sentBody.model).toBe("Camry");
@@ -360,7 +366,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
 
-    const [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
+    const [, opts] = findFetchCallContaining("/mmr/year-make-model");
     const sentBody = JSON.parse(opts.body as string) as Record<string, unknown>;
     // Cox MMR 1.4 YMMT requires bodyname (trim) as a path segment, so the
     // trim must cross the main-worker → intelligence-worker boundary.
@@ -723,7 +729,7 @@ describe("#41 title-trim fallback before trim_missing", () => {
     );
     expect(outcome.kind).toBe("hit");
     expect(fetch).toHaveBeenCalled();
-    const init = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+    const [, init] = findFetchCallContaining("/mmr/year-make-model");
     expect(JSON.parse(init.body as string).trim).toBe("XSE");
   });
 
@@ -735,5 +741,92 @@ describe("#41 title-trim fallback before trim_missing", () => {
     );
     expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("#43 Cox catalog style selection before YMM lookup", () => {
+  it("uses an exact catalog style instead of the loose title trim", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            items: ["4D CREW CAB XLT", "2D REGULAR CAB XL", "2D REGULAR CAB XLT"],
+            catalogState: "connected",
+            cached: false,
+            reason: null,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Ford"]),
+      models: new Map([["Ford", new Set(["F150"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2019,
+        make: "Ford",
+        model: "F150",
+        trim: "XL",
+        mileage: 138_000,
+        title: "2019 Ford F150 Regular Cab XL Pickup 2D 6 1/2 ft",
+      },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind).toBe("hit");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/catalog/years/2019/makes/Ford/models/F150/styles");
+    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(ymmInit.body as string).trim).toBe("2D REGULAR CAB XL");
+  });
+
+  it("returns trim_missing when the live catalog is available but style evidence is ambiguous", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        success: true,
+        data: {
+          items: ["4D CREW CAB RST", "4D DOUBLE CAB RST"],
+          catalogState: "connected",
+          cached: false,
+          reason: null,
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Chevrolet"]),
+      models: new Map([["Chevrolet", new Set(["Silverado 1500"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2020,
+        make: "Chevrolet",
+        model: "Silverado 1500",
+        trim: "RST",
+        mileage: 13_848,
+        title: "2020 Chevrolet Silverado 1500 RST Pickup 4D 5 3/4 ft",
+      },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
