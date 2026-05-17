@@ -380,7 +380,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
     expect(result).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => String(url).includes("/mmr/year-make-model"))).toBe(false);
   });
 
   it("whitespace-only trim short-circuits before fetch", async () => {
@@ -390,7 +390,7 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
     expect(result).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => String(url).includes("/mmr/year-make-model"))).toBe(false);
   });
 
   it("trim from params is present on result as lookupTrim", async () => {
@@ -547,7 +547,7 @@ describe("getMmrValueFromWorker — error cases", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("OUTCOME: YMM path with missing trim yields miss reason 'trim_missing' without calling worker (Cox YMMT requires bodyname)", async () => {
+  it("OUTCOME: YMM path with missing trim yields miss reason 'trim_missing' without valuation lookup (Cox YMMT requires bodyname)", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const outcome = await getMmrLookupOutcome(
       { year: 2020, make: "Toyota", model: "Camry", mileage: 45_000 },
@@ -557,7 +557,7 @@ describe("getMmrValueFromWorker — error cases", () => {
     if (outcome.kind !== "miss") return;
     expect(outcome.reason).toBe("trim_missing");
     expect(outcome.method).toBe("year_make_model");
-    expect(fetch).not.toHaveBeenCalled();
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => String(url).includes("/mmr/year-make-model"))).toBe(false);
   });
 
   it("OUTCOME: incomplete YMM (no make) yields miss reason 'insufficient_params'", async () => {
@@ -740,7 +740,7 @@ describe("#41 title-trim fallback before trim_missing", () => {
       BASE_ENV,
     );
     expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
-    expect(fetch).not.toHaveBeenCalled();
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) => String(url).includes("/mmr/year-make-model"))).toBe(false);
   });
 });
 
@@ -828,5 +828,111 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
 
     expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("#53 Cox catalog model variant selection before style lookup", () => {
+  it("uses an exact Cox model variant when drivetrain evidence is present", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], catalogState: "not_connected", cached: false, reason: "not_found" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: ["K5 AWD", "K5 FWD"], catalogState: "connected", cached: false, reason: null },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: ["4D SEDAN GT-LINE", "4D SEDAN LXS"], catalogState: "connected", cached: false, reason: null },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Kia"]),
+      models: new Map([["Kia", new Set(["K5"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2021,
+        make: "Kia",
+        model: "K5",
+        trim: "GT-Line",
+        mileage: 47_532,
+        title: "2021 Kia K5 AWD GT-Line Sedan 4D",
+      },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind).toBe("hit");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/catalog/years/2021/makes/Kia/models/K5/styles");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/catalog/years/2021/makes/Kia/models");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/catalog/years/2021/makes/Kia/models/K5%20AWD/styles");
+    const ymmInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    const sentBody = JSON.parse(ymmInit.body as string) as Record<string, unknown>;
+    expect(sentBody.model).toBe("K5 AWD");
+    expect(sentBody.trim).toBe("4D SEDAN GT-LINE");
+  });
+
+  it("returns model_variant_missing when Cox splits the model but listing evidence cannot choose AWD/FWD", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: [], catalogState: "not_connected", cached: false, reason: "not_found" },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: { items: ["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"], catalogState: "connected", cached: false, reason: null },
+        }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Honda"]),
+      models: new Map([["Honda", new Set(["CR-V"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2016,
+        make: "Honda",
+        model: "CR-V",
+        trim: "Sport Utility",
+        mileage: 79_200,
+        title: "2016 Honda CR-V Sport Utility 4D",
+      },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind === "miss" && outcome.reason).toBe("model_variant_missing");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
