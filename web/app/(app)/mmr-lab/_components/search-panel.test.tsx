@@ -1,13 +1,13 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SearchPanel } from "./search-panel";
 
-describe("SearchPanel", () => {
+afterEach(() => vi.restoreAllMocks());
+
+describe("SearchPanel (revised: disabled Y/M/M/S — live catalog not connected)", () => {
   it("VIN submit fires only for an 11-17 char VIN", () => {
     const onVinSubmit = vi.fn();
-    render(
-      <SearchPanel onVinSubmit={onVinSubmit} onIdentityChange={vi.fn()} vinPending={false} />,
-    );
+    render(<SearchPanel onVinSubmit={onVinSubmit} vinPending={false} />);
     const vin = screen.getByPlaceholderText(/enter vin/i);
     fireEvent.change(vin, { target: { value: "SHORT" } });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
@@ -17,54 +17,27 @@ describe("SearchPanel", () => {
     expect(onVinSubmit).toHaveBeenCalledWith("1FT7W2BT4KED81759");
   });
 
-  it("Make disabled until Year, Model until Make, Style until Model", () => {
-    render(
-      <SearchPanel onVinSubmit={vi.fn()} onIdentityChange={vi.fn()} vinPending={false} />,
-    );
-    expect(screen.getByLabelText(/make/i)).toBeDisabled();
-    expect(screen.getByLabelText(/model/i)).toBeDisabled();
-    expect(screen.getByLabelText(/style/i)).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2026" } });
-    expect(screen.getByLabelText(/make/i)).not.toBeDisabled();
-    expect(screen.getByLabelText(/model/i)).toBeDisabled();
+  it("Year/Make/Model/Style selectors are visible but disabled", () => {
+    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
+    for (const label of [/year/i, /make/i, /model/i, /style/i]) {
+      const sel = screen.getByLabelText(label);
+      expect(sel).toBeInTheDocument();
+      expect(sel).toBeDisabled();
+    }
   });
 
-  it("full Y/M/M/S selection emits identity and fires NO network call", () => {
+  it("explains the live catalog / API access is not connected yet", () => {
+    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
+    expect(screen.getByText(/live catalog not connected/i)).toBeInTheDocument();
+  });
+
+  it("performs NO network call on mount or any interaction", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const onIdentityChange = vi.fn();
-    render(
-      <SearchPanel
-        onVinSubmit={vi.fn()}
-        onIdentityChange={onIdentityChange}
-        vinPending={false}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2026" } });
-    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "CADILLAC" } });
-    fireEvent.change(screen.getByLabelText(/model/i), { target: { value: "ESCALADE IQ" } });
-    fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV SPORT" } });
-    expect(onIdentityChange).toHaveBeenLastCalledWith({
-      year: 2026,
-      make: "CADILLAC",
-      model: "ESCALADE IQ",
-      style: "4D SUV SPORT",
-    });
+    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
+    const vin = screen.getByPlaceholderText(/enter vin/i);
+    fireEvent.change(vin, { target: { value: "TOO-SHORT" } });
+    fireEvent.click(screen.getByRole("button", { name: /search/i }));
+    // disabled selectors cannot be changed; nothing here may touch the network
     expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
-  });
-
-  it("changing Year clears make/model/style", () => {
-    const onIdentityChange = vi.fn();
-    render(
-      <SearchPanel
-        onVinSubmit={vi.fn()}
-        onIdentityChange={onIdentityChange}
-        vinPending={false}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2026" } });
-    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "CADILLAC" } });
-    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2019" } });
-    expect(onIdentityChange).toHaveBeenLastCalledWith({ year: 2019 });
   });
 });

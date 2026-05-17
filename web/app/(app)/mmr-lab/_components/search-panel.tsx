@@ -3,18 +3,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getMakes, getModels, getStyles, getYears } from "../_data/interim-catalog";
-
-export type VehicleIdentity = {
-  year?: number;
-  make?: string;
-  model?: string;
-  style?: string;
-};
 
 type Props = {
   onVinSubmit: (vin: string) => void;
-  onIdentityChange: (identity: VehicleIdentity) => void;
   vinPending: boolean;
 };
 
@@ -25,51 +16,19 @@ const selectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
-export function SearchPanel({ onVinSubmit, onIdentityChange, vinPending }: Props) {
+// Year/Make/Model/Style are intentionally rendered but DISABLED. There is no
+// hardcoded vehicle catalog and no scraping. A live catalog requires official
+// Manheim/Cox metadata access (tracked in #45); until then these are inert and
+// VIN is the only valuation path. Do NOT wire local constants here.
+const SELECTOR_LABELS = ["Year", "Make", "Model", "Style"] as const;
+
+export function SearchPanel({ onVinSubmit, vinPending }: Props) {
   const [vin, setVin] = useState("");
-  const [year, setYear] = useState("");
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
-  const [style, setStyle] = useState("");
-
-  function emit(next: { year: string; make: string; model: string; style: string }) {
-    const id: VehicleIdentity = {};
-    if (next.year) id.year = Number(next.year);
-    if (next.make) id.make = next.make;
-    if (next.model) id.model = next.model;
-    if (next.style) id.style = next.style;
-    onIdentityChange(id);
-  }
-
-  function changeYear(v: string) {
-    setYear(v);
-    setMake("");
-    setModel("");
-    setStyle("");
-    emit({ year: v, make: "", model: "", style: "" });
-  }
-  function changeMake(v: string) {
-    setMake(v);
-    setModel("");
-    setStyle("");
-    emit({ year, make: v, model: "", style: "" });
-  }
-  function changeModel(v: string) {
-    setModel(v);
-    setStyle("");
-    emit({ year, make, model: v, style: "" });
-  }
-  function changeStyle(v: string) {
-    setStyle(v);
-    emit({ year, make, model, style: v });
-  }
 
   function submitVin() {
     const v = vin.trim();
     if (v.length >= VIN_MIN && v.length <= VIN_MAX) onVinSubmit(v);
   }
-
-  const yearNum = year ? Number(year) : null;
 
   return (
     <div>
@@ -107,6 +66,7 @@ export function SearchPanel({ onVinSubmit, onIdentityChange, vinPending }: Props
           <Button
             type="button"
             aria-label="Search VIN"
+            aria-busy={vinPending}
             disabled={vinPending}
             onClick={submitVin}
           >
@@ -115,71 +75,24 @@ export function SearchPanel({ onVinSubmit, onIdentityChange, vinPending }: Props
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <select
-            aria-label="Year"
-            className={selectClass}
-            value={year}
-            onChange={(e) => changeYear(e.target.value)}
-          >
-            <option value="">Year</option>
-            {getYears().map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="Make"
-            className={selectClass}
-            value={make}
-            disabled={!year}
-            onChange={(e) => changeMake(e.target.value)}
-          >
-            <option value="">Make</option>
-            {yearNum != null &&
-              getMakes(yearNum).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-          </select>
-
-          <select
-            aria-label="Model"
-            className={selectClass}
-            value={model}
-            disabled={!make}
-            onChange={(e) => changeModel(e.target.value)}
-          >
-            <option value="">Model</option>
-            {yearNum != null &&
-              make &&
-              getModels(yearNum, make).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-          </select>
-
-          <select
-            aria-label="Style"
-            className={selectClass}
-            value={style}
-            disabled={!model}
-            onChange={(e) => changeStyle(e.target.value)}
-          >
-            <option value="">Style</option>
-            {yearNum != null &&
-              make &&
-              model &&
-              getStyles(yearNum, make, model).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-          </select>
+          {SELECTOR_LABELS.map((label) => (
+            <select
+              key={label}
+              aria-label={label}
+              className={selectClass}
+              value=""
+              disabled
+              title="Live catalog not connected"
+            >
+              <option value="">{label}</option>
+            </select>
+          ))}
         </div>
+
+        <p className="text-xs text-muted-foreground">
+          Live catalog not connected — Year/Make/Model/Style lookup needs official
+          Manheim/Cox metadata access (tracked in #45). Use a VIN for a valuation.
+        </p>
       </div>
     </div>
   );
