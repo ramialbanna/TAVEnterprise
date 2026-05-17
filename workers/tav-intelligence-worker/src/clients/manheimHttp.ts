@@ -14,6 +14,8 @@
  */
 
 import type { Env } from "../types/env";
+import type { ContractProbeReport } from "./valuationsContractProbe";
+import { executeContractProbe } from "./valuationsContractProbe";
 import type {
   ManheimClient,
   ManheimVinResponse,
@@ -292,6 +294,21 @@ export class ManheimHttpClient implements ManheimClient {
       requestId:  args.requestId,
       lookupType: "ymm",
       startMs:    start,
+    });
+  }
+
+  async runContractProbe(requestId: string): Promise<ContractProbeReport> {
+    return executeContractProbe({
+      env: this.env,
+      fetchFn: this.fetchFn,
+      requestId,
+      getToken: async () => {
+        try {
+          return { token: await this.getAccessToken(requestId) };
+        } catch (error) {
+          return { token: null, error };
+        }
+      },
     });
   }
 

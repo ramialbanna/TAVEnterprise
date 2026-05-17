@@ -4,6 +4,14 @@ import type { Env } from "../../types/env";
 import type { ApiResponse } from "../../types/api";
 import { AuthError } from "../../errors";
 
+const mockRunContractProbe = vi.fn();
+
+vi.mock("../../clients/manheimHttp", () => ({
+  ManheimHttpClient: vi.fn().mockImplementation(() => ({
+    runContractProbe: mockRunContractProbe,
+  })),
+}));
+
 // Universal fluent chain mock. All chainable methods return `this`; terminal
 // async methods (range, maybeSingle) are controlled per-test. The chain is
 // also thenable so `await query` works for handlers that don't call an
@@ -87,6 +95,45 @@ describe("dispatch", () => {
     });
     await expect(dispatch(req, { ...env, INTEL_SERVICE_SECRET: "replace_me" }, "req-secret"))
       .rejects.toBeInstanceOf(AuthError);
+  });
+
+  it("does not allow unauthenticated contract-probe access", async () => {
+    const req = new Request("https://example.test/admin/valuations/contract-probe", {
+      method: "GET",
+    });
+    await expect(dispatch(req, env, "req-probe-no-auth"))
+      .rejects.toBeInstanceOf(AuthError);
+    expect(mockRunContractProbe).not.toHaveBeenCalled();
+  });
+
+  it("dispatches GET /admin/valuations/contract-probe with service identity", async () => {
+    mockRunContractProbe.mockResolvedValueOnce({
+      vendorConfigured: "cox",
+      grantType: "client_credentials",
+      scopeConfigured: true,
+      tokenObtained: false,
+      tokenClassified: "not_provisioned",
+      probes: [],
+      recommendation: "blocked_not_provisioned",
+    });
+
+    const req = new Request("https://example.test/admin/valuations/contract-probe", {
+      method: "GET",
+      headers: {
+        "x-tav-service-secret": "service-secret",
+      },
+    });
+    const res = await dispatch(
+      req,
+      { ...env, INTEL_SERVICE_SECRET: "service-secret" },
+      "req-probe",
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockRunContractProbe).toHaveBeenCalledWith("req-probe");
+    const body = (await res.json()) as ApiResponse<{ recommendation: string }>;
+    expect(body.data?.recommendation).toBe("blocked_not_provisioned");
+    expect(JSON.stringify(body)).not.toContain("service-secret");
   });
 
   it("dispatches GET /kpis/summary when authenticated", async () => {
