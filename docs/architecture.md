@@ -52,13 +52,13 @@ Buy-Box Learning Layer   (rules updated from real outcomes)
 ├── .dev.vars.example
 ├── .gitignore
 ├── docs/
-│   ├── PRODUCT_SPEC.md
-│   ├── ARCHITECTURE.md    ← this file (or symlink)
-│   ├── DATA_MODEL.md
-│   ├── IMPLEMENTATION_PLAN.md
+│   ├── architecture.md    ← this file
+│   ├── HANDOFF.md
+│   ├── ROADMAP.md
 │   ├── RUNBOOK.md
-│   ├── SECURITY.md
-│   └── API_CONTRACTS.md
+│   ├── APP_API.md
+│   ├── COX_API_INTEGRATION.md
+│   └── archive/
 ├── supabase/
 │   ├── schema.sql
 │   └── migrations/

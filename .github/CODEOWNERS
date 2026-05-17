@@ -15,4 +15,3 @@
 # CI / deploy / hooks — security-sensitive.
 /.github/               @ramialbanna
 /.claude/               @ramialbanna
-/scripts/               @ramialbanna

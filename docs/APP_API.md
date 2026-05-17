@@ -6,7 +6,7 @@ TAV-owned frontend/dashboard. This is the source of truth for frontend integrati
 - **Worker:** `tav-aip` (same Worker as `/ingest`, `/admin/*`, `/health` — see `docs/architecture.md`).
 - **Implementation:** `src/index.ts` → `src/app/routes.ts` (`handleApp`).
 - **Origin / ADR:** `docs/adr/0002-frontend-app-api-layer.md`.
-- **Status:** all 5 endpoints implemented + live on `tav-aip-staging` and `tav-aip-production` (2026-05-11; see `docs/app-api-smoke-2026-05-11.md`).
+- **Status:** base `/app/*` endpoints implemented + live on `tav-aip-staging` and `tav-aip-production` (2026-05-11; historical smoke evidence is archived under `docs/archive/2026-05-mvp/uat-staging/`).
 
 ## Base URLs
 
@@ -425,6 +425,6 @@ Tracked in `docs/followups.md`:
 ## Related docs
 
 - `docs/adr/0002-frontend-app-api-layer.md` — decision record + rationale.
-- `docs/app-api-smoke-2026-05-11.md` — deploy + smoke evidence (both rounds).
+- `docs/archive/2026-05-mvp/uat-staging/app-api-smoke-2026-05-11.md` — historical deploy + smoke evidence.
 - `docs/architecture.md` — the four HTTP surfaces, repo layout, env, routes.
 - `docs/INTELLIGENCE_CONTRACTS.md` — the intel-worker contracts behind `/app/mmr/vin`.

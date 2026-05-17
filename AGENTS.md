@@ -1,7 +1,7 @@
-<claude-mem-context>
-# Memory Context
+# TAV-AIP Agent Pointer
 
-# [TAV-AIP] recent context, 2026-05-09 7:00am CDT
-
-No previous sessions found.
-</claude-mem-context>
+- Start with `CLAUDE.md`, then `docs/HANDOFF.md`, `docs/architecture.md`, `docs/RUNBOOK.md`, and `docs/ROADMAP.md`.
+- Keep the four concepts separate: Raw Listing, Normalized Listing, Vehicle Candidate, Lead.
+- Do not re-enable RuFlo / claude-flow autopilot or recreate `.claude-flow` / `.swarm` without explicit governance approval.
+- Never log, commit, or paste secrets or licensed Cox/Manheim valuation figures.
+- Verify scoped changes before claiming done.

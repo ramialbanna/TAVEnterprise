@@ -1,12 +1,12 @@
-# GitHub Integration — TAV-VAIP
+# GitHub Integration — TAV-AIP
 
 > Companion to CLAUDE.md §4 and `.claude/agents/gh-integration.md`. Pulled in via `@docs/github.md`.
 
 ## Repo facts
-- **URL:** https://github.com/ramialbanna/TAV-VAIP
-- **Owner / repo:** `ramialbanna/TAV-VAIP`
+- **URL:** https://github.com/ramialbanna/TAVEnterprise
+- **Owner / repo:** `ramialbanna/TAVEnterprise`
 - **Default branch:** `main`
-- **Visibility:** public
+- **Visibility:** private/internal
 
 ## Workflow files
 
@@ -26,7 +26,7 @@
 `.github/pull_request_template.md` — built around the verification report from `docs/verification/template.md`. The TAV self-check tickboxes are mandatory; merging without them is a process violation, not a style nit.
 
 ## CODEOWNERS
-`@ramialbanna` owns everything by default, with explicit ownership called out for `CLAUDE.md`, `docs/architecture.md`, `docs/identity.md`, `docs/voice.md`, `docs/adr/`, `supabase/`, `src/sources/`, `.github/`, `.claude/`, and `scripts/`.
+`@ramialbanna` owns everything by default, with explicit ownership called out for `CLAUDE.md`, `docs/architecture.md`, `docs/identity.md`, `docs/voice.md`, `docs/adr/`, `supabase/`, `src/sources/`, `.github/`, and `.claude/`.
 
 ## Branch protection (configure in repo Settings)
 Required for `main`:
@@ -65,29 +65,6 @@ A PR may be merged only when:
 5. The diff respects the four-concept rule (Raw / Normalized / Vehicle Candidate / Lead).
 
 These are non-negotiable. The `gh-integration` subagent will not bypass them, and humans should not either.
-
-## Bootstrap (empty repo first push)
-
-The repo at `ramialbanna/TAV-VAIP` is currently empty. To seed it:
-
-```bash
-cd /path/to/tav-vaip-local
-git init -b main
-git remote add origin https://github.com/ramialbanna/TAV-VAIP.git
-
-# copy the starter kit contents into this directory first
-git add .
-git commit -m "chore: bootstrap TAV-VAIP with starter kit (CLAUDE.md, .claude/, .github/, docs/)"
-git push -u origin main
-```
-
-After the first push:
-1. Add the three required repo secrets above.
-2. Add `STAGING_HEALTH_URL` repo variable.
-3. Configure branch protection on `main`.
-4. Create the `staging` environment.
-5. (Optional) `claude /install-github-app` from a local Claude Code session to wire `CLAUDE_CODE_OAUTH_TOKEN`.
-6. Open the first issue using `source_adapter.md` for the Facebook adapter (or use `docs/architecture.md` §18 step 1 — project foundation — as the inaugural PR).
 
 ## Day-to-day commands (cheat sheet)
 
