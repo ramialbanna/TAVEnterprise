@@ -245,6 +245,40 @@ describe("parseFacebookItem — valid cases", () => {
     expect(r.listing.make).toBe("honda");
     expect(r.listing.model).toBe("accord");
   });
+
+  it("A21: Facebook title separator does not leak into model", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/21", title: "2013 Toyota RAV4 · XLE Sport Utility 4D", price: "$10,500", mileage: "147000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("toyota");
+    expect(r.listing.model).toBe("rav4");
+    expect(r.listing.trim).toBe("xle");
+  });
+
+  it("A22: separator after single-token model does not become part of Alfa Romeo model", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/22", title: "2017 Alfa Romeo Giulia · Sedan 4D", price: "$10,000", mileage: "99000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("alfa romeo");
+    expect(r.listing.model).toBe("giulia");
+  });
+
+  it("A23: canonical Mercedes-Benz make wins before Mercedes alias", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/23", title: "2015 Mercedes-Benz E-Class", price: "$33,968", mileage: "87800" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("mercedes-benz");
+    expect(r.listing.model).toBe("e-class");
+  });
 });
 
 // ── Group B: Edge cases ───────────────────────────────────────────────────────
