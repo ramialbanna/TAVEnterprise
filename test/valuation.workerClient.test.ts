@@ -654,3 +654,86 @@ describe("getMmrValueFromWorker — error cases", () => {
     expect((init.headers as Record<string, string>)["x-tav-service-secret"]).toBe("secret-xyz");
   });
 });
+
+// ── #41 Phase 4b: actionable miss reasons + title-trim fallback ───────────────
+
+/** Non-2xx mock that also exposes res.text() carrying the intel error envelope. */
+function mockFetchErr(status: number, code: string) {
+  const envelope = JSON.stringify({
+    success: false,
+    error: { code, message: "x" },
+    requestId: "r",
+    timestamp: "2026-05-16T00:00:00.000Z",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status,
+      json: vi.fn().mockResolvedValue(JSON.parse(envelope)),
+      text: vi.fn().mockResolvedValue(envelope),
+    }),
+  );
+}
+
+describe("#41 actionable miss reasons (non-2xx is no longer flattened)", () => {
+  it("HTTP 400 → cox_bad_request", async () => {
+    mockFetchErr(400, "validation_error");
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_bad_request");
+  });
+
+  it("HTTP 401 → cox_auth", async () => {
+    mockFetchErr(401, "auth_error");
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_auth");
+  });
+
+  it("HTTP 502 manheim_response_error → cox_vendor_bad_response", async () => {
+    mockFetchErr(502, "manheim_response_error");
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_vendor_bad_response");
+  });
+
+  it("HTTP 502 manheim_auth_error → cox_vendor_auth", async () => {
+    mockFetchErr(502, "manheim_auth_error");
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_vendor_auth");
+  });
+
+  it("HTTP 502 manheim_unavailable → cox_unavailable (preserved)", async () => {
+    mockFetchErr(502, "manheim_unavailable");
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_unavailable");
+  });
+
+  it("opaque non-2xx with no parseable body falls back to status mapping", async () => {
+    mockFetch(503, { ok: false, error: "unavailable" });
+    const o = await getMmrLookupOutcome({ vin: "1HGCM82633A004352" }, BASE_ENV);
+    expect(o.kind === "miss" && o.reason).toBe("cox_unavailable");
+  });
+});
+
+describe("#41 title-trim fallback before trim_missing", () => {
+  it("derives a trim from the title and performs the YMM lookup", async () => {
+    mockFetch(200, ENVELOPE_YMM);
+    const outcome = await getMmrLookupOutcome(
+      { year: 2020, make: "Toyota", model: "Camry", mileage: 45_000, title: "2020 Toyota Camry XSE" },
+      BASE_ENV,
+    );
+    expect(outcome.kind).toBe("hit");
+    expect(fetch).toHaveBeenCalled();
+    const init = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(init.body as string).trim).toBe("XSE");
+  });
+
+  it("still returns trim_missing when the title has no recognizable token", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const outcome = await getMmrLookupOutcome(
+      { year: 2011, make: "Toyota", model: "Camry", mileage: 136_000, title: "2011 Toyota Camry" },
+      BASE_ENV,
+    );
+    expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

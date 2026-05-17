@@ -318,6 +318,29 @@ Note: `tav.dead_letters` has no `source_run_id` column in the current schema,
 so dead letters are intentionally **not** reported per-run. Surfacing them
 would require a schema change and is out of scope for v1.5.
 
+#### Valuation miss reasons (`valuation_missing_reason` / `valuationMissByReason` keys)
+
+Source of truth: `src/valuation/workerClient.ts → MmrMissReason`. As of Phase 4b
+(#41) an intel non-2xx is no longer flattened to a single `cox_unavailable`;
+it is classified from intel's structured `error.code` (non-secret) and HTTP
+status:
+
+| Reason | Meaning | Actionable by |
+|---|---|---|
+| `not_configured` | No intel binding/URL configured | Operator |
+| `insufficient_params` | No VIN and incomplete YMM | Source data |
+| `mileage_missing` | YMM requires mileage | Source data |
+| `trim_missing` | No trim and none derivable from title (Cox YMMT needs a bodyname) | Source data / normalization |
+| `cox_no_data` | Intel 2xx negative envelope (Cox 404 — no match) | Expected (no MMR for this YMM/VIN) |
+| `cox_bad_request` | Intel rejected our request body (400 / `validation_error`) | **Us** (payload/shape) |
+| `cox_auth` | Intel auth gate (401/403 / `auth_error`) | **Us** (service identity) |
+| `cox_vendor_auth` | Cox rejected intel's credentials (`manheim_auth_error`) | Operator (Cox creds) |
+| `cox_vendor_bad_response` | Cox returned a non-404 unusable response (`manheim_response_error`) — e.g. a trim sent where Cox expects a bodyname | Normalization / Cox mapping |
+| `cox_unavailable` | Intel/Cox down (5xx / `manheim_unavailable` / unclassified) | Retry / vendor |
+| `cox_rate_limited` | 429 / `manheim_rate_limited` | Retry / backoff |
+| `cox_timeout` | Exceeded the worker call timeout | Retry |
+| `envelope_invalid` | Intel 2xx but body off-contract | **Us** (contract drift) |
+
 Failure: unknown run id → `404 { "ok": false, "error": "not_found" }`.
 Supabase client cannot be constructed, or any diagnostic query throws →
 `503 { "ok": false, "error": "db_error" }`.
