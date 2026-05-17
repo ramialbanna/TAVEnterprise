@@ -266,7 +266,7 @@ export async function ingestCore(
       } else {
         try {
           const outcome = await getMmrLookupOutcome(
-            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage },
+            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage, title: listing.title },
             env,
           );
           if (outcome.kind === "hit") {

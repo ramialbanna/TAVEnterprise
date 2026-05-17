@@ -8,6 +8,7 @@ import { loadMmrReferenceData } from "./loadMmrReferenceData";
 import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
+import { extractTitleTrim } from "./extractTitleTrim";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -18,8 +19,15 @@ import { isConfiguredSecret } from "../types/envValidation";
  *   mileage_missing      — YMM path requires mileage; not provided
  *   trim_missing         — Cox YMMT requires bodyname (trim) as path segment
  *   cox_no_data          — worker returned a negative envelope (ok=false or mmr_value=null)
- *   cox_unavailable      — worker returned a non-2xx response
- *   cox_rate_limited     — worker returned 429
+ *   cox_bad_request      — intel rejected our request body (400 / validation_error):
+ *                          actionable on OUR side (payload/shape)
+ *   cox_auth             — intel auth gate (401/403 / auth_error): service identity
+ *   cox_vendor_auth      — Cox/Manheim rejected intel's credentials (manheim_auth_error)
+ *   cox_vendor_bad_response — Cox returned a non-404 unusable response
+ *                          (manheim_response_error) — e.g. trim sent as bodyname
+ *   cox_unavailable      — intel/vendor is down (5xx / manheim_unavailable /
+ *                          unclassified non-2xx)
+ *   cox_rate_limited     — worker/vendor rate limited (429 / manheim_rate_limited)
  *   cox_timeout          — request exceeded TIMEOUT_MS
  *   envelope_invalid     — worker returned 2xx but body did not match the contract
  */
@@ -29,10 +37,53 @@ export type MmrMissReason =
   | "mileage_missing"
   | "trim_missing"
   | "cox_no_data"
+  | "cox_bad_request"
+  | "cox_auth"
+  | "cox_vendor_auth"
+  | "cox_vendor_bad_response"
   | "cox_unavailable"
   | "cox_rate_limited"
   | "cox_timeout"
   | "envelope_invalid";
+
+/**
+ * Map an intel non-2xx response to a specific, actionable miss reason.
+ * Prefers the structured `error.code` from intel's error envelope
+ * (`{ success:false, error:{ code } }` — non-secret, see
+ * tav-intelligence-worker/src/types/api.ts); falls back to HTTP status when
+ * the body is absent/unparseable. Never inspects secrets.
+ */
+export function classifyIntelHttpError(
+  status: number,
+  responseText: string,
+): MmrMissReason {
+  let code: string | undefined;
+  try {
+    const parsed = JSON.parse(responseText) as { error?: { code?: unknown } };
+    if (parsed && typeof parsed.error === "object" && parsed.error !== null) {
+      const c = (parsed.error as { code?: unknown }).code;
+      if (typeof c === "string") code = c;
+    }
+  } catch {
+    /* unparseable / empty → status-based fallback below */
+  }
+
+  switch (code) {
+    case "validation_error":     return "cox_bad_request";
+    case "auth_error":           return "cox_auth";
+    case "manheim_auth_error":   return "cox_vendor_auth";
+    case "manheim_response_error": return "cox_vendor_bad_response";
+    case "manheim_rate_limited":
+    case "rate_limited":         return "cox_rate_limited";
+    case "manheim_unavailable":
+    case "external_api_error":   return "cox_unavailable";
+  }
+
+  if (status === 400) return "cox_bad_request";
+  if (status === 401 || status === 403) return "cox_auth";
+  if (status === 429) return "cox_rate_limited";
+  return "cox_unavailable";
+}
 
 export type MmrLookupOutcome =
   | { kind: "hit"; result: MmrResult }
@@ -159,8 +210,18 @@ async function performMmrCall(
     if (mileage === undefined) {
       return { kind: "miss", reason: "mileage_missing", method: "year_make_model" };
     }
-    const preTrim = params.trim?.trim();
-    if (!preTrim) {
+    // Trim resolution: explicit trim first, then a title-derived real token
+    // (never fabricated) before declaring trim_missing. Cox YMMT requires a
+    // 4th path segment; a recoverable token keeps the listing in the running.
+    let effectiveTrim = params.trim?.trim() || "";
+    if (!effectiveTrim) {
+      const derived = extractTitleTrim(params.title);
+      if (derived) {
+        effectiveTrim = derived;
+        log("ingest.mmr_trim_from_title", { derived_trim: derived });
+      }
+    }
+    if (!effectiveTrim) {
       return { kind: "miss", reason: "trim_missing", method: "year_make_model" };
     }
 
@@ -168,7 +229,7 @@ async function performMmrCall(
     const db = getSupabaseClient(env);
     const ref = await loadMmrReferenceData(db);
     const normalized = normalizeMmrParams(
-      { make, model, trim: params.trim ?? null },
+      { make, model, trim: effectiveTrim },
       ref,
     );
 
@@ -178,7 +239,7 @@ async function performMmrCall(
 
     endpoint = `${baseUrl}/mmr/year-make-model`;
     body = { year, make: sendMake, model: sendModel, mileage };
-    const sendTrim = normalized.trim?.trim();
+    const sendTrim = normalized.trim?.trim() || effectiveTrim;
     if (sendTrim) body.trim = sendTrim;
 
     // exact and alias both yield "medium"; partial/none degrades to "low"
@@ -192,7 +253,7 @@ async function performMmrCall(
     normalizationMeta = {
       lookupMake: normalized.canonicalMake,
       lookupModel: normalized.canonicalModel,
-      lookupTrim: params.trim ?? null,
+      lookupTrim: effectiveTrim,
       normalizationConfidence: normalized.normalizationConfidence,
     };
   } else {
@@ -268,7 +329,12 @@ async function performMmrCall(
       response_text:                 responseText,
     });
 
-    return { kind: "miss", reason: "cox_unavailable", method, httpStatus: res.status };
+    return {
+      kind: "miss",
+      reason: classifyIntelHttpError(res.status, responseText),
+      method,
+      httpStatus: res.status,
+    };
   }
 
   let data: unknown;
@@ -345,6 +411,10 @@ export async function getMmrValueFromWorker(
   switch (outcome.reason) {
     case "cox_timeout":      throw new WorkerTimeoutError();
     case "cox_rate_limited": throw new WorkerRateLimitError();
+    case "cox_bad_request":
+    case "cox_auth":
+    case "cox_vendor_auth":
+    case "cox_vendor_bad_response":
     case "cox_unavailable":  throw new WorkerUnavailableError(outcome.httpStatus ?? 0);
     default:                 return null;
   }

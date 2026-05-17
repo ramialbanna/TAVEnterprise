@@ -31,6 +31,12 @@ export interface MmrParams {
   model?: string;
   trim?: string;
   mileage?: number;
+  /**
+   * Normalized listing title. Used only as a YMM fallback to recover a
+   * real trim/body token the normalizer didn't capture, before declaring
+   * `trim_missing`. Never fabricated — see extractTitleTrim.
+   */
+  title?: string;
 }
 
 const TOKEN_KV_KEY = "manheim:token";
