@@ -28,11 +28,14 @@ import type { IngestRunListFilter } from "../persistence/ingestRuns";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import {
+  classifyIntelHttpError,
   getMmrValueFromWorker,
   WorkerTimeoutError,
   WorkerRateLimitError,
   WorkerUnavailableError,
 } from "../valuation/workerClient";
+import { MmrResponseEnvelopeSchema } from "../types/intelligence";
+import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { log, serializeError } from "../logging/logger";
@@ -40,6 +43,7 @@ import { VERSION } from "../version";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+const INTEL_SERVICE_BINDING_BASE = "https://tav-intelligence-worker.internal";
 
 /**
  * Body schema for POST /app/mmr/vin. Deliberately narrower than the intelligence
@@ -50,6 +54,26 @@ const AppMmrVinRequestSchema = z.object({
   vin: z.string().trim().min(11).max(17),
   year: z.number().int().min(1900).max(2100).optional(),
   mileage: z.number().int().nonnegative().max(2_000_000).optional(),
+});
+const AppMmrYmmRequestSchema = z.object({
+  year: z.number().int().min(1900).max(2100),
+  make: z.string().trim().min(1).max(64),
+  model: z.string().trim().min(1).max(128),
+  style: z.string().trim().min(1).max(128),
+  mileage: z.number().int().nonnegative().max(2_000_000),
+});
+const IntelCatalogEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    items: z.array(z.string()),
+    catalogState: z.enum(["connected", "not_connected"]),
+    cached: z.boolean(),
+    reason: z.string().nullable(),
+  }),
+});
+const IntelMmrEnvelopeSchema = z.object({
+  success: z.literal(true),
+  data: MmrResponseEnvelopeSchema,
 });
 
 function json(body: unknown, status = 200): Response {
@@ -101,6 +125,39 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     }
     if (request.method === "POST" && pathname === "/app/mmr/vin") {
       return await handleMmrVin(request, env);
+    }
+    if (request.method === "POST" && pathname === "/app/mmr/ymm") {
+      return await handleMmrYmm(request, env);
+    }
+    if (request.method === "GET" && pathname === "/app/mmr/catalog/years") {
+      return await handleMmrCatalog(env, "/catalog/years");
+    }
+    if (request.method === "GET" && pathname === "/app/mmr/catalog/makes") {
+      const year = url.searchParams.get("year");
+      return await handleMmrCatalog(env, year ? `/catalog/years/${encodeURIComponent(year)}/makes` : null);
+    }
+    if (request.method === "GET" && pathname === "/app/mmr/catalog/models") {
+      const year = url.searchParams.get("year");
+      const make = url.searchParams.get("make");
+      return await handleMmrCatalog(
+        env,
+        year && make
+          ? `/catalog/years/${encodeURIComponent(year)}/makes/${encodeURIComponent(make)}/models`
+          : null,
+      );
+    }
+    if (request.method === "GET" && pathname === "/app/mmr/catalog/styles") {
+      const year = url.searchParams.get("year");
+      const make = url.searchParams.get("make");
+      const model = url.searchParams.get("model");
+      return await handleMmrCatalog(
+        env,
+        year && make && model
+          ? `/catalog/years/${encodeURIComponent(year)}` +
+            `/makes/${encodeURIComponent(make)}` +
+            `/models/${encodeURIComponent(model)}/styles`
+          : null,
+      );
     }
     if (request.method === "GET" && pathname === "/app/ingest-runs") {
       return await handleIngestRunsList(env, url);
@@ -419,6 +476,213 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
     log("app.mmr_vin.worker_error", { missingReason, error: serializeError(err) });
     return json({ ok: true, data: { mmrValue: null, missingReason } });
   }
+}
+
+type AppCatalogData = z.infer<typeof IntelCatalogEnvelopeSchema>["data"];
+
+function catalogNotConnected(reason: string): Response {
+  return json({
+    ok: true,
+    data: {
+      items: [],
+      catalogState: "not_connected",
+      cached: false,
+      reason,
+    } satisfies AppCatalogData,
+  });
+}
+
+function intelWorkerEndpoint(env: Env, path: string): { endpoint: string; useServiceBinding: boolean } | null {
+  const useServiceBinding = env.INTEL_WORKER !== undefined;
+  const baseUrl =
+    env.INTEL_WORKER_URL || (useServiceBinding ? INTEL_SERVICE_BINDING_BASE : "");
+  if (!baseUrl || !isConfiguredSecret(env.INTEL_WORKER_SECRET)) return null;
+  return {
+    endpoint: `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`,
+    useServiceBinding,
+  };
+}
+
+async function fetchIntelWorker(
+  env: Env,
+  path: string,
+  init: RequestInit,
+): Promise<Response | null> {
+  const target = intelWorkerEndpoint(env, path);
+  if (target === null) return null;
+
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  headers.set("x-tav-service-secret", env.INTEL_WORKER_SECRET);
+
+  const requestInit: RequestInit = { ...init, headers };
+  return target.useServiceBinding
+    ? await env.INTEL_WORKER!.fetch(target.endpoint, requestInit)
+    : await fetch(target.endpoint, requestInit);
+}
+
+async function handleMmrCatalog(env: Env, intelPath: string | null): Promise<Response> {
+  if (intelPath === null) {
+    return json({ ok: false, error: "invalid_filter" }, 400);
+  }
+
+  let res: Response | null;
+  try {
+    res = await fetchIntelWorker(env, intelPath, { method: "GET" });
+  } catch (err) {
+    log("app.mmr_catalog.worker_fetch_failed", {
+      path: intelPath.split("?")[0],
+      error: serializeError(err),
+    });
+    return catalogNotConnected("intel_worker_unavailable");
+  }
+
+  if (res === null) {
+    return catalogNotConnected("intel_worker_not_configured");
+  }
+
+  const body = await readResponseJson(res);
+  if (!res.ok) {
+    log("app.mmr_catalog.worker_error", {
+      path: intelPath.split("?")[0],
+      status: res.status,
+    });
+    return catalogNotConnected(
+      res.status === 401 || res.status === 403 ? "intel_worker_auth_failed" : "intel_worker_unavailable",
+    );
+  }
+
+  const parsed = IntelCatalogEnvelopeSchema.safeParse(body);
+  if (!parsed.success) {
+    log("app.mmr_catalog.worker_envelope_invalid", {
+      path: intelPath.split("?")[0],
+      issues: parsed.error.issues.slice(0, 5),
+    });
+    return catalogNotConnected("envelope_invalid");
+  }
+
+  return json({ ok: true, data: parsed.data.data });
+}
+
+async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = AppMmrYmmRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
+  }
+
+  const { year, make, model, style, mileage } = parsed.data;
+  const body = { year, make, model, trim: style, mileage };
+
+  let res: Response | null;
+  try {
+    res = await fetchIntelWorker(env, "/mmr/year-make-model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    log("app.mmr_ymm.worker_fetch_failed", { error: serializeError(err) });
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_unavailable" } });
+  }
+
+  if (res === null) {
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
+  }
+
+  const responseText = await res.text();
+  const responseJson = parseJsonText(responseText);
+  if (!res.ok) {
+    const missingReason = classifyIntelHttpError(res.status, responseText);
+    log("app.mmr_ymm.worker_error", {
+      status: res.status,
+      missingReason,
+      body_keys: Object.keys(body).sort(),
+    });
+    return json({ ok: true, data: { mmrValue: null, missingReason } });
+  }
+
+  const wrapped = IntelMmrEnvelopeSchema.safeParse(responseJson);
+  if (!wrapped.success) {
+    log("app.mmr_ymm.worker_envelope_invalid", {
+      issues: wrapped.error.issues.slice(0, 5),
+    });
+    return json({ ok: true, data: { mmrValue: null, missingReason: "envelope_invalid" } });
+  }
+
+  const envelope = wrapped.data.data;
+  if (!envelope.ok || envelope.mmr_value === null) {
+    return json({
+      ok: true,
+      data: {
+        mmrValue: null,
+        missingReason: envelope.error_code ?? "no_mmr_value",
+      },
+    });
+  }
+
+  const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
+  const payloadItem = firstPayloadItem(envelope.mmr_payload);
+  return json({
+    ok: true,
+    data: {
+      mmrValue: envelope.mmr_value,
+      confidence: "medium",
+      method: "year_make_model",
+      mileageUsed: envelope.mileage_used,
+      avgOdometer: readNumericField(payloadItem, "averageOdometer"),
+      avgCondition: readNumericField(payloadItem, "averageGrade"),
+      sampleCount: distribution.sampleCount,
+      rangeLow: distribution.wholesaleRough,
+      rangeHigh: distribution.wholesaleClean,
+      adjustedMmr: distribution.wholesaleAvg ?? envelope.mmr_value,
+      retailValue: distribution.retailAvg,
+      retailRangeLow: distribution.retailRough,
+      retailRangeHigh: distribution.retailClean,
+    },
+  });
+}
+
+async function readResponseJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonText(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function firstPayloadItem(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  const candidate = Array.isArray(record.items) && record.items.length > 0 ? record.items[0] : record;
+  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null;
+}
+
+function readNumericField(record: Record<string, unknown> | null, key: string): number | null {
+  if (record === null) return null;
+  const value = record[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
 }
 
 /** Valid source_run statuses — mirrors the CHECK in supabase/schema.sql. */

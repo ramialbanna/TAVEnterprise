@@ -4,9 +4,32 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+export type MmrSelection = {
+  year: string;
+  make: string;
+  model: string;
+  style: string;
+  mileage: string;
+};
+
+export type MmrCatalogOptions = {
+  years: string[];
+  makes: string[];
+  models: string[];
+  styles: string[];
+  catalogState: "connected" | "not_connected";
+  reason: string | null;
+  loading: "years" | "makes" | "models" | "styles" | null;
+};
+
 type Props = {
   onVinSubmit: (vin: string) => void;
   vinPending: boolean;
+  selection: MmrSelection;
+  catalog: MmrCatalogOptions;
+  onSelectionChange: (next: MmrSelection) => void;
+  onYmmSubmit: () => void;
+  ymmPending: boolean;
 };
 
 const VIN_MIN = 11;
@@ -16,13 +39,28 @@ const selectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
-// Year/Make/Model/Style are intentionally rendered but DISABLED. There is no
-// hardcoded vehicle catalog and no scraping. A live catalog requires official
-// Manheim/Cox metadata access (tracked in #45); until then these are inert and
-// VIN is the only valuation path. Do NOT wire local constants here.
-const SELECTOR_LABELS = ["Year", "Make", "Model", "Style"] as const;
+const emptySelection: MmrSelection = {
+  year: "",
+  make: "",
+  model: "",
+  style: "",
+  mileage: "",
+};
 
-export function SearchPanel({ onVinSubmit, vinPending }: Props) {
+function numericMileage(raw: string): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 2_000_000 ? n : null;
+}
+
+export function SearchPanel({
+  onVinSubmit,
+  vinPending,
+  selection,
+  catalog,
+  onSelectionChange,
+  onYmmSubmit,
+  ymmPending,
+}: Props) {
   const [vin, setVin] = useState("");
 
   function submitVin() {
@@ -30,16 +68,24 @@ export function SearchPanel({ onVinSubmit, vinPending }: Props) {
     if (v.length >= VIN_MIN && v.length <= VIN_MAX) onVinSubmit(v);
   }
 
+  const mileage = numericMileage(selection.mileage);
+  const canSubmitYmm =
+    catalog.catalogState === "connected" &&
+    selection.year !== "" &&
+    selection.make !== "" &&
+    selection.model !== "" &&
+    selection.style !== "" &&
+    mileage !== null &&
+    !ymmPending;
+
   return (
     <div>
-      {/* Blue MMR bar */}
       <div className="bg-primary px-6 py-4">
         <span className="text-lg font-semibold tracking-tight text-primary-foreground">
           MMR
         </span>
       </div>
 
-      {/* Gray search panel */}
       <div className="space-y-3 bg-surface-sunken px-6 py-4">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -74,24 +120,132 @@ export function SearchPanel({ onVinSubmit, vinPending }: Props) {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {SELECTOR_LABELS.map((label) => (
-            <select
-              key={label}
-              aria-label={label}
-              className={selectClass}
-              value=""
-              disabled
-              title="Live catalog not connected"
-            >
-              <option value="">{label}</option>
-            </select>
-          ))}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1.4fr_1.6fr_1.8fr_1fr_auto]">
+          <select
+            aria-label="Year"
+            className={selectClass}
+            value={selection.year}
+            disabled={catalog.catalogState !== "connected" || catalog.loading === "years"}
+            onChange={(e) =>
+              onSelectionChange({
+                ...emptySelection,
+                year: e.target.value,
+              })
+            }
+          >
+            <option value="">Year</option>
+            {catalog.years.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Make"
+            className={selectClass}
+            value={selection.make}
+            disabled={
+              catalog.catalogState !== "connected" ||
+              selection.year === "" ||
+              catalog.loading === "makes"
+            }
+            onChange={(e) =>
+              onSelectionChange({
+                ...selection,
+                make: e.target.value,
+                model: "",
+                style: "",
+              })
+            }
+          >
+            <option value="">Make</option>
+            {catalog.makes.map((make) => (
+              <option key={make} value={make}>
+                {make}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Model"
+            className={selectClass}
+            value={selection.model}
+            disabled={
+              catalog.catalogState !== "connected" ||
+              selection.make === "" ||
+              catalog.loading === "models"
+            }
+            onChange={(e) =>
+              onSelectionChange({
+                ...selection,
+                model: e.target.value,
+                style: "",
+              })
+            }
+          >
+            <option value="">Model</option>
+            {catalog.models.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="Style"
+            className={selectClass}
+            value={selection.style}
+            disabled={
+              catalog.catalogState !== "connected" ||
+              selection.model === "" ||
+              catalog.loading === "styles"
+            }
+            onChange={(e) =>
+              onSelectionChange({
+                ...selection,
+                style: e.target.value,
+              })
+            }
+          >
+            <option value="">Style</option>
+            {catalog.styles.map((style) => (
+              <option key={style} value={style}>
+                {style}
+              </option>
+            ))}
+          </select>
+
+          <Input
+            aria-label="Mileage"
+            inputMode="numeric"
+            placeholder="Miles"
+            value={selection.mileage}
+            onChange={(e) =>
+              onSelectionChange({
+                ...selection,
+                mileage: e.target.value.replace(/[^\d]/g, ""),
+              })
+            }
+          />
+
+          <Button
+            type="button"
+            aria-label="Value selected vehicle"
+            disabled={!canSubmitYmm}
+            aria-busy={ymmPending}
+            onClick={onYmmSubmit}
+          >
+            {ymmPending ? "…" : "Value"}
+          </Button>
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Live catalog not connected — Year/Make/Model/Style lookup needs official
-          Manheim/Cox metadata access (tracked in #45). Use a VIN for a valuation.
+          {catalog.catalogState === "connected"
+            ? "Live Manheim/Cox catalog connected. Y/M/M/S valuation requires style and miles."
+            : `Live catalog not connected${
+                catalog.reason ? ` — ${catalog.reason}` : ""
+              }. Use VIN while metadata is unavailable.`}
         </p>
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   IngestRunSummaryListSchema,
   IngestRunDetailSchema,
   KpisSchema,
+  MmrCatalogSchema,
   MmrVinOkSchema,
   SystemStatusSchema,
   type HistoricalSale,
@@ -12,6 +13,7 @@ import {
   type IngestRunSummary,
   type IngestRunDetail,
   type Kpis,
+  type MmrCatalog,
   type MmrVinOk,
   type SystemStatus,
 } from "./schemas";
@@ -217,6 +219,14 @@ export function parseMmrVin(status: number, json: unknown): ApiResult<MmrVinOk> 
     };
   }
   return { ok: true, data: parsed.data, status };
+}
+
+export function parseMmrYmm(status: number, json: unknown): ApiResult<MmrVinOk> {
+  return parseMmrVin(status, json);
+}
+
+export function parseMmrCatalog(status: number, json: unknown): ApiResult<MmrCatalog> {
+  return interpret(status, json, MmrCatalogSchema);
 }
 
 // ── metric-block helper (KPI: outcomes/leads/listings) ─────────────────────────

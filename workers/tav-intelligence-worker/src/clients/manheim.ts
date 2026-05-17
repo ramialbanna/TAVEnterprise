@@ -29,6 +29,15 @@ export interface ManheimYmmResponse {
   retryCount: number;
 }
 
+export interface ManheimCatalogResponse {
+  /** Catalog labels exactly as returned by Cox, preserving source order. */
+  items: string[];
+  /** Full Cox payload for internal diagnostics; callers must not log values. */
+  payload: Record<string, unknown>;
+  fetched_at: string;
+  retryCount: number;
+}
+
 export interface ManheimClient {
   lookupByVin(args: {
     vin:       string;

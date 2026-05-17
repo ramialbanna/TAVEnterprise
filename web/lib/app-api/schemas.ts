@@ -117,6 +117,16 @@ export const MmrVinOkSchema = z.object({
   mmrValue: z.number(),
   confidence: z.enum(["high", "medium", "low"]),
   method: z.enum(["vin", "year_make_model"]).nullable(),
+  mileageUsed: z.number().nullable().optional(),
+  avgOdometer: z.number().nullable().optional(),
+  avgCondition: z.number().nullable().optional(),
+  sampleCount: z.number().nullable().optional(),
+  rangeLow: z.number().nullable().optional(),
+  rangeHigh: z.number().nullable().optional(),
+  adjustedMmr: z.number().nullable().optional(),
+  retailValue: z.number().nullable().optional(),
+  retailRangeLow: z.number().nullable().optional(),
+  retailRangeHigh: z.number().nullable().optional(),
 });
 export const MmrVinUnavailableSchema = z.object({
   mmrValue: z.null(),
@@ -124,6 +134,14 @@ export const MmrVinUnavailableSchema = z.object({
 });
 export type MmrVinOk = z.infer<typeof MmrVinOkSchema>;
 export type MmrVinUnavailable = z.infer<typeof MmrVinUnavailableSchema>;
+
+export const MmrCatalogSchema = z.object({
+  items: z.array(z.string()),
+  catalogState: z.enum(["connected", "not_connected"]),
+  cached: z.boolean(),
+  reason: z.string().nullable(),
+});
+export type MmrCatalog = z.infer<typeof MmrCatalogSchema>;
 
 // ── GET /app/ingest-runs ───────────────────────────────────────────────────────
 // Snake_case fields — the Worker returns tav.source_runs columns verbatim
