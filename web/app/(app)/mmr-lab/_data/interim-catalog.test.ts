@@ -56,4 +56,24 @@ describe("interim-catalog (bounded validated sample — NOT live Manheim)", () =
     expect(getModels(2026, "FERRARI")).toEqual([]);
     expect(getStyles(2026, "CADILLAC", "LYRIQ 2WD")).toEqual([]);
   });
+
+  it("getModels preserves Manheim source order (not alphabetical)", () => {
+    expect(getModels(2026, "CADILLAC")).toEqual([
+      "ESCALADE 4WD",
+      "ESCALADE AWD",
+      "ESCALADE ESV 2WD",
+      "ESCALADE ESV 4WD",
+      "ESCALADE ESV AWD",
+      "ESCALADE IQ",
+      "ESCALADE IQL",
+      "LYRIQ 2WD",
+      "LYRIQ AWD",
+      "OPTIQ",
+      "VISTIQ",
+      "XT5 AWD 4C",
+      "XT5 AWD V6",
+      "XT5 FWD 4C",
+      "XT5 FWD V6",
+    ]);
+  });
 });

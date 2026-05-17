@@ -54,6 +54,8 @@ export function getYears(): number[] {
   return [...YEARS];
 }
 
+// Makes are alphabetized for scanability; models preserve Manheim source
+// order (do not add .sort() to getModels — cascade order is a UX contract).
 export function getMakes(year: number): string[] {
   return Object.keys(CATALOG[year] ?? {}).sort();
 }
