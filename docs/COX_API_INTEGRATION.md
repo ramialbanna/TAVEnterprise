@@ -1,12 +1,17 @@
 # Cox/Manheim Wholesale-Valuations API Integration
 
-**Status:** Sandbox access provisioned 2026-05-08 for the TAV Evaluation app.
-**Replaces:** Legacy `uat.api.manheim.com/valuations` integration (account not provisioned for that path).
+**Status:** Production-bound Cox Storefront integration. PR #50 wires the live
+catalog and YMM valuation path for Issue #45.
+**Chosen path:** Cox Storefront
+`/wholesale-valuations/vehicle/mmr-lookup/*` for catalog metadata and
+`/wholesale-valuations/vehicle/mmr/search/*` for YMM valuation.
+**Not chosen:** legacy Manheim `/valuations/*`; production probing classified it
+as not provisioned for this account.
 **Implementation home:** `workers/tav-intelligence-worker/src/clients/manheimHttp.ts`
 
 ---
 
-## 1. Sandbox account facts
+## 1. Production account facts
 
 | Field | Value |
 |---|---|
@@ -15,8 +20,9 @@
 | Grant type | `client_credentials` |
 | Scope | `wholesale-valuations.vehicle.mmr-ext.get` (single value, no spaces) |
 | Token URL | `https://authorize.coxautoinc.com/oauth2/.../v1/token` (exact path is per-app — copy from the Cox app detail page; do not guess) |
-| MMR API base | `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr` (note trailing `/mmr` — per MMR 1.4 spec) |
-| Endpoints enabled | see §3 below — MMR 1.4 endpoints |
+| MMR API base | production Cox Storefront wholesale-valuations base ending in `/wholesale-valuations/vehicle/mmr` |
+| Catalog path family | `/mmr-lookup/*` |
+| Valuation path family | `/search/*` |
 | Required headers (lookup) | `Accept: application/vnd.coxauto.v1+json`, `Content-Type: application/vnd.coxauto.v1+json` |
 
 > **Do not use the `title-services` sample scope** that appears in some Cox docs.
@@ -68,7 +74,7 @@ grant_type=client_credentials&scope=wholesale-valuations.vehicle.mmr-ext.get
 
 ---
 
-## 3. MMR 1.4 endpoints
+## 3. MMR endpoints
 
 All lookup requests carry:
 
@@ -78,26 +84,25 @@ Accept:        application/vnd.coxauto.v1+json
 Content-Type:  application/vnd.coxauto.v1+json
 ```
 
-`MANHEIM_MMR_URL` is set to the full base ending in `/mmr` —
-`https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr`.
-Code appends path segments per the MMR 1.4 OpenAPI:
+`MANHEIM_MMR_URL` is set to the full Cox Storefront base ending in
+`/wholesale-valuations/vehicle/mmr`. Code appends path segments from that base:
 
 | Function | Method | Path appended | Phase |
 |---|---|---|---|
 | Single VIN | GET | `/vin/{vin}` | this phase |
-| VIN + subseries | GET | `/vin/{vin}/{subseries}` | deferred |
-| VIN + subseries + transmission | GET | `/vin/{vin}/{subseries}/{transmission}` | deferred |
-| YMMT (short form) | GET | `/search/{year}/{makename}/{modelname}/{bodyname}` | this phase (trim-gated) |
-| YMMT (long form) | GET | `/search/years/{year}/makes/{makename}/models/{modelname}/trims/{bodyname}` | deferred |
-| Reference (colors) | GET | `/colors` | deferred |
-| Reference (edition) | GET | `/edition` | deferred |
-| Reference (grades) | GET | `/grades` | deferred |
-| Reference (regions) | GET | `/regions`, `/regions/auction/id/{auction_id}`, `/regions/id/{region_id}` | deferred |
+| Catalog years | GET | `/mmr-lookup/years` | PR #50 |
+| Catalog makes | GET | `/mmr-lookup/years/{year}/makes` | PR #50 |
+| Catalog models | GET | `/mmr-lookup/years/{year}/makes/{make}/models` | PR #50 |
+| Catalog trims/styles | GET | `/mmr-lookup/years/{year}/makes/{make}/models/{model}/trims` | PR #50 |
+| YMMT valuation | GET | `/search/{year}/{makename}/{modelname}/{bodyname}` | PR #50 (trim + odometer gated) |
 
 **Trim gating:** the YMMT endpoint requires `bodyname` (trim) as a path segment.
 `ManheimHttpClient.lookupByYmm` short-circuits to a null envelope (`mmr_value: null`,
 no fetch, log `manheim.http.skipped { reason: "cox_ymm_requires_trim" }`) when trim
 is missing or whitespace-only and vendor=cox.
+
+**Mileage gating:** app-facing YMM valuation requires finite odometer mileage before
+the vendor call. A selected Year/Make/Model/Style without mileage is identity only.
 
 ### 3a. Query parameters (Cox MMR 1.4)
 
@@ -121,28 +126,18 @@ is identified.
 
 ---
 
-## 4. Open verification items (before first live call)
+## 4. Production verification items
 
-Resolved by the MMR 1.4 guide (no longer open):
-- `odometer` is supported on both `/vin/{vin}` and `/search/...` — code now sends it.
-- Response shape is documented and parsed via `extractManheimDistribution`
-  (`adjustedPricing.wholesale.{above,average,below}`, `adjustedPricing.retail.{above,average,below}`,
-  `sampleSize`).
-- Endpoint paths and methods are confirmed.
+Production probing already chose Cox Storefront over legacy `/valuations/*`.
+Before enabling any new surface, validate through the server-side Worker path only:
 
-Still open:
-
-1. **Token URL exact path** — copy the full URL from the Cox app detail page; the
-   `.../oauth2/<authServerId>/v1/token` segment is account-scoped.
-2. **`bodyname` format coupling** — `normalizeMmrParams` returns trim pass-through
-   (no alias table). Listing-source trim values may not match Cox's accepted
-   `bodyname` strings. The future plan is to use Cox's `mmr-lookup` endpoints
-   as the source-of-truth for make/model/trim alias data; tracked in
-   `docs/followups.md`.
-3. **Subseries / transmission disambiguation** — deferred; the bare `/vin/{vin}`
-   variant ships in this phase.
-4. **Long-form YMMT path** (`/search/years/.../makes/...`) — deferred in favor of
-   the short form `/search/{year}/{make}/{model}/{bodyname}`.
+1. Token can be fetched with production credentials.
+2. Catalog years/makes/models/trims return non-empty metadata.
+3. YMM valuation requires style/bodyname and odometer before the vendor call.
+4. `401`, `403`, `596`, and `invalid_scope` degrade to not-provisioned /
+   unavailable state, never fake catalog data.
+5. Logs and PR/issue comments contain only classifications and shape metadata,
+   never secrets or licensed valuation figures.
 
 Tests guard the URL templates, query params, and headers so any product-guide-driven
 correction surfaces as a unit-test failure before deploy.
@@ -192,7 +187,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 
 ## 7. Environment configuration
 
-| Env var | Value (sandbox) | Source |
+| Env var | Value | Source |
 |---|---|---|
 | `MANHEIM_API_VENDOR` | `cox` | wrangler secret |
 | `MANHEIM_GRANT_TYPE` | `client_credentials` | wrangler secret |
@@ -200,7 +195,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 | `MANHEIM_CLIENT_ID` | (from Cox app detail) | wrangler secret |
 | `MANHEIM_CLIENT_SECRET` | (from Cox app detail) | wrangler secret |
 | `MANHEIM_TOKEN_URL` | `https://authorize.coxautoinc.com/oauth2/.../v1/token` | wrangler secret |
-| `MANHEIM_MMR_URL` | `https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr` | wrangler secret |
+| `MANHEIM_MMR_URL` | production Cox Storefront MMR base ending in `/wholesale-valuations/vehicle/mmr` | wrangler secret |
 | `MANHEIM_USERNAME` | — | not required for client_credentials |
 | `MANHEIM_PASSWORD` | — | not required for client_credentials |
 | `MANHEIM_INCLUDE_RETAIL` | `false` (default) | wrangler secret; `"true"` opts in |
@@ -212,7 +207,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 
 ## 8. Related documents
 
-- `docs/manheim-uat-validation-plan.md` — staging UAT test matrix and pass/fail gates.
+- `docs/archive/2026-05-mvp/uat-staging/manheim-uat-validation-plan.md` — historical staging/UAT test matrix and pass/fail gates.
 - `docs/MANHEIM_INTEGRATION_ARCHITECTURE.md` — overall layered architecture (vendor-agnostic).
 - `docs/MANHEIM_RUNTIME_BEHAVIOR.md` — runtime request flow.
 - `docs/RUNBOOK.md` — staging deploy sequence and provisioning commands.

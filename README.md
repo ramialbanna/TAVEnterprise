@@ -1,270 +1,154 @@
 # TAV-AIP
 
-**TAV-AIP** is the Texas Auto Value AI platform for internal automotive operations, acquisition support, scoring logic, source integrations, and workflow automation.
+TAV-AIP is Texas Auto Value's internal acquisition intelligence platform. It ingests marketplace inventory, normalizes listings, dedupes and suppresses stale records, looks up MMR valuations, and exposes an authenticated buyer/admin web app.
 
-This repository is being built as the operational backbone for disciplined, AI-assisted decision support inside TAV. The focus is not just shipping features fast, but building a system that is explainable, safe to deploy, integration-aware, and reliable under real business workflows.
+The important product rule is the four-concept boundary:
 
----
+1. Raw Listing
+2. Normalized Listing
+3. Vehicle Candidate
+4. Lead
 
-## Overview
+Do not collapse those concepts. The separation keeps source replay, dedupe, valuation, buyer workflow, and purchase outcomes clean.
 
-TAV-AIP is intended to centralize business-critical workflows that currently live across spreadsheets, fragmented tools, manual review steps, and source-specific logic.
-
-The platform is being designed around a few core principles:
-
-- **Operational safety** — protect high-risk write paths, deploy carefully, and keep rollback simple
-- **Explainability** — scoring, reason codes, and business decisions should be inspectable
-- **Data integrity** — VINs, listing states, and normalized source records must remain trustworthy
-- **Integration resilience** — external source adapters and vendor payloads should fail safely
-- **AI-assisted development** — use Claude Code productively, but with strong repo rules and guardrails
-
----
-
-## What this repo includes
-
-This repository is the working home for:
-
-- CI/CD and staging deployment workflows
-- Claude Code project guidance and local rules
-- runbooks and incident response procedures
-- security and secrets-handling conventions
-- environment templates for local development
-- future application code for sourcing, scoring, integrations, and internal workflows
-
-At the moment, the repo is in a structured bootstrap phase: documentation, workflow safety, and repository conventions are being put in place before the product surface expands.
-
----
-
-## Architecture
-
-The exact implementation will evolve, but the intended architecture is organized around a few durable layers:
-
-### 1. Source ingestion
-External marketplaces, vendor feeds, and internal inputs are collected through controlled adapters and normalized into shared internal shapes.
-
-Examples of likely responsibilities:
-- source-specific payload parsing
-- VIN-aware normalization
-- deduplication support
-- resilience to upstream schema drift
-
-### 2. Business logic and scoring
-Operational logic should live in explicit, testable services rather than hidden in route handlers or one-off scripts.
-
-Examples of likely responsibilities:
-- scoring and ranking
-- reason-code generation
-- validation and gating rules
-- workflow status/state decisions
-
-### 3. Internal APIs and workflows
-The platform is expected to expose internal endpoints and workflow logic for review tools, sync jobs, dashboards, and downstream automations.
-
-Design goals:
-- thin handlers
-- typed contracts
-- explicit validation
-- predictable error handling
-- safe write behavior
-
-### 4. Deployment and operations
-Deployments, secrets, health checks, and staging approvals are treated as part of the product, not afterthoughts.
-
-Operational goals:
-- gated staging deploys
-- secret hygiene
-- clean CI behavior during bootstrap
-- rollback-first incident handling
-- documented runbooks
-
----
-
-## Repository structure
+## Current Topology
 
 ```text
-.
-├── CLAUDE.md
-├── README.md
-├── .claude/
-├── .github/workflows/
-├── docs/
-│   ├── PRODUCT_SPEC.md
-│   ├── RUNBOOK.md
-│   └── SECURITY.md
-└── .dev.vars.example
+Apify / authorized source
+  -> Cloudflare Worker (/ingest, /app/*, /admin/*)
+  -> Supabase Postgres + Cloudflare KV
+  -> tav-intelligence-worker for MMR/Cox calls
+  -> Next.js web app in /web
 ```
 
-### Key files
+Key runtime pieces:
 
-- `CLAUDE.md` — project-level operating instructions for Claude Code
-- `.claude/` — local settings, rules, hooks, and Claude-specific project behavior
-- `.github/workflows/` — CI, staging deploy, and automated review workflows
-- `docs/RUNBOOK.md` — deploy wiring, incident response, and operational procedures
-- `docs/PRODUCT_SPEC.md` — product direction, intended scope, and open questions
-- `docs/SECURITY.md` — baseline security expectations, secrets handling, and safeguards
-- `.dev.vars.example` — local environment template for development
+- `src/` - main Cloudflare Worker, ingestion, app/admin APIs, auth, persistence, valuation client.
+- `workers/tav-intelligence-worker/` - service-bound Worker that owns Cox/Manheim credentials and valuation calls.
+- `web/` - Next.js App Router dashboard with Auth.js and same-origin `/api/app/*` proxy.
+- `supabase/` - schema and migrations.
+- `docs/` - current architecture, runbook, roadmap, ADRs, handoff, and archives.
 
----
+## Active Docs
 
-## Workflows
+- [docs/HANDOFF.md](docs/HANDOFF.md) - next-developer state, branch/PR map, known issues.
+- [docs/architecture.md](docs/architecture.md) - architecture and data model.
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) - production operations, deploy, smoke checks, rollback.
+- [docs/ROADMAP.md](docs/ROADMAP.md) - current roadmap and v2 direction.
+- [docs/APP_API.md](docs/APP_API.md) - app API contract.
+- [docs/COX_API_INTEGRATION.md](docs/COX_API_INTEGRATION.md) - Cox/Manheim integration notes.
+- [docs/archive/2026-05-mvp/](docs/archive/2026-05-mvp/) - historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
 
-### CI
+## Local Setup
 
-The repository uses GitHub Actions for CI.
+Root Worker:
 
-Current behavior:
-- CI runs on pushes and pull requests
-- Node-specific steps are skipped until `package.json` and `package-lock.json` exist
-- secret scanning and TAV-specific guardrails continue to run during bootstrap
+```bash
+npm install
+cp .dev.vars.example .dev.vars
+npm run lint
+npm run typecheck
+npm test
+npm run dev
+```
 
-This lets the repo stay healthy while infrastructure and documentation are being set up before full application code lands.
+Web app:
 
-### Staging deploy
+```bash
+cd web
+pnpm install
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm dev
+```
 
-A staging deploy workflow is already wired in principle and depends on GitHub-side configuration that does **not** live in the repo:
+Do not commit `.dev.vars`, live tokens, exported secrets, screenshots containing secrets, or vendor response payloads with licensed values.
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLAUDE_CODE_OAUTH_TOKEN`
-- `STAGING_HEALTH_URL`
-- GitHub `staging` environment with a required reviewer
+## Verification
 
-See `docs/RUNBOOK.md` for the exact checklist.
+Before claiming a code change is done:
 
-### PR review automation
+```bash
+npm run lint
+npm run typecheck
+npm test
+```
 
-The repository also uses Claude-driven PR review workflows. These are useful once secrets and OAuth wiring are in place, but they are intentionally separate from the main CI path so documentation/setup gaps do not break the entire repo.
+Run integration/e2e gates when the touched area requires them:
 
----
+```bash
+npm run test:int
+cd web && pnpm test:e2e
+```
 
-## Local setup
+For `/mmr-lab` work, also run:
 
-This project is currently optimized for a careful bootstrap workflow rather than one-command application startup.
+```bash
+cd web && pnpm test -- mmr-lab app-api
+cd web && pnpm test:e2e -- mmr-lab
+```
 
-### Initial setup
+## Deployment
 
-1. Clone the repository.
-2. Review `CLAUDE.md` before making structural changes.
-3. Copy `.dev.vars.example` to `.dev.vars`.
-4. Replace placeholder values in `.dev.vars` with local development values.
-5. Confirm GitHub secrets, variables, and the `staging` environment if you want deploy workflows enabled.
-6. Once the app package exists, run the project-specific install and test commands.
+Production deploys are manual. There is no auto-deploy-on-merge contract for Workers in this cleanup state.
 
-### Local env file
+Main Worker:
 
-Use `.dev.vars` for local-only secrets and configuration.
+```bash
+npm run deploy
+```
 
-Important rules:
-- never commit `.dev.vars`
-- keep `.dev.vars.example` placeholder-only
-- do not paste live credentials into docs, issues, or screenshots
+Intelligence Worker:
 
----
+```bash
+npm run deploy:intelligence
+```
 
-## Security posture
+Verify production after deploy with `/health` and the relevant admin/app smoke route. See [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
-TAV-AIP is intended to handle business-critical operational logic, so the repo is being structured with security discipline from the beginning.
+## Secrets
 
-Priority areas include:
-- secret hygiene
-- safe deploy gating
-- validated inputs
-- constrained write paths
-- operational auditability
-- careful handling of VINs, inventory state, scoring outputs, and integration credentials
+Secret values belong only in Cloudflare, GitHub secrets, Vercel, or local `.dev.vars`.
 
-See `docs/SECURITY.md` for the baseline expectations.
+Common names:
 
----
+- `APP_API_SECRET`
+- `ADMIN_API_SECRET`
+- `WEBHOOK_HMAC_SECRET`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `INTEL_WORKER_SECRET`
+- `INTEL_SERVICE_SECRET`
+- `MANHEIM_API_VENDOR`
+- `MANHEIM_GRANT_TYPE`
+- `MANHEIM_SCOPE`
+- `MANHEIM_CLIENT_ID`
+- `MANHEIM_CLIENT_SECRET`
+- `MANHEIM_TOKEN_URL`
+- `MANHEIM_MMR_URL`
 
-## Incident response
+Never print, log, commit, or paste secret values into GitHub, Obsidian, or PR bodies.
 
-This repository includes operational guidance for failure handling, not just code guidance.
+## MMR / Cox Status
 
-The runbook covers:
-- CI/CD wiring
-- staging deploy dependencies
-- incident severity definitions
-- first-response containment
-- rollback guidance
-- recovery validation
-- post-incident follow-up
+Issue #45 / PR #50 uses the production-proven Cox Storefront path:
 
-See `docs/RUNBOOK.md`.
+- catalog: `/wholesale-valuations/vehicle/mmr-lookup/*`
+- YMMT valuation: `/wholesale-valuations/vehicle/mmr/search/*`
 
----
+Legacy Manheim `/valuations/*` is not the chosen path for this account. It was classified as not provisioned during production probing.
 
-## Roadmap
+## Automation Guardrail
 
-The roadmap below reflects the current intended direction and should be refined as product requirements firm up.
-
-### Phase 0 — Bootstrap and guardrails
-- Establish Claude Code project rules
-- Wire CI and staging deploy workflows
-- Add runbook, security docs, and local environment templates
-- Set GitHub secrets, variables, and staging environment approvals
-
-### Phase 1 — Core application skeleton
-- Add application package structure
-- Define shared types and contracts
-- Create first health and status endpoints
-- Stand up base validation, error handling, and config layers
-
-### Phase 2 — Source and normalization layer
-- Add source adapters
-- Normalize inbound records into shared internal models
-- Establish VIN-aware validation and deduplication patterns
-- Add tests for payload drift and contract safety
-
-### Phase 3 — Scoring and workflow logic
-- Implement scoring engine and reason-code patterns
-- Add workflow state handling and review support
-- Separate advisory logic from write-enabled logic
-- Add TAV-specific invariants and regression tests
-
-### Phase 4 — Internal tooling and dashboards
-- Add operator-facing review flows
-- Expose workflow status, confidence, and reasoning
-- Improve observability and operational diagnostics
-- Support safer review, override, and audit trails
-
-### Phase 5 — Hardening
-- Expand automated tests
-- improve health checks and deploy diagnostics
-- tighten incident-response loops
-- strengthen security controls and operational visibility
-
----
-
-## Design principles
-
-A few principles should remain true even as the implementation changes:
-
-- Prefer explicitness over magic
-- Keep business logic out of thin transport layers
-- Treat writes as riskier than reads
-- Favor rollback over heroic hotfixes
-- Build for operational trust, not just feature completeness
-- Make automation inspectable and recoverable
-
----
+RuFlo / claude-flow autopilot caused unauthorized commits and a PR merge on 2026-05-17. Keep it disabled. Do not recreate `.claude-flow`, `.swarm`, or a RuFlo MCP/autopilot configuration without an explicit governance decision.
 
 ## Contributing
 
-This is currently an internal project, and contributions should follow the repo’s documented conventions.
-
 Before major changes:
-- read `CLAUDE.md`
-- review `.claude/rules/`
-- check `docs/RUNBOOK.md`
-- confirm any new secret, deploy, or integration behavior is documented
 
-When changing workflows, contracts, or operational logic, prefer additive and reversible changes over broad rewrites.
-
----
-
-## Status
-
-This repository is under active setup and early architecture work.
-
-That means some workflows, docs, and placeholders exist before the full app exists on purpose. The goal is to make sure TAV-AIP grows on top of a clean operational foundation instead of accumulating risky shortcuts.
+1. Read [CLAUDE.md](CLAUDE.md).
+2. Read [docs/HANDOFF.md](docs/HANDOFF.md).
+3. Check current PRs/issues.
+4. Keep diffs scoped.
+5. Run the verification loop.
