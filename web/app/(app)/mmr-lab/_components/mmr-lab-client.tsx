@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { postMmrVin } from "@/lib/app-api/client";
-import { ErrorState } from "@/components/data-state";
+import { ErrorState, type ApiErrorResult } from "@/components/data-state";
 import { SearchPanel } from "./search-panel";
 import { ResultBand } from "./result-band";
 import { DataSections } from "./data-sections";
@@ -27,7 +27,7 @@ type View =
       method: string | null;
     }
   | { kind: "unavailable"; reason: string }
-  | { kind: "error"; error: Parameters<typeof ErrorState>[0]["error"] };
+  | { kind: "error"; error: ApiErrorResult };
 
 export function MmrLabClient() {
   const [view, setView] = useState<View>({ kind: "empty" });
