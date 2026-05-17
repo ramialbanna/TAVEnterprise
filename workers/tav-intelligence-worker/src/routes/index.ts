@@ -12,6 +12,9 @@ import { handleActivityFeed }      from "../handlers/activityFeed";
 import { handleKpisSummary }       from "../handlers/kpisSummary";
 import { handleIntelMmrCacheKey }  from "../handlers/intelMmrCacheKey";
 import { handleIntelMmrQueries }   from "../handlers/intelMmrQueries";
+import {
+  handleValuationsContractProbe,
+} from "../handlers/valuationsContractProbe";
 import type { HandlerArgs }        from "../handlers/types";
 
 /**
@@ -43,6 +46,9 @@ export async function dispatch(
   if (method === "POST" && pathname === "/mmr/year-make-model")  return handleMmrYearMakeModel(baseArgs);
   if (method === "POST" && pathname === "/sales/upload")         return handleSalesUpload(baseArgs);
   if (method === "GET"  && pathname === "/kpis/summary")         return handleKpisSummary(baseArgs);
+  if (method === "GET"  && pathname === "/admin/valuations/contract-probe") {
+    return handleValuationsContractProbe(baseArgs);
+  }
 
   if (method === "GET" && pathname === "/activity/feed") {
     return handleActivityFeed(baseArgs);
