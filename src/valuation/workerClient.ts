@@ -9,6 +9,7 @@ import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
+import { isCatalogModelVariantOf, selectCatalogModelVariantForListing } from "./selectCatalogModelVariant";
 import { selectCatalogStyleForListing } from "./selectCatalogStyle";
 
 /**
@@ -18,6 +19,8 @@ import { selectCatalogStyleForListing } from "./selectCatalogStyle";
  *   not_configured       — neither INTEL_WORKER binding nor INTEL_WORKER_URL set
  *   insufficient_params  — no VIN and incomplete YMM (year/make/model missing)
  *   mileage_missing      — YMM path requires mileage; not provided
+ *   model_variant_missing — Cox catalog splits the model (e.g. AWD/FWD), but
+ *                          listing evidence is insufficient to choose safely
  *   trim_missing         — Cox YMMT requires bodyname (trim) as path segment
  *   cox_no_data          — worker returned a negative envelope (ok=false or mmr_value=null)
  *   cox_bad_request      — intel rejected our request body (400 / validation_error):
@@ -36,6 +39,7 @@ export type MmrMissReason =
   | "not_configured"
   | "insufficient_params"
   | "mileage_missing"
+  | "model_variant_missing"
   | "trim_missing"
   | "cox_no_data"
   | "cox_bad_request"
@@ -149,20 +153,20 @@ export class WorkerUnavailableError extends Error {
  */
 const SERVICE_BINDING_PLACEHOLDER_BASE = "https://tav-intelligence-worker.internal";
 
-async function fetchCatalogStyles(args: {
+interface CatalogFetchResult {
+  catalogState: "connected" | "not_connected";
+  items: string[];
+}
+
+async function fetchCatalogItems(args: {
   baseUrl: string;
   env: Env;
   useServiceBinding: boolean;
-  year: number;
-  make: string;
-  model: string;
+  path: string;
+  eventLabel: string;
   serviceSecretConfigured: boolean;
-}): Promise<string[] | null> {
-  const path =
-    `/catalog/years/${encodeURIComponent(String(args.year))}` +
-    `/makes/${encodeURIComponent(args.make)}` +
-    `/models/${encodeURIComponent(args.model)}/styles`;
-  const endpoint = `${args.baseUrl}${path}`;
+}): Promise<CatalogFetchResult | null> {
+  const endpoint = `${args.baseUrl}${args.path}`;
   const requestInit: RequestInit = {
     method: "GET",
     headers: {
@@ -176,7 +180,7 @@ async function fetchCatalogStyles(args: {
       ? await args.env.INTEL_WORKER!.fetch(endpoint, requestInit)
       : await fetch(endpoint, requestInit);
     if (!res.ok) {
-      log("ingest.mmr_catalog_styles_http_error", {
+      log(`ingest.mmr_catalog_${args.eventLabel}_http_error`, {
         endpoint,
         status: res.status,
         service_secret_header_present: args.serviceSecretConfigured,
@@ -186,21 +190,35 @@ async function fetchCatalogStyles(args: {
     const raw = await res.json();
     const parsed = IntelCatalogEnvelopeSchema.safeParse(raw);
     if (!parsed.success) {
-      log("ingest.mmr_catalog_styles_envelope_invalid", {
+      log(`ingest.mmr_catalog_${args.eventLabel}_envelope_invalid`, {
         endpoint,
         issues: parsed.error.issues.slice(0, 5),
       });
       return null;
     }
-    if (parsed.data.data.catalogState !== "connected") return null;
-    return parsed.data.data.items;
+    return {
+      catalogState: parsed.data.data.catalogState,
+      items: parsed.data.data.items,
+    };
   } catch (err) {
-    log("ingest.mmr_catalog_styles_fetch_failed", {
+    log(`ingest.mmr_catalog_${args.eventLabel}_fetch_failed`, {
       endpoint,
       error: err instanceof Error ? err.name : String(err),
     });
     return null;
   }
+}
+
+function catalogModelsPath(year: number, make: string): string {
+  return `/catalog/years/${encodeURIComponent(String(year))}/makes/${encodeURIComponent(make)}/models`;
+}
+
+function catalogStylesPath(year: number, make: string, model: string): string {
+  return (
+    `/catalog/years/${encodeURIComponent(String(year))}` +
+    `/makes/${encodeURIComponent(make)}` +
+    `/models/${encodeURIComponent(model)}/styles`
+  );
 }
 
 /**
@@ -288,10 +306,6 @@ async function performMmrCall(
         log("ingest.mmr_trim_from_title", { derived_trim: derived });
       }
     }
-    if (!effectiveTrim) {
-      return { kind: "miss", reason: "trim_missing", method: "year_make_model" };
-    }
-
     // Normalize make/model via reference data before sending
     const db = getSupabaseClient(env);
     const ref = await loadMmrReferenceData(db);
@@ -302,23 +316,85 @@ async function performMmrCall(
 
     // Use canonical values when resolved; fall back to raw on partial/none
     const sendMake = normalized.canonicalMake ?? make;
-    const sendModel = normalized.canonicalModel ?? model;
+    let sendModel = normalized.canonicalModel ?? model;
 
     endpoint = `${baseUrl}/mmr/year-make-model`;
-    body = { year, make: sendMake, model: sendModel, mileage };
     let sendTrim = normalized.trim?.trim() || effectiveTrim;
-    const catalogStyles = await fetchCatalogStyles({
+    let catalogStyles = await fetchCatalogItems({
       baseUrl,
       env,
       useServiceBinding,
-      year,
-      make: sendMake,
-      model: sendModel,
+      path: catalogStylesPath(year, sendMake, sendModel),
+      eventLabel: "styles",
       serviceSecretConfigured,
     });
-    if (catalogStyles !== null) {
+
+    if (catalogStyles?.catalogState === "not_connected") {
+      const catalogModels = await fetchCatalogItems({
+        baseUrl,
+        env,
+        useServiceBinding,
+        path: catalogModelsPath(year, sendMake),
+        eventLabel: "models",
+        serviceSecretConfigured,
+      });
+      if (catalogModels?.catalogState === "connected") {
+        const selectedModel = selectCatalogModelVariantForListing({
+          models: catalogModels.items,
+          sourceModel: sendModel,
+          title: params.title,
+          trim: sendTrim,
+        });
+        if (!selectedModel) {
+          const variantCount = catalogModels.items.filter((catalogModel) =>
+            isCatalogModelVariantOf(sendModel, catalogModel),
+          ).length;
+          if (variantCount > 0) {
+            log("ingest.mmr_catalog_model_variant_unmatched", {
+              year,
+              make: sendMake,
+              model: sendModel,
+              variant_count: variantCount,
+              trim_present: sendTrim.length > 0,
+              title_present: typeof params.title === "string" && params.title.trim().length > 0,
+            });
+            return {
+              kind: "miss",
+              reason: "model_variant_missing",
+              method: "year_make_model",
+              normalizationConfidence: normalized.normalizationConfidence,
+            };
+          }
+        }
+        if (selectedModel) {
+          sendModel = selectedModel.model;
+          log("ingest.mmr_catalog_model_variant_selected", {
+            year,
+            make: sendMake,
+            model: sendModel,
+            matched_signals: selectedModel.matchedSignals,
+          });
+          catalogStyles = await fetchCatalogItems({
+            baseUrl,
+            env,
+            useServiceBinding,
+            path: catalogStylesPath(year, sendMake, sendModel),
+            eventLabel: "styles",
+            serviceSecretConfigured,
+          });
+        }
+      }
+    }
+
+    if (!sendTrim) {
+      return { kind: "miss", reason: "trim_missing", method: "year_make_model" };
+    }
+
+    body = { year, make: sendMake, model: sendModel, mileage };
+
+    if (catalogStyles?.catalogState === "connected") {
       const selected = selectCatalogStyleForListing({
-        styles: catalogStyles,
+        styles: catalogStyles.items,
         title: params.title,
         trim: sendTrim,
       });
@@ -327,7 +403,7 @@ async function performMmrCall(
           year,
           make: sendMake,
           model: sendModel,
-          style_count: catalogStyles.length,
+          style_count: catalogStyles.items.length,
           trim_present: sendTrim.length > 0,
           title_present: typeof params.title === "string" && params.title.trim().length > 0,
         });
