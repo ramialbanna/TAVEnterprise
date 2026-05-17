@@ -8,13 +8,25 @@ type Props = {
   confidence?: "high" | "medium" | "low" | null;
   method?: string | null;
   unavailableReason?: string | null;
+  avgOdometer?: number | null;
+  avgCondition?: number | null;
+  rangeLow?: number | null;
+  rangeHigh?: number | null;
+  adjustedMmr?: number | null;
+  retailValue?: number | null;
+  retailRangeLow?: number | null;
+  retailRangeHigh?: number | null;
 };
 
-function Stat({ label }: { label: string }) {
+function formatNumber(value: number | null | undefined): string {
+  return Number.isFinite(value) ? (value as number).toLocaleString() : DASH;
+}
+
+function Stat({ label, value }: { label: string; value?: number | null }) {
   return (
     <div className="border-t border-border py-3 text-center">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-sm tabular-nums">{DASH}</div>
+      <div className="text-sm tabular-nums">{formatNumber(value)}</div>
     </div>
   );
 }
@@ -23,7 +35,20 @@ const adjSelectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
-export function ResultBand({ baseMmr, confidence, method, unavailableReason }: Props) {
+export function ResultBand({
+  baseMmr,
+  confidence,
+  method,
+  unavailableReason,
+  avgOdometer,
+  avgCondition,
+  rangeLow,
+  rangeHigh,
+  adjustedMmr,
+  retailValue,
+  retailRangeLow,
+  retailRangeHigh,
+}: Props) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
       {/* Left — Base MMR */}
@@ -47,8 +72,8 @@ export function ResultBand({ baseMmr, confidence, method, unavailableReason }: P
           </div>
         ) : null}
         <div className="mt-4">
-          <Stat label="Avg Odometer (mi)" />
-          <Stat label="Avg Condition" />
+          <Stat label="Avg Odometer (mi)" value={avgOdometer} />
+          <Stat label="Avg Condition" value={avgCondition} />
           <Stat label="Avg EV Battery Score" />
         </div>
       </div>
@@ -104,23 +129,29 @@ export function ResultBand({ baseMmr, confidence, method, unavailableReason }: P
       <div className="rounded-lg bg-primary p-6 text-center text-primary-foreground">
         <div className="text-sm uppercase tracking-wider opacity-90">MMR Range</div>
         <div className="mt-1 text-lg font-semibold tabular-nums">
-          <MmrRange low={null} high={null} />
+          <MmrRange low={rangeLow} high={rangeHigh} />
         </div>
         <div className="mt-4 rounded-md bg-background/95 p-4 text-foreground">
           <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Adjusted MMR
           </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{DASH}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">
+            <MmrMoney value={adjustedMmr} />
+          </div>
         </div>
         <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
           Estimated Retail Value
         </div>
         <div className="text-xs opacity-75">Based on Cox Automotive Retail Transactions</div>
-        <div className="mt-1 text-lg font-semibold tabular-nums">{DASH}</div>
+        <div className="mt-1 text-lg font-semibold tabular-nums">
+          <MmrMoney value={retailValue} />
+        </div>
         <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
           Typical Range
         </div>
-        <div className="mt-1 text-lg font-semibold tabular-nums">{DASH}</div>
+        <div className="mt-1 text-lg font-semibold tabular-nums">
+          <MmrRange low={retailRangeLow} high={retailRangeHigh} />
+        </div>
       </div>
     </div>
   );

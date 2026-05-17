@@ -721,6 +721,133 @@ describe("POST /app/mmr/vin", () => {
   });
 });
 
+describe("/app/mmr live catalog + YMM valuation", () => {
+  function intelEnv(fetchImpl: ReturnType<typeof vi.fn>): Env {
+    return makeEnv({
+      INTEL_WORKER_URL: "",
+      INTEL_WORKER_SECRET: "intel-secret-test-value",
+      INTEL_WORKER: { fetch: fetchImpl } as unknown as Fetcher,
+    });
+  }
+
+  function intelOk(data: unknown): Response {
+    return new Response(JSON.stringify({
+      success: true,
+      data,
+      requestId: "intel-req",
+      timestamp: "2026-05-17T12:00:00.000Z",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  it("GET /app/mmr/catalog/years proxies to intel and unwraps the catalog envelope", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      items: ["2026", "2025"],
+      catalogState: "connected",
+      cached: false,
+      reason: null,
+    }));
+    const res = await worker.fetch(authedReq("/app/mmr/catalog/years"), intelEnv(intelFetch), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { items: string[] } };
+    expect(body).toEqual({
+      ok: true,
+      data: {
+        items: ["2026", "2025"],
+        catalogState: "connected",
+        cached: false,
+        reason: null,
+      },
+    });
+    expect(String(intelFetch.mock.calls[0]?.[0])).toContain("/catalog/years");
+    const init = intelFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("x-tav-service-secret")).toBe("intel-secret-test-value");
+  });
+
+  it("GET catalog routes reject missing parent parameters before intel fetch", async () => {
+    const intelFetch = vi.fn();
+    const res = await worker.fetch(authedReq("/app/mmr/catalog/models?year=2026"), intelEnv(intelFetch), ctx);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body).toEqual({ ok: false, error: "invalid_filter" });
+    expect(intelFetch).not.toHaveBeenCalled();
+  });
+
+  it("POST /app/mmr/ymm requires style and mileage before intel fetch", async () => {
+    const intelFetch = vi.fn();
+    const res = await worker.fetch(
+      authedPost("/app/mmr/ymm", { year: 2026, make: "TESLA", model: "MODEL Y AWD", style: "" }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_body");
+    expect(intelFetch).not.toHaveBeenCalled();
+  });
+
+  it("POST /app/mmr/ymm forwards style as trim and surfaces distribution fields", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ok: true,
+      mmr_value: 23900,
+      mileage_used: 70740,
+      is_inferred_mileage: false,
+      cache_hit: false,
+      source: "manheim",
+      fetched_at: "2026-05-17T12:00:00.000Z",
+      expires_at: "2026-05-18T12:00:00.000Z",
+      error_code: null,
+      error_message: null,
+      mmr_payload: {
+        items: [{
+          averageOdometer: 70740,
+          averageGrade: 3.9,
+          sampleSize: "32",
+          adjustedPricing: {
+            wholesale: { below: 22700, average: 23900, above: 25100 },
+            retail: { below: 23500, average: 26600, above: 29800 },
+          },
+        }],
+      },
+    }));
+    const res = await worker.fetch(
+      authedPost("/app/mmr/ymm", {
+        year: 2026,
+        make: "TESLA",
+        model: "MODEL Y AWD",
+        style: "4D SUV PERFORMANCE",
+        mileage: 70740,
+      }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const request = JSON.parse(String((intelFetch.mock.calls[0]?.[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(request).toEqual({
+      year: 2026,
+      make: "TESLA",
+      model: "MODEL Y AWD",
+      trim: "4D SUV PERFORMANCE",
+      mileage: 70740,
+    });
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      mmrValue: 23900,
+      confidence: "medium",
+      method: "year_make_model",
+      mileageUsed: 70740,
+      avgOdometer: 70740,
+      avgCondition: 3.9,
+      sampleCount: 32,
+      rangeLow: 22700,
+      rangeHigh: 25100,
+      adjustedMmr: 23900,
+      retailValue: 26600,
+      retailRangeLow: 23500,
+      retailRangeHigh: 29800,
+    });
+  });
+});
+
 // ── GET /app/ingest-runs ──────────────────────────────────────────────────────
 
 const RUN_SUMMARY = {

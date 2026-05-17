@@ -18,6 +18,7 @@ import type { ContractProbeReport } from "./valuationsContractProbe";
 import { executeContractProbe } from "./valuationsContractProbe";
 import type {
   ManheimClient,
+  ManheimCatalogResponse,
   ManheimVinResponse,
   ManheimYmmResponse,
 } from "./manheim";
@@ -312,10 +313,69 @@ export class ManheimHttpClient implements ManheimClient {
     });
   }
 
+  async getCatalogYears(requestId: string): Promise<ManheimCatalogResponse> {
+    return this.executeCatalogLookup({
+      url: this.buildCatalogUrl("/years"),
+      requestId,
+      field: "year",
+    });
+  }
+
+  async getCatalogMakes(args: {
+    year: number;
+    requestId: string;
+  }): Promise<ManheimCatalogResponse> {
+    return this.executeCatalogLookup({
+      url: this.buildCatalogUrl(`/years/${encodeURIComponent(String(args.year))}/makes`),
+      requestId: args.requestId,
+      field: "make",
+    });
+  }
+
+  async getCatalogModels(args: {
+    year: number;
+    make: string;
+    requestId: string;
+  }): Promise<ManheimCatalogResponse> {
+    return this.executeCatalogLookup({
+      url: this.buildCatalogUrl(
+        `/years/${encodeURIComponent(String(args.year))}` +
+        `/makes/${encodeURIComponent(args.make)}/models`,
+      ),
+      requestId: args.requestId,
+      field: "model",
+    });
+  }
+
+  async getCatalogStyles(args: {
+    year: number;
+    make: string;
+    model: string;
+    requestId: string;
+  }): Promise<ManheimCatalogResponse> {
+    return this.executeCatalogLookup({
+      url: this.buildCatalogUrl(
+        `/years/${encodeURIComponent(String(args.year))}` +
+        `/makes/${encodeURIComponent(args.make)}` +
+        `/models/${encodeURIComponent(args.model)}/trims`,
+      ),
+      requestId: args.requestId,
+      field: "trim",
+    });
+  }
+
   // ── Vendor-aware URL builders ──────────────────────────────────────────────
 
   private isCoxVendor(): boolean {
     return this.env.MANHEIM_API_VENDOR === "cox";
+  }
+
+  private catalogBaseUrl(): string {
+    return this.env.MANHEIM_MMR_URL.replace(/\/mmr\/?$/, "/mmr-lookup");
+  }
+
+  private buildCatalogUrl(path: string): string {
+    return joinUrl(this.catalogBaseUrl(), path);
   }
 
   /**
@@ -527,6 +587,100 @@ export class ManheimHttpClient implements ManheimClient {
       fetched_at: fetchedAt,
       retryCount,
     } as T;
+  }
+
+  private async executeCatalogLookup(args: {
+    url: string;
+    requestId: string;
+    field: "year" | "make" | "model" | "trim";
+  }): Promise<ManheimCatalogResponse> {
+    if (!this.isCoxVendor()) {
+      throw new ManheimAuthError("Catalog lookup requires Cox storefront vendor");
+    }
+
+    const start = Date.now();
+    const token = await this.getAccessToken(args.requestId);
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.coxauto.v1+json",
+      "Content-Type": "application/vnd.coxauto.v1+json",
+    };
+
+    let response: Response;
+    let attempts: number;
+    try {
+      const result = await this.fetchWithRetry(args.url, {
+        method: "GET",
+        headers,
+      }, args.requestId);
+      response = result.response;
+      attempts = result.attempts;
+    } catch (err) {
+      log("manheim.catalog.failure", {
+        requestId: args.requestId,
+        error_category: errorCategory(err),
+        error_code: err instanceof Error ? err.name : "unknown",
+        attempts: HTTP_RETRY_OPTS.maxAttempts,
+      });
+      throw err;
+    }
+
+    const fetchedAt = new Date().toISOString();
+    const retryCount = attempts - 1;
+    const latencyMs = Date.now() - start;
+
+    if (response.status === 401 || response.status === 403 || response.status === 596) {
+      log("manheim.catalog.failure", {
+        requestId: args.requestId,
+        error_category: "auth",
+        error_code: "manheim_catalog_not_provisioned",
+        attempts,
+      });
+      throw new ManheimAuthError("Manheim catalog endpoint rejected bearer token", {
+        status: response.status,
+      });
+    }
+
+    if (!response.ok) {
+      log("manheim.catalog.failure", {
+        requestId: args.requestId,
+        error_category: "response_shape",
+        error_code: "manheim_catalog_response_error",
+        attempts,
+      });
+      throw new ManheimResponseError("Manheim catalog returned non-OK status", {
+        status: response.status,
+      });
+    }
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = (await response.json()) as Record<string, unknown>;
+    } catch (err) {
+      throw new ManheimResponseError("Manheim catalog returned malformed JSON body", {
+        cause: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    const rawItems = Array.isArray(payload.items) ? payload.items : [];
+    const items = rawItems
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const value = (item as Record<string, unknown>)[args.field];
+        return typeof value === "number" || typeof value === "string" ? String(value) : null;
+      })
+      .filter((value): value is string => value !== null && value.trim().length > 0);
+
+    log("manheim.catalog.complete", {
+      requestId: args.requestId,
+      field: args.field,
+      item_count: items.length,
+      latency_ms: latencyMs,
+      attempts,
+      kpi: true,
+    });
+
+    return { items, payload, fetched_at: fetchedAt, retryCount };
   }
 
   // ── HTTP retry wrapper ─────────────────────────────────────────────────────

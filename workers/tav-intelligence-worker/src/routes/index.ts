@@ -15,6 +15,7 @@ import { handleIntelMmrQueries }   from "../handlers/intelMmrQueries";
 import {
   handleValuationsContractProbe,
 } from "../handlers/valuationsContractProbe";
+import { handleMmrCatalog }        from "../handlers/mmrCatalog";
 import type { HandlerArgs }        from "../handlers/types";
 
 /**
@@ -48,6 +49,45 @@ export async function dispatch(
   if (method === "GET"  && pathname === "/kpis/summary")         return handleKpisSummary(baseArgs);
   if (method === "GET"  && pathname === "/admin/valuations/contract-probe") {
     return handleValuationsContractProbe(baseArgs);
+  }
+  if (method === "GET" && pathname === "/catalog/years") {
+    return handleMmrCatalog({ ...baseArgs, catalogLevel: "years" });
+  }
+  if (method === "GET" && pathname.match(/^\/catalog\/years\/[^/]+\/makes$/)) {
+    const [, year] = pathname.match(/^\/catalog\/years\/([^/]+)\/makes$/) ?? [];
+    return handleMmrCatalog({
+      ...baseArgs,
+      catalogLevel: "makes",
+      pathParams: { year: decodeURIComponent(year ?? "") },
+    });
+  }
+  if (method === "GET" && pathname.match(/^\/catalog\/years\/[^/]+\/makes\/[^/]+\/models$/)) {
+    const [, year, make] =
+      pathname.match(/^\/catalog\/years\/([^/]+)\/makes\/([^/]+)\/models$/) ?? [];
+    return handleMmrCatalog({
+      ...baseArgs,
+      catalogLevel: "models",
+      pathParams: {
+        year: decodeURIComponent(year ?? ""),
+        make: decodeURIComponent(make ?? ""),
+      },
+    });
+  }
+  if (
+    method === "GET" &&
+    pathname.match(/^\/catalog\/years\/[^/]+\/makes\/[^/]+\/models\/[^/]+\/styles$/)
+  ) {
+    const [, year, make, model] =
+      pathname.match(/^\/catalog\/years\/([^/]+)\/makes\/([^/]+)\/models\/([^/]+)\/styles$/) ?? [];
+    return handleMmrCatalog({
+      ...baseArgs,
+      catalogLevel: "styles",
+      pathParams: {
+        year: decodeURIComponent(year ?? ""),
+        make: decodeURIComponent(make ?? ""),
+        model: decodeURIComponent(model ?? ""),
+      },
+    });
   }
 
   if (method === "GET" && pathname === "/activity/feed") {

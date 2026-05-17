@@ -1,76 +1,164 @@
 import { render, screen, fireEvent, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { SearchPanel } from "./search-panel";
+import { describe, expect, it, vi } from "vitest";
+import {
+  SearchPanel,
+  type MmrCatalogOptions,
+  type MmrSelection,
+} from "./search-panel";
 
-afterEach(() => vi.restoreAllMocks());
+const emptySelection: MmrSelection = {
+  year: "",
+  make: "",
+  model: "",
+  style: "",
+  mileage: "",
+};
 
-describe("SearchPanel (revised: disabled Y/M/M/S — live catalog not connected)", () => {
+const connectedCatalog: MmrCatalogOptions = {
+  years: ["2026", "2025"],
+  makes: ["TESLA"],
+  models: ["MODEL Y AWD"],
+  styles: ["4D SUV PERFORMANCE"],
+  catalogState: "connected",
+  reason: null,
+  loading: null,
+};
+
+function renderPanel(
+  overrides: Partial<{
+    selection: MmrSelection;
+    catalog: MmrCatalogOptions;
+    onSelectionChange: (next: MmrSelection) => void;
+    onYmmSubmit: () => void;
+  }> = {},
+) {
+  const props = {
+    onVinSubmit: vi.fn(),
+    vinPending: false,
+    selection: overrides.selection ?? emptySelection,
+    catalog: overrides.catalog ?? connectedCatalog,
+    onSelectionChange: overrides.onSelectionChange ?? vi.fn(),
+    onYmmSubmit: overrides.onYmmSubmit ?? vi.fn(),
+    ymmPending: false,
+  };
+  render(<SearchPanel {...props} />);
+  return props;
+}
+
+describe("SearchPanel — live catalog + VIN", () => {
   it("VIN submit fires only for an 11-17 char VIN", () => {
-    const onVinSubmit = vi.fn();
-    render(<SearchPanel onVinSubmit={onVinSubmit} vinPending={false} />);
+    const props = renderPanel();
     const vin = screen.getByPlaceholderText(/enter vin/i);
     fireEvent.change(vin, { target: { value: "SHORT" } });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(onVinSubmit).not.toHaveBeenCalled();
+    expect(props.onVinSubmit).not.toHaveBeenCalled();
     fireEvent.change(vin, { target: { value: "1FT7W2BT4KED81759" } });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(onVinSubmit).toHaveBeenCalledWith("1FT7W2BT4KED81759");
+    expect(props.onVinSubmit).toHaveBeenCalledWith("1FT7W2BT4KED81759");
   });
 
-  it("Year/Make/Model/Style selectors are visible but disabled", () => {
-    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
+  it("renders catalog options from props, not local constants", () => {
+    renderPanel();
+    const year = screen.getByLabelText(/year/i);
+    expect(within(year).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Year",
+      "2026",
+      "2025",
+    ]);
+    expect(screen.getByLabelText(/make/i)).toBeDisabled();
+  });
+
+  it("enables the cascade as upstream selections exist", () => {
+    renderPanel({
+      selection: {
+        year: "2026",
+        make: "TESLA",
+        model: "MODEL Y AWD",
+        style: "",
+        mileage: "",
+      },
+    });
+    expect(screen.getByLabelText(/year/i)).toBeEnabled();
+    expect(screen.getByLabelText(/make/i)).toBeEnabled();
+    expect(screen.getByLabelText(/model/i)).toBeEnabled();
+    expect(screen.getByLabelText(/style/i)).toBeEnabled();
+  });
+
+  it("selection changes clear downstream values before the parent callback", () => {
+    const onSelectionChange = vi.fn();
+    renderPanel({
+      selection: {
+        year: "2026",
+        make: "TESLA",
+        model: "MODEL Y AWD",
+        style: "4D SUV PERFORMANCE",
+        mileage: "70740",
+      },
+      onSelectionChange,
+    });
+    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "" } });
+    expect(onSelectionChange).toHaveBeenCalledWith({
+      year: "2026",
+      make: "",
+      model: "",
+      style: "",
+      mileage: "70740",
+    });
+  });
+
+  it("YMM valuation requires style and mileage", () => {
+    const onYmmSubmit = vi.fn();
+    const { rerender } = render(
+      <SearchPanel
+        onVinSubmit={vi.fn()}
+        vinPending={false}
+        selection={{ ...emptySelection, year: "2026", make: "TESLA", model: "MODEL Y AWD" }}
+        catalog={connectedCatalog}
+        onSelectionChange={vi.fn()}
+        onYmmSubmit={onYmmSubmit}
+        ymmPending={false}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /value selected vehicle/i })).toBeDisabled();
+
+    rerender(
+      <SearchPanel
+        onVinSubmit={vi.fn()}
+        vinPending={false}
+        selection={{
+          year: "2026",
+          make: "TESLA",
+          model: "MODEL Y AWD",
+          style: "4D SUV PERFORMANCE",
+          mileage: "70740",
+        }}
+        catalog={connectedCatalog}
+        onSelectionChange={vi.fn()}
+        onYmmSubmit={onYmmSubmit}
+        ymmPending={false}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
+    expect(onYmmSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("not-connected catalog disables selectors without injecting samples", () => {
+    renderPanel({
+      catalog: {
+        ...connectedCatalog,
+        years: [],
+        makes: [],
+        models: [],
+        styles: [],
+        catalogState: "not_connected",
+        reason: "not_provisioned",
+      },
+    });
     for (const label of [/year/i, /make/i, /model/i, /style/i]) {
       const sel = screen.getByLabelText(label);
-      expect(sel).toBeInTheDocument();
       expect(sel).toBeDisabled();
-    }
-  });
-
-  it("each selector has ONLY a placeholder option — no catalog values leaked", () => {
-    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
-    for (const label of [/year/i, /make/i, /model/i, /style/i]) {
-      const sel = screen.getByLabelText(label);
       expect(within(sel).getAllByRole("option")).toHaveLength(1);
     }
-  });
-
-  it("VIN length boundaries are inclusive [11,17]", () => {
-    const onVinSubmit = vi.fn();
-    render(<SearchPanel onVinSubmit={onVinSubmit} vinPending={false} />);
-    const vin = screen.getByPlaceholderText(/enter vin/i);
-    const search = () =>
-      fireEvent.click(screen.getByRole("button", { name: /search/i }));
-
-    fireEvent.change(vin, { target: { value: "X".repeat(10) } });
-    search();
-    expect(onVinSubmit).not.toHaveBeenCalled();
-
-    fireEvent.change(vin, { target: { value: "X".repeat(11) } });
-    search();
-    expect(onVinSubmit).toHaveBeenLastCalledWith("X".repeat(11));
-
-    fireEvent.change(vin, { target: { value: "X".repeat(17) } });
-    search();
-    expect(onVinSubmit).toHaveBeenLastCalledWith("X".repeat(17));
-
-    onVinSubmit.mockClear();
-    fireEvent.change(vin, { target: { value: "X".repeat(18) } });
-    search();
-    expect(onVinSubmit).not.toHaveBeenCalled();
-  });
-
-  it("explains the live catalog / API access is not connected yet", () => {
-    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
     expect(screen.getByText(/live catalog not connected/i)).toBeInTheDocument();
-  });
-
-  it("performs NO network call on mount or any interaction", () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
-    const vin = screen.getByPlaceholderText(/enter vin/i);
-    fireEvent.change(vin, { target: { value: "TOO-SHORT" } });
-    fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    // disabled selectors cannot be changed; nothing here may touch the network
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

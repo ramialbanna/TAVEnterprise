@@ -17,6 +17,8 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseKpis,
+  parseMmrCatalog,
+  parseMmrYmm,
   parseMmrVin,
   parseSystemStatus,
   type ApiResult,
@@ -28,6 +30,7 @@ import type {
   IngestRunSummary,
   IngestRunDetail,
   Kpis,
+  MmrCatalog,
   MmrVinOk,
   SystemStatus,
 } from "./schemas";
@@ -68,6 +71,14 @@ export type MmrVinRequest = {
   vin: string;
   year?: number;
   mileage?: number;
+};
+
+export type MmrYmmRequest = {
+  year: number;
+  make: string;
+  model: string;
+  style: string;
+  mileage: number;
 };
 
 const PROXY_PREFIX = "/api/app";
@@ -185,4 +196,52 @@ export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinO
     return clientTransportError();
   }
   return parseMmrVin(res.status, await readJson(res));
+}
+
+export async function postMmrYmm(body: MmrYmmRequest): Promise<ApiResult<MmrVinOk>> {
+  let res: Response;
+  try {
+    res = await fetch(`${PROXY_PREFIX}/mmr/ymm`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return clientTransportError();
+  }
+  return parseMmrYmm(res.status, await readJson(res));
+}
+
+export async function getMmrCatalogYears(): Promise<ApiResult<MmrCatalog>> {
+  const r = await getJson("mmr/catalog/years");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMmrCatalog(r.status, r.json);
+}
+
+export async function getMmrCatalogMakes(year: string | number): Promise<ApiResult<MmrCatalog>> {
+  const params = new URLSearchParams({ year: String(year) });
+  const r = await getJson(`mmr/catalog/makes?${params.toString()}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMmrCatalog(r.status, r.json);
+}
+
+export async function getMmrCatalogModels(
+  year: string | number,
+  make: string,
+): Promise<ApiResult<MmrCatalog>> {
+  const params = new URLSearchParams({ year: String(year), make });
+  const r = await getJson(`mmr/catalog/models?${params.toString()}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMmrCatalog(r.status, r.json);
+}
+
+export async function getMmrCatalogStyles(
+  year: string | number,
+  make: string,
+  model: string,
+): Promise<ApiResult<MmrCatalog>> {
+  const params = new URLSearchParams({ year: String(year), make, model });
+  const r = await getJson(`mmr/catalog/styles?${params.toString()}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMmrCatalog(r.status, r.json);
 }
