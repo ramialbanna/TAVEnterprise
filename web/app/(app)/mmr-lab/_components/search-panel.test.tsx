@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SearchPanel } from "./search-panel";
 
@@ -24,6 +24,39 @@ describe("SearchPanel (revised: disabled Y/M/M/S — live catalog not connected)
       expect(sel).toBeInTheDocument();
       expect(sel).toBeDisabled();
     }
+  });
+
+  it("each selector has ONLY a placeholder option — no catalog values leaked", () => {
+    render(<SearchPanel onVinSubmit={vi.fn()} vinPending={false} />);
+    for (const label of [/year/i, /make/i, /model/i, /style/i]) {
+      const sel = screen.getByLabelText(label);
+      expect(within(sel).getAllByRole("option")).toHaveLength(1);
+    }
+  });
+
+  it("VIN length boundaries are inclusive [11,17]", () => {
+    const onVinSubmit = vi.fn();
+    render(<SearchPanel onVinSubmit={onVinSubmit} vinPending={false} />);
+    const vin = screen.getByPlaceholderText(/enter vin/i);
+    const search = () =>
+      fireEvent.click(screen.getByRole("button", { name: /search/i }));
+
+    fireEvent.change(vin, { target: { value: "X".repeat(10) } });
+    search();
+    expect(onVinSubmit).not.toHaveBeenCalled();
+
+    fireEvent.change(vin, { target: { value: "X".repeat(11) } });
+    search();
+    expect(onVinSubmit).toHaveBeenLastCalledWith("X".repeat(11));
+
+    fireEvent.change(vin, { target: { value: "X".repeat(17) } });
+    search();
+    expect(onVinSubmit).toHaveBeenLastCalledWith("X".repeat(17));
+
+    onVinSubmit.mockClear();
+    fireEvent.change(vin, { target: { value: "X".repeat(18) } });
+    search();
+    expect(onVinSubmit).not.toHaveBeenCalled();
   });
 
   it("explains the live catalog / API access is not connected yet", () => {
