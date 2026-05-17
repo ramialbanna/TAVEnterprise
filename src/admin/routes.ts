@@ -16,6 +16,8 @@ import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { log, serializeError } from "../logging/logger";
 
+const INTEL_SERVICE_BINDING_BASE = "https://tav-intelligence-worker.internal";
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -25,6 +27,46 @@ function json(body: unknown, status = 200): Response {
 
 function verifyAdminAuth(request: Request, env: Env): boolean {
   return verifyBearer(request, env.ADMIN_API_SECRET);
+}
+
+async function handleValuationsContractProbe(env: Env): Promise<Response> {
+  if (!isConfiguredSecret(env.INTEL_WORKER_SECRET)) {
+    return json({ ok: false, error: "intel_worker_secret_not_configured" }, 503);
+  }
+
+  const hasServiceBinding = env.INTEL_WORKER !== undefined;
+  const baseUrl = env.INTEL_WORKER_URL || (hasServiceBinding ? INTEL_SERVICE_BINDING_BASE : "");
+  if (!baseUrl) {
+    return json({ ok: false, error: "intel_worker_not_configured" }, 503);
+  }
+
+  const endpoint = `${baseUrl}/admin/valuations/contract-probe`;
+  const init: RequestInit = {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "x-tav-service-secret": env.INTEL_WORKER_SECRET,
+    },
+  };
+
+  let res: Response;
+  try {
+    res = hasServiceBinding
+      ? await env.INTEL_WORKER!.fetch(endpoint, init)
+      : await fetch(endpoint, init);
+  } catch (err) {
+    log("admin.valuations_contract_probe.fetch_failed", {
+      error: serializeError(err),
+      transport: hasServiceBinding ? "service_binding" : "public_fetch",
+    });
+    return json({ ok: false, error: "intel_worker_unavailable" }, 503);
+  }
+
+  const contentType = res.headers.get("Content-Type") ?? "application/json";
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "Content-Type": contentType },
+  });
 }
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
@@ -38,6 +80,11 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
   const url = new URL(request.url);
   const pathname = url.pathname;
+
+  // GET /admin/valuations/contract-probe
+  if (request.method === "GET" && pathname === "/admin/valuations/contract-probe") {
+    return handleValuationsContractProbe(env);
+  }
 
   let db: ReturnType<typeof getSupabaseClient>;
   try {
