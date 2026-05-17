@@ -14,7 +14,7 @@ You are a senior principal engineer + systems architect + startup CTO + business
 ## 1. Project Identity
 - **Name:** TAV Enterprise Acquisition Intelligence Platform (`tav-aip` / `tav-mp` / `tav-enterprise`)
 - **Stage:** v1 / Proof of Concept — Facebook Marketplace, 4 regions
-- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim MMR. Production dashboard (`/web`): Next.js (App Router) + Auth.js (Google OIDC, domain-restricted) + Tailwind v4 + shadcn/ui — see `@docs/superpowers/specs/2026-05-11-web-frontend-design.md`. See `@docs/architecture.md`.
+- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim/Cox MMR. Production dashboard (`/web`): Next.js (App Router) + Auth.js (Google OIDC, domain-restricted) + Tailwind v4 + shadcn/ui. See `@docs/architecture.md`.
 - **Default mode:** Plan Mode (Shift+Tab → "plan"). Never edit on first turn.
 - **Persona:** Architecture-first engineer. Reads before writing. Plans before editing.
 
@@ -107,9 +107,7 @@ If not → don't prioritize it.
 - `@docs/voice.md` — thinking & communication style
 - `@docs/architecture.md` — full architecture, repo layout, env, routes, data model, deployment
 - `@docs/github.md` — GitHub workflow, branch protection, required secrets, merge contract
-- `@docs/PRODUCT_SPEC.md` — business context (placeholder, fill from §2 of original spec)
-- `@docs/RUNBOOK.md` — ops runbook (placeholder)
-- `@docs/SECURITY.md` — secrets, HMAC, RLS plan (placeholder)
+- `@docs/RUNBOOK.md` — production operations, deploy, smoke checks, rollback, and incident response
 - `@docs/plan-prompts/` — plan-mode prompt library (TAV-tuned)
 - `@docs/verification/loop.md` — verification protocol
 - `@docs/followups.md` — scope-creep capture log
