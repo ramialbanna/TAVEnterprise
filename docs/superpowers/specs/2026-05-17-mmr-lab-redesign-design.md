@@ -1,9 +1,40 @@
 # /mmr-lab Redesign — Manheim MMR Layout, Honest Shell (Issue #44)
 
 Date: 2026-05-17
-Status: Approved (user, 2026-05-17)
+Status: **REVISED R1 (user, 2026-05-17)** — see "REVISION R1" below; it SUPERSEDES the interim-catalog sections.
 GitHub: ramialbanna/TAVEnterprise#44
 Scope: **frontend/product only.** No backend slice, no v2, no lead-scoring change.
+
+## REVISION R1 — 2026-05-17 (no hardcoded catalog; selectors disabled)
+
+The bounded interim catalog is **withdrawn**. We will NOT present Cadillac/Ford/Subaru
+local constants as if they were real product data, and we will NOT scrape the Manheim
+UI. Authoritative changes (these override anything below that conflicts):
+
+1. **Delete `web/app/(app)/mmr-lab/_data/interim-catalog.ts` and its test.** Zero
+   hardcoded vehicle catalog values anywhere in production code.
+2. **Production Year/Make/Model/Style selectors render visible but DISABLED**, with no
+   options, and the UI states clearly that the **live catalog / API access is not
+   connected yet**. No cascade logic, no local vehicle constants imported.
+3. **VIN is the only working valuation path** — existing `/api/app/mmr/vin` lean
+   envelope → Base MMR; everything else honest `--` (unchanged from below).
+4. Selecting/interacting with Y/M/M/S **cannot** call `/api/app/mmr/vin` or any YMM
+   endpoint (it's inert/disabled). Money fields stay `--` unless populated by the real
+   VIN path.
+5. Official Manheim/Cox Valuations API integration is owned by **#45** (created +
+   linked): server-side metadata endpoints (years/makes/models/trims), server-side YMM
+   valuation requiring style/body + mileage, safe metadata caching, 401/596 treated as
+   "not provisioned" (never fake fallback), removal of this disabled state on delivery,
+   no scraping unless Cox/Manheim authorizes in writing.
+6. Tests focus on revised behavior: selectors visible+disabled; UI explains "live
+   catalog not connected"; Y/M/M/S interaction triggers no network; money `--` unless
+   real VIN path. e2e screenshots = empty state + disabled-state (NO fake selected-YMM
+   screenshot).
+
+Everything below about layout faithfulness, the honest VIN result, disabled MMR
+Adjustments, `--` everywhere, security boundary, and "no dummy prefill" still applies.
+Wherever the text below describes a working interim catalog / cascade / identity title
+from Y/M/M/S, treat it as REPLACED by items 1–4 above.
 
 ## Goal
 

@@ -2,6 +2,24 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **REVISION R1 (2026-05-17) — READ FIRST.** Scope changed; see spec "REVISION R1".
+> Interim catalog is WITHDRAWN. Net plan now:
+> - T1 ✅ done. T2 (catalog) → **REVERTED: delete `interim-catalog.ts` + test.**
+>   T3 ✅ (`MmrMoney/MmrRange`) unchanged & kept.
+> - T4 → **rewritten:** `search-panel.tsx` renders VIN row + Year/Make/Model/Style
+>   selectors **visible but DISABLED**, no options, no catalog import, with a clear
+>   "live catalog not connected" message. No cascade, no `onIdentityChange`.
+> - T5 (result band), T6 (data sections) — unchanged (honest `--`).
+> - T7 (compose) — page = SearchPanel + ResultBand + DataSections; wire VIN via
+>   `postMmrVin`; "live catalog not connected" note; NO interim-catalog import; remove
+>   dummy prefill. No identity title from Y/M/M/S (selectors inert).
+> - T8 (e2e) — empty state + disabled-selectors state + VIN mocked path; screenshots =
+>   empty + disabled-state ONLY (drop the selected-YMM screenshot).
+> - T9 — follow-up issue **already created (#45) + linked from #44**; do final verify +
+>   guardrail greps (incl. zero hardcoded vehicle catalog in `web/`).
+> Where any task below references the interim catalog / cascade / identity title, it is
+> SUPERSEDED by the above.
+
 **Goal:** Replace `/mmr-lab` with a Manheim-MMR-faithful, honest-data workspace: VIN valuation via the existing proxy, identity-only cascading Year/Make/Model/Style from a bounded labeled interim catalog, no dummy prefill, `--` everywhere there is no real API value.
 
 **Architecture:** Next.js App Router page composed of focused client components under `web/app/(app)/mmr-lab/`. New `_data/interim-catalog.ts` (labeled, bounded). New `_components` for the Manheim zones; reuse `@/components/data-state`, `@/lib/format`, shadcn/ui primitives, `@tanstack/react-query`. VIN is the ONLY valuation path: browser → same-origin `/api/app/mmr/vin` → Worker (unchanged). Y/M/M/S sets the title only and fires no request.
