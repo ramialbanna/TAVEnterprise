@@ -72,6 +72,8 @@ included `V2-Core` requirement.
 | `15-current-architecture-map.md` | Current live architecture map used to ground v2 design work. | Created |
 | `16-final-outcome-architecture-map.md` | Target buying-side platform architecture after v2/v3 are complete. | Created |
 | `17-current-file-by-file-review.md` | Active file/group review with purpose, risk, v2 relevance, and next action. | Created |
+| `18-new-developer-handoff.md` | Clean new-developer handoff for understanding current state and guardrails. | Created |
+| `19-v2-implementation-index.md` | Execution index for required docs and phased v2/v3 work packages. | Created |
 
 ## Strategic Implementation Approach
 
@@ -116,3 +118,15 @@ The next implementation PR should not start until:
 - If a PR touches offer approval, it must cite the approval governance ADR and
   explicitly state whether it is implementing offer-level audit only or a later
   governance layer.
+
+## New Developer Entry Point
+
+For a clean start, read these three files first:
+
+1. `18-new-developer-handoff.md`
+2. `19-v2-implementation-index.md`
+3. `15-current-architecture-map.md`
+
+Then read `16-final-outcome-architecture-map.md`,
+`17-current-file-by-file-review.md`, `docs/02-product/v2-opportunities.md`, and
+`13-open-questions-log.md` before writing any implementation plan.

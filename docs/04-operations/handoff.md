@@ -120,6 +120,8 @@ RuFlo / claude-flow autopilot caused unauthorized commits and PR merge activity 
 - `docs/04-operations/runbook.md` - production operations.
 - `docs/02-product/roadmap.md` - roadmap and v2 direction.
 - `docs/06-platform/README.md` - v2/v3 buying-side platform control docs.
+- `docs/06-platform/18-new-developer-handoff.md` - clean new-developer handoff.
+- `docs/06-platform/19-v2-implementation-index.md` - ordered v2 docs/PR sequence.
 - `docs/03-api/app-api.md` - app API.
 - `docs/03-api/manheim-cox.md` - Cox/Manheim notes.
 - `docs/archive/2026-05-doc-consolidation/` - historical MVP artifacts.
