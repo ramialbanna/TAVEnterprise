@@ -81,6 +81,10 @@ const ENGINE_CONFIG_STOP_SET: ReadonlySet<string> = new Set([
   "4c", "6c", "8c", "v4", "v6", "v8", "i4", "i6", "ev", "phev", "hybrid", "diesel",
 ]);
 
+const BODY_STYLE_STOP_SET: ReadonlySet<string> = new Set([
+  "sedan", "coupe", "convertible", "hatchback", "wagon", "pickup", "suv", "van", "minivan",
+]);
+
 const MODEL_STOP_RE =
   /\b(miles?|mi|km|clean|great|excellent|good|nice|runs?|asking|obo|firm|negotiable|priced)\b/i;
 
@@ -133,7 +137,15 @@ function extractMake(
     return { make: canonical, rest: lower.slice(idx + alias.length).trim() };
   }
 
-  // Single-word aliases ("chevy" → "chevrolet").
+  // Canonical makes (multi-word first by list order).
+  for (const make of CANONICAL_MAKES) {
+    if (!lower.includes(make)) continue;
+    const idx = lower.indexOf(make);
+    return { make, rest: lower.slice(idx + make.length).trim() };
+  }
+
+  // Single-word aliases ("chevy" → "chevrolet"). These run after canonical
+  // makes so "mercedes-benz" is not partially parsed as alias "mercedes".
   for (const [alias, canonical] of Object.entries(MAKE_ALIASES)) {
     if (alias.includes(" ")) continue;
     const re = new RegExp(`\\b${alias}\\b`, "i");
@@ -142,20 +154,13 @@ function extractMake(
     return { make: canonical, rest: lower.slice(idx + alias.length).trim() };
   }
 
-  // Canonical makes (multi-word first by list order).
-  for (const make of CANONICAL_MAKES) {
-    if (!lower.includes(make)) continue;
-    const idx = lower.indexOf(make);
-    return { make, rest: lower.slice(idx + make.length).trim() };
-  }
-
   return undefined;
 }
 
 function extractModel(
   rest: string,
 ): { model: string; remaining: string } | undefined {
-  const lower = rest.toLowerCase().trim();
+  const lower = rest.toLowerCase().replace(/[·•]/g, " ").trim();
 
   // Known models matched only at the START of the remainder.
   for (const km of KNOWN_MODELS) {
@@ -171,12 +176,14 @@ function extractModel(
   for (const tok of tokens) {
     if (!tok) continue;
     if (MODEL_STOP_RE.test(tok)) break;
-    if (/^[,|/]/.test(tok)) break;
+    if (/^[,|/()[\]{}:;]+$/.test(tok)) break;
+    if (/^[,|/()[\]{}:;]/.test(tok)) break;
     if (/^\d{5,}$/.test(tok)) break;    // bare 5-digit mileage
     if (/^\d+k$/i.test(tok)) break;     // "82k"
     if (TRIM_STOP_SET.has(tok)) break;  // trim token signals end of model
     if (DRIVETRAIN_STOP_SET.has(tok)) break;
     if (ENGINE_CONFIG_STOP_SET.has(tok)) break;
+    if (BODY_STYLE_STOP_SET.has(tok)) break;
     modelTokens.push(tok);
     if (modelTokens.length === 2) break;
   }
