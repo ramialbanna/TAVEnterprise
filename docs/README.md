@@ -46,6 +46,7 @@ current doc links to them explicitly.
 - [Business Requirements](06-platform/01-business-requirements.md) — business rules tagged by milestone.
 - [Open Questions Log](06-platform/13-open-questions-log.md) — unresolved decisions that must not be guessed during implementation.
 - [Current Architecture Map](06-platform/15-current-architecture-map.md) — current live runtime, data, route, and integration map for v2 planning.
+- [Final Outcome Architecture Map](06-platform/16-final-outcome-architecture-map.md) — target buying-side operating-system architecture for v2/v3.
 
 ## Archive
 
