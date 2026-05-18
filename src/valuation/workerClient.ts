@@ -391,7 +391,9 @@ async function performMmrCall(
       }
     }
 
-    if (!sendTrim) {
+    let lookupTrimEstimated = false;
+
+    if (!sendTrim && catalogStyles?.catalogState !== "connected") {
       return {
         kind: "miss",
         reason: "trim_missing",
@@ -433,17 +435,26 @@ async function performMmrCall(
         };
       }
       sendTrim = selected.style;
-      log("ingest.mmr_catalog_style_selected", {
+      lookupTrimEstimated = selected.isEstimated;
+      log(
+        lookupTrimEstimated
+          ? "ingest.mmr_catalog_style_estimated"
+          : "ingest.mmr_catalog_style_selected",
+        {
         year,
         make: sendMake,
         model: sendModel,
+        style: sendTrim,
+        estimated: lookupTrimEstimated,
         matched_signals: selected.matchedSignals,
-      });
+        },
+      );
     }
     if (sendTrim) body.trim = sendTrim;
 
     // exact and alias both yield "medium"; partial/none degrades to "low"
     confidence =
+      lookupTrimEstimated ||
       normalized.normalizationConfidence === "partial" ||
       normalized.normalizationConfidence === "none"
         ? "low"
@@ -453,8 +464,10 @@ async function performMmrCall(
     normalizationMeta = {
       lookupMake: normalized.canonicalMake,
       lookupModel: normalized.canonicalModel,
-      lookupTrim: effectiveTrim,
-      normalizationConfidence: normalized.normalizationConfidence,
+      lookupTrim: sendTrim || effectiveTrim || null,
+      normalizationConfidence: lookupTrimEstimated
+        ? "partial"
+        : normalized.normalizationConfidence,
     };
   } else {
     return { kind: "miss", reason: "insufficient_params", method: null };

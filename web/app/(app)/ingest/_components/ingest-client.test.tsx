@@ -67,6 +67,8 @@ function okDetail(over: Partial<IngestRunDetail> = {}): ApiResult<IngestRunDetai
           mileage: 62000,
           valuation_mileage: 62000,
           valuation_mileage_is_estimated: false,
+          valuation_style: null,
+          valuation_style_is_estimated: false,
           vin: null,
           valuation_status: "miss",
           valuation_missing_reason: "trim_missing",
@@ -197,6 +199,8 @@ describe("IngestClient", () => {
           mileage: null,
           valuation_mileage: 96000,
           valuation_mileage_is_estimated: true,
+          valuation_style: "4D SEDAN SE",
+          valuation_style_is_estimated: true,
           vin: null,
           valuation_status: "hit",
           valuation_missing_reason: null,
@@ -216,5 +220,6 @@ describe("IngestClient", () => {
     await user.click(occurrences[occurrences.length - 1]!);
 
     expect(await screen.findByText(/MMR mileage estimate: 96,000 mi/i)).toBeInTheDocument();
+    expect(screen.getByText(/MMR style estimate: 4D SEDAN SE/i)).toBeInTheDocument();
   });
 });

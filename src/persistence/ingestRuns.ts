@@ -45,6 +45,8 @@ export interface ListingDiagnostic {
   mileage: number | null;
   valuation_mileage: number | null;
   valuation_mileage_is_estimated: boolean;
+  valuation_style: string | null;
+  valuation_style_is_estimated: boolean;
   vin: string | null;
   valuation_status: "hit" | "miss" | null;
   valuation_missing_reason: string | null;
@@ -76,6 +78,8 @@ type ValAgg = {
   mileage: number | null;
   missing_reason: string | null;
   vehicle_candidate_id: string | null;
+  lookup_trim: string | null;
+  normalization_confidence: string | null;
   fetched_at: string;
 };
 type LeadAgg = {
@@ -108,6 +112,8 @@ export function buildListingDiagnostics(
       mileage: (v.mileage as number | null) ?? null,
       missing_reason: (v.missing_reason as string | null) ?? null,
       vehicle_candidate_id: (v.vehicle_candidate_id as string | null) ?? null,
+      lookup_trim: (v.lookup_trim as string | null) ?? null,
+      normalization_confidence: (v.normalization_confidence as string | null) ?? null,
       fetched_at: fetchedAt,
     });
   }
@@ -138,6 +144,12 @@ export function buildListingDiagnostics(
 
     const listingMileage = (n.mileage as number | null) ?? null;
     const valuationMileage = val?.mileage ?? null;
+    const listingTrim = (n.trim as string | null) ?? null;
+    const valuationStyle = val?.lookup_trim ?? null;
+    const valuationStyleIsEstimated =
+      valuationStyle !== null &&
+      val?.normalization_confidence === "partial" &&
+      listingTrim?.trim().toUpperCase() !== valuationStyle.trim().toUpperCase();
 
     return {
       normalized_listing_id: nlId,
@@ -146,11 +158,13 @@ export function buildListingDiagnostics(
       year: (n.year as number | null) ?? null,
       make: (n.make as string | null) ?? null,
       model: (n.model as string | null) ?? null,
-      trim: (n.trim as string | null) ?? null,
+      trim: listingTrim,
       price: (n.price as number | null) ?? null,
       mileage: listingMileage,
       valuation_mileage: valuationMileage,
       valuation_mileage_is_estimated: listingMileage === null && valuationMileage !== null,
+      valuation_style: valuationStyle,
+      valuation_style_is_estimated: valuationStyleIsEstimated,
       vin: (n.vin as string | null) ?? null,
       valuation_status: valuationStatus,
       valuation_missing_reason: valuationStatus === "miss" ? val!.missing_reason : null,
@@ -297,7 +311,7 @@ export async function getSourceRunDetail(
   if (normIds.length > 0) {
     const { data: vData, error: vDErr } = await db
       .from("valuation_snapshots")
-      .select("normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, fetched_at")
+      .select("normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, lookup_trim, normalization_confidence, fetched_at")
       .in("normalized_listing_id", normIds);
     if (vDErr) throw vDErr;
     valRows = (vData ?? []) as Array<Record<string, unknown>>;

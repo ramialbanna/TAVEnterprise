@@ -15,6 +15,7 @@ describe("selectCatalogStyleForListing", () => {
 
     expect(selected?.style).toBe("2D REGULAR CAB XL");
     expect(selected?.matchedSignals).toEqual(expect.arrayContaining(["XL", "REGULAR CAB"]));
+    expect(selected?.isEstimated).toBe(false);
   });
 
   it("selects EV range/performance styles from title evidence", () => {
@@ -25,9 +26,10 @@ describe("selectCatalogStyleForListing", () => {
     });
 
     expect(selected?.style).toBe("4D SUV PERFORMANCE");
+    expect(selected?.isEstimated).toBe(false);
   });
 
-  it("returns null when matching trim is ambiguous across catalog styles", () => {
+  it("uses the first catalog style as an estimate when matching trim is ambiguous", () => {
     const selected = selectCatalogStyleForListing({
       title: "2020 Chevrolet Silverado 1500 RST Pickup 4D 5 3/4 ft",
       trim: "RST",
@@ -37,16 +39,19 @@ describe("selectCatalogStyleForListing", () => {
       ],
     });
 
-    expect(selected).toBeNull();
+    expect(selected?.style).toBe("4D CREW CAB RST");
+    expect(selected?.isEstimated).toBe(true);
   });
 
-  it("returns null when no listing evidence matches the catalog", () => {
+  it("uses the first catalog style as an estimate when no listing evidence matches the catalog", () => {
     const selected = selectCatalogStyleForListing({
       title: "2011 Ram 2500",
       trim: null,
       styles: ["4D CREW CAB LARAMIE", "4D CREW CAB SLT"],
     });
 
-    expect(selected).toBeNull();
+    expect(selected?.style).toBe("4D CREW CAB LARAMIE");
+    expect(selected?.matchedSignals).toEqual([]);
+    expect(selected?.isEstimated).toBe(true);
   });
 });
