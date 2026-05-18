@@ -279,6 +279,34 @@ describe("parseFacebookItem — valid cases", () => {
     expect(r.listing.make).toBe("mercedes-benz");
     expect(r.listing.model).toBe("e-class");
   });
+
+  it("A24: unhyphenated Ford F150 normalizes to Cox-friendly F-150", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/24", title: "2011 Ford F150", price: "$11,999", mileage: "190000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("ford");
+    expect(r.listing.model).toBe("f-150");
+  });
+
+  it("A25: Range Rover Evoque stays a full model, not generic Range Rover", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/25",
+        title: "2017 Land Rover Range Rover Evoque · SE Premium Sport Utility 4D",
+        price: "$12,500",
+        mileage: "89711",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("land rover");
+    expect(r.listing.model).toBe("range rover evoque");
+    expect(r.listing.trim).toBe("se premium");
+  });
 });
 
 // ── Group B: Edge cases ───────────────────────────────────────────────────────

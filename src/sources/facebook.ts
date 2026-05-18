@@ -43,6 +43,10 @@ const CANONICAL_MAKES: readonly string[] = [
 
 // Checked only at the START of the post-make remainder string.
 const KNOWN_MODELS: readonly string[] = [
+  "range rover evoque",
+  "range rover sport",
+  "range rover",
+  "f150", "f250", "f350", "f450",
   "f-150", "f-250", "f-350", "f-450",
   "1500", "2500", "3500",
   "cx-5", "cx-9", "cx-30", "cx-50",
@@ -58,6 +62,7 @@ const KNOWN_MODELS: readonly string[] = [
 // Single-word trims act as stop tokens during generic model extraction.
 const KNOWN_TRIMS: readonly string[] = [
   "ex-l", "big horn", "laramie longhorn", "road warrior", "king ranch",
+  "se premium",
   "sport", "se", "sel", "le", "xle", "xse",
   "ex", "lx", "dx", "sx", "limited", "premium",
   "xlt", "lariat", "laramie", "rebel", "platinum",
@@ -165,7 +170,7 @@ function extractModel(
   // Known models matched only at the START of the remainder.
   for (const km of KNOWN_MODELS) {
     if (lower === km || lower.startsWith(km + " ") || lower.startsWith(km + ",")) {
-      return { model: km, remaining: lower.slice(km.length).trim() };
+      return { model: normalizeKnownModel(km), remaining: lower.slice(km.length).trim() };
     }
   }
 
@@ -193,6 +198,16 @@ function extractModel(
   const model = modelTokens.join(" ");
   const remaining = lower.slice(model.length).trim();
   return { model, remaining };
+}
+
+function normalizeKnownModel(model: string): string {
+  const aliases: Record<string, string> = {
+    f150: "f-150",
+    f250: "f-250",
+    f350: "f-350",
+    f450: "f-450",
+  };
+  return aliases[model] ?? model;
 }
 
 function extractTrim(remaining: string): string | undefined {
