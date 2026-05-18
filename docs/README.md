@@ -45,6 +45,7 @@ current doc links to them explicitly.
 - [Project Charter](06-platform/00-project-charter.md) — scope, success criteria, stakeholders, glossary.
 - [Business Requirements](06-platform/01-business-requirements.md) — business rules tagged by milestone.
 - [Open Questions Log](06-platform/13-open-questions-log.md) — unresolved decisions that must not be guessed during implementation.
+- [Current Architecture Map](06-platform/15-current-architecture-map.md) — current live runtime, data, route, and integration map for v2 planning.
 
 ## Archive
 

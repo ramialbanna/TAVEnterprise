@@ -69,6 +69,7 @@ included `V2-Core` requirement.
 | `12-security-and-access.md` | Role/tier access matrix and audit policy. | Pending |
 | `13-open-questions-log.md` | Living decision log. | Created |
 | `14-decision-records/` | Short ADRs for durable choices. | Started with [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+| `15-current-architecture-map.md` | Current live architecture map used to ground v2 design work. | Created |
 
 ## Strategic Implementation Approach
 
