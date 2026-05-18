@@ -39,8 +39,14 @@ current doc links to them explicitly.
 - [Followups](05-process/followups.md) — scoped follow-up log.
 - [Plan Prompts](05-process/plan-prompts/) — task planning templates.
 
+### 06 — Platform
+
+- [V2/V3 Platform Control Docs](06-platform/README.md) — buying-side platform charter, requirements, traceability, and decision controls.
+- [Project Charter](06-platform/00-project-charter.md) — scope, success criteria, stakeholders, glossary.
+- [Business Requirements](06-platform/01-business-requirements.md) — business rules tagged by milestone.
+- [Open Questions Log](06-platform/13-open-questions-log.md) — unresolved decisions that must not be guessed during implementation.
+
 ## Archive
 
 - [2026-05 MVP Archive](archive/2026-05-mvp/) — historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
 - [2026-05 Doc Consolidation Archive](archive/2026-05-doc-consolidation/) — detailed docs superseded by the current docs spine.
-
