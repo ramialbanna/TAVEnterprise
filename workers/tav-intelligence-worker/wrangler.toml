@@ -33,7 +33,7 @@ preview_id = "1b19d3c13a5e4b9c95f7a9c6aa4161ae"
 
 [vars]
 # Comma-separated email allowlist for force_refresh (temporary; see
-# docs/INTELLIGENCE_CONTRACTS.md §D). Empty string = no email-based bypass.
+# docs/03-api/intelligence-contracts.md §D). Empty string = no email-based bypass.
 MANAGER_EMAIL_ALLOWLIST = ""
 
 # ── Staging ──────────────────────────────────────────────────────────────────

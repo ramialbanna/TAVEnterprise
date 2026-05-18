@@ -10,7 +10,7 @@ import type {
 } from "@/lib/app-api";
 
 /**
- * Typed fixtures mirroring `docs/APP_API.md` / the parser schemas. Handlers wrap these
+ * Typed fixtures mirroring `docs/03-api/app-api.md` / the parser schemas. Handlers wrap these
  * in the `{ ok: true, data }` envelope the `/api/app/*` proxy returns.
  */
 

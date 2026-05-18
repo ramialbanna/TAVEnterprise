@@ -1,6 +1,6 @@
 # Architecture Reference — TAV-AIP
 
-> Long-form companion to CLAUDE.md. Pulled in via `@docs/architecture.md` when needed.
+> Long-form companion to CLAUDE.md. Pulled in via `@docs/01-architecture/system-overview.md` when needed.
 
 ## 1. End-to-End Flow (target enterprise vision)
 
@@ -52,12 +52,19 @@ Buy-Box Learning Layer   (rules updated from real outcomes)
 ├── .dev.vars.example
 ├── .gitignore
 ├── docs/
-│   ├── architecture.md    ← this file
-│   ├── HANDOFF.md
-│   ├── ROADMAP.md
-│   ├── RUNBOOK.md
-│   ├── APP_API.md
-│   ├── COX_API_INTEGRATION.md
+│   ├── README.md
+│   ├── 01-architecture/
+│   │   └── system-overview.md    ← this file
+│   ├── 02-product/
+│   │   ├── roadmap.md
+│   │   └── v2-opportunities.md
+│   ├── 03-api/
+│   │   ├── app-api.md
+│   │   └── manheim-cox.md
+│   ├── 04-operations/
+│   │   ├── handoff.md
+│   │   └── runbook.md
+│   ├── 05-process/
 │   └── archive/
 ├── supabase/
 │   ├── schema.sql
@@ -441,7 +448,7 @@ docs: add runbook and deployment instructions
 - **Microservices** before the Worker becomes a bottleneck.
 - **ML buy-box** before 2026 purchase outcomes exist.
 
-## 21. ADR Format (`docs/adr/NNNN-title.md`)
+## 21. ADR Format (`docs/01-architecture/adr/NNNN-title.md`)
 ```
 # NNNN — Title
 Status: proposed | accepted | superseded by NNNN

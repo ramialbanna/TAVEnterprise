@@ -322,7 +322,7 @@ describe("GET /app/kpis", () => {
     expect(body.ok).toBe(true);
     expect(body.data.outcomes.missingReason).toBeNull();
     // sell_through_rate is present in the view row but intentionally NOT surfaced
-    // (tautologically 1.0 today — see handleKpis comment / docs/followups.md).
+    // (tautologically 1.0 today — see handleKpis comment / docs/05-process/followups.md).
     expect(body.data.outcomes.value).toEqual({
       totalOutcomes: 12,
       avgGrossProfit: 1500,

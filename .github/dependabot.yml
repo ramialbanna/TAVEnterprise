@@ -18,7 +18,7 @@ updates:
         dependency-type: "production"
         update-types: ["minor", "patch"]
     ignore:
-      # Major bumps for these get an ADR per docs/architecture.md §21.
+      # Major bumps for these get an ADR per docs/01-architecture/system-overview.md §21.
       - dependency-name: "wrangler"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@supabase/supabase-js"

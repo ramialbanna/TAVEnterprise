@@ -9,7 +9,7 @@ import {
   parseSystemStatus,
 } from "./parse";
 
-// ── fixtures (mirroring docs/APP_API.md) ───────────────────────────────────────
+// ── fixtures (mirroring docs/03-api/app-api.md) ───────────────────────────────────────
 const SYSTEM_STATUS_OK = {
   ok: true,
   data: {

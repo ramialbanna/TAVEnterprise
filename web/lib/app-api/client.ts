@@ -35,7 +35,7 @@ import type {
   SystemStatus,
 } from "./schemas";
 
-/** Query filter for `GET /app/ingest-runs` (all optional; see `docs/APP_API.md`). */
+/** Query filter for `GET /app/ingest-runs` (all optional; see `docs/03-api/app-api.md`). */
 export type IngestRunsFilter = {
   /** Default 20, clamped to 100 by the Worker. */
   limit?: number;
@@ -55,7 +55,7 @@ export function ingestRunsQuery(filter: IngestRunsFilter = {}): string {
   return qs ? `?${qs}` : "";
 }
 
-/** Query filter for `GET /app/historical-sales` (all fields optional; see `docs/APP_API.md`). */
+/** Query filter for `GET /app/historical-sales` (all fields optional; see `docs/03-api/app-api.md`). */
 export type HistoricalSalesFilter = {
   /** Default 20, clamped to 100 by the Worker. */
   limit?: number;

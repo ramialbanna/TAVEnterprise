@@ -1,6 +1,6 @@
 # GitHub Integration — TAV-AIP
 
-> Companion to CLAUDE.md §4 and `.claude/agents/gh-integration.md`. Pulled in via `@docs/github.md`.
+> Companion to CLAUDE.md §4 and `.claude/agents/gh-integration.md`. Pulled in via `@docs/05-process/github.md`.
 
 ## Repo facts
 - **URL:** https://github.com/ramialbanna/TAVEnterprise
@@ -19,14 +19,14 @@
 ## Issue templates
 - `bug_report.md`
 - `feature_request.md`
-- `source_adapter.md` — for new platform adapters (links to `docs/plan-prompts/01-add-source-adapter.md`)
-- `schema_change.md` — for schema migrations (links to `docs/plan-prompts/05-schema-migration.md`)
+- `source_adapter.md` — for new platform adapters (links to `docs/05-process/plan-prompts/01-add-source-adapter.md`)
+- `schema_change.md` — for schema migrations (links to `docs/05-process/plan-prompts/05-schema-migration.md`)
 
 ## PR template
-`.github/pull_request_template.md` — built around the verification report from `docs/verification/template.md`. The TAV self-check tickboxes are mandatory; merging without them is a process violation, not a style nit.
+`.github/pull_request_template.md` — built around the verification report from `docs/archive/2026-05-doc-consolidation/verification-template.md`. The TAV self-check tickboxes are mandatory; merging without them is a process violation, not a style nit.
 
 ## CODEOWNERS
-`@ramialbanna` owns everything by default, with explicit ownership called out for `CLAUDE.md`, `docs/architecture.md`, `docs/identity.md`, `docs/voice.md`, `docs/adr/`, `supabase/`, `src/sources/`, `.github/`, and `.claude/`.
+`@ramialbanna` owns everything by default, with explicit ownership called out for `CLAUDE.md`, `docs/01-architecture/system-overview.md`, `docs/01-architecture/identity.md`, `docs/05-process/voice.md`, `docs/01-architecture/adr/`, `supabase/`, `src/sources/`, `.github/`, and `.claude/`.
 
 ## Branch protection (configure in repo Settings)
 Required for `main`:

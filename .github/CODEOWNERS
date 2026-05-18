@@ -3,10 +3,10 @@
 
 # Architecture & data model: any change here pulls the architect and data-modeler in.
 /CLAUDE.md              @ramialbanna
-/docs/architecture.md   @ramialbanna
-/docs/identity.md       @ramialbanna
-/docs/voice.md          @ramialbanna
-/docs/adr/              @ramialbanna
+/docs/01-architecture/  @ramialbanna
+/docs/02-product/       @ramialbanna
+/docs/05-process/voice.md @ramialbanna
+/docs/01-architecture/adr/ @ramialbanna
 /supabase/              @ramialbanna
 
 # Source adapters — every new platform requires lead review.

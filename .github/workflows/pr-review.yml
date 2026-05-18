@@ -33,8 +33,8 @@ jobs:
             /review
 
             You are reviewing PR #${{ github.event.pull_request.number }} on TAV-VAIP.
-            Read CLAUDE.md, docs/identity.md, docs/voice.md, and the relevant sections
-            of docs/architecture.md before reviewing.
+            Read CLAUDE.md, docs/01-architecture/identity.md, docs/05-process/voice.md, and the relevant sections
+            of docs/01-architecture/system-overview.md before reviewing.
 
             Partition reviewers by TAV layer per .claude/commands/review.md and post
             the aggregated review as a single PR comment. Treat any of the following
@@ -44,5 +44,5 @@ jobs:
               - Silent drops (no reason_code)
               - Service-role key, HMAC secret, Manheim creds, or Twilio creds in source
               - Stale-suppression regression
-              - Missing required indexes from docs/architecture.md §12
+              - Missing required indexes from docs/01-architecture/system-overview.md §12
               - v_active_inbox losing its filter semantics

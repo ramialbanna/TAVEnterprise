@@ -7,7 +7,7 @@ Goal: add a source adapter for <platform> (e.g. craigslist | autotrader | cars_c
 
 Read first:
 1. CLAUDE.md §§2, 3, 9.
-2. docs/architecture.md §§4, 5, 12.
+2. docs/01-architecture/system-overview.md §§4, 5, 12.
 3. src/sources/facebook.ts as the reference adapter.
 4. src/normalize/* and src/dedupe/identity.ts to confirm what shape the downstream pipeline expects.
 5. test/fixtures/ to see how real source payloads are stored.

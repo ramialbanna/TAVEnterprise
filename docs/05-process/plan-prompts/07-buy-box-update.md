@@ -8,7 +8,7 @@ Goal: <add buy-box rule | change scoring weights | change grade mapping | introd
 Read first:
 1. src/scoring/scoreLead.ts, buyBox.ts, reasonCodes.ts.
 2. test/scoring.test.ts.
-3. docs/architecture.md §§9, 10.
+3. docs/01-architecture/system-overview.md §§9, 10.
 4. tav.buy_box_rules schema.
 5. tav.purchase_outcomes (current row count and shape — informs whether we have enough evidence to change weights).
 

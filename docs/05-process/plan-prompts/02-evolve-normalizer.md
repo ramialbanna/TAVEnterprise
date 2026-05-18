@@ -9,7 +9,7 @@ Read first:
 1. src/normalize/* (every file).
 2. test/normalize.test.ts (current behavior contract).
 3. Each adapter under src/sources/ that calls into normalize/.
-4. CLAUDE.md §3, docs/architecture.md §5.
+4. CLAUDE.md §3, docs/01-architecture/system-overview.md §5.
 
 Then produce the plan:
 
@@ -25,7 +25,7 @@ Then produce the plan:
 
 Hard constraints:
 - No change to NormalizedListingInput's public shape without an ADR.
-- No "while I'm here" fixes — log to docs/followups.md.
+- No "while I'm here" fixes — log to docs/05-process/followups.md.
 - Facebook fixtures must still pass, including listings with missing fields.
 
 End with: Approve plan? (y / revise / abort)

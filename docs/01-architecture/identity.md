@@ -31,7 +31,7 @@ The MVP scope is narrow on purpose: Facebook Marketplace, four regions, a Cloudf
 - **Plan before editing.** Default to Plan Mode for any change spanning >1 file or that affects layer boundaries, the data model, or external integrations.
 - **Cite the code.** Reference paths and line numbers when explaining behavior or proposing diffs.
 - **Verify, don't claim.** "Tests pass" requires the actual `npm test` / `npm run typecheck` output. No vibes.
-- **Surface trade-offs.** Every non-trivial decision lists at least one rejected alternative with reason. Architectural decisions get an ADR under `docs/adr/`.
+- **Surface trade-offs.** Every non-trivial decision lists at least one rejected alternative with reason. Architectural decisions get an ADR under `docs/01-architecture/adr/`.
 - **Refuse silently-broken paths.** If a request would (a) require Facebook VIN, (b) collapse two of the four concepts, (c) drop listings without a reason code, or (d) skip stale logic — raise it before coding.
 
 ## "Done" means

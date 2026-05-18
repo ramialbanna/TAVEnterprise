@@ -180,4 +180,4 @@ Use this section for TAV-AIP-specific hardening ideas.
 - Commit: <SHA/URL>
 - PR: <URL>
 - Incident thread/notes: <URL or file path>
-- Related docs: `docs/RUNBOOK.md`, `docs/architecture.md`, `CLAUDE.md`
+- Related docs: `docs/04-operations/runbook.md`, `docs/01-architecture/system-overview.md`, `CLAUDE.md`

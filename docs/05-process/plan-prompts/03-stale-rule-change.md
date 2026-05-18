@@ -8,7 +8,7 @@ Goal: <tune signal | add signal | adjust threshold | change status mapping> in t
 Read first:
 1. src/stale/staleScore.ts and src/stale/freshnessStatus.ts.
 2. test/staleScore.test.ts.
-3. docs/architecture.md §7 (stale strategy + score table).
+3. docs/01-architecture/system-overview.md §7 (stale strategy + score table).
 4. Any view that filters on freshness_status or stale_score (tav.v_active_inbox).
 
 Then produce the plan:

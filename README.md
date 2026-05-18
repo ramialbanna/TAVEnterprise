@@ -31,13 +31,15 @@ Key runtime pieces:
 
 ## Active Docs
 
-- [docs/HANDOFF.md](docs/HANDOFF.md) - next-developer state, branch/PR map, known issues.
-- [docs/architecture.md](docs/architecture.md) - architecture and data model.
-- [docs/RUNBOOK.md](docs/RUNBOOK.md) - production operations, deploy, smoke checks, rollback.
-- [docs/ROADMAP.md](docs/ROADMAP.md) - current roadmap and v2 direction.
-- [docs/APP_API.md](docs/APP_API.md) - app API contract.
-- [docs/COX_API_INTEGRATION.md](docs/COX_API_INTEGRATION.md) - Cox/Manheim integration notes.
-- [docs/archive/2026-05-mvp/](docs/archive/2026-05-mvp/) - historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
+- [docs/README.md](docs/README.md) - documentation map and current source-of-truth index.
+- [docs/04-operations/handoff.md](docs/04-operations/handoff.md) - next-developer state, branch/PR map, known issues.
+- [docs/01-architecture/system-overview.md](docs/01-architecture/system-overview.md) - architecture and data model.
+- [docs/04-operations/runbook.md](docs/04-operations/runbook.md) - production operations, deploy, smoke checks, rollback.
+- [docs/02-product/roadmap.md](docs/02-product/roadmap.md) - current roadmap and v2 direction.
+- [docs/02-product/v2-opportunities.md](docs/02-product/v2-opportunities.md) - active v2 Opportunities product spec.
+- [docs/03-api/app-api.md](docs/03-api/app-api.md) - app API contract.
+- [docs/03-api/manheim-cox.md](docs/03-api/manheim-cox.md) - Cox/Manheim integration notes.
+- [docs/archive/2026-05-doc-consolidation/](docs/archive/2026-05-doc-consolidation/) - historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
 
 ## Local Setup
 
@@ -105,7 +107,7 @@ Intelligence Worker:
 npm run deploy:intelligence
 ```
 
-Verify production after deploy with `/health` and the relevant admin/app smoke route. See [docs/RUNBOOK.md](docs/RUNBOOK.md).
+Verify production after deploy with `/health` and the relevant admin/app smoke route. See [docs/04-operations/runbook.md](docs/04-operations/runbook.md).
 
 ## Secrets
 
@@ -148,7 +150,7 @@ RuFlo / claude-flow autopilot caused unauthorized commits and a PR merge on 2026
 Before major changes:
 
 1. Read [CLAUDE.md](CLAUDE.md).
-2. Read [docs/HANDOFF.md](docs/HANDOFF.md).
+2. Read [docs/04-operations/handoff.md](docs/04-operations/handoff.md).
 3. Check current PRs/issues.
 4. Keep diffs scoped.
 5. Run the verification loop.

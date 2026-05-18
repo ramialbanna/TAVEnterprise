@@ -12,13 +12,13 @@ assignees: []
 ## Tables / objects affected
 <!-- e.g. tav.normalized_listings, tav.leads, tav.v_active_inbox -->
 
-## Phase plan (expand → migrate → contract — see docs/plan-prompts/05-schema-migration.md)
+## Phase plan (expand → migrate → contract — see docs/05-process/plan-prompts/05-schema-migration.md)
 - [ ] **Expand** — additive migration, nullable columns, indexes CONCURRENTLY where possible
 - [ ] **Backfill** — idempotent, resumable script
 - [ ] **Migrate readers** — switch consumers one at a time
 - [ ] **Contract** — drop old columns/objects in a separate, later migration
 
-## Required-index check (docs/architecture.md §12)
+## Required-index check (docs/01-architecture/system-overview.md §12)
 - [ ] No required index removed without an ADR
 - [ ] New columns indexed where read patterns demand it
 
@@ -30,7 +30,7 @@ assignees: []
 <!-- Exact steps to revert if the migration goes wrong. -->
 
 ## ADR
-- [ ] ADR added at `docs/adr/NNNN-<slug>.md` (required for non-additive schema changes)
+- [ ] ADR added at `docs/01-architecture/adr/NNNN-<slug>.md` (required for non-additive schema changes)
 
 ## Hand-off
 This issue should be picked up by the **data-modeler** subagent first (SQL only),

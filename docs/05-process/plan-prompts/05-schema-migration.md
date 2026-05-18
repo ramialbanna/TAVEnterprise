@@ -9,7 +9,7 @@ Read first:
 1. supabase/schema.sql.
 2. The most recent migrations in supabase/migrations/.
 3. Every TypeScript file that references the affected table/column (Grep).
-4. docs/architecture.md §12 (data model + required indexes).
+4. docs/01-architecture/system-overview.md §12 (data model + required indexes).
 5. tav.v_active_inbox and any other view that depends on the touched objects.
 
 Then produce the plan, structured as **expand → migrate → contract**:
@@ -37,7 +37,7 @@ Per phase: list the verification commands and the rollback procedure.
 Hard constraints:
 - Each phase must be independently deployable and revertible.
 - The four-concept tables (raw_listings, normalized_listings, vehicle_candidates, leads) keep their semantic boundary.
-- Required indexes from docs/architecture.md §12 stay required.
+- Required indexes from docs/01-architecture/system-overview.md §12 stay required.
 - v_active_inbox keeps its filter semantics (excludes stale_confirmed/removed, last_seen_at > now() − 30d).
 - RLS is not introduced in this migration (track in followups).
 

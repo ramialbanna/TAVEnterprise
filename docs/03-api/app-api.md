@@ -3,9 +3,9 @@
 Contract for the `/app/*` HTTP surface on the main `tav-aip` Worker, consumed by the
 TAV-owned frontend/dashboard. This is the source of truth for frontend integration.
 
-- **Worker:** `tav-aip` (same Worker as `/ingest`, `/admin/*`, `/health` — see `docs/architecture.md`).
+- **Worker:** `tav-aip` (same Worker as `/ingest`, `/admin/*`, `/health` — see `docs/01-architecture/system-overview.md`).
 - **Implementation:** `src/index.ts` → `src/app/routes.ts` (`handleApp`).
-- **Origin / ADR:** `docs/adr/0002-frontend-app-api-layer.md`.
+- **Origin / ADR:** `docs/01-architecture/adr/0002-frontend-app-api-layer.md`.
 - **Status:** base `/app/*` endpoints implemented + live on `tav-aip-staging` and `tav-aip-production` (2026-05-11; historical smoke evidence is archived under `docs/archive/2026-05-mvp/uat-staging/`).
 
 ## Base URLs
@@ -63,8 +63,54 @@ Authorization: Bearer <APP_API_SECRET>
 | GET | `/app/import-batches` | Recent outcome-import batches |
 | GET | `/app/historical-sales` | `tav.historical_sales` rows, filterable |
 | POST | `/app/mmr/vin` | On-demand MMR valuation by VIN |
+| GET | `/app/opportunities` | Planned v2 Opportunities queue |
+| GET | `/app/opportunities/:id` | Planned v2 Opportunity detail |
+| POST | `/app/opportunities/manual` | Planned manual opportunity submission |
+| POST | `/app/opportunities/:id/assign` | Planned assignment route |
+| POST | `/app/opportunities/:id/claim` | Planned claim route |
+| POST | `/app/opportunities/:id/status` | Planned status route |
+| POST | `/app/opportunities/:id/notes` | Planned note route |
 
 Unknown path / method under `/app/*` → `404 { "ok": false, "error": "not_found" }`.
+
+---
+
+## Planned v2: Opportunities
+
+`/app/opportunities` is the planned v2 buyer-facing read model. It is not
+implemented yet.
+
+The product source of truth is `docs/02-product/v2-opportunities.md`.
+
+Intended routes:
+
+```text
+GET /app/opportunities
+GET /app/opportunities/:id
+POST /app/opportunities/manual
+POST /app/opportunities/:id/assign
+POST /app/opportunities/:id/claim
+POST /app/opportunities/:id/status
+POST /app/opportunities/:id/notes
+```
+
+Scope:
+
+- include created leads and reviewable near-misses
+- include manually submitted listing links
+- show one row per listing/run-relevant opportunity
+- surface event badges such as `First seen`, `Seen again`, `Price changed`,
+  `VIN appeared`, `Estimated miles`, `Estimated style`, and `Near miss`
+- show claim owner, claim timestamp, 24-hour claim expiration, and prior
+  evaluator warnings once assignment workflow is enabled
+- show basic `Spread vs MMR = MMR - asking price`
+- support a read-only first slice, then manual submission + assignment before
+  live multi-user testing
+
+Out of scope for the first v2 Opportunities release:
+
+- projected gross/net profit
+- silently collapsing duplicates into one row
 
 ---
 
@@ -139,7 +185,7 @@ Supabase client itself cannot be constructed.
   currently holds only sold/imported outcome rows (every row has a `sale_price`), so the
   ratio is tautologically `1.0` and would mislead the frontend. A real sell-through metric
   is blocked on TAV persisting acquisition-time `purchase_outcomes` rows (i.e. inventory
-  bought-but-not-yet-resold) — tracked in `docs/followups.md`. The SQL views are unchanged,
+  bought-but-not-yet-resold) — tracked in `docs/05-process/followups.md`. The SQL views are unchanged,
   and the raw per-region `sell_through_rate` still appears inside `byRegion` rows for now.
 - The `outcomes` block degrades to `{ "value": null, "missingReason": "db_error" }`
   if *either* view query fails; the `leads` / `listings` blocks are independent.
@@ -415,7 +461,7 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 
 ## Open follow-ups
 
-Tracked in `docs/followups.md`:
+Tracked in `docs/05-process/followups.md`:
 
 - A real `sellThroughRate` for `/app/kpis` is blocked on the lead→purchase /
   acquisition-persistence workflow writing `purchase_outcomes` rows *before* resale
@@ -424,7 +470,7 @@ Tracked in `docs/followups.md`:
 
 ## Related docs
 
-- `docs/adr/0002-frontend-app-api-layer.md` — decision record + rationale.
+- `docs/01-architecture/adr/0002-frontend-app-api-layer.md` — decision record + rationale.
 - `docs/archive/2026-05-mvp/uat-staging/app-api-smoke-2026-05-11.md` — historical deploy + smoke evidence.
-- `docs/architecture.md` — the four HTTP surfaces, repo layout, env, routes.
-- `docs/INTELLIGENCE_CONTRACTS.md` — the intel-worker contracts behind `/app/mmr/vin`.
+- `docs/01-architecture/system-overview.md` — the four HTTP surfaces, repo layout, env, routes.
+- `docs/03-api/intelligence-contracts.md` — the intel-worker contracts behind `/app/mmr/vin`.

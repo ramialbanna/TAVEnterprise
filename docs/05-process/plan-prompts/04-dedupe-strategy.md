@@ -8,7 +8,7 @@ Goal: change <exact dedupe keys | fuzzy dedupe inputs | identity-key shape | con
 Read first:
 1. src/dedupe/identity.ts, exactDedupe.ts, fuzzyDedupe.ts.
 2. test/dedupe.test.ts.
-3. docs/architecture.md §6.
+3. docs/01-architecture/system-overview.md §6.
 4. tav.duplicate_groups schema and any code that reads it.
 
 Then produce the plan:

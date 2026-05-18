@@ -30,4 +30,4 @@ If fewer than two are ticked, this probably should not be prioritized yet.
 <!-- What this feature will NOT do, to keep the diff small. -->
 
 ## Suggested plan template
-<!-- One of docs/plan-prompts/*.md, e.g. 01-add-source-adapter.md, 05-schema-migration.md. -->
+<!-- One of docs/05-process/plan-prompts/*.md, e.g. 01-add-source-adapter.md, 05-schema-migration.md. -->

@@ -14,7 +14,7 @@ export interface Env {
    * no email-based bypass.
    *
    * Temporary — removed once `tav.user_roles` exists.
-   * See docs/INTELLIGENCE_CONTRACTS.md §D.
+   * See docs/03-api/intelligence-contracts.md §D.
    */
   MANAGER_EMAIL_ALLOWLIST: string;
 
@@ -29,7 +29,7 @@ export interface Env {
    *               Accept and Content-Type = application/vnd.coxauto.v1+json.
    *   "manheim" — Legacy Manheim VIN /valuations/vin and YMM /valuations/search.
    * Absent or unrecognized → "manheim" (legacy default).
-   * See docs/COX_API_INTEGRATION.md.
+   * See docs/03-api/manheim-cox.md.
    */
   MANHEIM_API_VENDOR?: string;
   /**
