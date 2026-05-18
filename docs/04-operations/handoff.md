@@ -99,6 +99,7 @@ As of 2026-05-18:
 - Cox/Manheim uses Storefront `/mmr-lookup/*` and `/mmr/search/*`.
 - Legacy `/valuations/*` is not provisioned for this account.
 - Do not delete breach/evidence branches until reviewed deliberately.
+- Keep local-only `feat/issue-45-manheim-valuations` and `recovery/issue-45-implementation` until v2 has safely started from clean `main`; after that, delete them as local cleanup.
 
 ## 8. Known Issues
 
