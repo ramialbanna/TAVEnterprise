@@ -57,6 +57,9 @@ workflow, data ownership, or future training data.
 | OQ-021 | Is approver note required on approve? | `V3` | Optional on approve; required on rejection. | Open | | Rami | | Speed vs audit richness. |
 | OQ-022 | Is a release-lead reason required? | `V3` | Yes, one-line reason. | Open | | Rami | | Release should not be friction-free. |
 | OQ-023 | Should closer/system grade comparison split initial judgment from final outcome? | `V3` | Yes: `closer_initial_grade` and `closer_final_grade`. | Open | | Rami | | Prevents polluted calibration signal. |
+| OQ-027 | Should the first `lead_offers` PR include full approval audit beyond the offer row? | `V3` | No; defer until event infrastructure exists. | Deferred | First offer PR records offer-level audit only; full audit comes after shared `lead_events`/workflow audit substrate. | Rami | 2026-05-18 | Prevents first approval PR from becoming global event sourcing. |
+| OQ-028 | Should the first `lead_offers` PR include SLA timers on approval? | `V3` | No; defer until on-duty/escalation dependencies exist. | Deferred | Approval SLA timers move to `V3+` after on-duty state, eligible approver routing, escalation policy, and notification transport are defined. | Rami | 2026-05-18 | A timer without an operational escalation answer is noise, not control. |
+| OQ-029 | Should delegated approval be supported in the first approval implementation? | `V3` | No; defer until normal tier path is proven. | Deferred | Delegated approval is a later governance feature requiring policy, revocation, dollar ceilings, conflict rules, and full audit. | Rami | 2026-05-18 | Keeps first approval implementation enforceable and auditable. |
 
 ## Process Questions
 
@@ -65,4 +68,3 @@ workflow, data ownership, or future training data.
 | OQ-024 | Who is the final decision arbiter when requirements conflict? | `V2-Core` | Rami until delegated. | Open | | Rami | | Required to prevent endless re-litigation. |
 | OQ-025 | Should every implementation PR be blocked unless it lists FR IDs and ADRs? | `V2-Core` | Yes. | Open | | Rami | | Traceability guardrail. |
 | OQ-026 | Should v2 start with a read-only shadow period before live team actions? | `V2-Core` | Yes if timeline allows; otherwise limited live test with 1-3 users. | Open | | Rami | | Review calls 30-day shadow mode highest leverage. |
-

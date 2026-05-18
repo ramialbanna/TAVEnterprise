@@ -41,6 +41,10 @@ concepts do not accidentally become immediate implementation scope.
 | BR-027 | The closer dashboard should be role-aware and mode-aware: hunting, working, awaiting, disposing. | `V3` | Review D |
 | BR-028 | Fraud/collusion analytics around approver/submitter frequency and approval-to-MMR drift are admin-only controls. | `V3` | Review E.2.2 |
 | BR-029 | Experiment infrastructure such as `bucket_id` is cheap to add early but does not require experiment workflows in v2. | `V2.5` | Review E.1.6 |
+| BR-030 | The first `lead_offers` PR records minimum offer-level approval audit on the offer row; full cross-workflow audit is a later governance layer. | `V3` | [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+| BR-031 | Full approval audit requires shared event infrastructure across claims, touches, offers, statuses, and dispositions. | `V3+` | [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+| BR-032 | Approval SLA timers require on-duty state, eligible approver routing, escalation policy, and notification transport before implementation. | `V3+` | [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+| BR-033 | Delegated approval is not part of the first approval implementation; it requires a separate delegation policy after normal tier approval is proven. | `V3+` | [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
 
 ## V2-Core Business Rules
 
@@ -98,6 +102,19 @@ The first live queue includes:
 - Rejecting an internal offer is not a customer-facing disposition.
 - Superseded offer expiration is informational only.
 - Withdrawal is modeled as a superseding offer, not a special action.
+- The first `lead_offers` implementation records offer-level audit only:
+  submitter, amount, required approver tier, approver, approval/rejection time,
+  rejection reason, sent time, expiration, supersession.
+- Full approval audit beyond the offer row, approval SLA timers, and delegated
+  approval are intentionally deferred until their dependencies exist.
+
+### Approval Governance Deferrals
+
+| Deferred feature | Milestone | Why deferred |
+|---|---|---|
+| Full approval audit beyond `lead_offers` | `V3+` | A complete audit log spans claims, touches, status changes, offers, counters, dispositions, validators, and users. Building it inside the first offer PR would turn that PR into global event infrastructure. |
+| Approval SLA timers | `V3+` | Timers are not useful without on-duty state, eligible approver routing, escalation rules, notification transport, and ownership of missed SLA outcomes. |
+| Delegated approval | `V3+` | Delegation creates authority chains, revocation, time windows, dollar ceilings, and conflict-of-interest rules. The normal tier path should be proven first. |
 
 ### Disposition and Validation Rules
 
@@ -133,4 +150,3 @@ Status: Proposed default, not locked.
 - No fake catalog, fake MMR, fake people, or fake workflow data.
 - No hidden collapse of repeated sightings.
 - No implementation outside its milestone tag without an explicit doc change.
-

@@ -30,6 +30,7 @@ carry one of these tags:
 | `V2-Core` | Required for the first live Opportunities workflow. |
 | `V2.5` | Required after the queue is usable, before the full negotiation system. |
 | `V3` | Buying-side operating-system features: offers, approvals, dispositions, validation, coaching. |
+| `V3+` | Governance/optimization features after the V3 workflow is proven. |
 | `Future` | Useful but not approved for the current platform build. |
 | `Blocked` | Cannot proceed until a named external decision or dependency is resolved. |
 
@@ -67,7 +68,37 @@ included `V2-Core` requirement.
 | `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Pending |
 | `12-security-and-access.md` | Role/tier access matrix and audit policy. | Pending |
 | `13-open-questions-log.md` | Living decision log. | Created |
-| `14-decision-records/` | Short ADRs for durable choices. | Pending |
+| `14-decision-records/` | Short ADRs for durable choices. | Started with [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+
+## Strategic Implementation Approach
+
+Build the platform in dependency order. Do not pull later governance features
+into earlier workflow PRs just because the final design needs them.
+
+```text
+V2-Core: Opportunities queue and accountable human ownership
+  -> V2.5: touches, on-duty state, cutover readiness, richer audit substrate
+  -> V3: offers, approval gates, dispositions, validation, closer dashboard
+  -> V3+: approval SLA automation, full audit analytics, delegation
+```
+
+### Approval Governance Strategy
+
+The first `lead_offers` implementation should enforce the customer-facing offer
+gate and write the offer-level audit fields on the offer row. It should not
+also build global audit analytics, SLA timers, or delegated approval.
+
+Those features are deliberately sequenced later because they depend on broader
+workflow primitives:
+
+| Feature | Earliest milestone | Required dependency |
+|---|---|---|
+| Full approval audit beyond `lead_offers` | `V3+` | `lead_events`, `lead_touches`, dispositions, status transitions, user identity. |
+| Approval SLA timers | `V3+` | on-duty/off-duty state, escalation policy, notification transport, eligible approver routing. |
+| Delegated approval | `V3+` | stable tier model, normal approval path in production, delegation policy, revocation/audit rules. |
+
+This keeps the first approval PR buildable while preserving the governance
+requirements instead of pretending they do not exist.
 
 ## Implementation Gate
 
@@ -79,4 +110,6 @@ The next implementation PR should not start until:
 - The PR states which FRs and ADRs it implements.
 - The PR does not implement `V2.5`, `V3`, or `Future` items unless the milestone
   tag was deliberately changed in a prior docs PR.
-
+- If a PR touches offer approval, it must cite the approval governance ADR and
+  explicitly state whether it is implementing offer-level audit only or a later
+  governance layer.
