@@ -1,7 +1,7 @@
 /**
  * Authoritative MMR cache-key derivation.
  *
- * Format (see docs/INTELLIGENCE_CONTRACTS.md §A):
+ * Format (see docs/03-api/intelligence-contracts.md §A):
  *   - VIN:  vin:${normalizedVin}      where normalizedVin = vin.trim().toUpperCase()
  *   - YMM:  ymm:${year}:${makeLower}:${modelLower}:${trimLower ?? 'base'}:${mileageBucket}
  *

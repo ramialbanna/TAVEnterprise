@@ -14,7 +14,7 @@
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
  * GET /app/ingest-runs/:id.
- * (See docs/adr/0002-frontend-app-api-layer.md for the full contract.)
+ * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
 import type { Env } from "../types/env";
@@ -278,7 +278,7 @@ async function block<T>(name: string, fn: () => Promise<T>): Promise<MetricBlock
  * here: `tav.purchase_outcomes` currently holds only sold/imported outcome rows
  * (every row has a `sale_price`), so the ratio is tautologically 1.0. A real
  * sell-through metric needs acquisition-time `purchase_outcomes` rows written
- * before resale — see docs/followups.md.
+ * before resale — see docs/05-process/followups.md.
  *
  * Returns 503 only if the Supabase client itself cannot be constructed;
  * individual KPI blocks degrade to `{ value: null, missingReason }`.

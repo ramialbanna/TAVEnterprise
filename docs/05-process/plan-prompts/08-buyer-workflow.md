@@ -9,7 +9,7 @@ Read first:
 1. src/assignment/assignLead.ts, locking.ts.
 2. tav.leads, tav.lead_actions schema in supabase/schema.sql.
 3. tav.v_active_inbox view definition.
-4. docs/architecture.md §11.
+4. docs/01-architecture/system-overview.md §11.
 
 Then produce the plan:
 

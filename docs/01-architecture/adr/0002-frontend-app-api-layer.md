@@ -68,7 +68,7 @@ Always `200`. `staleSweep` reflects the latest daily stale-sweep cron run, recor
 `tav.cron_runs` (migration 0042) by the Worker's `scheduled()` handler (best-effort —
 an audit-write failure never fails the cron). `missingReason: "never_run"` until the first
 post-migration run; `"db_error"` if the `cron_runs` lookup or the Supabase client fails.
-See `docs/APP_API.md`.
+See `docs/03-api/app-api.md`.
 
 ### `GET /app/kpis` — implemented (2026-05-11)
 
@@ -90,8 +90,8 @@ See `docs/APP_API.md`.
 the three blocks degrade independently. The `outcomes` block degrades if either
 `v_outcome_summary_global` or `v_outcome_summary` errors. `sell_through_rate` exists
 in the views but is intentionally omitted from this response — tautologically `1.0`
-until acquisition-time `purchase_outcomes` rows exist; see `docs/APP_API.md` /
-`docs/followups.md`.
+until acquisition-time `purchase_outcomes` rows exist; see `docs/03-api/app-api.md` /
+`docs/05-process/followups.md`.
 
 ### `GET /app/import-batches` — implemented (2026-05-11)
 
@@ -158,7 +158,7 @@ distribution fields (`wholesaleClean`, etc.) can be added later via
 - New Cloudflare secret `APP_API_SECRET` must be provisioned on `tav-aip-staging`
   and `tav-aip-production` (`wrangler secret put APP_API_SECRET`) before the
   frontend integrates. Unset ⇒ all `/app/*` calls `503`.
-- `docs/APP_API.md` is the source-of-truth contract for the frontend; this ADR
+- `docs/03-api/app-api.md` is the source-of-truth contract for the frontend; this ADR
   records the *decision and rationale*. Keep the two in sync when a route changes.
 - A future per-user authZ requirement would migrate `/app/*` to Cloudflare Access
   + `extractUserContext`; the route shapes above are designed to survive that.

@@ -1,7 +1,7 @@
 /**
  * Authoritative `segment_key` derivation.
  *
- * Format (see docs/INTELLIGENCE_CONTRACTS.md §B):
+ * Format (see docs/03-api/intelligence-contracts.md §B):
  *
  *   ${year ?? 'all'}:${makeLower}:${modelLower}:${trimLower ?? 'base'}:${region ?? 'national'}
  *

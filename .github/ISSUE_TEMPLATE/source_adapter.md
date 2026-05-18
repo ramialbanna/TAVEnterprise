@@ -30,4 +30,4 @@ assignees: []
 - [ ] Facebook fixtures still pass
 
 ## Plan template
-Use `docs/plan-prompts/01-add-source-adapter.md` to scope this in Plan Mode before any edits.
+Use `docs/05-process/plan-prompts/01-add-source-adapter.md` to scope this in Plan Mode before any edits.

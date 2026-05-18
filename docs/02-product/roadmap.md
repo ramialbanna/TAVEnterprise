@@ -15,7 +15,7 @@ that lets buyers inspect created leads, near-misses, repeats, price changes, VIN
 upgrades, estimated valuations, and manually submitted listing links routed to
 specific closers.
 
-The durable v2 product spec is `docs/V2_OPPORTUNITIES_SPEC.md`.
+The durable v2 product spec is `docs/02-product/v2-opportunities.md`.
 
 Target sequence:
 
@@ -177,7 +177,7 @@ Claude Code tasks:
    - schema drift events
    - dead letters
    - created lead ids/count
-6. Update `docs/APP_API.md`.
+6. Update `docs/03-api/app-api.md`.
 7. Add unit tests.
 
 Acceptance criteria:

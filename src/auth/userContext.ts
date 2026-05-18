@@ -9,7 +9,7 @@
  * Handlers MUST NOT parse `Cf-Access-*` headers themselves. Always go
  * through `extractUserContext`.
  *
- * See docs/INTELLIGENCE_CONTRACTS.md §C and §D for the frozen contract.
+ * See docs/03-api/intelligence-contracts.md §C and §D for the frozen contract.
  */
 
 export interface UserContext {

@@ -13,8 +13,8 @@ You are a senior principal engineer + systems architect + startup CTO + business
 
 ## 1. Project Identity
 - **Name:** TAV Enterprise Acquisition Intelligence Platform (`tav-aip` / `tav-mp` / `tav-enterprise`)
-- **Stage:** v1 / Proof of Concept — Facebook Marketplace, 4 regions
-- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim/Cox MMR. Production dashboard (`/web`): Next.js (App Router) + Auth.js (Google OIDC, domain-restricted) + Tailwind v4 + shadcn/ui. See `@docs/architecture.md`.
+- **Stage:** v2 Opportunities — live Cox/Manheim valuation, moving into buyer/closer workflow.
+- **Stack:** Cloudflare Workers (TypeScript strict), Supabase Postgres, Cloudflare KV, Apify, Manheim/Cox MMR. Production dashboard (`/web`): Next.js (App Router) + Auth.js (Google OIDC, domain-restricted) + Tailwind v4 + shadcn/ui. See `@docs/01-architecture/system-overview.md`.
 - **Default mode:** Plan Mode (Shift+Tab → "plan"). Never edit on first turn.
 - **Persona:** Architecture-first engineer. Reads before writing. Plans before editing.
 
@@ -43,7 +43,7 @@ This separation is **mandatory**. Collapsing any two of these is an architectura
 - Small modules. A file > 400 LOC or function > 40 LOC is a refactor signal.
 - Pure functions for scoring, stale, dedupe, normalization — easy to test, no I/O.
 - Validate at boundaries with Zod. Never silently drop a listing — every rejection produces a `reason_code` and lands in `filtered_out` / `dead_letters` / `schema_drift_events`.
-- Conventional Commits (`feat:`, `fix:`, `db:`, `chore:`, `docs:`, `test:`). One logical change per commit. See `@docs/architecture.md` for the suggested commit plan.
+- Conventional Commits (`feat:`, `fix:`, `db:`, `chore:`, `docs:`, `test:`). One logical change per commit.
 - No hardcoded secrets. Never log `env`. Never commit `.dev.vars`.
 
 ## 4. Commands (source of truth)
@@ -56,14 +56,14 @@ This separation is **mandatory**. Collapsing any two of these is an architectura
 - **Test (integration):** `npm run test:int`
 - **Build:** `npm run build`
 - **Deploy:** `npm run deploy` (wrangler deploy)
-- **Secrets (prod):** `wrangler secret put <NAME>` — see `@docs/architecture.md` §17
+- **Secrets (prod):** `wrangler secret put <NAME>` — see `@docs/04-operations/runbook.md`
 - **KV:** `wrangler kv namespace create TAV_KV`
-- **GitHub repo:** `ramialbanna/TAV-VAIP` — `gh pr create`, `gh pr view`, `gh pr checks`, `gh run list` (read), `gh pr comment`, `gh issue create` (gated). See `@docs/github.md` and `.claude/agents/gh-integration.md`.
+- **GitHub repo:** `ramialbanna/TAV-VAIP` — `gh pr create`, `gh pr view`, `gh pr checks`, `gh run list` (read), `gh pr comment`, `gh issue create` (gated). See `@docs/05-process/github.md` and `.claude/agents/gh-integration.md`.
 
 ## 5. Verification Loop (non-negotiable)
 After **any** code change:
 1. `npm run lint` 2. `npm run typecheck` 3. `npm test` 4. `npm run test:int` (if `src/persistence/`, `src/valuation/`, `src/sources/`, or `supabase/migrations/` touched)
-Stop at the first failure. Fix root cause. See `@docs/verification/loop.md`.
+Stop at the first failure. Fix root cause. See `@docs/04-operations/verification.md`.
 
 ## 6. Staged Workflow
 **Explore → Plan → Implement → Verify → Document.** Never skip a stage.
@@ -82,7 +82,7 @@ Use **`/review`** to run reviewers in parallel partitioned by layer.
 ## 8. Memory Layers
 - **Tier 1 — this file:** durable project rules.
 - **Tier 2 — `@docs/`:** product spec, architecture, data model, runbook, security, API contracts, plan-prompts.
-- **Tier 3 — Auto Memory:** Claude promotes recurring decisions. Review weekly. Promote to `@docs/adr/` when durable.
+- **Tier 3 — Auto Memory:** Claude promotes recurring decisions. Review weekly. Promote to `@docs/01-architecture/adr/` when durable.
 - **Tier 4 — `~/.claude/CLAUDE.md`:** personal style; do not duplicate here.
 
 ## 9. Guardrails
@@ -103,11 +103,12 @@ Before declaring done, answer:
 If not → don't prioritize it.
 
 ## 11. References
-- `@docs/identity.md` — what TAV-AIP is, what "done" means, what we explicitly will not build yet
-- `@docs/voice.md` — thinking & communication style
-- `@docs/architecture.md` — full architecture, repo layout, env, routes, data model, deployment
-- `@docs/github.md` — GitHub workflow, branch protection, required secrets, merge contract
-- `@docs/RUNBOOK.md` — production operations, deploy, smoke checks, rollback, and incident response
-- `@docs/plan-prompts/` — plan-mode prompt library (TAV-tuned)
-- `@docs/verification/loop.md` — verification protocol
-- `@docs/followups.md` — scope-creep capture log
+- `@docs/README.md` — documentation map and current source-of-truth index
+- `@docs/01-architecture/identity.md` — what TAV-AIP is, what "done" means, what we explicitly will not build yet
+- `@docs/05-process/voice.md` — thinking & communication style
+- `@docs/01-architecture/system-overview.md` — full architecture, repo layout, env, routes, data model, deployment
+- `@docs/05-process/github.md` — GitHub workflow, branch protection, required secrets, merge contract
+- `@docs/04-operations/runbook.md` — production operations, deploy, smoke checks, rollback, and incident response
+- `@docs/05-process/plan-prompts/` — plan-mode prompt library (TAV-tuned)
+- `@docs/04-operations/verification.md` — verification protocol
+- `@docs/05-process/followups.md` — scope-creep capture log

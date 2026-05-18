@@ -8,7 +8,7 @@ Goal: <integrate Manheim MMR | change cache strategy | adjust YMM fallback | cha
 Read first:
 1. src/valuation/manheim.ts, valuationCache.ts, valuationTypes.ts.
 2. src/scoring/scoreLead.ts to see how valuation feeds scoring.
-3. docs/architecture.md §8.
+3. docs/01-architecture/system-overview.md §8.
 4. The KV namespace binding in wrangler.toml.
 
 Then produce the plan:

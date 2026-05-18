@@ -13,9 +13,9 @@ Current open follow-ups only. Historical completed items were archived at
 
 ## MMR / Cox
 
-- [ ] Merge and smoke PR #50, which wires the Cox Storefront
-      `/wholesale-valuations/vehicle/mmr-lookup/*` catalog and
-      `/wholesale-valuations/vehicle/mmr/search/*` YMM valuation path.
+- [ ] Keep monitoring production Cox catalog/YMMT behavior from PR #50 and add
+      targeted follow-ups for estimated mileage/style badges, cost inputs, and
+      UI refinement.
 - [ ] Add `cox.environment` or equivalent to `GET /app/system-status` so the
       dashboard can show Cox runtime state from configuration instead of static
       operator copy.

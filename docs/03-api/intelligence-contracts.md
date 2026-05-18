@@ -13,8 +13,8 @@ so we lock them now.
 
 ## A. `cache_key` derivation
 
-**Authoritative helper:** `deriveMmrCacheKey()` (to be implemented in
-`workers/tav-intelligence-worker/src/cache/mmrCacheKey.ts`).
+**Authoritative helpers:** `deriveVinCacheKey()` and `deriveYmmCacheKey()` in
+`workers/tav-intelligence-worker/src/cache/mmrCacheKey.ts`.
 
 **Format — VIN lookup:**
 
@@ -91,8 +91,8 @@ ymm:2027:rivian:r1t:base:0
 
 ## B. `segment_key` derivation
 
-**Authoritative helper:** `deriveSegmentKey()` (to be implemented in
-`workers/tav-intelligence-worker/src/scoring/segmentKey.ts`).
+**Authoritative helper:** `deriveSegmentKey()` in
+`workers/tav-intelligence-worker/src/scoring/segmentKey.ts`.
 
 **Format:**
 
@@ -227,7 +227,7 @@ supplied. The request does NOT silently downgrade to a cached lookup.
 ## Change procedure
 
 Any modification to A, B, C, or D after Phase F.1 ships requires:
-1. An ADR in `docs/adr/` explaining the migration path.
+1. An ADR in `docs/01-architecture/adr/` explaining the migration path.
 2. A coordinated cache flush (for A) or full velocity recompute (for
    B) before deploy.
 3. Tests covering the OLD and NEW key shapes.

@@ -131,11 +131,11 @@ jobs:
           if [[ -f supabase/schema.sql ]]; then
             if grep -nE 'v_active_inbox' supabase/schema.sql >/dev/null; then
               grep -A 30 'v_active_inbox' supabase/schema.sql | grep -E "stale_confirmed" >/dev/null || {
-                echo "::error::v_active_inbox no longer references stale_confirmed. See docs/architecture.md §12."
+                echo "::error::v_active_inbox no longer references stale_confirmed. See docs/01-architecture/system-overview.md §12."
                 exit 1
               }
               grep -A 30 'v_active_inbox' supabase/schema.sql | grep -E "last_seen_at" >/dev/null || {
-                echo "::error::v_active_inbox no longer filters by last_seen_at. See docs/architecture.md §12."
+                echo "::error::v_active_inbox no longer filters by last_seen_at. See docs/01-architecture/system-overview.md §12."
                 exit 1
               }
             fi

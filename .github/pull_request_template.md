@@ -5,7 +5,7 @@
 
 ## Linked issue / plan
 - Closes #
-- Plan / ADR: `docs/adr/NNNN-<slug>.md` (if architectural)
+- Plan / ADR: `docs/01-architecture/adr/NNNN-<slug>.md` (if architectural)
 
 ## Pipeline trace (mandatory)
 - Raw → Normalized → Vehicle Candidate → Lead: <which steps does this PR touch?>
@@ -33,7 +33,7 @@ $ npm run test:int    # or "skipped — no I/O / sources / migrations touched"
 - [ ] Stale-suppression strength not regressed
 - [ ] No secrets committed; no `.dev.vars` committed; no service-role key outside the Worker
 - [ ] HMAC verification on `/ingest` still over the raw body
-- [ ] Required indexes from `docs/architecture.md` §12 still present
+- [ ] Required indexes from `docs/01-architecture/system-overview.md` §12 still present
 - [ ] `tav.v_active_inbox` filter semantics intact
 - [ ] CHANGELOG updated; RUNBOOK updated if ops changed; ADR added if architectural
 
@@ -44,4 +44,4 @@ $ npm run test:int    # or "skipped — no I/O / sources / migrations touched"
 <!-- What this PR explicitly does NOT change. -->
 
 ## Follow-ups
-<!-- Items appended to docs/followups.md. -->
+<!-- Items appended to docs/05-process/followups.md. -->

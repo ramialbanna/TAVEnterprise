@@ -9,7 +9,7 @@ Production operations guide for the Cloudflare Workers, web app, Cox/Manheim val
 - Web app: `tav-enterprise.vercel.app`
 - GitHub repository: `ramialbanna/TAVEnterprise`
 
-Use `docs/HANDOFF.md` for current branch/PR state.
+Use `docs/04-operations/handoff.md` for current branch/PR state.
 
 ## Deploy
 

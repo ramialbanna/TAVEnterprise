@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Zod 4 schemas mirroring the live v1 `/app/*` response shapes from `docs/APP_API.md`
+ * Zod 4 schemas mirroring the live v1 `/app/*` response shapes from `docs/03-api/app-api.md`
  * (source of truth) and `src/app/routes.ts`.
  *
  * Tolerance policy: the documented fields are validated; unknown additive fields are
@@ -145,7 +145,7 @@ export type MmrCatalog = z.infer<typeof MmrCatalogSchema>;
 
 // ── GET /app/ingest-runs ───────────────────────────────────────────────────────
 // Snake_case fields — the Worker returns tav.source_runs columns verbatim
-// (see docs/APP_API.md → IngestRunSummary). Do NOT camel-case these.
+// (see docs/03-api/app-api.md → IngestRunSummary). Do NOT camel-case these.
 export const IngestRunSummarySchema = z.object({
   id: z.string(),
   source: z.string(),
@@ -166,7 +166,7 @@ export type IngestRunSummary = z.infer<typeof IngestRunSummarySchema>;
 // ── GET /app/ingest-runs/:id ───────────────────────────────────────────────────
 // `run` mirrors IngestRunSummary; grouped diagnostics are camelCase records
 // keyed by reason_code / missing_reason / event_type. dead_letters is absent by
-// design (no source_run_id in schema — see docs/APP_API.md).
+// design (no source_run_id in schema — see docs/03-api/app-api.md).
 // Phase 4a — per-normalized-listing diagnostics. Snake_case mirrors the Worker.
 export const ListingDiagnosticSchema = z.object({
   normalized_listing_id: z.string(),

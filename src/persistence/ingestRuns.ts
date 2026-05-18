@@ -70,7 +70,7 @@ export interface IngestRunDetail {
   /** Per-normalized-listing diagnostics for this run (Phase 4a). */
   listings: ListingDiagnostic[];
   // dead_letters has no source_run linkage in the current schema, so it is
-  // intentionally not reported per-run. See docs/APP_API.md.
+  // intentionally not reported per-run. See docs/03-api/app-api.md.
 }
 
 type ValAgg = {

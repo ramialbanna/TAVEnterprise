@@ -1,7 +1,7 @@
 # Cox/Manheim Wholesale-Valuations API Integration
 
-**Status:** Production-bound Cox Storefront integration. PR #50 wires the live
-catalog and YMM valuation path for Issue #45.
+**Status:** Production-bound Cox Storefront integration, implemented on main
+through PR #50 for Issue #45.
 **Chosen path:** Cox Storefront
 `/wholesale-valuations/vehicle/mmr-lookup/*` for catalog metadata and
 `/wholesale-valuations/vehicle/mmr/search/*` for YMM valuation.
@@ -90,11 +90,11 @@ Content-Type:  application/vnd.coxauto.v1+json
 | Function | Method | Path appended | Phase |
 |---|---|---|---|
 | Single VIN | GET | `/vin/{vin}` | this phase |
-| Catalog years | GET | `/mmr-lookup/years` | PR #50 |
-| Catalog makes | GET | `/mmr-lookup/years/{year}/makes` | PR #50 |
-| Catalog models | GET | `/mmr-lookup/years/{year}/makes/{make}/models` | PR #50 |
-| Catalog trims/styles | GET | `/mmr-lookup/years/{year}/makes/{make}/models/{model}/trims` | PR #50 |
-| YMMT valuation | GET | `/search/{year}/{makename}/{modelname}/{bodyname}` | PR #50 (trim + odometer gated) |
+| Catalog years | GET | `/mmr-lookup/years` | implemented |
+| Catalog makes | GET | `/mmr-lookup/years/{year}/makes` | implemented |
+| Catalog models | GET | `/mmr-lookup/years/{year}/makes/{make}/models` | implemented |
+| Catalog trims/styles | GET | `/mmr-lookup/years/{year}/makes/{make}/models/{model}/trims` | implemented |
+| YMMT valuation | GET | `/search/{year}/{makename}/{modelname}/{bodyname}` | implemented (trim + odometer gated) |
 
 **Trim gating:** the YMMT endpoint requires `bodyname` (trim) as a path segment.
 `ManheimHttpClient.lookupByYmm` short-circuits to a null envelope (`mmr_value: null`,
@@ -161,9 +161,8 @@ request the minimum).
 
 The token names `retail`, `forecast`, `historical`, and `ci` are confirmed by the
 Cox MMR Valuations guide. `ci` is documented as unsupported on Search/YMMT and is
-stripped from the include list there. End-to-end sandbox behavior (which response
-sections each flag actually returns, and the exact 4xx code for an unsupported
-combination) still needs validation against a live sandbox call before going live.
+stripped from the include list there. Validate any newly enabled include flag
+through a minimal production smoke before exposing its fields in the UI.
 
 ---
 
@@ -207,7 +206,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 
 ## 8. Related documents
 
-- `docs/archive/2026-05-mvp/uat-staging/manheim-uat-validation-plan.md` — historical staging/UAT test matrix and pass/fail gates.
-- `docs/MANHEIM_INTEGRATION_ARCHITECTURE.md` — overall layered architecture (vendor-agnostic).
-- `docs/MANHEIM_RUNTIME_BEHAVIOR.md` — runtime request flow.
-- `docs/RUNBOOK.md` — staging deploy sequence and provisioning commands.
+- `docs/archive/2026-05-doc-consolidation/uat-staging/manheim-uat-validation-plan.md` — historical staging/UAT test matrix and pass/fail gates.
+- `docs/archive/2026-05-doc-consolidation/manheim-integration-architecture.md` — overall layered architecture (vendor-agnostic).
+- `docs/archive/2026-05-doc-consolidation/manheim-runtime-behavior.md` — runtime request flow.
+- `docs/04-operations/runbook.md` — staging deploy sequence and provisioning commands.

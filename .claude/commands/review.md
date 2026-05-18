@@ -20,7 +20,7 @@ REVIEW SUMMARY: PASS | NEEDS CHANGES | BLOCK
 BLOCKERS:    <merged list — secret leaks, four-concept violations, silent drops, VIN assumptions on Facebook, stale regressions go here>
 NITS:        <merged list>
 QUESTIONS:   <merged list>
-FOLLOW-UPS:  <merged list, append to docs/followups.md if any>
+FOLLOW-UPS:  <merged list, append to docs/05-process/followups.md if any>
 ```
 
 Do not edit code from this command.

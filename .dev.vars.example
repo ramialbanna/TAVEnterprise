@@ -12,7 +12,7 @@ NORMALIZER_SECRET=replace_me
 
 # ── Cox/Manheim Wholesale-Valuations API ──────────────────────────────────────
 # Current account is Cox Bridge 2 / client_credentials.
-# See docs/COX_API_INTEGRATION.md for full details.
+# See docs/03-api/manheim-cox.md for full details.
 MANHEIM_API_VENDOR=cox
 MANHEIM_GRANT_TYPE=client_credentials
 MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get
