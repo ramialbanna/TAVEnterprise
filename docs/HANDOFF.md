@@ -23,6 +23,7 @@ Important routes:
 - `POST /app/mmr/ymm`
 - `GET /app/mmr/catalog/*`
 - `GET /admin/valuations/contract-probe`
+- Planned v2: `GET /app/opportunities`, `GET /app/opportunities/:id`
 
 ## 3. Four-Concept Rule
 
@@ -90,11 +91,12 @@ Secret names only. Values never belong in docs, issues, PRs, logs, or screenshot
 
 ## 7. Branch and PR State
 
-As of 2026-05-17:
+As of 2026-05-18:
 
-- `main` is the clean base.
-- PR #50 is the live #45 implementation branch: `feat/issue-45-live-mmr-catalog`, commit `c24a6ee`.
-- PR #50 uses Cox Storefront `/mmr-lookup/*` and `/mmr/search/*`.
+- `main` includes the #45 live Cox/Manheim catalog + YMM valuation work.
+- `main` includes the missing-mileage and first-catalog-style estimate fixes.
+- V2 starts from the Opportunities direction in `docs/V2_OPPORTUNITIES_SPEC.md`.
+- Cox/Manheim uses Storefront `/mmr-lookup/*` and `/mmr/search/*`.
 - Legacy `/valuations/*` is not provisioned for this account.
 - Do not delete breach/evidence branches until reviewed deliberately.
 
@@ -103,6 +105,7 @@ As of 2026-05-17:
 - Staging-strip cleanup is intentionally a separate PR. Do not mix it with docs cleanup.
 - `.dev.vars.example` still documents password-grant legacy fields because live code still supports that mode.
 - Historical archive files may contain old Make.com, UAT, or staging language; treat files under `docs/archive/2026-05-mvp/` as historical.
+- `AGENTS.md` may regenerate local claude-mem context; do not stage it as product work.
 
 ## 9. Breach Pointer
 

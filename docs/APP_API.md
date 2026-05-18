@@ -63,8 +63,54 @@ Authorization: Bearer <APP_API_SECRET>
 | GET | `/app/import-batches` | Recent outcome-import batches |
 | GET | `/app/historical-sales` | `tav.historical_sales` rows, filterable |
 | POST | `/app/mmr/vin` | On-demand MMR valuation by VIN |
+| GET | `/app/opportunities` | Planned v2 Opportunities queue |
+| GET | `/app/opportunities/:id` | Planned v2 Opportunity detail |
+| POST | `/app/opportunities/manual` | Planned manual opportunity submission |
+| POST | `/app/opportunities/:id/assign` | Planned assignment route |
+| POST | `/app/opportunities/:id/claim` | Planned claim route |
+| POST | `/app/opportunities/:id/status` | Planned status route |
+| POST | `/app/opportunities/:id/notes` | Planned note route |
 
 Unknown path / method under `/app/*` → `404 { "ok": false, "error": "not_found" }`.
+
+---
+
+## Planned v2: Opportunities
+
+`/app/opportunities` is the planned v2 buyer-facing read model. It is not
+implemented yet.
+
+The product source of truth is `docs/V2_OPPORTUNITIES_SPEC.md`.
+
+Intended routes:
+
+```text
+GET /app/opportunities
+GET /app/opportunities/:id
+POST /app/opportunities/manual
+POST /app/opportunities/:id/assign
+POST /app/opportunities/:id/claim
+POST /app/opportunities/:id/status
+POST /app/opportunities/:id/notes
+```
+
+Scope:
+
+- include created leads and reviewable near-misses
+- include manually submitted listing links
+- show one row per listing/run-relevant opportunity
+- surface event badges such as `First seen`, `Seen again`, `Price changed`,
+  `VIN appeared`, `Estimated miles`, `Estimated style`, and `Near miss`
+- show claim owner, claim timestamp, 24-hour claim expiration, and prior
+  evaluator warnings once assignment workflow is enabled
+- show basic `Spread vs MMR = MMR - asking price`
+- support a read-only first slice, then manual submission + assignment before
+  live multi-user testing
+
+Out of scope for the first v2 Opportunities release:
+
+- projected gross/net profit
+- silently collapsing duplicates into one row
 
 ---
 

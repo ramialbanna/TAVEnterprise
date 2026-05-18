@@ -1,19 +1,26 @@
-# TAV-AIP Execution Roadmap — v1.5 to v2
+# TAV-AIP Execution Roadmap — v2 Opportunities
 
-Date: 2026-05-16  
+Date: 2026-05-18
 Status: Active execution plan  
 Owner model: Claude Code executes phase PRs; Codex reviews as architect, business analyst, coordinator, and orchestrator.
 
 ## Executive decision
 
-Do not start v2 yet.
+Start v2 as the **Opportunities** workflow.
 
-TAV-AIP is in a strong but incomplete v1 state. The Apify backend path is live, and `tav-tx-east` is scheduled in production, but the product does not yet expose the operational visibility needed to trust and tune ingestion. The next milestone is v1.5: an Ingest Monitor that explains every Apify run and why it did or did not produce leads.
+The v1.5 foundations are in place: production ingest visibility exists, live
+Cox/Manheim catalog + YMM valuation is connected, and estimated mileage/style
+inputs are explicitly badged. The next milestone is v2: an Opportunities queue
+that lets buyers inspect created leads, near-misses, repeats, price changes, VIN
+upgrades, estimated valuations, and manually submitted listing links routed to
+specific closers.
+
+The durable v2 product spec is `docs/V2_OPPORTUNITIES_SPEC.md`.
 
 Target sequence:
 
 ```text
-Stabilize -> Ingest Visibility -> Lead Diagnosis -> v2 Read-Only Lead Review -> v2 Workflow Mutations
+Ingest + MMR Foundations -> v2 Opportunities Read Model -> Manual Submission + Assignment -> Workflow Mutations
 ```
 
 ## Current state
@@ -23,25 +30,28 @@ Stabilize -> Ingest Visibility -> Lead Diagnosis -> v2 Read-Only Lead Review -> 
 - Apify production bridge is enabled.
 - `tav-tx-east` Apify schedule is enabled every 5 minutes and verified.
 - `tav-tx-west`, `tav-tx-south`, and `tav-ok` remain disabled pending separate soaks.
-- The frontend v1 surfaces only Dashboard, VIN/MMR Lab, Historical Data, and Admin/Integrations.
-- Admin/Integrations shows latest source-run health only. It is not the Apify results screen.
-- The designed Apify results surface is `/ingest`, planned as v1.5.
+- The frontend surfaces Dashboard, Ingest Monitor, VIN/MMR Lab, Historical Data, and Admin/Integrations.
+- `/ingest` explains Apify/source runs and why runs did or did not create leads.
+- `/mmr-lab` uses the live Cox/Manheim catalog and can value YMM + style + miles.
+- Missing mileage/style can be estimated, but must be badged clearly wherever surfaced.
+- There is not yet an Opportunities queue for buyer review.
 
-## Why the user still does not see Apify results
+## Why v2 is still needed
 
 The data path exists:
 
 ```text
-Apify -> /apify-webhook -> ingestCore -> Supabase
+Apify -> ingest -> normalize/dedupe/value/score -> Supabase
 ```
 
-The product visibility path does not yet exist:
+The buyer workflow path does not yet exist:
 
 ```text
-Supabase source_runs/raw/normalized/rejections -> /app/ingest-runs -> /ingest UI
+Supabase leads/near-misses/listings/candidates -> /app/opportunities -> /opportunities UI
 ```
 
-The current `/app/system-status` endpoint reads `tav.v_source_health`, which is a latest-health summary. Seeing one row or one processed item can be correct because it represents the latest run for the enabled source/region, not cumulative results and not a lead queue.
+The Ingest Monitor answers operational questions. V2 Opportunities answers buyer
+questions: what should we call, watch, pass, or tune?
 
 ## Timeline
 
@@ -52,15 +62,17 @@ The current `/app/system-status` endpoint reads `tav.v_source_health`, which is 
 | Phase 2 | 2 days | `/app/ingest-runs` backend API |
 | Phase 3 | 2 days | `/ingest` frontend Ingest Monitor |
 | Phase 4 | 1 day | Production validation and lead-creation diagnosis |
-| Phase 5 | 3-5 days | v2 read-only Lead Review |
-| Phase 6 | 4-7 days | v2 lead workflow mutations |
-| Phase 7 | Ongoing | Region expansion, observability, optimization |
+| Phase 5 | 3-5 days | v2 Opportunities read model |
+| Phase 6 | 4-7 days | manual submission + assignment foundation |
+| Phase 7 | 4-7 days | v2 workflow mutations |
+| Phase 8 | Ongoing | Region expansion, observability, optimization |
 
 Practical planning estimate:
 
 - 1 week to a trustworthy Apify-facing app.
-- 2 weeks to read-only v2 Lead Review.
-- 3-4 weeks to useful workflow v2.
+- 2 weeks to read-only v2 Opportunities.
+- 3-4 weeks to live assignment testing.
+- 4+ weeks to useful workflow v2.
 
 ## Phase 0 — Hygiene and baseline
 
@@ -264,7 +276,7 @@ Codex review gate:
 
 - Decide from evidence whether to tune scoring, adapter mapping, buy-box rules, or source configuration.
 
-## Phase 5 — v2 read-only Lead Review
+## Phase 5 — v2 read-only Opportunities
 
 Start only after Phase 4.
 
@@ -273,51 +285,60 @@ Goal: show actual acquisition opportunities without allowing users to mutate sta
 Backend:
 
 ```text
-GET /app/leads
-GET /app/leads/:id
+GET /app/opportunities
+GET /app/opportunities/:id
 ```
 
 Frontend:
 
 ```text
-/leads
+/opportunities
 ```
 
 Claude Code tasks:
 
-1. Add lead list endpoint joining:
+1. Add opportunity list endpoint joining:
    - lead
+   - near-miss / filtered-out listing where reviewable
    - normalized listing
    - vehicle candidate
+   - duplicate group context
    - latest valuation
    - score components
    - source run/source
-2. Add lead detail endpoint.
-3. Build Lead Review page:
+2. Add opportunity detail endpoint.
+3. Build Opportunities page:
    - vehicle
    - price
    - MMR
-   - spread
+   - spread vs MMR
    - score
    - reason codes
    - source
    - first/last seen
+   - run identity
+   - event badges: First seen, Seen again, Price changed, VIN appeared, Estimated miles/style/MMR, Near miss
    - status if available
-4. Keep it read-only.
+4. Add preview pane on single click.
+5. Add full detail page on double click.
+6. Keep it read-only.
 
 Acceptance criteria:
 
-- TAV can inspect opportunities.
+- TAV can inspect created leads and reviewable near-misses.
+- TAV can identify first sightings, repeat sightings, price changes, and VIN upgrades.
+- Estimated mileage/style/MMR are clearly badged.
 - No assignment/status/notes yet.
 - No user ownership model is required yet.
 
 Codex review gate:
 
-- Review business usefulness. If the lead list does not help decide "call or pass", it is not v2-ready.
+- Review business usefulness. If the Opportunities queue does not help decide "call, watch, tune, or pass", it is not v2-ready.
 
-## Phase 6 — v2 workflow mutations
+## Phase 6 — manual submission + assignment foundation
 
-Goal: turn the product into an operating tool.
+Goal: add manual submission and safe assignment so live users can test the real
+current workflow.
 
 Claude Code tasks:
 
@@ -325,28 +346,64 @@ Claude Code tasks:
 2. Decide identity path:
    - Auth.js identity forwarded server-side, or
    - Cloudflare Access/JWT-based backend identity.
-3. Add lead mutations:
+3. Add manual opportunity submission:
+   - listing URL
+   - optional known vehicle facts
+   - submitter/finder
+   - optional assigned closer
+   - notes/context
+4. Add assignment routing:
    - assign owner
+   - claim unassigned opportunity
+   - set 24-hour claim window
+   - show claim/evaluation collision warning with user and timestamp
+   - reassign
+   - unassign
+5. Add audit table/events for submission and assignment.
+6. Add concurrency protection for claim/assign.
+
+Acceptance criteria:
+
+- Buyer/finder can submit a listing link into the Opportunities queue.
+- Buyer/finder can route it to a specific closer.
+- Closers can see assigned opportunities.
+- All buyers and closers can see the entire queue during live testing.
+- Claim is the first required action.
+- Claim owner, timestamp, and 24-hour expiration are visible.
+- Users are warned when another person already evaluated/claimed an opportunity.
+- Assignment changes are audited with actor and timestamp.
+- Two users cannot silently claim the same opportunity.
+
+Codex review gate:
+
+- Review identity, authorization, and audit before live user testing.
+
+## Phase 7 — v2 workflow mutations
+
+Goal: turn the product into an operating tool.
+
+Claude Code tasks:
+
+1. Add opportunity workflow mutations:
    - mark reviewed
    - mark contacted
    - mark bought
    - mark passed
    - add note
-4. Add audit table.
-5. Add frontend controls.
-6. Add optimistic UI only after server audit is correct.
+2. Every mutation writes an audit action.
+3. Add optimistic UI only after server audit is correct.
 
 Acceptance criteria:
 
 - Every mutation has actor, timestamp, old/new state.
 - No anonymous shared bearer-only writes.
-- Lead history is inspectable.
+- Opportunity history is inspectable.
 
 Codex review gate:
 
 - Review authZ, auditability, and operational safety before production deploy.
 
-## Phase 7 — Region expansion
+## Phase 8 — Region expansion
 
 Goal: scale ingestion only after visibility exists.
 
@@ -420,4 +477,3 @@ Scope:
 - Do not build /ingest yet.
 - Do not touch v2 lead workflow yet.
 ```
-
