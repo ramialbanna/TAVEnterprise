@@ -159,9 +159,9 @@ describe("getSourceRunDetail", () => {
       schema_drift_events: { data: [] },
       valuation_snapshots: {
         data: [
-          { normalized_listing_id: "nl_hit", mmr_value: 19000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T20:00:00Z" },
-          { normalized_listing_id: "nl_hit", mmr_value: 19500, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T21:00:00Z" },
-          { normalized_listing_id: "nl_miss", mmr_value: null, missing_reason: "trim_missing", vehicle_candidate_id: null, fetched_at: "2026-05-16T20:30:00Z" },
+          { normalized_listing_id: "nl_hit", mmr_value: 19000, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T20:00:00Z" },
+          { normalized_listing_id: "nl_hit", mmr_value: 19500, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T21:00:00Z" },
+          { normalized_listing_id: "nl_miss", mmr_value: null, mileage: 105000, missing_reason: "trim_missing", vehicle_candidate_id: null, fetched_at: "2026-05-16T20:30:00Z" },
         ],
       },
       leads: {
@@ -177,6 +177,8 @@ describe("getSourceRunDetail", () => {
     expect(hit.valuation_status).toBe("hit");
     expect(hit.mmr_value).toBe(19500); // latest snapshot by fetched_at
     expect(hit.valuation_missing_reason).toBeNull();
+    expect(hit.valuation_mileage).toBe(62000);
+    expect(hit.valuation_mileage_is_estimated).toBe(false);
     expect(hit.lead_id).toBe("lead_hit");
     expect(hit.lead_grade).toBe("good");
     expect(hit.lead_final_score).toBe(78);
@@ -186,6 +188,8 @@ describe("getSourceRunDetail", () => {
     expect(miss.valuation_status).toBe("miss");
     expect(miss.valuation_missing_reason).toBe("trim_missing");
     expect(miss.mmr_value).toBeNull();
+    expect(miss.valuation_mileage).toBe(105000);
+    expect(miss.valuation_mileage_is_estimated).toBe(true);
     expect(miss.lead_id).toBeNull();
   });
 });

@@ -11,6 +11,8 @@ import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
 import { isCatalogModelVariantOf, selectCatalogModelVariantForListing } from "./selectCatalogModelVariant";
 import { selectCatalogStyleForListing } from "./selectCatalogStyle";
+import { getMmrMileageData } from "../scoring/mmrMileage";
+import type { MmrMileageData } from "../scoring/mmrMileage";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -18,7 +20,7 @@ import { selectCatalogStyleForListing } from "./selectCatalogStyle";
  *
  *   not_configured       — neither INTEL_WORKER binding nor INTEL_WORKER_URL set
  *   insufficient_params  — no VIN and incomplete YMM (year/make/model missing)
- *   mileage_missing      — YMM path requires mileage; not provided
+ *   mileage_missing      — YMM path cannot infer mileage because year is absent
  *   model_variant_missing — Cox catalog splits the model (e.g. AWD/FWD), but
  *                          listing evidence is insufficient to choose safely
  *   trim_missing         — Cox YMMT requires bodyname (trim) as path segment
@@ -97,6 +99,8 @@ export type MmrLookupOutcome =
       reason: MmrMissReason;
       method: ValuationMethod | null;
       normalizationConfidence?: NormalizationConfidence;
+      mileageUsed?: number | null;
+      isInferredMileage?: boolean;
     };
 
 // tav-intelligence-worker wraps every successful response as
@@ -276,6 +280,7 @@ async function performMmrCall(
         normalizationConfidence: NormalizationConfidence;
       }
     | undefined;
+  let mileageData: MmrMileageData | undefined;
 
   if (vin) {
     // VIN path — normalization does not apply
@@ -288,13 +293,11 @@ async function performMmrCall(
     confidence = "high";
     method = "vin";
   } else if (year !== undefined && make && model) {
-    // YMM path — gate on mileage and trim BEFORE the network call so misses
-    // are diagnosable. Cox MMR 1.4 YMMT requires `odometer` query param and
-    // `bodyname` (trim) path segment; missing either yields a 404 (cox_no_data)
-    // that hides the real cause. Pre-checking surfaces the specific reason.
-    if (mileage === undefined) {
-      return { kind: "miss", reason: "mileage_missing", method: "year_make_model" };
-    }
+    // YMM path — Cox MMR 1.4 YMMT requires `odometer` and `bodyname`.
+    // If the source listing has no mileage, use the shared 15k/year estimator
+    // for the lookup only. The source mileage remains null; downstream UI
+    // labels the valuation mileage as estimated.
+    mileageData = getMmrMileageData(year, mileage);
     // Trim resolution: explicit trim first, then a title-derived real token
     // (never fabricated) before declaring trim_missing. Cox YMMT requires a
     // 4th path segment; a recoverable token keeps the listing in the running.
@@ -363,6 +366,8 @@ async function performMmrCall(
               reason: "model_variant_missing",
               method: "year_make_model",
               normalizationConfidence: normalized.normalizationConfidence,
+              mileageUsed: mileageData.value,
+              isInferredMileage: mileageData.isInferred,
             };
           }
         }
@@ -387,10 +392,21 @@ async function performMmrCall(
     }
 
     if (!sendTrim) {
-      return { kind: "miss", reason: "trim_missing", method: "year_make_model" };
+      return {
+        kind: "miss",
+        reason: "trim_missing",
+        method: "year_make_model",
+        mileageUsed: mileageData.value,
+        isInferredMileage: mileageData.isInferred,
+      };
     }
 
-    body = { year, make: sendMake, model: sendModel, mileage };
+    body = {
+      year,
+      make: sendMake,
+      model: sendModel,
+      ...(mileage !== undefined && { mileage }),
+    };
 
     if (catalogStyles?.catalogState === "connected") {
       const selected = selectCatalogStyleForListing({
@@ -412,6 +428,8 @@ async function performMmrCall(
           reason: "trim_missing",
           method: "year_make_model",
           normalizationConfidence: normalized.normalizationConfidence,
+          mileageUsed: mileageData.value,
+          isInferredMileage: mileageData.isInferred,
         };
       }
       sendTrim = selected.style;
@@ -479,6 +497,7 @@ async function performMmrCall(
         reason: "cox_timeout",
         method,
         ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+        ...(mileageData && { mileageUsed: mileageData.value, isInferredMileage: mileageData.isInferred }),
       };
     }
     throw err;
@@ -487,7 +506,12 @@ async function performMmrCall(
   }
 
   if (res.status === 429) {
-    return { kind: "miss", reason: "cox_rate_limited", method };
+    return {
+      kind: "miss",
+      reason: "cox_rate_limited",
+      method,
+      ...(mileageData && { mileageUsed: mileageData.value, isInferredMileage: mileageData.isInferred }),
+    };
   }
 
   if (!res.ok) {
@@ -513,6 +537,7 @@ async function performMmrCall(
       reason: classifyIntelHttpError(res.status, responseText),
       method,
       httpStatus: res.status,
+      ...(mileageData && { mileageUsed: mileageData.value, isInferredMileage: mileageData.isInferred }),
     };
   }
 
@@ -520,7 +545,12 @@ async function performMmrCall(
   try {
     data = await res.json();
   } catch {
-    return { kind: "miss", reason: "envelope_invalid", method };
+    return {
+      kind: "miss",
+      reason: "envelope_invalid",
+      method,
+      ...(mileageData && { mileageUsed: mileageData.value, isInferredMileage: mileageData.isInferred }),
+    };
   }
 
   const wrapped = IntelOkEnvelopeSchema.safeParse(data);
@@ -529,7 +559,12 @@ async function performMmrCall(
       endpoint,
       issues: wrapped.error.issues.slice(0, 5),
     });
-    return { kind: "miss", reason: "envelope_invalid", method };
+    return {
+      kind: "miss",
+      reason: "envelope_invalid",
+      method,
+      ...(mileageData && { mileageUsed: mileageData.value, isInferredMileage: mileageData.isInferred }),
+    };
   }
 
   const envelope = wrapped.data.data;
@@ -539,6 +574,8 @@ async function performMmrCall(
       reason: "cox_no_data",
       method,
       ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+      mileageUsed: envelope.mileage_used ?? mileageData?.value ?? null,
+      isInferredMileage: envelope.is_inferred_mileage ?? mileageData?.isInferred ?? false,
     };
   }
 
@@ -548,6 +585,12 @@ async function performMmrCall(
     method,
     rawResponse: envelope.mmr_payload ?? {},
     ...normalizationMeta,
+    mileageUsed: envelope.mileage_used ?? mileageData?.value ?? null,
+    isInferredMileage: envelope.is_inferred_mileage ?? mileageData?.isInferred ?? false,
+    mileageMethod:
+      envelope.is_inferred_mileage || mileageData?.isInferred
+        ? "estimated_annual_average"
+        : "actual",
   };
   return { kind: "hit", result };
 }
@@ -571,6 +614,8 @@ export async function getMmrLookupOutcome(
     reason: raw.reason,
     method: raw.method,
     ...(raw.normalizationConfidence && { normalizationConfidence: raw.normalizationConfidence }),
+    ...(raw.mileageUsed !== undefined && { mileageUsed: raw.mileageUsed }),
+    ...(raw.isInferredMileage !== undefined && { isInferredMileage: raw.isInferredMileage }),
   };
 }
 

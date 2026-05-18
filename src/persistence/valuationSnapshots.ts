@@ -25,6 +25,9 @@ export interface ValuationMissSnapshotInput {
   lookupMake?: string | null;
   lookupModel?: string | null;
   lookupTrim?: string | null;
+  /** Mileage used by the valuation attempt; may be estimated when listing mileage is absent. */
+  mileageUsed?: number | null;
+  isInferredMileage?: boolean;
   fetchedAt?: string;
 }
 
@@ -56,6 +59,7 @@ export async function writeValuationMissSnapshot(
     lookupMake,
     lookupModel,
     lookupTrim,
+    mileageUsed,
     fetchedAt,
   } = input;
 
@@ -66,7 +70,7 @@ export async function writeValuationMissSnapshot(
     year:                     listing.year ?? null,
     make:                     listing.make ?? null,
     model:                    listing.model ?? null,
-    mileage:                  listing.mileage ?? null,
+    mileage:                  mileageUsed ?? listing.mileage ?? null,
     mmr_value:                null,
     confidence:               "none",
     valuation_method:         method ?? "year_make_model",
@@ -100,7 +104,7 @@ export async function writeValuationSnapshot(
     year:                     listing.year ?? null,
     make:                     listing.make ?? null,
     model:                    listing.model ?? null,
-    mileage:                  listing.mileage ?? null,
+    mileage:                  valuation.mileageUsed ?? listing.mileage ?? null,
     mmr_value:                valuation.mmrValue,
     confidence:               valuation.confidence,
     valuation_method:         valuation.valuationMethod,

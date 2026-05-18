@@ -252,7 +252,13 @@ export async function ingestCore(
       // with a structured `missing_reason` (mileage_missing, trim_missing,
       // cox_no_data, cox_unavailable, etc.) instead of disappearing silently.
       let mmrResult = null;
-      let workerMiss: { reason: MmrMissReason; method: ValuationMethod | null; normalizationConfidence?: NormalizationConfidence } | null = null;
+      let workerMiss: {
+        reason: MmrMissReason;
+        method: ValuationMethod | null;
+        normalizationConfidence?: NormalizationConfidence;
+        mileageUsed?: number | null;
+        isInferredMileage?: boolean;
+      } | null = null;
       if (getValuationLookupMode(env) === "direct") {
         try {
           mmrResult = await getMmrValue(
@@ -276,6 +282,8 @@ export async function ingestCore(
               reason: outcome.reason,
               method: outcome.method,
               ...(outcome.normalizationConfidence && { normalizationConfidence: outcome.normalizationConfidence }),
+              ...(outcome.mileageUsed !== undefined && { mileageUsed: outcome.mileageUsed }),
+              ...(outcome.isInferredMileage !== undefined && { isInferredMileage: outcome.isInferredMileage }),
             };
           }
         } catch (err) {
@@ -293,6 +301,8 @@ export async function ingestCore(
             missingReason:       workerMiss.reason,
             method:              workerMiss.method,
             ...(workerMiss.normalizationConfidence && { normalizationConfidence: workerMiss.normalizationConfidence }),
+            ...(workerMiss.mileageUsed !== undefined && { mileageUsed: workerMiss.mileageUsed }),
+            ...(workerMiss.isInferredMileage !== undefined && { isInferredMileage: workerMiss.isInferredMileage }),
           });
           log("valuation.miss", { missing_reason: workerMiss.reason, method: workerMiss.method, kpi: true }, listingCtx);
         } catch (err) {

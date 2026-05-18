@@ -73,6 +73,12 @@ const ENVELOPE_YMM = {
   cache_hit: true,
 };
 
+const ENVELOPE_YMM_INFERRED = {
+  ...ENVELOPE_YMM,
+  mileage_used: 96_000,
+  is_inferred_mileage: true,
+};
+
 const ENVELOPE_NEGATIVE = {
   ok: false,
   mmr_value: null,
@@ -128,7 +134,10 @@ beforeEach(() => {
   // Default: YMM tests get a reference that exact-matches Toyota/Camry and Honda/Civic
   vi.mocked(loadMmrReferenceData).mockResolvedValue(DEFAULT_REF);
 });
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 // ── transport configuration ───────────────────────────────────────────────────
 
@@ -534,17 +543,28 @@ describe("getMmrValueFromWorker — error cases", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("OUTCOME: YMM path with missing mileage yields miss reason 'mileage_missing' without calling worker", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+  it("OUTCOME: YMM path with missing mileage lets intel infer 15k/year mileage and labels the result", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-17T12:00:00.000Z"));
+    mockFetch(200, ENVELOPE_YMM_INFERRED);
     const outcome = await getMmrLookupOutcome(
       { year: 2020, make: "Toyota", model: "Camry", trim: "SE" },
       BASE_ENV,
     );
-    expect(outcome.kind).toBe("miss");
-    if (outcome.kind !== "miss") return;
-    expect(outcome.reason).toBe("mileage_missing");
-    expect(outcome.method).toBe("year_make_model");
-    expect(fetch).not.toHaveBeenCalled();
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+    expect(outcome.result.mmrValue).toBe(16_000);
+    expect(outcome.result.mileageUsed).toBe(96_000);
+    expect(outcome.result.isInferredMileage).toBe(true);
+    expect(outcome.result.mileageMethod).toBe("estimated_annual_average");
+
+    const [, init] = findFetchCallContaining("/mmr/year-make-model");
+    expect(JSON.parse(String(init.body))).toEqual({
+      year: 2020,
+      make: "Toyota",
+      model: "Camry",
+      trim: "SE",
+    });
   });
 
   it("OUTCOME: YMM path with missing trim yields miss reason 'trim_missing' without valuation lookup (Cox YMMT requires bodyname)", async () => {

@@ -117,6 +117,10 @@ export interface ValuationResult {
   lookupModel?: string | null;
   lookupTrim?: string | null;
   normalizationConfidence?: NormalizationConfidence;
+  /** Mileage sent to the valuation source; distinct from source listing mileage. */
+  mileageUsed?: number | null;
+  /** True when mileageUsed was estimated from model year at 15k miles/year. */
+  isInferredMileage?: boolean;
 }
 
 // ── Concept 4: Lead ───────────────────────────────────────────────────────────

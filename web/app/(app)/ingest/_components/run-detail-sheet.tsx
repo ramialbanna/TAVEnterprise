@@ -203,6 +203,11 @@ function ListingCell({ listing }: { listing: ListingDiagnostic }) {
         {ymm || "—"} · VIN {listing.vin ?? "—"} ·{" "}
         {listing.mileage !== null ? `${formatNumber(listing.mileage)} mi` : "— mi"}
       </div>
+      {listing.valuation_mileage_is_estimated && listing.valuation_mileage !== null ? (
+        <div className="inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+          MMR mileage estimate: {formatNumber(listing.valuation_mileage)} mi
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -178,6 +178,8 @@ export const ListingDiagnosticSchema = z.object({
   trim: z.string().nullable(),
   price: z.number().nullable(),
   mileage: z.number().nullable(),
+  valuation_mileage: z.number().nullable(),
+  valuation_mileage_is_estimated: z.boolean().default(false),
   vin: z.string().nullable(),
   valuation_status: z.enum(["hit", "miss"]).nullable(),
   valuation_missing_reason: z.string().nullable(),

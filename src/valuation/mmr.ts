@@ -10,6 +10,7 @@
  */
 import type { Env } from "../types/env";
 import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } from "../types/domain";
+import type { MmrMileageMethod } from "../scoring/mmrMileage";
 import { log } from "../logging/logger";
 
 export interface MmrResult {
@@ -22,6 +23,11 @@ export interface MmrResult {
   lookupModel?: string | null;
   lookupTrim?: string | null;
   normalizationConfidence?: NormalizationConfidence;
+  /** Mileage actually sent to Manheim/Cox. May be estimated when listing mileage is absent. */
+  mileageUsed?: number | null;
+  /** True when mileageUsed came from the 15k/year estimator, not the source listing. */
+  isInferredMileage?: boolean;
+  mileageMethod?: MmrMileageMethod;
 }
 
 export interface MmrParams {
