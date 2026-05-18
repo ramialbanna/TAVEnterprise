@@ -71,6 +71,7 @@ included `V2-Core` requirement.
 | `14-decision-records/` | Short ADRs for durable choices. | Started with [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
 | `15-current-architecture-map.md` | Current live architecture map used to ground v2 design work. | Created |
 | `16-final-outcome-architecture-map.md` | Target buying-side platform architecture after v2/v3 are complete. | Created |
+| `17-current-file-by-file-review.md` | Active file/group review with purpose, risk, v2 relevance, and next action. | Created |
 
 ## Strategic Implementation Approach
 
