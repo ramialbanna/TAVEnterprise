@@ -27,5 +27,7 @@ export function fromMmrResult(result: MmrResult): ValuationResult {
     lookupModel:             result.lookupModel,
     lookupTrim:              result.lookupTrim,
     normalizationConfidence: result.normalizationConfidence,
+    mileageUsed:             result.mileageUsed ?? null,
+    isInferredMileage:       result.isInferredMileage ?? false,
   };
 }

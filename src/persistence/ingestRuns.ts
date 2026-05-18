@@ -43,6 +43,8 @@ export interface ListingDiagnostic {
   trim: string | null;
   price: number | null;
   mileage: number | null;
+  valuation_mileage: number | null;
+  valuation_mileage_is_estimated: boolean;
   vin: string | null;
   valuation_status: "hit" | "miss" | null;
   valuation_missing_reason: string | null;
@@ -71,6 +73,7 @@ export interface IngestRunDetail {
 
 type ValAgg = {
   mmr_value: number | null;
+  mileage: number | null;
   missing_reason: string | null;
   vehicle_candidate_id: string | null;
   fetched_at: string;
@@ -102,6 +105,7 @@ export function buildListingDiagnostics(
     if (prev && prev.fetched_at >= fetchedAt) continue;
     valByListing.set(nlId, {
       mmr_value: (v.mmr_value as number | null) ?? null,
+      mileage: (v.mileage as number | null) ?? null,
       missing_reason: (v.missing_reason as string | null) ?? null,
       vehicle_candidate_id: (v.vehicle_candidate_id as string | null) ?? null,
       fetched_at: fetchedAt,
@@ -132,6 +136,9 @@ export function buildListingDiagnostics(
       else if (val.missing_reason !== null) valuationStatus = "miss";
     }
 
+    const listingMileage = (n.mileage as number | null) ?? null;
+    const valuationMileage = val?.mileage ?? null;
+
     return {
       normalized_listing_id: nlId,
       title: (n.title as string | null) ?? null,
@@ -141,7 +148,9 @@ export function buildListingDiagnostics(
       model: (n.model as string | null) ?? null,
       trim: (n.trim as string | null) ?? null,
       price: (n.price as number | null) ?? null,
-      mileage: (n.mileage as number | null) ?? null,
+      mileage: listingMileage,
+      valuation_mileage: valuationMileage,
+      valuation_mileage_is_estimated: listingMileage === null && valuationMileage !== null,
       vin: (n.vin as string | null) ?? null,
       valuation_status: valuationStatus,
       valuation_missing_reason: valuationStatus === "miss" ? val!.missing_reason : null,
@@ -288,7 +297,7 @@ export async function getSourceRunDetail(
   if (normIds.length > 0) {
     const { data: vData, error: vDErr } = await db
       .from("valuation_snapshots")
-      .select("normalized_listing_id, mmr_value, missing_reason, vehicle_candidate_id, fetched_at")
+      .select("normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, fetched_at")
       .in("normalized_listing_id", normIds);
     if (vDErr) throw vDErr;
     valRows = (vData ?? []) as Array<Record<string, unknown>>;

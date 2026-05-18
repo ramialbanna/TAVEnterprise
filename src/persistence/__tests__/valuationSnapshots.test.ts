@@ -129,6 +129,25 @@ describe("writeValuationSnapshot — core fields", () => {
     expect(payload.raw_response).toEqual({ raw: true });
   });
 
+  it("stores valuation mileage when it differs from missing source listing mileage", async () => {
+    const { db, insertSpy } = makeDb();
+    const estimatedMileageValuation: ValuationResult = {
+      ...YMM_VALUATION,
+      mileageUsed: 96_000,
+      isInferredMileage: true,
+    };
+
+    await writeValuationSnapshot(db, {
+      normalizedListingId: "nl-estimated-mileage",
+      listing: { ...BASE_LISTING, mileage: undefined },
+      valuation: estimatedMileageValuation,
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.mileage).toBe(96_000);
+    expect(payload.mmr_value).toBe(12_500);
+  });
+
   it("sets vehicle_candidate_id to null when not provided", async () => {
     const { db, insertSpy } = makeDb();
 
@@ -234,6 +253,25 @@ describe("writeValuationMissSnapshot", () => {
     expect(payload.make).toBe("Honda");
     expect(payload.model).toBe("Civic");
     expect(payload.mileage).toBe(55_000);
+  });
+
+  it("stores estimated lookup mileage on miss rows without changing listing identity fields", async () => {
+    const { db, insertSpy } = makeDb();
+
+    await writeValuationMissSnapshot(db, {
+      normalizedListingId: "nl-miss-estimated-mileage",
+      listing: { ...BASE_LISTING, mileage: undefined },
+      missingReason: "cox_no_data",
+      method: "year_make_model",
+      mileageUsed: 96_000,
+      isInferredMileage: true,
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.mileage).toBe(96_000);
+    expect(payload.year).toBe(2020);
+    expect(payload.make).toBe("Honda");
+    expect(payload.model).toBe("Civic");
   });
 
   it("nulls distribution and raw_response columns on miss", async () => {

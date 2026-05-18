@@ -65,6 +65,8 @@ function okDetail(over: Partial<IngestRunDetail> = {}): ApiResult<IngestRunDetai
           trim: "SE",
           price: 18500,
           mileage: 62000,
+          valuation_mileage: 62000,
+          valuation_mileage_is_estimated: false,
           vin: null,
           valuation_status: "miss",
           valuation_missing_reason: "trim_missing",
@@ -178,5 +180,41 @@ describe("IngestClient", () => {
     expect(screen.getByText(/miss · trim_missing/i)).toBeInTheDocument();
     // dead_letters explicitly unavailable per current schema
     expect(screen.getByRole("heading", { name: /dead letters/i })).toBeInTheDocument();
+  });
+
+  it("highlights estimated MMR mileage when the source listing mileage is missing", async () => {
+    mockedDetail.mockResolvedValue(okDetail({
+      listings: [
+        {
+          normalized_listing_id: "nl_estimated",
+          title: "2020 Toyota Camry SE",
+          listing_url: "https://fb.com/1",
+          year: 2020,
+          make: "Toyota",
+          model: "Camry",
+          trim: "SE",
+          price: 18500,
+          mileage: null,
+          valuation_mileage: 96000,
+          valuation_mileage_is_estimated: true,
+          vin: null,
+          valuation_status: "hit",
+          valuation_missing_reason: null,
+          mmr_value: 19000,
+          lead_id: null,
+          lead_grade: null,
+          lead_final_score: null,
+          lead_score_components: null,
+          vehicle_candidate_id: null,
+        },
+      ],
+    }));
+    renderClient(okList([run({ id: "sr_est", run_id: "RUN_EST" })]));
+
+    const user = userEvent.setup();
+    const occurrences = screen.getAllByText("RUN_EST");
+    await user.click(occurrences[occurrences.length - 1]!);
+
+    expect(await screen.findByText(/MMR mileage estimate: 96,000 mi/i)).toBeInTheDocument();
   });
 });
