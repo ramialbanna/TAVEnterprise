@@ -208,6 +208,11 @@ function ListingCell({ listing }: { listing: ListingDiagnostic }) {
           MMR mileage estimate: {formatNumber(listing.valuation_mileage)} mi
         </div>
       ) : null}
+      {listing.valuation_style_is_estimated && listing.valuation_style ? (
+        <div className="inline-flex rounded border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-800">
+          MMR style estimate: {listing.valuation_style}
+        </div>
+      ) : null}
     </div>
   );
 }

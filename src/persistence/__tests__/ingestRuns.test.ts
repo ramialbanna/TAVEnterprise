@@ -159,9 +159,9 @@ describe("getSourceRunDetail", () => {
       schema_drift_events: { data: [] },
       valuation_snapshots: {
         data: [
-          { normalized_listing_id: "nl_hit", mmr_value: 19000, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T20:00:00Z" },
-          { normalized_listing_id: "nl_hit", mmr_value: 19500, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", fetched_at: "2026-05-16T21:00:00Z" },
-          { normalized_listing_id: "nl_miss", mmr_value: null, mileage: 105000, missing_reason: "trim_missing", vehicle_candidate_id: null, fetched_at: "2026-05-16T20:30:00Z" },
+          { normalized_listing_id: "nl_hit", mmr_value: 19000, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", lookup_trim: "SE", normalization_confidence: "exact", fetched_at: "2026-05-16T20:00:00Z" },
+          { normalized_listing_id: "nl_hit", mmr_value: 19500, mileage: 62000, missing_reason: null, vehicle_candidate_id: "vc_1", lookup_trim: "SE", normalization_confidence: "exact", fetched_at: "2026-05-16T21:00:00Z" },
+          { normalized_listing_id: "nl_miss", mmr_value: null, mileage: 105000, missing_reason: "trim_missing", vehicle_candidate_id: null, lookup_trim: "4D SEDAN LX", normalization_confidence: "partial", fetched_at: "2026-05-16T20:30:00Z" },
         ],
       },
       leads: {
@@ -179,6 +179,8 @@ describe("getSourceRunDetail", () => {
     expect(hit.valuation_missing_reason).toBeNull();
     expect(hit.valuation_mileage).toBe(62000);
     expect(hit.valuation_mileage_is_estimated).toBe(false);
+    expect(hit.valuation_style).toBe("SE");
+    expect(hit.valuation_style_is_estimated).toBe(false);
     expect(hit.lead_id).toBe("lead_hit");
     expect(hit.lead_grade).toBe("good");
     expect(hit.lead_final_score).toBe(78);
@@ -190,6 +192,8 @@ describe("getSourceRunDetail", () => {
     expect(miss.mmr_value).toBeNull();
     expect(miss.valuation_mileage).toBe(105000);
     expect(miss.valuation_mileage_is_estimated).toBe(true);
+    expect(miss.valuation_style).toBe("4D SEDAN LX");
+    expect(miss.valuation_style_is_estimated).toBe(true);
     expect(miss.lead_id).toBeNull();
   });
 });
@@ -203,6 +207,8 @@ describe("buildListingDiagnostics", () => {
     );
     expect(out).toHaveLength(1);
     expect(out[0]!.valuation_status).toBeNull();
+    expect(out[0]!.valuation_style).toBeNull();
+    expect(out[0]!.valuation_style_is_estimated).toBe(false);
     expect(out[0]!.lead_id).toBeNull();
     expect(out[0]!.vehicle_candidate_id).toBeNull();
   });
@@ -210,10 +216,12 @@ describe("buildListingDiagnostics", () => {
   it("prefers the lead's vehicle_candidate_id over the valuation's", () => {
     const out = buildListingDiagnostics(
       [{ id: "nl1" }],
-      [{ normalized_listing_id: "nl1", mmr_value: 100, missing_reason: null, vehicle_candidate_id: "vc_val", fetched_at: "2026-01-01T00:00:00Z" }],
+      [{ normalized_listing_id: "nl1", mmr_value: 100, missing_reason: null, vehicle_candidate_id: "vc_val", lookup_trim: "4D SEDAN SE", normalization_confidence: "partial", fetched_at: "2026-01-01T00:00:00Z" }],
       [{ id: "L1", normalized_listing_id: "nl1", vehicle_candidate_id: "vc_lead", grade: "fair", final_score: 50, score_components: null }],
     );
     expect(out[0]!.vehicle_candidate_id).toBe("vc_lead");
     expect(out[0]!.valuation_status).toBe("hit");
+    expect(out[0]!.valuation_style).toBe("4D SEDAN SE");
+    expect(out[0]!.valuation_style_is_estimated).toBe(true);
   });
 });

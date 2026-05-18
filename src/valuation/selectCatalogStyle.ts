@@ -7,6 +7,7 @@ export interface CatalogStyleSelectionInput {
 export interface CatalogStyleSelection {
   style: string;
   matchedSignals: string[];
+  isEstimated: boolean;
 }
 
 const SIGNALS: readonly string[] = [
@@ -144,9 +145,10 @@ function scoreStyle(style: string, signals: readonly string[]): { score: number;
 }
 
 /**
- * Selects an exact Cox catalog style using only evidence already present in
- * the listing. Returns null when the evidence is ambiguous; callers should
- * persist an honest miss instead of sending a guessed bodyname.
+ * Selects a Cox catalog style using listing evidence when possible. If no
+ * single style can be proven, falls back to the first catalog option and marks
+ * it estimated. Manheim's own UI presents that ordered style list; the caller
+ * must surface the estimate marker instead of treating it as source truth.
  */
 export function selectCatalogStyleForListing(
   input: CatalogStyleSelectionInput,
@@ -155,18 +157,22 @@ export function selectCatalogStyleForListing(
   if (styles.length === 0) return null;
 
   const signals = collectSignals(input.title, input.trim);
-  if (signals.length === 0) return null;
+  if (signals.length === 0) {
+    return { style: styles[0]!, matchedSignals: [], isEstimated: true };
+  }
 
   const scored = styles
     .map((style) => ({ style, ...scoreStyle(style, signals) }))
     .filter((row) => row.score >= 6)
     .sort((a, b) => b.score - a.score || b.matched.length - a.matched.length);
 
-  if (scored.length === 0) return null;
+  if (scored.length === 0) {
+    return { style: styles[0]!, matchedSignals: [], isEstimated: true };
+  }
   const [best, second] = scored;
   if (!best) return null;
   if (second && second.score === best.score && second.matched.length === best.matched.length) {
-    return null;
+    return { style: styles[0]!, matchedSignals: best.matched, isEstimated: true };
   }
-  return { style: best.style, matchedSignals: best.matched };
+  return { style: best.style, matchedSignals: best.matched, isEstimated: false };
 }

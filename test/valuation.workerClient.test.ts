@@ -812,20 +812,26 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
     expect(JSON.parse(ymmInit.body as string).trim).toBe("2D REGULAR CAB XL");
   });
 
-  it("returns trim_missing when the live catalog is available but style evidence is ambiguous", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue({
-        success: true,
-        data: {
-          items: ["4D CREW CAB RST", "4D DOUBLE CAB RST"],
-          catalogState: "connected",
-          cached: false,
-          reason: null,
-        },
-      }),
-    });
+  it("uses the first live catalog style as an estimate when style evidence is ambiguous", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            items: ["4D CREW CAB RST", "4D DOUBLE CAB RST"],
+            catalogState: "connected",
+            cached: false,
+            reason: null,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
+      });
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Chevrolet"]),
@@ -846,8 +852,61 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
       BASE_ENV,
     );
 
-    expect(outcome.kind === "miss" && outcome.reason).toBe("trim_missing");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(ymmInit.body as string).trim).toBe("4D CREW CAB RST");
+    expect(outcome.result.lookupTrim).toBe("4D CREW CAB RST");
+    expect(outcome.result.normalizationConfidence).toBe("partial");
+    expect(outcome.result.confidence).toBe("low");
+  });
+
+  it("uses the first live catalog style as an estimate when source trim is missing", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            items: ["4D SUV R-DYNAMIC HST", "4D SUV R-DYNAMIC S", "4D SUV SE"],
+            catalogState: "connected",
+            cached: false,
+            reason: null,
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Land Rover"]),
+      models: new Map([["Land Rover", new Set(["Range Rover Evoque"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2022,
+        make: "Land Rover",
+        model: "Range Rover Evoque",
+        mileage: 60_000,
+        title: "2022 Land Rover Range Rover Evoque",
+      },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(ymmInit.body as string).trim).toBe("4D SUV R-DYNAMIC HST");
+    expect(outcome.result.lookupTrim).toBe("4D SUV R-DYNAMIC HST");
+    expect(outcome.result.normalizationConfidence).toBe("partial");
   });
 });
 
