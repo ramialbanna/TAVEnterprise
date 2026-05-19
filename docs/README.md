@@ -6,6 +6,12 @@ Use the numbered folders for active development. Files under `docs/archive/` are
 preserved for history and should not be treated as current instructions unless a
 current doc links to them explicitly.
 
+## Start Here
+
+- [Master Documentation Index](INDEX.md) — first stop for new developers.
+- [Final Handoff Checklist](04-operations/final-handoff-checklist.md) — current handoff readiness and exact next action.
+- [New Developer Onboarding Email](04-operations/onboarding-email.md) — copy/paste email for incoming developers.
+
 ## Current Docs
 
 ### 01 — Architecture
@@ -45,6 +51,11 @@ current doc links to them explicitly.
 - [Project Charter](06-platform/00-project-charter.md) — scope, success criteria, stakeholders, glossary.
 - [Business Requirements](06-platform/01-business-requirements.md) — business rules tagged by milestone.
 - [Open Questions Log](06-platform/13-open-questions-log.md) — unresolved decisions that must not be guessed during implementation.
+- [Current Architecture Map](06-platform/15-current-architecture-map.md) — current live runtime, data, route, and integration map for v2 planning.
+- [Final Outcome Architecture Map](06-platform/16-final-outcome-architecture-map.md) — target buying-side operating-system architecture for v2/v3.
+- [Current File-by-File Review](06-platform/17-current-file-by-file-review.md) — active file/group review with purpose, risk, v2 relevance, and next action.
+- [New Developer Handoff](06-platform/18-new-developer-handoff.md) — clean handoff for understanding current state, guardrails, and first safe implementation slice.
+- [V2 Implementation Index](06-platform/19-v2-implementation-index.md) — ordered docs and PR sequence for v2/v3 work.
 
 ## Archive
 

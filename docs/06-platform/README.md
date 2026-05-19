@@ -56,19 +56,24 @@ included `V2-Core` requirement.
 |---|---|---|
 | `00-project-charter.md` | Scope, ownership, success criteria, glossary. | Created |
 | `01-business-requirements.md` | Business rules in business language. | Created |
-| `02-functional-requirements.md` | Numbered FRs by capability. | Pending |
-| `03-data-model.md` | Schema design and traceability. | Pending |
-| `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Pending |
-| `05-api-contract.md` | Worker and web API contracts. | Pending |
-| `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Pending |
-| `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Pending |
-| `08-metrics-and-observability.md` | KPIs and instrumentation. | Pending |
-| `09-test-strategy.md` | Unit, integration, E2E, manual QA, shadow mode. | Pending |
-| `10-glossary-and-data-dictionary.md` | Enum/status/grade dictionary. | Pending |
-| `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Pending |
-| `12-security-and-access.md` | Role/tier access matrix and audit policy. | Pending |
+| `02-functional-requirements.md` | Numbered FRs by capability. | Created |
+| `03-data-model.md` | Schema design and traceability. | Created |
+| `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Created |
+| `05-api-contract.md` | Worker and web API contracts. | Created |
+| `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Created |
+| `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Created |
+| `08-metrics-and-observability.md` | KPIs and instrumentation. | Created |
+| `09-test-strategy.md` | Unit, integration, E2E, manual QA, shadow mode. | Created |
+| `10-glossary-and-data-dictionary.md` | Enum/status/grade dictionary. | Created |
+| `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Created |
+| `12-security-and-access.md` | Role/tier access matrix and audit policy. | Created |
 | `13-open-questions-log.md` | Living decision log. | Created |
 | `14-decision-records/` | Short ADRs for durable choices. | Started with [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
+| `15-current-architecture-map.md` | Current live architecture map used to ground v2 design work. | Created |
+| `16-final-outcome-architecture-map.md` | Target buying-side platform architecture after v2/v3 are complete. | Created |
+| `17-current-file-by-file-review.md` | Active file/group review with purpose, risk, v2 relevance, and next action. | Created |
+| `18-new-developer-handoff.md` | Clean new-developer handoff for understanding current state and guardrails. | Created |
+| `19-v2-implementation-index.md` | Execution index for required docs and phased v2/v3 work packages. | Created |
 
 ## Strategic Implementation Approach
 
@@ -113,3 +118,15 @@ The next implementation PR should not start until:
 - If a PR touches offer approval, it must cite the approval governance ADR and
   explicitly state whether it is implementing offer-level audit only or a later
   governance layer.
+
+## New Developer Entry Point
+
+For a clean start, read these three files first:
+
+1. `18-new-developer-handoff.md`
+2. `19-v2-implementation-index.md`
+3. `15-current-architecture-map.md`
+
+Then read `16-final-outcome-architecture-map.md`,
+`17-current-file-by-file-review.md`, `docs/02-product/v2-opportunities.md`, and
+`13-open-questions-log.md` before writing any implementation plan.

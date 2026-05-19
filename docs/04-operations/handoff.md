@@ -114,12 +114,32 @@ RuFlo / claude-flow autopilot caused unauthorized commits and PR merge activity 
 
 ## 10. Doc Map
 
+- `docs/INDEX.md` - master documentation index and reading order.
 - `README.md` - repo overview and quickstart.
 - `CLAUDE.md` - agent operating rules.
+- `docs/04-operations/final-handoff-checklist.md` - final handoff status and next action.
+- `docs/04-operations/onboarding-email.md` - onboarding email draft.
 - `docs/01-architecture/system-overview.md` - architecture and data model.
 - `docs/04-operations/runbook.md` - production operations.
 - `docs/02-product/roadmap.md` - roadmap and v2 direction.
 - `docs/06-platform/README.md` - v2/v3 buying-side platform control docs.
+- `docs/06-platform/18-new-developer-handoff.md` - clean new-developer handoff.
+- `docs/06-platform/19-v2-implementation-index.md` - ordered v2 docs/PR sequence.
 - `docs/03-api/app-api.md` - app API.
 - `docs/03-api/manheim-cox.md` - Cox/Manheim notes.
 - `docs/archive/2026-05-doc-consolidation/` - historical MVP artifacts.
+
+## 11. Cleanup Summary
+
+The repository documentation was intentionally reorganized before v2 handoff:
+
+- active documentation now lives in numbered folders under `docs/`
+- v2/v3 platform controls live under `docs/06-platform/`
+- historical MVP/staging/UAT/superseded documents live under `docs/archive/`
+- the new developer handoff, implementation index, final checklist, and master
+  docs index are explicit entry points
+- Obsidian notes are lightweight pointers back to repo docs, not duplicated
+  source-of-truth copies
+
+This makes the project easier for a new development team to navigate because
+current instructions are no longer mixed with historical session artifacts.
