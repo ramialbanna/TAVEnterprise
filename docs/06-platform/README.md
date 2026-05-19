@@ -59,7 +59,7 @@ included `V2-Core` requirement.
 | `02-functional-requirements.md` | Numbered FRs by capability. | Created |
 | `03-data-model.md` | Schema design and traceability. | Created |
 | `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Created |
-| `05-api-contract.md` | Worker and web API contracts. | Pending |
+| `05-api-contract.md` | Worker and web API contracts. | Created |
 | `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Pending |
 | `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Pending |
 | `08-metrics-and-observability.md` | KPIs and instrumentation. | Pending |
