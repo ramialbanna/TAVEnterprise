@@ -58,7 +58,7 @@ included `V2-Core` requirement.
 | `01-business-requirements.md` | Business rules in business language. | Created |
 | `02-functional-requirements.md` | Numbered FRs by capability. | Created |
 | `03-data-model.md` | Schema design and traceability. | Created |
-| `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Pending |
+| `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Created |
 | `05-api-contract.md` | Worker and web API contracts. | Pending |
 | `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Pending |
 | `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Pending |
