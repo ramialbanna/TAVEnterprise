@@ -33,9 +33,11 @@ Recommended but can follow immediately after:
 
 | File | Why |
 |---|---|
-| `07-non-functional-requirements.md` | Performance, retention, observability, reliability for live testing. |
-| `08-metrics-and-observability.md` | Queue health, claim age, source health, first-touch timing. |
-| `12-security-and-access.md` | Buyer/closer/admin visibility, role/tier map, future approvals. |
+| `07-non-functional-requirements.md` | Created; cite applicable NFR IDs in implementation PRs. |
+| `08-metrics-and-observability.md` | Created; use when adding events, dashboards, or audit rows. |
+| `10-glossary-and-data-dictionary.md` | Created; use the canonical enum/status/badge names. |
+| `11-migration-and-rollout-plan.md` | Created; use for rollout/rollback and AppSheet cutover planning. |
+| `12-security-and-access.md` | Created; cite role/tier access rows in mutation PRs. |
 
 ## 3. V2-Core Work Packages
 

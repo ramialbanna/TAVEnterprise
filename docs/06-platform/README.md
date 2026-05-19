@@ -61,12 +61,12 @@ included `V2-Core` requirement.
 | `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Created |
 | `05-api-contract.md` | Worker and web API contracts. | Created |
 | `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Created |
-| `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Pending |
-| `08-metrics-and-observability.md` | KPIs and instrumentation. | Pending |
+| `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Created |
+| `08-metrics-and-observability.md` | KPIs and instrumentation. | Created |
 | `09-test-strategy.md` | Unit, integration, E2E, manual QA, shadow mode. | Created |
-| `10-glossary-and-data-dictionary.md` | Enum/status/grade dictionary. | Pending |
-| `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Pending |
-| `12-security-and-access.md` | Role/tier access matrix and audit policy. | Pending |
+| `10-glossary-and-data-dictionary.md` | Enum/status/grade dictionary. | Created |
+| `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Created |
+| `12-security-and-access.md` | Role/tier access matrix and audit policy. | Created |
 | `13-open-questions-log.md` | Living decision log. | Created |
 | `14-decision-records/` | Short ADRs for durable choices. | Started with [ADR-0001](14-decision-records/ADR-0001-progressive-approval-governance.md) |
 | `15-current-architecture-map.md` | Current live architecture map used to ground v2 design work. | Created |
