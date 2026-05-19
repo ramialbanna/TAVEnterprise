@@ -22,7 +22,7 @@ Complete these in order:
 
 | Order | File | Output required |
 |---:|---|---|
-| 1 | `02-functional-requirements.md` | FR IDs for V2-Core, V2.5, V3. Must include read-only queue, manual submission, claim, assignment, touches, offers, dispositions. |
+| 1 | `02-functional-requirements.md` | FR IDs for V2-Core, V2.5, V3. Must include read-only queue, manual submission, claim, assignment, touches, offers, dispositions. Created; use it as the source for downstream schema/state/API/UX/test docs. |
 | 2 | `03-data-model.md` | Exact table/view plan for Opportunity read model, manual submissions, claim/assignment, touches, events. |
 | 3 | `04-state-machines.md` | Opportunity, claim, assignment, status, offer, approval, disposition, validation transitions by milestone. |
 | 4 | `05-api-contract.md` | `/app/opportunities*` contracts and future offer/disposition contracts. |
@@ -287,4 +287,3 @@ Every V2-Core requirement must cite source review/business requirement context
 and must be written so it can later trace to schema, state machine, API, UX, and
 tests. Do not implement code.
 ```
-

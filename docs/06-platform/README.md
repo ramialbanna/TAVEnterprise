@@ -56,7 +56,7 @@ included `V2-Core` requirement.
 |---|---|---|
 | `00-project-charter.md` | Scope, ownership, success criteria, glossary. | Created |
 | `01-business-requirements.md` | Business rules in business language. | Created |
-| `02-functional-requirements.md` | Numbered FRs by capability. | Pending |
+| `02-functional-requirements.md` | Numbered FRs by capability. | Created |
 | `03-data-model.md` | Schema design and traceability. | Pending |
 | `04-state-machines.md` | Lead/opportunity, claim, offer, disposition transitions. | Pending |
 | `05-api-contract.md` | Worker and web API contracts. | Pending |
