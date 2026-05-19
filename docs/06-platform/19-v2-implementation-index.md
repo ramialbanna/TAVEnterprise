@@ -27,7 +27,7 @@ Complete these in order:
 | 3 | `04-state-machines.md` | Opportunity, claim, assignment, status, offer, approval, disposition, validation transitions by milestone. Created; use it as the source for API and UX workflow gates. |
 | 4 | `05-api-contract.md` | `/app/opportunities*` contracts and future offer/disposition contracts. Created; use it as the source for Worker/web client implementation. |
 | 5 | `06-ux-spec.md` | `/opportunities` table, preview pane, detail page, manual submission, empty/loading/error states. Created; use it as the source for frontend implementation. |
-| 6 | `09-test-strategy.md` | Test matrix that maps FR -> schema/state/API/UX. |
+| 6 | `09-test-strategy.md` | Test matrix that maps FR -> schema/state/API/UX. Created; use it as the acceptance gate for implementation PRs. |
 
 Recommended but can follow immediately after:
 

@@ -63,7 +63,7 @@ included `V2-Core` requirement.
 | `06-ux-spec.md` | Role-aware screens, controls, empty/error states. | Created |
 | `07-non-functional-requirements.md` | Performance, security, audit, retention, reliability. | Pending |
 | `08-metrics-and-observability.md` | KPIs and instrumentation. | Pending |
-| `09-test-strategy.md` | Unit, integration, E2E, manual QA, shadow mode. | Pending |
+| `09-test-strategy.md` | Unit, integration, E2E, manual QA, shadow mode. | Created |
 | `10-glossary-and-data-dictionary.md` | Enum/status/grade dictionary. | Pending |
 | `11-migration-and-rollout-plan.md` | Shadow mode, AppSheet cutover, rollback. | Pending |
 | `12-security-and-access.md` | Role/tier access matrix and audit policy. | Pending |
