@@ -283,9 +283,15 @@ docs/06-platform/17-current-file-by-file-review.md,
 docs/02-product/v2-opportunities.md, and
 docs/06-platform/13-open-questions-log.md.
 
-Produce docs/06-platform/02-functional-requirements.md.
-Tag every requirement by milestone.
-Every V2-Core requirement must cite source review/business requirement context
-and must be written so it can later trace to schema, state machine, API, UX, and
-tests. Do not implement code.
+Implement PR 1 from this index: the read-only Opportunities API.
+
+Scope:
+- GET /app/opportunities
+- GET /app/opportunities/:id
+- existing data only
+- no claim/manual/offer/disposition mutation
+
+Before coding, state which FR IDs, schema sections, state-machine rows, API
+contracts, UX states, and tests the PR implements. If the traceability chain is
+incomplete, stop and update docs/open questions instead of guessing.
 ```

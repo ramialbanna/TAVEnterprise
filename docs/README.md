@@ -6,6 +6,12 @@ Use the numbered folders for active development. Files under `docs/archive/` are
 preserved for history and should not be treated as current instructions unless a
 current doc links to them explicitly.
 
+## Start Here
+
+- [Master Documentation Index](INDEX.md) — first stop for new developers.
+- [Final Handoff Checklist](04-operations/final-handoff-checklist.md) — current handoff readiness and exact next action.
+- [New Developer Onboarding Email](04-operations/onboarding-email.md) — copy/paste email for incoming developers.
+
 ## Current Docs
 
 ### 01 — Architecture

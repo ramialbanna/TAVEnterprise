@@ -49,14 +49,16 @@ become accountable, claimable, auditable work.
 
 | Step | File | Why |
 |---:|---|---|
-| 1 | `docs/06-platform/README.md` | Source hierarchy, milestone tags, traceability rule. |
-| 2 | `docs/06-platform/18-new-developer-handoff.md` | This handoff. |
-| 3 | `docs/06-platform/19-v2-implementation-index.md` | The exact next-doc and next-PR sequence. |
-| 4 | `docs/06-platform/15-current-architecture-map.md` | What exists today. |
-| 5 | `docs/06-platform/16-final-outcome-architecture-map.md` | Where the platform is going. |
-| 6 | `docs/06-platform/17-current-file-by-file-review.md` | Which files are risky and v2-relevant. |
-| 7 | `docs/02-product/v2-opportunities.md` | Approved v2 product direction. |
-| 8 | `docs/06-platform/13-open-questions-log.md` | Decisions still open; do not guess these. |
+| 1 | `docs/INDEX.md` | Master documentation map. |
+| 2 | `docs/04-operations/final-handoff-checklist.md` | Handoff readiness and exact next action. |
+| 3 | `docs/06-platform/README.md` | Source hierarchy, milestone tags, traceability rule. |
+| 4 | `docs/06-platform/18-new-developer-handoff.md` | This handoff. |
+| 5 | `docs/06-platform/19-v2-implementation-index.md` | The exact next-PR sequence. |
+| 6 | `docs/06-platform/15-current-architecture-map.md` | What exists today. |
+| 7 | `docs/06-platform/16-final-outcome-architecture-map.md` | Where the platform is going. |
+| 8 | `docs/06-platform/17-current-file-by-file-review.md` | Which files are risky and v2-relevant. |
+| 9 | `docs/02-product/v2-opportunities.md` | Approved v2 product direction. |
+| 10 | `docs/06-platform/13-open-questions-log.md` | Decisions still open; do not guess these. |
 
 After that, read `docs/03-api/app-api.md`, `docs/03-api/manheim-cox.md`, and
 `docs/04-operations/runbook.md` only as needed for the specific task.
@@ -222,3 +224,12 @@ developer should not rebuild ingestion or MMR. They should build the buyer-facin
 Opportunity layer on top of the existing raw/normalized/candidate/lead/valuation
 foundation, using the traceability docs as the guardrails.
 
+## 15. Cleanup Summary For New Developers
+
+The repo was cleaned before this handoff. Current docs now live in predictable
+numbered folders; old session artifacts, MVP plans, staging/UAT notes, and
+superseded docs were moved to `docs/archive/`. The result should feel much less
+like a chat-history dump and more like an engineering project with a map.
+
+Use `docs/INDEX.md` as the front door. Treat archive files as historical unless
+a current doc explicitly links to them.

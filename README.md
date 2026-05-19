@@ -31,7 +31,10 @@ Key runtime pieces:
 
 ## Active Docs
 
+- [docs/INDEX.md](docs/INDEX.md) - master documentation index and recommended reading order.
 - [docs/README.md](docs/README.md) - documentation map and current source-of-truth index.
+- [docs/04-operations/final-handoff-checklist.md](docs/04-operations/final-handoff-checklist.md) - final handoff status, cleanup summary, and next action.
+- [docs/04-operations/onboarding-email.md](docs/04-operations/onboarding-email.md) - onboarding email draft for new developers.
 - [docs/04-operations/handoff.md](docs/04-operations/handoff.md) - next-developer state, branch/PR map, known issues.
 - [docs/01-architecture/system-overview.md](docs/01-architecture/system-overview.md) - architecture and data model.
 - [docs/04-operations/runbook.md](docs/04-operations/runbook.md) - production operations, deploy, smoke checks, rollback.
