@@ -57,6 +57,22 @@ current doc links to them explicitly.
 - [New Developer Handoff](06-platform/18-new-developer-handoff.md) — clean handoff for understanding current state, guardrails, and first safe implementation slice.
 - [V2 Implementation Index](06-platform/19-v2-implementation-index.md) — ordered docs and PR sequence for v2/v3 work.
 
+### 07 — Buybox (MaxBuy)
+
+MaxBuy is TAV's internal adaptive buybox decision engine. This folder is the
+complete pre-code documentation set. Nothing under `apps/maxbuy/` ships until
+the punch list is closed.
+
+- [MaxBuy Documentation Set](07-buybox/README.md) — entry point and reading guide for the doc set.
+- [00 — Leadership Brief](07-buybox/00-LEADERSHIP-BRIEF.md) — executive strategic doc: what MaxBuy is, the 6-phase plan, the four owner decisions.
+- [01 — Charter](07-buybox/01-CHARTER.md) — mission, scope, non-goals, acceptance criteria, owner decisions DEC-1..4.
+- [02 — Architecture](07-buybox/02-ARCHITECTURE.md) — system context, online/offline split, serving decision, offline pipeline.
+- [03 — Technical Spec](07-buybox/03-TECHNICAL-SPEC.md) — engineering contract: SQL DDL, serving API, decision replay, governance.
+- [04 — Risk Register](07-buybox/04-RISK-REGISTER.md) — 18 risks across 5 reviewer lenses with mitigations.
+- [05 — Punch List](07-buybox/05-PUNCH-LIST.md) — ordered 18-item pre-code execution checklist.
+- [06 — Execution Plan](07-buybox/06-EXECUTION-PLAN.md) — dev-facing pre-code execution plan derived from the punch list.
+- [Pre-code Audits & Spikes](07-buybox/audits/) — read-only audit/spike kits for the dev-owned punch-list items.
+
 ## Archive
 
 - [2026-05 MVP Archive](archive/2026-05-mvp/) — historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.

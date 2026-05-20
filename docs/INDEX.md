@@ -53,6 +53,26 @@ Every implementation PR should cite the relevant docs in this section.
 | [Open Questions Log](06-platform/13-open-questions-log.md) | Decisions that must not be guessed. |
 | [Decision Records](06-platform/14-decision-records/) | Durable architectural/product decisions. |
 
+## 3A. Buybox (MaxBuy) Product Direction
+
+MaxBuy is TAV's internal adaptive buybox decision engine — a standalone
+VIN-first recommendation product. It should stay separate from the v2
+Opportunities docs until implementation scope is deliberately connected. The
+folder is a complete pre-code documentation set; nothing under `apps/maxbuy/`
+ships until the punch list is closed.
+
+| Doc | Purpose |
+|---|---|
+| [MaxBuy Documentation Set](07-buybox/README.md) | Entry point and reading guide for the doc set. |
+| [00 — Leadership Brief](07-buybox/00-LEADERSHIP-BRIEF.md) | Executive strategic doc: what MaxBuy is, the 6-phase plan, the four owner decisions. |
+| [01 — Charter](07-buybox/01-CHARTER.md) | Mission, scope, non-goals, acceptance criteria, owner decisions DEC-1..4. |
+| [02 — Architecture](07-buybox/02-ARCHITECTURE.md) | System context, online/offline split, serving decision, offline pipeline. |
+| [03 — Technical Spec](07-buybox/03-TECHNICAL-SPEC.md) | Engineering contract: SQL DDL, serving API, decision replay, governance. |
+| [04 — Risk Register](07-buybox/04-RISK-REGISTER.md) | 18 risks across 5 reviewer lenses with mitigations and top-5 blockers. |
+| [05 — Punch List](07-buybox/05-PUNCH-LIST.md) | Ordered 18-item pre-code execution checklist. |
+| [06 — Execution Plan](07-buybox/06-EXECUTION-PLAN.md) | Dev-facing pre-code execution plan derived from the punch list. |
+| [Pre-code Audits & Spikes](07-buybox/audits/) | Read-only audit/spike kits for the dev-owned punch-list items. |
+
 ## 4. First V2 Code Slice
 
 After the handoff docs merge, the first implementation slice is:
@@ -131,4 +151,3 @@ They should point to:
 - the new developer handoff
 - the v2 implementation index
 - the full platform control packet
-
