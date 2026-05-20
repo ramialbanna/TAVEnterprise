@@ -17,7 +17,10 @@ written*. Audience: the solo dev (execution owner). Companion docs:
 ## 1. Phase boundary — what this phase is and is not
 
 This phase is **MaxBuy pre-code readiness only**. It closes the punch list and
-nothing else.
+nothing else. The live audits found that the missing historical fields are not
+loaded into the database; TAV ownership has since confirmed that the data exists
+outside the DB. That changes the next step from a product pivot to a **Phase 0
+historical outcome backfill gate** before Phase 1 code.
 
 **In scope this phase**
 - Owner / product decisions (punch-list items 1, 2, 4, 5).
@@ -38,8 +41,11 @@ nothing else.
 - No MarketCheck runtime integration yet. MarketCheck is evaluated as an
   enrichment spike only.
 
-The first line of code is `git checkout -b TAV-BB-phase-1-data-foundation`, and
-it is not written until the exit criteria in §3 are all true.
+The first line of MaxBuy application code is
+`git checkout -b TAV-BB-phase-1-data-foundation`, and it is not written until
+the exit criteria in §3 are all true and the Phase 0 backfill gate in
+[`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md)
+has either closed or been explicitly deferred by ownership.
 
 ## 2. Hard constraints (carry into every item)
 
@@ -65,6 +71,9 @@ are true:
    [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md).
 2. Items **6, 7, 9, 10** (read-only data audits) are closed with reports
    committed and field/segment tags reconciled against the audit findings.
+   If the missing fields are supplied by an external source, the Phase 0
+   backfill is completed and audits **6, 7, 9, and 10** are re-run against the
+   enriched database state.
 3. Item **12** (`tav-intelligence-worker` contract pin) is closed with a
    pinned `intelligence_worker_contract_version` and compatibility tests in CI.
 4. Items **11, 13, 14** (architecture spikes) are scoped and assigned — the
@@ -135,6 +144,11 @@ and data-quality spike. It may inform data strength, hard-gate evidence, and
 buyer explanation later, but it does not replace MMR, TAV outcomes, or the v1
 benchmark recommendation engine.
 
+Item **20** (historical outcome backfill) starts now because ownership confirmed
+the missing fields exist outside the DB. It is a Phase 0 data-loading gate, not
+a MaxBuy product pivot: inventory the external source, map safe fields, backfill
+or stage them, re-run audits 6/7/9/10, then decide whether Phase 1 may start.
+
 ### WS-E — Acknowledgements (design already done)
 Item **3** (decision replay schema) — design is written in
 [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.4 + §3; the dev's remaining
@@ -174,6 +188,8 @@ benchmark views are defined.
 - **Dev:** execute WS-C audits 6, 7, 9, 10 using the kits in [`audits/`](audits/).
 - **Dev:** execute WS-D item 12 worker-contract pin using its kit.
 - **Dev:** execute WS-D item 19 MarketCheck enrichment spike using its kit.
+- **Dev/Data:** execute Phase 0 item 20, the historical outcome backfill plan,
+  before Phase 1 MaxBuy application code.
 
 ### Week 1 — architecture spikes + workflow decisions
 - **Dev:** scope and run spikes 11, 13, 14.
@@ -212,6 +228,7 @@ or downstream CI work only.
 | 17 | Adoption KPIs (gating) | B | P | Blocked-P — needs item 1 (KPI-5) | CHARTER §5.2 |
 | 18 | Evaluation rubric refresh | B | P | Blocked-P | ARCH §6 |
 | 19 | MarketCheck VIN enrichment spike | D | D | **In progress — interim report filed; live API checks pending** | [`audits/reports/19-marketcheck-spike-report.md`](audits/reports/19-marketcheck-spike-report.md) |
+| 20 | Historical outcome backfill gate | C/D | D | **Planned — missing fields exist externally; load/verify before Phase 1** | [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md) |
 
 ## 9. Audit & spike kit index
 
@@ -226,6 +243,7 @@ The dev-owned, read-only kits started in this phase live under
 | [`10-decay-rate-validation-plan.md`](audits/10-decay-rate-validation-plan.md) | 10 | Spike plan | λ-grid backtest design |
 | [`12-worker-contract-pinning-plan.md`](audits/12-worker-contract-pinning-plan.md) | 12 | Spike plan | Contract pin + compatibility-test design |
 | [`19-marketcheck-vin-enrichment-spike.md`](audits/19-marketcheck-vin-enrichment-spike.md) | 19 | Provider spike | MarketCheck endpoint, quality, cost, rate-limit, and safe-persist decision |
+| [`20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md) | 20 | Phase 0 data gate | External source inventory, mapping, verification gates, and re-run plan |
 
 Each kit is read-only: it specifies queries and methodology. No kit creates
 code, migrations, or schema.
@@ -234,9 +252,11 @@ Reports are committed under [`audits/reports/`](audits/reports/). As of
 2026-05-20: item 12 is fully executed (contract `mmr-v1` pinned from worker
 source); items 6, 7, 9 have completed live read-only Supabase audits — the
 runs surfaced material data gaps (`purchase_outcomes` has no purchase date, no
-mileage, and no MMR / pipeline linkage), escalated in their reports; item 10
-carries the backtest status; item 19 carries the design-level findings with
-live-API checks pending TAV account access.
+mileage, and no MMR / pipeline linkage), escalated in their reports. Ownership
+then confirmed the missing fields exist outside the DB, so item 20 is the next
+gate: load/stage the external fields, verify, and re-run the affected audits.
+Item 10 carries the backtest status; item 19 carries the design-level findings
+with live-API checks pending TAV account access.
 
 ## 10. Definition of done for this plan
 

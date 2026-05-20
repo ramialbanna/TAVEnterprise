@@ -28,6 +28,7 @@ This folder is the **complete pre-code documentation set**. It is the synthesis 
 | [`audits/10-decay-rate-validation-plan.md`](audits/10-decay-rate-validation-plan.md) | Recency-decay backtest plan. |
 | [`audits/12-worker-contract-pinning-plan.md`](audits/12-worker-contract-pinning-plan.md) | `tav-intelligence-worker` MMR contract pinning plan. |
 | [`audits/19-marketcheck-vin-enrichment-spike.md`](audits/19-marketcheck-vin-enrichment-spike.md) | MarketCheck VIN enrichment spike plan. |
+| [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md) | Phase 0 plan to load known external outcome fields before Phase 1 code. |
 
 ## How to read the set
 
@@ -67,5 +68,8 @@ MaxBuy is ready to leave pre-code when all of the following are true:
 5. Items 15, 16 (override capture + two-state display) have UI mocks approved by product.
 6. Items 17, 18 (adoption KPIs + rubric refresh) are closed with KPI floors set by owner.
 7. MarketCheck remains optional unless the spike proves it should be enabled; MaxBuy must still work when MarketCheck is unavailable.
+8. If the missing historical outcome fields exist outside the database, the
+   Phase 0 backfill gate in [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md)
+   is closed and audits 6, 7, 9, and 10 are re-run against the enriched data.
 
 At that point, `git checkout -b TAV-BB-phase-1-data-foundation` and start work.

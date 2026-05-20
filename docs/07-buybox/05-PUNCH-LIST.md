@@ -4,6 +4,11 @@
 
 **Date:** 2026-05-20 · **Status:** Pre-code · **Repo prefix:** `TAV-BB`
 
+> **2026-05-20 update:** Live audits 6, 7, and 9 found that key historical
+> fields are absent from the DB, but TAV ownership confirmed the data exists
+> externally. Phase 0 now adds item 20: load or stage the historical outcome
+> backfill and re-run the affected audits before Phase 1 application code.
+
 ---
 
 ## 1. How to read this list
@@ -23,6 +28,8 @@
 5. **Product, before UI build:** items 15, 16, 17, 18.
 6. **Item 8** (pass-on logging) is partly design (table exists) and partly dev (logging starts at v1 ship).
 7. **Item 3** (decision replay schema) is partly design (already written in [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.4 + §3) and partly dev (CI test that verifies AC-8 on every release).
+8. **Item 20** (historical outcome backfill) runs before Phase 1 if the missing
+   data exists outside the DB.
 
 ---
 
@@ -140,6 +147,16 @@ The dev can start these in parallel with owner/product decisions. Each produces 
 | Lands in | [`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §5 |
 | Task | Backtest exponential decay λ grid (90/180/365/540-day half-life) by sale week. Compare sale-price MAE, gross-hit classification error, and segment-level stability. |
 | Definition of done | λ-grid report; chosen λ committed to benchmark view definitions; per-segment override allowed where the grid says so. |
+
+### #20 — Historical outcome backfill gate
+| Field | Value |
+|---|---|
+| Owner | **D** |
+| Category | Data Backfill Gate |
+| Closes risks | R1, R3, R6, R17 |
+| Lands in | [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md); refreshed reports for items 6, 7, 9, 10 |
+| Task | Since TAV ownership confirmed the missing historical fields exist outside the DB, inventory the source in aggregate, map safe fields, load or stage purchase date, mileage/odometer, day-of MMR or snapshot reference, linkage, region/source, trim, and expense fields, then re-run audits 6, 7, 9, and 10. |
+| Definition of done | External source inventory complete; mapping approved; no secrets/raw VIN lists/raw vendor payloads/individual MMR figures committed; affected audits re-run and Phase 1 go/no-go updated. |
 
 ---
 
