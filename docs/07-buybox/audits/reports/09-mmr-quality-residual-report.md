@@ -1,79 +1,112 @@
-# Report 09 — MMR Quality & Residuals (interim)
+# Report 09 — MMR Quality & Residuals
 
 **Punch item:** #9 · **Kit:** [`../09-mmr-quality-residual-audit.md`](../09-mmr-quality-residual-audit.md)
-**Date:** 2026-05-20 · **Status:** Interim — column availability and method
-confirmed; quality/residual numbers pending a Supabase read run.
+**Date:** 2026-05-20 · **Status:** Complete — live Supabase run folded in.
+Quality metrics produced; the residual backtest is **not producible** from
+current data (see §3).
 
-**Method:** read-only inspection of `supabase/schema.sql`
-(`tav.valuation_snapshots`, `tav.mmr_queries`, `tav.mmr_cache`,
-`tav.purchase_outcomes`). No live query run.
+**Method:** read-only structural analysis plus the live SELECT-only results of
+kit §4 (queries Q9.1–Q9.4), run in Supabase Studio.
 
-**Licensed-data guardrail (confirmed applied):** the kit queries select derived
-numeric columns only. `tav.valuation_snapshots.raw_response`,
-`tav.mmr_queries.mmr_payload`, and `tav.mmr_cache.mmr_payload` are licensed
-Cox/Manheim payloads — never selected into a report, log, or external service.
-No licensed value appears in this report.
+**Licensed-data guardrail (applied):** only derived numeric columns were
+queried. No `raw_response` / `mmr_payload`, no individual MMR dollar figures,
+no VINs appear in this report.
 
 ---
 
-## 1. Structural findings (complete)
+## 1. Headline
 
-### F1 — All four audit questions are answerable from existing columns
+MMR coverage in TAV's history is **thin and low-yield**: ~4,264
+`valuation_snapshots` rows, of which only **478 (≈11%) are hits** and ~3,786
+are misses, dominated by `cox_no_data`. The kit's core deliverable — the
+`actual_sale − day-of MMR` residual — **cannot be computed**, because
+`purchase_outcomes` carries no usable day-of MMR and no link to
+`valuation_snapshots` (Report 06 F2/F3).
 
-| Question | Column source |
+## 2. Live results
+
+### MMR method split — hits only (Q9.1a)
+| Method | Rows | Share |
+|---|---|---|
+| `vin` | 137 | 28.7% |
+| `year_make_model` | 341 | 71.3% |
+| **Total hits** | **478** | — |
+
+Most successful valuations are the **YMM fallback**, not true VIN lookups.
+
+### Method by segment (Q9.1b)
+Segment-level method is **polarised** — segments are either 100% YMM fallback
+or 0%. Large all-YMM segments include 2017 Land Rover Range Rover Evoque (133),
+2017 Mercedes-Benz AMG GT (86), 2017 Jeep Wrangler Unlimited (30).
+**Data-quality finding:** the `valuation_snapshots` model field carries
+normalization artifacts — trailing ` ·` separators and trim-polluted model
+names (e.g. `q60 ·`, `4runner ·`). Segment keys built from this column will
+mis-group until the model field is cleaned.
+
+### Miss reasons (Q9.2a) — `valuation_snapshots`, `mmr_value` NULL
+| `missing_reason` | Rows |
 |---|---|
-| VIN vs YMM-fallback rate | `valuation_snapshots.valuation_method` (`vin` \| `year_make_model`); `mmr_queries.lookup_type` |
-| Miss reasons | `valuation_snapshots.missing_reason`; `mmr_queries.error_code` |
-| Cache age | `mmr_queries.cache_hit` / `source`; `mmr_cache.fetched_at` / `expires_at` |
-| Residual | `purchase_outcomes.sale_price` − `purchase_outcomes.mmr_value_at_purchase` |
+| `cox_no_data` | 2,976 |
+| `trim_missing` | 702 |
+| `cox_unavailable` | 69 |
+| `mileage_missing` | 34 |
+| `cox_vendor_auth` | 3 |
+| `cox_vendor_bad_response` | 1 |
+| `cox_timeout` | 1 |
+| **Total misses** | **≈3,786** |
 
-### F2 — The XOR constraint makes miss data reliable
+`cox_no_data` is the dominant failure — Cox simply returns nothing for most
+lookups. `trim_missing` (702) is the YMM path hard-blocking on absent trim.
+Overall snapshot hit rate ≈ **478 / 4,264 ≈ 11%**.
 
-`tav.valuation_snapshots` has a CHECK enforcing exactly one of `mmr_value` /
-`missing_reason` is set. Every row is a clean hit or a clean miss — the audit
-can trust `missing_reason` without de-duping ambiguous states.
+### Query-log errors (Q9.2b) — `mmr_queries`
+| `error_code` | Rows |
+|---|---|
+| `manheim_auth_error` | 72 |
+| `Error` | 3 |
+| `manheim_unavailable` | 1 |
+| `manheim_response_error` | 1 |
 
-### F3 — Residual analysis needs no licensed re-pull
+72 recurring auth errors warrant an operational follow-up (token/credential
+health) outside MaxBuy scope.
 
-`purchase_outcomes.mmr_value_at_purchase` stores the day-of MMR as a plain
-integer. Residual = `sale_price − mmr_value_at_purchase` uses two numeric
-columns only — no payload, no licensed figure, no re-query of Cox.
+### Cache (Q9.3a / Q9.3b)
+- Source/hit split: `cache` hit 2,172 · `manheim` live (cache miss) 1,351.
+- `mmr_cache` age: all **615 rows fall in the 0–5-day bucket** — the cache is
+  small and uniformly fresh.
 
-### F4 — MMR method is not stored on `purchase_outcomes`
+### Residual backtest (Q9.4a / Q9.4b)
+**0 rows returned** for both the segment cut and the price-band cut.
 
-`purchase_outcomes` has `mmr_value_at_purchase` but not the method that
-produced it. Splitting residuals by VIN vs YMM method requires the kit §4.4
-join to `valuation_snapshots` / `mmr_queries` on `vehicle_candidate_id`. The
-join match rate is itself a finding; unmatched rows go to a `method_unknown`
-bucket, never dropped.
+## 3. Critical finding — residual backtest not producible
 
-### F5 — Pre-integration outcome rows
+The residual query needs `purchase_outcomes` rows with
+`sale_price` **and** `mmr_value_at_purchase` set. Report 06 (F1–F3) shows
+`purchase_outcomes` has no usable `mmr_value_at_purchase` and no
+`vehicle_candidate_id` to recover it from `valuation_snapshots`. So
+`actual_sale − day-of MMR` cannot be measured from current data.
 
-Outcome rows that predate the MMR integration will have
-`mmr_value_at_purchase IS NULL`. That share is expected and is a finding, not
-an error — it bounds how much history the residual backtest can cover.
+Consequence: the residual evidence that was meant to calibrate item #2's
+promotion thresholds is **unavailable**. An alternative is required before
+Phase 1 — options:
+- begin **capturing day-of MMR at buy time** going forward (forward-only);
+- backfill via a `vin` join from `purchase_outcomes` to `valuation_snapshots` /
+  `mmr_queries`, contingent on `purchase_outcomes.vin` coverage (mostly NULL
+  today — Report 06);
+- scope v1 residual calibration to the small set of units where both values
+  do coexist, if any can be assembled.
 
-## 2. Pending — requires a Supabase read run
+## 4. Interaction with DEC-4 (closed)
 
-Not produced in this docs-only phase:
-- VIN vs YMM-fallback rate, overall and by segment;
-- miss-reason / error-code distribution;
-- cache-age distribution;
-- residual-by-segment and residual-by-price-band (bias, MAE, P50, P90);
-- the method-join match rate.
+DEC-4 already keeps `GATE_MMR_MISSING` and `GATE_YMM_FALLBACK_LOW` **out** of
+the hard-gate set — both route to Review / `data_strength`. Given an ~11% MMR
+hit rate and a 71% YMM-fallback share, that decision is well-founded: hard-
+gating on MMR weakness would Pass most of the book. The high miss rate instead
+feeds the `data_strength` routing in Report 07.
 
-Kit §4 SQL (`SELECT`-only, derived columns only) is ready.
+## 5. Definition of done
 
-## 3. Feeds a closed decision — note
-
-DEC-4 (closed) makes `GATE_MMR_MISSING` and `GATE_YMM_FALLBACK_LOW` **not**
-hard gates in v1 — both route to Review / data-strength handling. So this
-audit's YMM-fallback-rate output no longer needs to set an owner hard-gate
-threshold. Its job narrows to: (a) feed the `data_strength` routing rule
-(Report 07), and (b) quantify MMR residual error so item #2's promotion
-thresholds can be calibrated.
-
-## 4. Definition of done — status
-
-Structural findings (F1–F5): **done.** Residual-by-segment report and
-YMM-fallback rate: **pending data run.**
+MMR quality metrics (method split, miss reasons, cache, errors): **done
+(live).** Residual-by-segment report: **not producible from current data** —
+escalated in §3; this is the live confirmation of risk R1. YMM-fallback rate:
+**done** (71% of hits; segment polarisation noted).

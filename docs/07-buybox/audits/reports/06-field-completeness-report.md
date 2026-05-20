@@ -1,89 +1,110 @@
-# Report 06 — Historical Field Completeness (interim)
+# Report 06 — Historical Field Completeness
 
 **Punch item:** #6 · **Kit:** [`../06-field-completeness-audit.md`](../06-field-completeness-audit.md)
-**Date:** 2026-05-20 · **Status:** Interim — structural findings complete;
-per-field null-rate numbers pending a Supabase read run.
+**Date:** 2026-05-20 · **Status:** Complete — live Supabase run folded in.
 
-**Method:** read-only inspection of `supabase/schema.sql` (`tav.purchase_outcomes`,
-migrations 0011/0018/0019). No live query run in this pre-code phase — the
-counting SQL is ready in the kit §4 and is `SELECT`-only. No licensed payloads
-are involved (`purchase_outcomes` holds derived numbers, not vendor payloads).
+**Method:** read-only structural analysis of `supabase/schema.sql` plus the
+live SELECT-only results of kit §4 (queries Q6.1–Q6.4), run in Supabase Studio.
+No licensed payloads involved — `purchase_outcomes` holds derived numbers only.
 
 ---
 
-## 1. Structural findings (complete — derivable from schema alone)
+## 1. Headline
 
-These are confirmed now and do not need a data run.
+`tav.purchase_outcomes` has **12,904 rows**. It is a **flat financial-outcome
+table** — buy price, sell price, gross, and hold days are populated for the
+full table — but it carries **almost no acquisition context**: no purchase
+date, no mileage, no region (mostly), no MMR-at-purchase, and no link to the
+Vehicle Candidate or Lead pipeline. This materially constrains MaxBuy's v1
+feature set and is the central finding of this audit.
 
-### F1 — Three duplicate-intent field pairs
+## 2. Per-field completeness (12,904 rows)
 
-`tav.purchase_outcomes` carries pairs that overlap in meaning. The model must
-pick one authoritative column per pair, not average them:
-
-| Pair | Likely intent |
-|---|---|
-| `purchase_price` vs `price_paid` | both = acquisition cost |
-| `gross_profit_est` vs `gross_profit` | estimate vs realized gross |
-| `mileage` vs `odometer_at_purchase` | both = odometer at buy |
-
-Resolution requires the §4.3 reconciliation query. Until then, MaxBuy training
-must not consume either column of a pair.
-
-### F2 — No `trim` column
-
-`tav.purchase_outcomes` has `year, make, model` but **no `trim`**. Trim-level
-features for bought units must come from a join (`vehicle_candidate_id` →
-`tav.vehicle_candidates`, or `vin` → `tav.valuation_snapshots`) or be tagged
-`unavailable`. This also constrains the segment matrix — see Report 07.
-
-### F3 — `lead_id` nullable by design
-
-The schema comment is explicit: "lead_id is nullable (historical imports may
-have no matching lead)." Any feature joined through `tav.leads` inherits that
-null rate. Bought-unit history that arrived via CSV import has no Lead.
-
-### F4 — Provenance fields are migration-era-bound
-
-`buyer_id` / `closer_id` (migration 0018) and `cot_city` / `cot_state`
-(migration 0019) did not exist before their migrations. Rows imported earlier
-are structurally NULL for them — expect `unavailable` for the pre-migration
-era and `future-only` after. `week_label`, `import_batch_id`,
-`import_fingerprint` follow the same pattern.
-
-### F5 — Columns already constrained (trustworthy where non-null)
-
-CHECK constraints on `purchase_outcomes`: `year` 1900–2100, `mileage` ≥ 0,
-`listed_price` ≥ 0, `condition_grade_normalized` ∈
-{excellent, good, fair, poor, unknown}, `purchase_channel` ∈
-{auction, private, dealer}, `selling_channel` ∈ {retail, wholesale, auction}.
-Where these are non-null, the value is structurally valid — the audit only
-needs the null/`unknown` rate, not range validation.
-
-## 2. Preliminary field tags (to confirm against the data run)
-
-| Field | Preliminary tag | Basis |
+| Field group | Field | State |
 |---|---|---|
-| `mmr_value_at_purchase` | backfillable | recoverable from `tav.valuation_snapshots` via `vehicle_candidate_id` (kit §4.4) |
-| `sale_price`, `gross_profit`, `hold_days` | future-only (likely) | populated reliably only once a unit sells; open inventory is NULL |
-| `buyer_id`, `closer_id`, `cot_city`, `cot_state` | future-only | per F4 |
-| `vin` | unknown — needs data | Facebook-sourced rows often lack VIN; rate unknown |
-| `condition_grade_normalized` | unknown — needs data | `unknown` enum value may dominate |
+| Financial | `price_paid` | **populated — all 12,904** |
+| Financial | `sale_price` | **populated — all 12,904** |
+| Financial | `gross_profit` | **populated — all 12,904** |
+| Financial | `hold_days` | **populated — all 12,904** |
+| Financial | `purchase_price` | effectively all NULL — unused |
+| Financial | `gross_profit_est` | effectively all NULL — unused |
+| Financial | `transport_cost`, `auction_fee`, `listed_price` | mostly/all NULL |
+| Condition | `condition_grade_normalized` | populated |
+| Channel | `purchase_channel`, `selling_channel` | populated |
+| Vehicle | `year`, `make`, `model` | populated (0 dropped — see Report 07 Q7.2) |
+| Vehicle | `mileage`, `odometer_at_purchase` | **both unavailable — all NULL** |
+| Vehicle | `vin` | mostly/all NULL |
+| Context | `purchase_date` | **NULL on all 12,904 rows** (see F1) |
+| Context | `region` | mostly missing |
+| Context | `source` | mostly/all NULL |
+| Linkage | `lead_id` | mostly/all NULL |
+| Linkage | `vehicle_candidate_id` | mostly/all NULL |
+| Provenance | `buyer_id` | 176 missing (98.6% populated) |
+| Provenance | `closer_id` | 1,781 missing (86.2% populated) |
 
-## 3. Pending — requires a Supabase read run
+## 3. Critical findings
 
-The numeric deliverable is **not** in this report. To complete item #6 the dev
-runs kit §4.1–4.4 (`SELECT`-only) against Supabase and fills:
+### F1 — `purchase_date` is NULL for the entire table
 
-- per-field null %, zero/empty %, effective-miss %;
-- completeness trend by `purchase_quarter`;
-- duplicate-pair verdicts (F1);
-- backfill match rate for each `backfillable` candidate.
+Q6.2 (completeness trend, `WHERE purchase_date IS NOT NULL`) returned **0 rows**;
+Report 07's Q7.3 and the `rows_6mo`/`rows_12mo` columns of Q7.1 confirm it
+independently. **There is no purchase-time signal on `purchase_outcomes`.**
+Consequences: no temporal feature, and **no recency or decay weighting is
+possible from this table** (Audit #7 effective-N, Audit #10 decay). The only
+time-like columns left are `created_at` (import time, not economically
+meaningful) and `week_label` (text) — both must be investigated as the fallback
+time anchor before training.
 
-This pre-code phase produced no live DB run (no Supabase read credentials in a
-docs-only change). The SQL is ready; running it is the dev's next action.
+### F2 — Bought units are not linked to the pipeline
 
-## 4. Definition of done — status
+`lead_id` and `vehicle_candidate_id` are mostly/all NULL. `purchase_outcomes`
+is a standalone import, **not joined to `leads`, `vehicle_candidates`, or
+`valuation_snapshots`.** Any feature that depends on a pipeline join is
+unavailable for history.
 
-Per-field null-rate table: **pending data run.** Structural findings (F1–F5):
-**done.** Field tags in [`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md)
-§1.1: reconcile after the data run.
+### F3 — `mmr_value_at_purchase` is not backfillable
+
+Q6.4: `po_missing_mmr` = 0 and `recoverable_from_snapshots` = 0. Because
+`vehicle_candidate_id` is empty, the `valuation_snapshots` join recovers
+**nothing**. Day-of MMR cannot be reconstructed for bought units — this is why
+the Report 09 residual backtest returns no rows.
+
+### F4 — Duplicate-pair verdicts (resolved)
+
+Q6.3 settles all three pairs from the kit:
+
+| Pair | Verdict |
+|---|---|
+| `purchase_price` vs `price_paid` | **`price_paid` authoritative** — `purchase_price` unused (all NULL) |
+| `gross_profit` vs `gross_profit_est` | **`gross_profit` authoritative** — `gross_profit_est` unused (all NULL) |
+| `mileage` vs `odometer_at_purchase` | **neither usable** — both unavailable |
+
+### F5 — `mileage` unavailable
+
+Both odometer columns are NULL across the table. MaxBuy cannot segment or
+feature on mileage from `purchase_outcomes` (see Report 07).
+
+## 4. Final field tags
+
+| Field | Tag | Note |
+|---|---|---|
+| `price_paid`, `sale_price`, `gross_profit`, `hold_days` | usable | full coverage |
+| `condition_grade_normalized`, `purchase_channel`, `selling_channel` | usable | populated |
+| `year`, `make`, `model` | usable | full coverage |
+| `buyer_id` | usable | 98.6% — treat NULL as `unknown` |
+| `closer_id` | usable-with-gaps | 86.2% — treat NULL as `unknown` |
+| `purchase_price`, `gross_profit_est` | unavailable | superseded by F4 |
+| `mileage`, `odometer_at_purchase` | unavailable | F5 |
+| `purchase_date` | unavailable | F1 |
+| `mmr_value_at_purchase` | unavailable | F3 — not backfillable |
+| `vin`, `source`, `region` | future-only | sparse; only forward-fill helps |
+| `lead_id`, `vehicle_candidate_id` | unavailable | F2 |
+
+## 5. Definition of done
+
+Per-field completeness: **done (live, 12,904 rows).** Duplicate-pair verdicts:
+**done.** Field tags: **done** — to be reconciled into
+[`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1, which must
+account for the no-date / no-mileage / no-pipeline-link reality. F1–F3 are
+escalation-grade: they shrink MaxBuy's v1 feature set and need a charter /
+architecture review before Phase 1 (see [`06-EXECUTION-PLAN.md`](../../06-EXECUTION-PLAN.md)).

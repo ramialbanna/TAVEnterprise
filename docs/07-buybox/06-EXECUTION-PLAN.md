@@ -198,10 +198,10 @@ or downstream CI work only.
 | 3 | Decision replay schema | E | D | Ack — design done; CI test in Phase 1 | TECH §1.4, §3 |
 | 4 | Confidence semantics | B | P | **Closed — data strength only; low caps at Review** | CHARTER §4; TECH §2 |
 | 5 | Hard gates | A | O | **Closed — legal/title/source risks force PASS; MMR/YMM weakness routes Review** | CHARTER §7; TECH §5 |
-| 6 | Historical field completeness | C | D | **In progress — interim report filed; live SQL pending** | [`audits/reports/06-field-completeness-report.md`](audits/reports/06-field-completeness-report.md) |
-| 7 | Segment support matrix | C | D | **In progress — interim report filed; live SQL pending** | [`audits/reports/07-segment-support-report.md`](audits/reports/07-segment-support-report.md) |
+| 6 | Historical field completeness | C | D | **Done — live audit complete (12,904 rows); data-gap findings escalated** | [`audits/reports/06-field-completeness-report.md`](audits/reports/06-field-completeness-report.md) |
+| 7 | Segment support matrix | C | D | **Done — live audit complete; training-base decision reopened** | [`audits/reports/07-segment-support-report.md`](audits/reports/07-segment-support-report.md) |
 | 8 | Survivorship & pass-on logging | E | D+O | Ack — table design done; logging at v1 | CHARTER §6; TECH §1.5 |
-| 9 | MMR quality & residuals | C | D | **In progress — interim report filed; live SQL pending** | [`audits/reports/09-mmr-quality-residual-report.md`](audits/reports/09-mmr-quality-residual-report.md) |
+| 9 | MMR quality & residuals | C | D | **Done — quality metrics live; residual backtest blocked on data gap** | [`audits/reports/09-mmr-quality-residual-report.md`](audits/reports/09-mmr-quality-residual-report.md) |
 | 10 | Decay-rate validation | C | D | **In progress — plan + status report filed; backtest pending** | [`audits/reports/10-decay-rate-report.md`](audits/reports/10-decay-rate-report.md) |
 | 11 | Offline pipeline operations | D | D | Scoped — spike kit to follow | ARCH §4.1; TECH §1.7 |
 | 12 | `tav-intelligence-worker` contract | D | D | **In progress — contract pinned (`mmr-v1`); CI compat test pending** | [`audits/reports/12-worker-contract.md`](audits/reports/12-worker-contract.md) |
@@ -230,12 +230,13 @@ The dev-owned, read-only kits started in this phase live under
 Each kit is read-only: it specifies queries and methodology. No kit creates
 code, migrations, or schema.
 
-Interim reports are committed under [`audits/reports/`](audits/reports/). As of
-2026-05-20 every kit has an interim report filed: item 12 is fully executed
-(contract `mmr-v1` pinned from worker source); items 6, 7, 9 carry the
-schema-derived structural findings with numeric sections pending a Supabase
-read run; item 10 carries the backtest status; item 19 carries the
-design-level findings with live-API checks pending TAV account access.
+Reports are committed under [`audits/reports/`](audits/reports/). As of
+2026-05-20: item 12 is fully executed (contract `mmr-v1` pinned from worker
+source); items 6, 7, 9 have completed live read-only Supabase audits — the
+runs surfaced material data gaps (`purchase_outcomes` has no purchase date, no
+mileage, and no MMR / pipeline linkage), escalated in their reports; item 10
+carries the backtest status; item 19 carries the design-level findings with
+live-API checks pending TAV account access.
 
 ## 10. Definition of done for this plan
 

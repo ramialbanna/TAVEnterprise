@@ -1,82 +1,91 @@
-# Report 07 — Segment Support Matrix (interim)
+# Report 07 — Segment Support Matrix
 
 **Punch item:** #7 · **Kit:** [`../07-segment-support-matrix.md`](../07-segment-support-matrix.md)
-**Date:** 2026-05-20 · **Status:** Interim — training-base decision analyzed
-and recommended; segment row-counts pending a Supabase read run.
+**Date:** 2026-05-20 · **Status:** Complete — live Supabase run folded in.
 
-**Method:** read-only inspection of `supabase/schema.sql`
-(`tav.purchase_outcomes`, `tav.historical_sales`, `tav.vehicle_candidates`).
-No live query run — the counting SQL is ready in kit §4 and is `SELECT`-only.
+**Method:** read-only structural analysis plus the live SELECT-only results of
+kit §4 (queries Q7.1–Q7.4), run in Supabase Studio.
 
 ---
 
-## 1. Structural finding — no table carries the full segment key
+## 1. Headline
 
-The target segment key is **year · make · model · trim · region · mileage_band**.
-Confirmed from schema: no single existing table has all six.
+Segmenting `tav.purchase_outcomes` (12,904 rows) is only possible at
+**year/make/model**. Trim has no column, `mileage_band` is entirely `unknown`
+(mileage all NULL — Report 06 F5), `region` is mostly NULL, and `purchase_date`
+is NULL on every row, so **recency / effective-N weighting cannot be computed
+from this table at all**. Support is also thin and truck-concentrated.
 
-| Table | year | make | model | trim | region | mileage |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| `tav.purchase_outcomes` | yes | yes | yes | **no** | yes | yes (`mileage`) |
-| `tav.historical_sales` | yes | yes | yes | yes | **no** | **no** |
+## 2. Live results
 
-## 2. Recommended training base (decision the kit required)
+### Segment counts (Q7.1)
+- Segmentation realised: **year/make/model only**. `mileage_band` returned
+  `unknown` for every row; `region` mostly NULL with sparse labels.
+- Distribution is truck-heavy. Largest segments: 2023 Ford F-150 (217),
+  2024 Ford F-150 (170), 2025 Ford F-150 (155), 2022 Ford F-150 (146),
+  2024 GMC Sierra 1500 (144), 2024 GMC Sierra 2500HD (144).
+- `rows_6mo` and `rows_12mo` were **0 across all segments** — a direct
+  consequence of `purchase_date` being all-NULL, not of low recent volume.
 
-**Recommendation: base = `tav.purchase_outcomes`.**
+### Dropped rows (Q7.2)
+- `dropped_null_year` 0 · `dropped_null_make` 0 · `dropped_null_model` 0 —
+  year/make/model are fully populated; no exclusions.
 
-Rationale:
-- It is the bought-unit table — the population MaxBuy actually predicts on and
-  scores a max-buy against. `historical_sales` is a sale-record table loaded
-  from weekly CSVs and lacks region and mileage entirely.
-- It already carries `region` and `mileage`, the two dimensions
-  `historical_sales` cannot supply.
-- The missing dimension is `trim`. Recover trim where possible by joining
-  `vehicle_candidate_id` → `tav.vehicle_candidates`; where the join misses,
-  the segment is trim-agnostic and the "drop trim" fallback tier is moot.
+### Effective N (Q7.3)
+- **0 rows returned.** The recency-weighted query filters on
+  `purchase_date IS NOT NULL`; with the column all-NULL, **effective N cannot
+  be computed**. Recency weighting on `purchase_outcomes` is impossible.
 
-Consequence for the fallback ladder (replaces kit §1's generic ladder):
+### Fallback coverage (Q7.4)
+- **2,176** distinct year/make/model segments.
+- ≥30 rows: **78** segments (3.6%)
+- ≥15 rows: **181** segments (8.3%)
+- ≥5 rows: **600** segments (27.6%)
+- <5 rows: **1,576** segments (72.4%) — a long, thin tail.
 
-```
-exact      : year · make · model · region · mileage_band   (+ trim where joinable)
-fallback 1 : drop mileage_band
-fallback 2 : drop region
-global     : make · model only
-```
+## 3. Training-base decision must be revisited
 
-Record this decision in [`../../02-ARCHITECTURE.md`](../../02-ARCHITECTURE.md) §5
-once the row counts confirm the ladder produces enough population per tier.
+Report 07's earlier recommendation (base = `purchase_outcomes`) assumed it
+carried region, mileage, and a purchase date. The live run refutes that:
+`purchase_outcomes` gives **year/make/model and nothing else** usable for
+segmentation, and **no time axis**.
 
-## 3. Mileage bands (proposed — confirm against the data run)
+`tav.historical_sales` has `trim`, `sale_date`, and `acquisition_date` but no
+region or mileage. **Neither table alone is sufficient.** Recommended next
+step (a decision, not a query): re-evaluate the base —
 
-```
-0-30k · 30-60k · 60-90k · 90-120k · 120-150k · 150k+ · unknown
-```
+- Option A — use `historical_sales` as the segment/time base (gains trim +
+  `sale_date` for recency); accept no region/mileage.
+- Option B — join `purchase_outcomes` ↔ `historical_sales` on `vin` (where
+  `purchase_outcomes.vin` is present — mostly NULL per Report 06) or another
+  key, and measure the match rate first.
+- Option C — investigate `purchase_outcomes.week_label` as the time anchor.
 
-Intentionally coarser than the 5,000-mile MMR cache bucket
-([`../../../03-api/intelligence-contracts.md`](../../../03-api/intelligence-contracts.md)
-§A) — segment support needs broad bands for population; the MMR cache needs
-fine buckets for reuse.
+Record the chosen base in [`../../02-ARCHITECTURE.md`](../../02-ARCHITECTURE.md)
+§5 before Phase 1.
 
-## 4. Pending — requires a Supabase read run
+## 4. Minimum-N policy (proposed, year/make/model resolution)
 
-Not produced in this docs-only phase:
-- `07-segment-support-matrix.csv` — raw + effective row counts per segment;
-- fallback-tier coverage (% of recent purchases each tier would serve);
-- the minimum-N policy table feeding `data_strength`.
+With recency weighting unavailable, the policy uses **raw** counts for v1:
 
-The kit §4 SQL (`SELECT`-only) is ready. Effective-N must be recomputed once
-Report 10 fixes the decay half-life; until then it is provisional at a 365-day
-half-life.
+| Resolution | Raw N | `data_strength` |
+|---|---|---|
+| exact year/make/model | ≥ 30 | high |
+| exact year/make/model | 5–29 | medium |
+| exact year/make/model | < 5, or make/model fallback only | low |
 
-## 5. Interaction with closed decisions
+## 5. Interaction with DEC-3 (closed)
 
-DEC-3 (closed): `data_strength` is the only confidence display, and **low data
-strength caps the verdict at Review**. The minimum-N policy this audit produces
-is therefore launch-critical — it is the rule that decides `low` vs `medium` vs
-`high`, and `low` directly suppresses Buy / Strong Buy. Size the thresholds
-conservatively.
+DEC-3: low `data_strength` **caps the verdict at Review**. With only 78
+segments at ≥30 rows and 1,576 segments below 5 rows, **the majority of
+year/make/model lookups will land in low/medium `data_strength`** — i.e. most
+v1 verdicts will be capped at Review and cannot reach Buy / Strong Buy. This is
+a launch-shaping finding: MaxBuy v1 will be conservative by data necessity.
+Owner/product should see this before Phase 1.
 
-## 6. Definition of done — status
+## 6. Definition of done
 
-Training-base decision: **done (recommended — confirm with counts).** Support
-matrix CSV + minimum-N policy: **pending data run.**
+Support matrix counts: **done (live).** Minimum-N policy: **done (raw-count
+v1 version).** Effective-N weighting: **not possible from `purchase_outcomes`**
+— blocked on the §3 base decision and Audit #10. Training-base recommendation:
+**revised — needs an owner/architecture decision.**
