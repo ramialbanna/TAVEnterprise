@@ -30,15 +30,20 @@ pnpm test:e2e -- mmr-lab
 
 ## Environment
 
-Use `web/.env.local` for local-only values. Do not commit it.
+Local-only secrets file — never commit it:
 
-Important names:
+```bash
+cp .env.example .env.local   # then fill in real values
+```
 
-- `AUTH_SECRET`
-- `AUTH_GOOGLE_ID`
-- `AUTH_GOOGLE_SECRET`
-- `APP_API_BASE_URL`
-- `APP_API_SECRET`
+Required server-only vars (see `web/lib/env.ts`):
+
+- `APP_API_BASE_URL` — Worker origin only; proxy appends `/app`
+- `APP_API_SECRET` — Bearer for `/app/*`
+- `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` — Auth.js
+- `ALLOWED_EMAIL_DOMAIN` — defaults to `texasautovalue.com`
+
+On Vercel, set the same keys in Production and Preview scopes. Never prefix any of these with `NEXT_PUBLIC_`.
 
 ## Boundaries
 

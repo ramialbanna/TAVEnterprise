@@ -32,7 +32,10 @@ Key runtime pieces:
 ## Active Docs
 
 - [docs/README.md](docs/README.md) - documentation map and current source-of-truth index.
+- [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md) - living checklist of what to do next.
+- [docs/tools.md](docs/tools.md) - MCP and external tools reference for agents.
 - [docs/04-operations/handoff.md](docs/04-operations/handoff.md) - next-developer state, branch/PR map, known issues.
+- [docs/04-operations/diagnostics.md](docs/04-operations/diagnostics.md) - production ingest and lead-creation diagnostics.
 - [docs/01-architecture/system-overview.md](docs/01-architecture/system-overview.md) - architecture and data model.
 - [docs/04-operations/runbook.md](docs/04-operations/runbook.md) - production operations, deploy, smoke checks, rollback.
 - [docs/02-product/roadmap.md](docs/02-product/roadmap.md) - current roadmap and v2 direction.
@@ -43,11 +46,20 @@ Key runtime pieces:
 
 ## Local Setup
 
+Two local-only env files — never commit real values:
+
+| File | Used by | Template |
+|------|---------|----------|
+| `.dev.vars` | Cloudflare Worker (`npm run dev` / wrangler) | `cp .dev.vars.example .dev.vars` |
+| `web/.env.local` | Next.js web app (`pnpm dev`) | `cp web/.env.example web/.env.local` |
+
+Both are gitignored. Secret values belong only in Cloudflare, Vercel, GitHub secrets, or these local files.
+
 Root Worker:
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars
+cp .dev.vars.example .dev.vars   # fill in secrets
 npm run lint
 npm run typecheck
 npm test
@@ -59,13 +71,14 @@ Web app:
 ```bash
 cd web
 pnpm install
+cp .env.example .env.local       # fill in secrets
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm dev
 ```
 
-Do not commit `.dev.vars`, live tokens, exported secrets, screenshots containing secrets, or vendor response payloads with licensed values.
+Do not commit `.dev.vars`, `web/.env.local`, live tokens, exported secrets, screenshots containing secrets, or vendor response payloads with licensed values.
 
 ## Verification
 
@@ -118,6 +131,8 @@ Common names:
 - `APP_API_SECRET`
 - `ADMIN_API_SECRET`
 - `WEBHOOK_HMAC_SECRET`
+- `APIFY_TOKEN`
+- `APIFY_WEBHOOK_SECRET`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `INTEL_WORKER_SECRET`

@@ -353,25 +353,66 @@ Initial channel: webhook → Twilio SMS to ALERT_TO_NUMBER.
 - **Supabase:** service role key in Worker only. Future dashboard → Supabase Auth + RLS, roles `admin | manager | buyer | viewer`.
 - **No service role key** in AppSheet, Make, Zapier, browser, or public repo. Ever.
 
-## 16. Environment Variables (`.dev.vars.example`)
+## 16. Environment Variables
+
+Two local-only files — never commit real values:
+
+| File | Runtime | Template |
+|------|---------|----------|
+| `.dev.vars` | main Cloudflare Worker | `.dev.vars.example` |
+| `web/.env.local` | Next.js dashboard | `web/.env.example` |
+
+### Worker — `.dev.vars.example`
+
+Secrets (set via `wrangler secret put` in deployed envs):
 
 ```env
-SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=replace_me
 WEBHOOK_HMAC_SECRET=replace_me
 NORMALIZER_SECRET=replace_me
 MANHEIM_CLIENT_ID=replace_me
 MANHEIM_CLIENT_SECRET=replace_me
-MANHEIM_USERNAME=replace_me
+MANHEIM_USERNAME=replace_me          # required by Env binding; unused with client_credentials
 MANHEIM_PASSWORD=replace_me
-MANHEIM_TOKEN_URL=replace_me
-MANHEIM_MMR_URL=replace_me
+MANHEIM_TOKEN_URL=
+MANHEIM_MMR_URL=
 ALERT_WEBHOOK_URL=replace_me
 TWILIO_ACCOUNT_SID=replace_me
 TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=replace_me
 ALERT_TO_NUMBER=replace_me
+ADMIN_API_SECRET=replace_me
+APP_API_SECRET=replace_me
+INTEL_WORKER_SECRET=replace_me
+APIFY_WEBHOOK_SECRET=replace_me
+APIFY_TOKEN=replace_me
 ```
+
+Non-secret flags (default in `wrangler.toml [vars]`; override in `.dev.vars` for local):
+
+- `HYBRID_BUYBOX_ENABLED`
+- `MANHEIM_LOOKUP_MODE` — `"direct"` or `"worker"`
+- `INTEL_WORKER_URL`
+- `APIFY_WEBHOOK_ENABLED`
+- `MANHEIM_API_VENDOR`, `MANHEIM_GRANT_TYPE`, `MANHEIM_SCOPE` — Cox config documented in `.dev.vars.example`
+
+Full template: repo-root `.dev.vars.example`. Binding source of truth: `src/types/env.ts`.
+
+### Web — `web/.env.example`
+
+Server-only vars validated by `web/lib/env.ts`:
+
+```env
+APP_API_BASE_URL=https://tav-aip-staging.rami-1a9.workers.dev
+APP_API_SECRET=replace_me
+AUTH_SECRET=replace_me
+AUTH_GOOGLE_ID=replace_me
+AUTH_GOOGLE_SECRET=replace_me
+ALLOWED_EMAIL_DOMAIN=texasautovalue.com
+```
+
+Copy with `cp web/.env.example web/.env.local`. Never prefix these with `NEXT_PUBLIC_`.
 
 ## 17. Production Deployment
 
@@ -382,16 +423,19 @@ npm run typecheck
 npm test
 npm run deploy
 
-# secrets
+# secrets (see .dev.vars.example for full list)
 wrangler secret put SUPABASE_URL
 wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 wrangler secret put WEBHOOK_HMAC_SECRET
 wrangler secret put MANHEIM_CLIENT_ID
 wrangler secret put MANHEIM_CLIENT_SECRET
-wrangler secret put MANHEIM_USERNAME
-wrangler secret put MANHEIM_PASSWORD
 wrangler secret put MANHEIM_TOKEN_URL
 wrangler secret put MANHEIM_MMR_URL
+wrangler secret put ADMIN_API_SECRET
+wrangler secret put APP_API_SECRET
+wrangler secret put INTEL_WORKER_SECRET
+wrangler secret put APIFY_WEBHOOK_SECRET
+wrangler secret put APIFY_TOKEN
 
 # KV
 wrangler kv namespace create TAV_KV

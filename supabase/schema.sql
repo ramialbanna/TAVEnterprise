@@ -398,7 +398,7 @@ CREATE UNIQUE INDEX ON tav.duplicate_groups (vehicle_candidate_id)
 CREATE INDEX ON tav.valuation_snapshots (vehicle_candidate_id);
 CREATE INDEX ON tav.valuation_snapshots (vehicle_candidate_id, fetched_at DESC);
 -- Roll up miss distributions without scanning the hit-heavy table (0043).
-CREATE INDEX ON tav.valuation_snapshots (missing_reason)
+CREATE INDEX vs_missing_reason_idx ON tav.valuation_snapshots (missing_reason)
   WHERE missing_reason IS NOT NULL;
 
 -- leads

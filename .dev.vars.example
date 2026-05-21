@@ -1,6 +1,9 @@
-# Copy to .dev.vars for local development only.
+# Copy to .dev.vars for local Worker development only.
 # Never commit .dev.vars — it is in .gitignore.
-# Keep every value in this file as replace_me.
+# Keep every secret placeholder in this file as replace_me.
+#
+# Source of truth for names: src/types/env.ts and wrangler.toml.
+# Non-secret flags live in wrangler.toml [vars]; override them here for local dev.
 
 # ── Database ───────────────────────────────────────────────────────────────────
 SUPABASE_URL=https://your-project.supabase.co
@@ -18,6 +21,10 @@ MANHEIM_GRANT_TYPE=client_credentials
 MANHEIM_SCOPE=wholesale-valuations.vehicle.mmr-ext.get
 MANHEIM_CLIENT_ID=replace_me
 MANHEIM_CLIENT_SECRET=replace_me
+# Required by the Env binding even when using client_credentials; leave replace_me
+# locally unless you switch to the legacy password grant.
+MANHEIM_USERNAME=replace_me
+MANHEIM_PASSWORD=replace_me
 # Cox sandbox endpoints. Copy MANHEIM_TOKEN_URL verbatim from the Cox app detail page;
 # the path segment after /oauth2/ is per-app and must not be guessed.
 MANHEIM_TOKEN_URL=https://authorize.coxautoinc.com/oauth2/REPLACE_AUTH_SERVER_ID/v1/token
@@ -27,11 +34,8 @@ MANHEIM_MMR_URL=https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/
 # Cox production:   https://api.coxautoinc.com/wholesale-valuations/vehicle/mmr
 #
 # Legacy Manheim password grant (deprecated — current account is Cox).
-# Revert by setting: MANHEIM_API_VENDOR=manheim, MANHEIM_GRANT_TYPE=password.
-# MANHEIM_USERNAME=replace_me
-# MANHEIM_PASSWORD=replace_me
-# MANHEIM_TOKEN_URL=https://api.manheim.com/oauth2/token.oauth2
-# MANHEIM_MMR_URL=https://api.manheim.com/valuations
+# Revert by setting: MANHEIM_API_VENDOR=manheim, MANHEIM_GRANT_TYPE=password,
+# then fill MANHEIM_USERNAME / MANHEIM_PASSWORD instead of client_credentials fields.
 
 # ── Alerts ─────────────────────────────────────────────────────────────────────
 ALERT_WEBHOOK_URL=replace_me
@@ -45,7 +49,20 @@ ADMIN_API_SECRET=replace_me
 # Bearer token for the /app/* frontend product API. Keep distinct from ADMIN_API_SECRET.
 APP_API_SECRET=replace_me
 
-# ── Feature flags (set in wrangler.toml [vars] for prod; override here for local) ──
+# ── Intelligence worker (when MANHEIM_LOOKUP_MODE=worker) ────────────────────
+# Shared secret for worker→intel auth (x-tav-service-secret). Must match
+# INTEL_SERVICE_SECRET in workers/tav-intelligence-worker.
+INTEL_WORKER_SECRET=replace_me
+
+# ── Apify bridge (when APIFY_WEBHOOK_ENABLED=true) ─────────────────────────────
+# Bearer token Apify webhooks present at POST /apify-webhook.
+APIFY_WEBHOOK_SECRET=replace_me
+# Apify Personal Access Token for dataset/run fetches.
+APIFY_TOKEN=replace_me
+
+# ── Non-secret vars (wrangler.toml [vars]; override here for local) ────────────
 # HYBRID_BUYBOX_ENABLED=false
-# MANHEIM_LOOKUP_MODE=direct   # "direct" = direct-to-Cox MMR (code default; fine for local dev — no intel worker needed)
-#                              # "worker" = MMR via tav-intelligence-worker — staging AND production run this (cutover 2026-05-09)
+# MANHEIM_LOOKUP_MODE=direct   # "direct" = main worker calls Cox directly (fine for local ingest without intel worker)
+#                              # "worker" = MMR via tav-intelligence-worker (staging + production default)
+# INTEL_WORKER_URL=            # e.g. https://tav-intelligence-worker-staging.rami-1a9.workers.dev
+# APIFY_WEBHOOK_ENABLED=false  # "true" enables POST /apify-webhook locally

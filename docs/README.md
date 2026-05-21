@@ -6,6 +6,9 @@ Use the numbered folders for active development. Files under `docs/archive/` are
 preserved for history and should not be treated as current instructions unless a
 current doc links to them explicitly.
 
+**Start here for what to do next:** [NEXT_STEPS.md](NEXT_STEPS.md)  
+**Agent MCP / tools reference:** [tools.md](tools.md)
+
 ## Current Docs
 
 ### 01 — Architecture
@@ -28,8 +31,10 @@ current doc links to them explicitly.
 
 ### 04 — Operations
 
+- [Next Steps](NEXT_STEPS.md) — living checklist (phases, follow-ups, PR order).
 - [Runbook](04-operations/runbook.md) — deploy, smoke, rollback, and operations.
 - [Handoff](04-operations/handoff.md) — current branch/state handoff for the next session.
+- [Diagnostics](04-operations/diagnostics.md) — production ingest / lead-creation analysis (living index).
 - [Verification](04-operations/verification.md) — required verification loop.
 
 ### 05 — Process
