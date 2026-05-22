@@ -1,7 +1,8 @@
 # Legacy `tav.purchase_outcomes` Replacement — Decision Package
 
 **Punch item:** #20 (Phase 0 gate) · **Date:** 2026-05-22 · **Status:**
-**Planning + SQL only — not executed.** No DB writes. No backfill load. No
+**Read-only profile complete (§1A) — Option A approved.** No DB writes
+executed. No backfill load. The archive transaction is gated — see §9. No
 app / API / UI / ML / scoring / Phase 1 work.
 
 **Sources:** [`maxbuy.md`](maxbuy.md) ·
@@ -107,6 +108,48 @@ WHERE import_batch_id IS DISTINCT FROM md5('phase0-backfill-2026-05-22')::uuid;
 `rows_with_lead_id` or `rows_with_candidate_id` is non-trivial, the linkage is
 real work product and Option A must be reconsidered (see §3).
 
+## 1A. Actual profile results (2026-05-22)
+
+The §1 read-only profile was run against `tav.purchase_outcomes`. Results:
+
+| Profile metric | Result |
+|---|---|
+| Total rows | **12,904** |
+| `source` | NULL on all 12,904 |
+| `purchase_date` NULL | 100% (12,904) |
+| `mileage` NULL | 100% (12,904) |
+| `odometer_at_purchase` NULL | 100% (12,904) |
+| `mmr_value_at_purchase` NULL | 100% (12,904) |
+| `lead_id` NULL | 100% (12,904) |
+| `vehicle_candidate_id` NULL | 100% (12,904) |
+| rows with non-null `lead_id` | **0** |
+| rows with non-null `vehicle_candidate_id` | **0** |
+| rows with non-null `import_fingerprint` | 12,904 |
+| duplicate `import_fingerprint` (Q1.6) | **0 — none returned** |
+| `legacy_candidate_rows` | 12,904 |
+| `no_purchase_date` | 12,904 |
+| `full_partial_signature` | 12,904 |
+
+**Business-key duplicates (Q1.7):** duplicate clusters on
+`vin / year / make / model / price_paid / sale_price / gross_profit /
+hold_days` **were observed** in the legacy set. The raw rows are deliberately
+not reproduced here — VIN-level data stays out of the repo. Their presence
+reinforces that the legacy rows must not coexist with the Phase 0 load: kept
+alongside, they would compound into further duplication.
+
+**Reading:**
+- **All 12,904 rows are legacy partial rows.** The full partial signature
+  (no purchase date, no mileage, no pipeline linkage) matches the entire
+  table — there is no good subset to preserve.
+- **Zero pipeline linkage** (`lead_id` 0, `vehicle_candidate_id` 0) — the §3
+  linkage gate is satisfied; archiving the set loses nothing of operational
+  value.
+- **0 duplicate `import_fingerprint`** — the SQL package's unique-index
+  pre-check ([`20-backfill-load-sql-package.md`](20-backfill-load-sql-package.md)
+  §2) is already satisfied.
+- The legacy set is exactly the partial data Audit 06 flagged; the 57,228-row
+  Phase 0 backfill is its complete replacement.
+
 ## 2. Decision options
 
 ### Option A — Archive, then delete the legacy set, then load Phase 0
@@ -144,6 +187,11 @@ update-in-place; insert the rest.
   cycles; far more code and review surface than A.
 
 ## 3. Recommended path
+
+**Profile result (2026-05-22): `rows_with_lead_id` = 0 and
+`rows_with_candidate_id` = 0 (§1A). Option A is confirmed — unconditionally
+approved.** Archive and delete the full 12,904-row legacy partial set before
+loading the 57,228-row Phase 0 backfill.
 
 **Recommend Option A**, conditional on the §1.5 profile:
 
@@ -322,3 +370,33 @@ No write runs until **every** gate is cleared:
 
 This document executes nothing. It is the reviewed decision package; §5/§6 run
 only after §7 is cleared.
+
+## 9. Execution gate — immediate next operator sequence
+
+Option A is approved by the §1A profile. The immediate, gated sequence —
+**stop at step 5**. This section authorizes steps 1–4 only, and only after the
+owner's explicit "run the archive" instruction. It does **not** authorize the
+Phase 0 load.
+
+1. **Backup.** Take or confirm a Supabase PITR timestamp / backup is available
+   immediately before any write. Record the timestamp.
+2. **Archive transaction.** Run the §5 transactional archive + delete exactly
+   as written — it creates `tav.purchase_outcomes_legacy_pre_phase0_20260522`,
+   verifies counts in `DO` blocks, deletes by archived `id`, and `COMMIT`s only
+   if both verifications pass.
+3. **Verify archive row count = 12,904:**
+   ```sql
+   SELECT count(*) AS archived_rows
+   FROM tav.purchase_outcomes_legacy_pre_phase0_20260522;   -- expect 12,904
+   ```
+4. **Verify `tav.purchase_outcomes` row count = 0 after the legacy delete:**
+   ```sql
+   SELECT count(*) AS remaining_rows FROM tav.purchase_outcomes;   -- expect 0
+   ```
+   Pre-Phase-0 the whole table is the legacy set, so the post-delete count is 0.
+5. **STOP and report.** Do not run migration 0045, do not create the staging
+   table, do not load or merge the Phase 0 backfill. Hand the step 3 and step 4
+   counts back for review; the load resumes only on a fresh go-ahead.
+
+Once steps 3 and 4 verify, the load continues from §8 step 5 (migration 0045)
+— but only under a new, explicit instruction.
