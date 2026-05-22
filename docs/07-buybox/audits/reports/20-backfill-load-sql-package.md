@@ -225,7 +225,7 @@ SELECT
   cycle_seq_final,
   md5(vin_clean || '|' || cycle_seq_final || '|' || coalesce(source_file,'')),
   md5('phase0-backfill-2026-05-22')::uuid,
-  CASE WHEN nullif(year,'')::numeric::int BETWEEN 1900 AND 2100
+  CASE WHEN nullif(year,'')::numeric BETWEEN 1900 AND 2100
        THEN nullif(year,'')::numeric::int::smallint END,
   nullif(make,''), nullif(model,''), nullif(trim,''),
   nullif(purchase_date,'')::date, nullif(sale_date,'')::date,
@@ -235,8 +235,11 @@ SELECT
   nullif(net_gross,'')::numeric::int,
   nullif(mileage_at_purchase,'')::numeric::int,            -- mileage (authoritative)
   nullif(mileage_at_purchase,'')::numeric::int,            -- odometer_at_purchase = mileage
-  nullif(days_on_lot,'')::numeric::int,                    -- hold_days
-  nullif(mmr_value_at_purchase,'')::numeric::int,
+  CASE WHEN nullif(days_on_lot,'')::numeric >= 0
+        AND nullif(days_on_lot,'')::numeric <= 32767
+       THEN nullif(days_on_lot,'')::numeric::int END,       -- hold_days
+  CASE WHEN nullif(mmr_value_at_purchase,'')::numeric BETWEEN 0 AND 2147483647
+       THEN nullif(mmr_value_at_purchase,'')::numeric::int END,
   nullif(mmr_source,''),
   nullif(region,''),
   nullif(condition_grade_raw,''),
@@ -339,18 +342,38 @@ and the raw CSV values stay staging-only (§4.2).
   The free-text `selling_channel` CSV column (188 distinct dealer / buyer
   names) is never forced into the enum.
 
-### 4.4 Data-quality handling (migration 0046 + year clamp)
+### 4.4 Data-quality handling (migration 0046 + merge clamps)
 
-- **`expense_total` is signed.** It is a net expense / adjustment field, not a
-  pure cost — 67 of the 57,228 staged rows are negative (min −10,170, max
-  21,300). Migration `0046` drops `purchase_outcomes_expense_total_chk`; the
-  `0045` `expense_total >= 0` check was wrong for this field. The sibling `0045`
-  checks `cycle_seq_chk` and `recon_cost_chk` stay (both still correct).
-- **Invalid `year` clamped to NULL.** 3 staged rows carry a `year` outside
-  1900–2100. The merge `year` expression is a `CASE` that keeps in-range years
-  and yields NULL otherwise, so those 3 rows still load with `year = NULL`.
+The staged export carries a handful of out-of-range / corrupt numeric values.
+Migration `0046` relaxes one constraint; the merge `SELECT` clamps three fields
+with `CASE` expressions so a bad value loads as NULL instead of aborting the
+merge. None of these are row exclusions — every staged row still loads.
+
+- **`expense_total` is signed.** A net expense / adjustment field, not a pure
+  cost — 67 of 57,228 staged rows are negative (min −10,170, max 21,300).
+  Migration `0046` drops `purchase_outcomes_expense_total_chk`; the `0045`
+  `expense_total >= 0` check was wrong for this field. The sibling `0045` checks
+  `cycle_seq_chk` and `recon_cost_chk` stay (both still correct).
+- **Invalid `year` → NULL.** 3 staged rows carry `year = 220` (outside
+  1900–2100). The merge `year` `CASE` compares as `numeric` and keeps only
+  in-range years, else NULL — those 3 rows load with `year = NULL`.
   `purchase_outcomes_year_check` (1900–2100) stays correct and is **not**
-  dropped — an out-of-range year is bad data, not a legitimate value.
+  dropped.
+- **Negative `days_on_lot` → NULL `hold_days`.** 54 staged rows have a negative
+  `days_on_lot` (min −735) — nonsensical. The merge `hold_days` `CASE` keeps
+  only values in `0 … 32767`, else NULL. (`hold_days` is an `integer` column;
+  the 32767 upper guard sits well above the real staged max of 591 and never
+  triggers in this load.)
+- **Out-of-range `mmr_value_at_purchase` → NULL.** 3 staged rows have an MMR
+  value above the 32-bit `int` ceiling (staged max 6,190,056,270 — corrupt; a
+  real MMR is never billions). The merge `mmr_value_at_purchase` `CASE` keeps
+  only values in `0 … 2147483647`, else NULL. The target column is `integer`
+  and is **not** widened — a multi-billion MMR is garbage, not a valuation.
+
+Non-blocking outlier flagged, left as-is (loads unchanged; a scrub is a
+separate owner call): 4 staged rows have `mileage_at_purchase` > 1,000,000
+(max 1,750,016,989 — implausibly high, but within `int`, so it does not abort
+the merge).
 
 ## 5. Rollback — keyed on `import_batch_id`
 
