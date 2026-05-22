@@ -2,10 +2,11 @@
 
 **Punch item:** #20 (Phase 0 gate) · **Date:** 2026-05-22 · **Status:**
 **SQL reconciled to the real `buybox_master.csv` export — not executed.**
-Migration `0045` is applied. §3 / §4 / §6 below are reconciled to the actual
-48-column export; the original §1.1 field table was written against the blank
-operator template and is superseded by §3 / §4. No production load has run. No
-app / UI / ML / scoring / Phase 1 work.
+Migration `0045` applied; migration `0046` (drop `expense_total` check) is
+required before the merge — see §4.4. §3 / §4 / §6 below are reconciled to the
+actual 48-column export; the original §1.1 field table was written against the
+blank operator template and is superseded by §3 / §4. No production load has
+run. No app / UI / ML / scoring / Phase 1 work.
 
 **Sources:** [`maxbuy.md`](maxbuy.md) · [`20-historical-outcome-backfill-report.md`](20-historical-outcome-backfill-report.md)
 · current `supabase/schema.sql` (`tav.purchase_outcomes`).
@@ -224,7 +225,8 @@ SELECT
   cycle_seq_final,
   md5(vin_clean || '|' || cycle_seq_final || '|' || coalesce(source_file,'')),
   md5('phase0-backfill-2026-05-22')::uuid,
-  nullif(year,'')::numeric::int::smallint,
+  CASE WHEN nullif(year,'')::numeric::int BETWEEN 1900 AND 2100
+       THEN nullif(year,'')::numeric::int::smallint END,
   nullif(make,''), nullif(model,''), nullif(trim,''),
   nullif(purchase_date,'')::date, nullif(sale_date,'')::date,
   nullif(price_paid,'')::numeric::int,
@@ -336,6 +338,19 @@ and the raw CSV values stay staging-only (§4.2).
   `wholesale` or `retail`) would populate `selling_channel` for 100% of rows.
   The free-text `selling_channel` CSV column (188 distinct dealer / buyer
   names) is never forced into the enum.
+
+### 4.4 Data-quality handling (migration 0046 + year clamp)
+
+- **`expense_total` is signed.** It is a net expense / adjustment field, not a
+  pure cost — 67 of the 57,228 staged rows are negative (min −10,170, max
+  21,300). Migration `0046` drops `purchase_outcomes_expense_total_chk`; the
+  `0045` `expense_total >= 0` check was wrong for this field. The sibling `0045`
+  checks `cycle_seq_chk` and `recon_cost_chk` stay (both still correct).
+- **Invalid `year` clamped to NULL.** 3 staged rows carry a `year` outside
+  1900–2100. The merge `year` expression is a `CASE` that keeps in-range years
+  and yields NULL otherwise, so those 3 rows still load with `year = NULL`.
+  `purchase_outcomes_year_check` (1900–2100) stays correct and is **not**
+  dropped — an out-of-range year is bad data, not a legitimate value.
 
 ## 5. Rollback — keyed on `import_batch_id`
 
@@ -489,7 +504,8 @@ WHERE length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 1
 2. **Migration `0045` — APPLIED + VERIFIED 2026-05-22.** The ten additive
    columns and three CHECK constraints exist; the `import_fingerprint` unique
    index was already present (a UNIQUE constraint of that name) and is
-   confirmed.
+   confirmed. **Migration `0046`** (drop `expense_total_chk`) must also be
+   applied before the merge — see §4.4.
 3. §6.1 shows `pass_57228_cycles` and `pass_53598_vins` true and the fill
    percentages on target.
 4. §6.2 returns `0`.
