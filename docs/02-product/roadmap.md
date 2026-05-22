@@ -1,7 +1,7 @@
 # TAV-AIP Execution Roadmap — v2 Opportunities
 
-Date: 2026-05-18
-Status: Active execution plan  
+Date: 2026-05-18  
+Status: Active execution plan (Phase 5 complete as of 2026-05-22)  
 Owner model: Claude Code executes phase PRs; Codex reviews as architect, business analyst, coordinator, and orchestrator.
 
 ## Executive decision
@@ -30,11 +30,12 @@ Ingest + MMR Foundations -> v2 Opportunities Read Model -> Manual Submission + A
 - Apify production bridge is enabled.
 - `tav-tx-east` Apify schedule is enabled every 5 minutes and verified.
 - `tav-tx-west`, `tav-tx-south`, and `tav-ok` remain disabled pending separate soaks.
-- The frontend surfaces Dashboard, Ingest Monitor, VIN/MMR Lab, Historical Data, and Admin/Integrations.
+- The frontend surfaces Dashboard, **Opportunities** (`/opportunities`), Ingest Monitor, VIN/MMR Lab, Historical Data, and Admin/Integrations.
+- `/opportunities` shows read-only leads and near-misses with MMR spread and event badges (Phase 5 shipped 2026-05-22, commit `5975d1e`).
 - `/ingest` explains Apify/source runs and why runs did or did not create leads.
 - `/mmr-lab` uses the live Cox/Manheim catalog and can value YMM + style + miles.
 - Missing mileage/style can be estimated, but must be badged clearly wherever surfaced.
-- There is not yet an Opportunities queue for buyer review.
+- **Next:** manual submission, assign/claim, and workflow mutations (Phase 6–7).
 
 ## Why v2 is still needed
 

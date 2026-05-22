@@ -322,32 +322,37 @@ type ManualOpportunitySubmission = {
 - Keep manual submissions in the same opportunity model as automated
   opportunities; do not build a separate side inbox.
 
-## 12. Known Technical Gaps Before Build
+## 12. Known Technical Gaps
 
-1. `GET /app/opportunities` and `GET /app/opportunities/:id` do not exist yet.
-2. The web client has no opportunities schema/client/parser.
-3. The nav has no Opportunities entry.
-4. Latest valuation lookup may need an index:
+**Slice A (read model) — shipped 2026-05-22** (`5975d1e`):
+
+- [x] `GET /app/opportunities` and `GET /app/opportunities/:id`
+- [x] Web client schemas/parser + `/opportunities` UI (list, preview, detail)
+- [x] Nav Opportunities entry
+
+**Remaining before live workflow (Slices B–C):**
+
+1. Latest valuation lookup may need an index:
 
 ```sql
 CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC);
 ```
 
-5. Near-miss inclusion needs a first-pass reason-code filter so obvious junk does
+2. Near-miss inclusion needs a first-pass reason-code filter so obvious junk does
    not overwhelm the buyer queue.
-6. Manual submission needs a persistence design.
-7. Assignment requires a user/role model and auditable actor identity.
-8. Full workflow mutations require an identity/audit design.
+3. Manual submission needs a persistence design.
+4. Assignment requires a user/role model and auditable actor identity.
+5. Full workflow mutations require an identity/audit design.
 
 ## 13. Recommended Delivery Slices
 
-### Slice A — Read Model
+### Slice A — Read Model ✅ (2026-05-22)
 
-- `GET /app/opportunities`
-- `GET /app/opportunities/:id`
-- `/opportunities` table, preview pane, detail page
-- includes automated leads, near-misses, repeat/price/VIN/estimate badges
-- no assignment mutations yet
+- [x] `GET /app/opportunities`
+- [x] `GET /app/opportunities/:id`
+- [x] `/opportunities` table, preview pane, detail page
+- [x] includes automated leads, near-misses, repeat/price/VIN/estimate badges
+- [x] no assignment mutations yet
 
 ### Slice B — Manual Submission and Routing Foundation
 

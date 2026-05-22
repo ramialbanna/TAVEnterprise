@@ -25,7 +25,7 @@ Important routes:
 - `POST /app/mmr/vin`, `POST /app/mmr/ymm`
 - `GET /app/mmr/catalog/*`
 - `GET /admin/valuations/contract-probe`
-- Planned v2: `GET /app/opportunities`, `GET /app/opportunities/:id`
+- `GET /app/opportunities`, `GET /app/opportunities/:id` (v2 read-only queue — Phase 5, 2026-05-22)
 
 ## 3. Four-Concept Rule
 
@@ -134,14 +134,14 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 
 ### Shipped product surfaces
 
-- Dashboard, **Ingest Monitor** (`/ingest`), **VIN/MMR Lab** (`/mmr-lab`), Historical Data, Admin/Integrations.
+- Dashboard, **Opportunities** (`/opportunities`), **Ingest Monitor** (`/ingest`), **VIN/MMR Lab** (`/mmr-lab`), Historical Data, Admin/Integrations.
+- `GET /app/opportunities` + detail API live (read-only buyer queue — Phase 5, commit `5975d1e`).
 - `GET /app/ingest-runs` + detail API live (powers Ingest Monitor).
 - Cox/Manheim catalog + YMM valuation via intelligence Worker (Storefront `/mmr-lookup/*`, `/mmr/search/*`).
 - Legacy Manheim `/valuations/*` is not provisioned for this account.
 
 ### Not shipped yet
 
-- v2 **Opportunities** queue (`/opportunities`, `GET /app/opportunities*`) — next product milestone after Phase 0–1 hardening + Phase 4 production diagnosis.
 - Manual submission, assignment, claim, and workflow mutations (Phase 6–7).
 
 ### Apify / ingest
