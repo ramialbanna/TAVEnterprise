@@ -1,11 +1,13 @@
 # Legacy `tav.purchase_outcomes` Replacement — Decision Package
 
 **Punch item:** #20 (Phase 0 gate) · **Date:** 2026-05-22 · **Status:**
-**Archive attempt failed on an FK constraint — §5 and §9 are superseded by
-§10.** Read-only profile complete (§1A); Option A is still the chosen path.
-No legacy rows archived or deleted — the failed transaction rolled back. No
-backfill load. The FK-aware archive path is gated — see §10. No app / API /
-UI / ML / scoring / Phase 1 work.
+**Archive complete — ready for migration 0045 + Phase 0 staging/load gate.**
+The FK-aware §10 archive transaction ran and verified — see §11. All 12,904
+legacy `tav.purchase_outcomes` rows are archived and deleted; the table is
+empty and the `import_rows` FK blocker is cleared. §5 and §9 are superseded
+by §10 (the original archive failed on an FK; §10 is the corrected path).
+Next gate: migration 0045 + Phase 0 staging/load — not yet run. No app / API
+/ UI / ML / scoring / Phase 1 work.
 
 **Sources:** [`maxbuy.md`](maxbuy.md) ·
 [`20-historical-outcome-backfill-report.md`](20-historical-outcome-backfill-report.md) ·
@@ -785,3 +787,50 @@ archive" instruction. It does **not** authorize the Phase 0 load.
    run migration 0045, do not create the staging table, do not load or merge
    the Phase 0 backfill — the load resumes only on a fresh, explicit
    instruction (§8 step 5 onward).
+
+---
+
+## 11. Archive Execution Results (2026-05-22)
+
+The §10.3 FK-aware archive transaction was run by the operator in Supabase
+Studio on 2026-05-22 and verified read-only via the `supabase` MCP. It
+committed cleanly — every `DO`-block count check passed.
+
+| Metric | Result | Expected |
+|---|---|---|
+| archived purchase_outcomes | 12,904 | 12,904 |
+| archived import_rows links | 522 | 522 |
+| import_rows outcome_id nulled | 522 | 522 |
+| purchase_outcomes remaining | 0 | 0 |
+| import_rows total — before / after | 522 / 522 | unchanged |
+| legacy outcome references remaining | 0 | 0 |
+| distinct archived link outcomes | 522 | 522 (1:1, no fan-out) |
+
+Every §10.6 expected effect is met. `tav.purchase_outcomes` is now empty;
+pre-Phase-0 the whole table was the legacy set, so 0 remaining is correct.
+The entire `tav.import_rows` table (522 rows) referenced legacy outcomes —
+all 522 `outcome_id` values are nulled, and the table row count is unchanged
+(§10.3.5 is an `UPDATE`, never a `DELETE`).
+
+**Archive tables (rollback source — §10.4):**
+
+- `tav.purchase_outcomes_legacy_pre_phase0_20260522` — 12,904 rows, full-row
+  snapshot of the legacy outcome set.
+- `tav.import_rows_outcome_links_pre_phase0_20260522` — 522 rows, the
+  `import_row_id → outcome_id` link mapping cleared by §10.3.5.
+
+**Rollback** remains available via §10.4 — both archive tables are intact.
+Do not drop them until the Phase 0 load is confirmed good (§8 step 10).
+
+**PITR.** The §10.6 step-1 backup timestamp must be recorded manually from the
+Supabase dashboard (Database → Backups / PITR) if it has not already been
+recorded. It is the outer backstop; the two archive tables already make the
+archive fully reversible on their own.
+
+**Next gate.** Archive complete. The next step is migration `0045` (additive
+columns) followed by the Phase 0 staging table, dry-run validation, and the
+57,228-row merge — all from
+[`20-backfill-load-sql-package.md`](20-backfill-load-sql-package.md) §2–§4,
+then re-running audits #6 / #7 / #9 / #10. Each step is operator-run in
+Supabase Studio and requires a fresh explicit go-ahead. No migration or load
+has been run.
