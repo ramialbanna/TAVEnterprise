@@ -1,8 +1,11 @@
 # Phase 0 Backfill — `tav.purchase_outcomes` Load SQL Package
 
 **Punch item:** #20 (Phase 0 gate) · **Date:** 2026-05-22 · **Status:**
-**Planning + SQL only — not executed.** No production load run. No migration
-file created. No app / UI / ML / scoring / Phase 1 work.
+**SQL reconciled to the real `buybox_master.csv` export — not executed.**
+Migration `0045` is applied. §3 / §4 / §6 below are reconciled to the actual
+48-column export; the original §1.1 field table was written against the blank
+operator template and is superseded by §3 / §4. No production load has run. No
+app / UI / ML / scoring / Phase 1 work.
 
 **Sources:** [`maxbuy.md`](maxbuy.md) · [`20-historical-outcome-backfill-report.md`](20-historical-outcome-backfill-report.md)
 · current `supabase/schema.sql` (`tav.purchase_outcomes`).
@@ -135,46 +138,51 @@ backfill; they stay in the staging table this phase.
 
 ## 3. Staging table DDL
 
-All-text staging absorbs CSV quirks (`2024.0`, blank cells); casts happen on
-merge. Transient — underscore-prefixed, dropped after load.
+Reconciled 2026-05-22 to the real export `buybox_master.csv` (48 columns). The
+staging table mirrors that file's header order and set **exactly**, so `\copy`
+loads positionally with no column list. All-text — absorbs CSV quirks
+(`2024.0`, blank cells); casts happen on merge. Transient: underscore-prefixed,
+dropped after load.
 
 ```sql
 DROP TABLE IF EXISTS tav._stg_phase0_backfill;
 CREATE TABLE tav._stg_phase0_backfill (
-  source_system text, source_file_name text, source_row_id text,
-  import_batch_label text, existing_purchase_outcome_id text,
-  existing_import_fingerprint text, vin text, stock_number text,
-  year text, make text, model text, trim text,
-  purchase_date text, sale_date text, price_paid text, sale_price text,
-  gross_profit text, net_gross text, mileage_at_purchase text,
-  odometer_at_purchase text, mmr_value_at_purchase text, mmr_snapshot_id text,
-  mmr_source text, mmr_method text, mmr_lookup_date text, region text,
-  source text, purchase_channel text, selling_channel text,
-  condition_grade_raw text, condition_grade_normalized text,
-  buyer_id text, closer_id text, lead_id text, vehicle_candidate_id text,
-  transport_cost text, auction_fee text, recon_cost text, misc_overhead text,
-  expense_total text, title_brand_flag text, salvage_flag text, flood_flag text,
-  frame_structural_flag text, odometer_issue_flag text, recall_stop_sale_flag text,
-  arbitration_flag text, source_restricted_flag text, announcement_flags_json text,
-  match_confidence text, match_method text, exclude_reason_code text, notes text,
-  -- present in buybox_master.csv; absent from the blank operator template.
-  -- Staging tolerates either: the merge COALESCEs to a derived value.
-  cycle_seq text, display_id text
+  source_system text, source_row_id text, source_file text, vin text,
+  cycle_seq text, display_id text, year text, make text, model text, trim text,
+  body_style text, purchase_date text, sale_date text, days_on_lot text,
+  price_paid text, sale_price text, gross_profit text, net_gross text,
+  mileage_at_purchase text, mmr_value_at_purchase text, mmr_source text,
+  price_vs_mmr text, purchase_channel text, selling_channel text,
+  condition_grade_raw text, buyer_id text, closer_id text, consignor_dealer text,
+  title_collection_status text, auction_fee text, expense_total text,
+  arbitration_flag text, sale_price_manheim text, has_dcl text,
+  has_gameday_cr text, has_manheim text, has_mmr text, dealer_sold_to text,
+  sale_channel text, cr_expected text, condition_status text, data_quality text,
+  notes text, cot_city text, cot_state text, region text, week_label text,
+  misc_overhead text
 );
 
--- Load (psql):
+-- Load (psql) — table mirrors the CSV 1:1, so positional \copy is correct:
 -- \copy tav._stg_phase0_backfill FROM 'buybox_master.csv' WITH (FORMAT csv, HEADER true)
 ```
 
-If the load file's column order/set differs from the above, adjust this DDL to
-match the file — staging must mirror the CSV exactly.
+The 48 columns above are the verbatim `buybox_master.csv` header, in order. If
+a future re-export changes the header, re-verify and regenerate this DDL — the
+positional `\copy` depends on an exact 1:1 match.
 
 ## 4. Idempotent upsert — keyed on `import_fingerprint`
 
-`cycle_seq` is taken from the CSV when present, else derived as the
-acquisition-date rank within a VIN (preserves re-entry cycles). The
-fingerprint `md5(vin · cycle_seq · source_file)` makes re-runs and forward
-loads converge on the same row.
+Reconciled 2026-05-22 to the real `buybox_master.csv` schema. `cycle_seq` is
+taken from the CSV when present, else derived as the acquisition-date rank
+within a VIN (preserves re-entry cycles). The fingerprint
+`md5(vin · cycle_seq · source_file)` makes re-runs and forward loads converge
+on the same row — `source_file` is this export's column for what the original
+template called `source_file_name`.
+
+The merge populates only existing `tav.purchase_outcomes` columns plus the ten
+added by migration `0045`. Columns the export cannot supply are left NULL — see
+§4.1. The CSV's extra QA fields stay staging-only — see §4.2. No new DB column
+is added.
 
 ```sql
 BEGIN;
@@ -184,7 +192,8 @@ WITH cleaned AS (
     upper(regexp_replace(coalesce(vin,''), '[^A-Za-z0-9]', '', 'g')) AS vin_clean,
     *
   FROM tav._stg_phase0_backfill
-  WHERE coalesce(exclude_reason_code,'') = ''                       -- documented exclusions skipped
+  -- This export has no exclude_reason_code column: every staged row is
+  -- included except invalid VINs, filtered in `keyed` below.
 ),
 keyed AS (
   SELECT
@@ -201,18 +210,19 @@ INSERT INTO tav.purchase_outcomes (
   vin, cycle_seq, import_fingerprint, import_batch_id,
   year, make, model, trim, purchase_date, sale_date,
   price_paid, sale_price, gross_profit, net_gross,
-  mileage, odometer_at_purchase,
-  mmr_value_at_purchase, mmr_snapshot_id, mmr_source, mmr_method, mmr_lookup_date,
-  region, source, purchase_channel, selling_channel,
-  condition_grade_raw, condition_grade_normalized,
+  mileage, odometer_at_purchase, hold_days,
+  mmr_value_at_purchase, mmr_source,
+  region, purchase_channel, selling_channel,
+  condition_grade_raw,
   buyer_id, closer_id,
-  transport_cost, auction_fee, recon_cost, misc_overhead, expense_total,
+  auction_fee, misc_overhead, expense_total,
+  week_label, cot_city, cot_state,
   notes
 )
 SELECT
   vin_clean,
   cycle_seq_final,
-  md5(vin_clean || '|' || cycle_seq_final || '|' || coalesce(source_file_name,'')),
+  md5(vin_clean || '|' || cycle_seq_final || '|' || coalesce(source_file,'')),
   md5('phase0-backfill-2026-05-22')::uuid,
   nullif(year,'')::numeric::int::smallint,
   nullif(make,''), nullif(model,''), nullif(trim,''),
@@ -221,65 +231,90 @@ SELECT
   nullif(sale_price,'')::numeric::int,
   nullif(gross_profit,'')::numeric::int,
   nullif(net_gross,'')::numeric::int,
-  nullif(mileage_at_purchase,'')::numeric::int,
-  nullif(odometer_at_purchase,'')::numeric::int,
+  nullif(mileage_at_purchase,'')::numeric::int,            -- mileage (authoritative)
+  nullif(mileage_at_purchase,'')::numeric::int,            -- odometer_at_purchase = mileage
+  nullif(days_on_lot,'')::numeric::int,                    -- hold_days
   nullif(mmr_value_at_purchase,'')::numeric::int,
-  nullif(mmr_snapshot_id,'')::uuid,
-  nullif(mmr_source,''), nullif(mmr_method,''), nullif(mmr_lookup_date,'')::date,
-  nullif(region,''), nullif(source,''),
+  nullif(mmr_source,''),
+  nullif(region,''),
   nullif(purchase_channel,''), nullif(selling_channel,''),
-  nullif(condition_grade_raw,''), nullif(condition_grade_normalized,''),
+  nullif(condition_grade_raw,''),
   nullif(buyer_id,''), nullif(closer_id,''),
-  nullif(transport_cost,'')::numeric::int,
   nullif(auction_fee,'')::numeric::int,
-  nullif(recon_cost,'')::numeric::int,
   nullif(misc_overhead,'')::numeric::int,
   nullif(expense_total,'')::numeric::int,
+  nullif(week_label,''), nullif(cot_city,''), nullif(cot_state,''),
   nullif(notes,'')
 FROM keyed
 ON CONFLICT (import_fingerprint) DO UPDATE SET
-  vin                        = EXCLUDED.vin,
-  cycle_seq                  = EXCLUDED.cycle_seq,
-  import_batch_id            = EXCLUDED.import_batch_id,
-  year                       = EXCLUDED.year,
-  make                       = EXCLUDED.make,
-  model                      = EXCLUDED.model,
-  trim                       = EXCLUDED.trim,
-  purchase_date              = EXCLUDED.purchase_date,
-  sale_date                  = EXCLUDED.sale_date,
-  price_paid                 = EXCLUDED.price_paid,
-  sale_price                 = EXCLUDED.sale_price,
-  gross_profit               = EXCLUDED.gross_profit,
-  net_gross                  = EXCLUDED.net_gross,
-  mileage                    = EXCLUDED.mileage,
-  odometer_at_purchase       = EXCLUDED.odometer_at_purchase,
-  mmr_value_at_purchase      = EXCLUDED.mmr_value_at_purchase,
-  mmr_snapshot_id            = EXCLUDED.mmr_snapshot_id,
-  mmr_source                 = EXCLUDED.mmr_source,
-  mmr_method                 = EXCLUDED.mmr_method,
-  mmr_lookup_date            = EXCLUDED.mmr_lookup_date,
-  region                     = EXCLUDED.region,
-  source                     = EXCLUDED.source,
-  purchase_channel           = EXCLUDED.purchase_channel,
-  selling_channel            = EXCLUDED.selling_channel,
-  condition_grade_raw        = EXCLUDED.condition_grade_raw,
-  condition_grade_normalized = EXCLUDED.condition_grade_normalized,
-  buyer_id                   = EXCLUDED.buyer_id,
-  closer_id                  = EXCLUDED.closer_id,
-  transport_cost             = EXCLUDED.transport_cost,
-  auction_fee                = EXCLUDED.auction_fee,
-  recon_cost                 = EXCLUDED.recon_cost,
-  misc_overhead              = EXCLUDED.misc_overhead,
-  expense_total              = EXCLUDED.expense_total,
-  notes                      = EXCLUDED.notes;
+  vin                   = EXCLUDED.vin,
+  cycle_seq             = EXCLUDED.cycle_seq,
+  import_batch_id       = EXCLUDED.import_batch_id,
+  year                  = EXCLUDED.year,
+  make                  = EXCLUDED.make,
+  model                 = EXCLUDED.model,
+  trim                  = EXCLUDED.trim,
+  purchase_date         = EXCLUDED.purchase_date,
+  sale_date             = EXCLUDED.sale_date,
+  price_paid            = EXCLUDED.price_paid,
+  sale_price            = EXCLUDED.sale_price,
+  gross_profit          = EXCLUDED.gross_profit,
+  net_gross             = EXCLUDED.net_gross,
+  mileage               = EXCLUDED.mileage,
+  odometer_at_purchase  = EXCLUDED.odometer_at_purchase,
+  hold_days             = EXCLUDED.hold_days,
+  mmr_value_at_purchase = EXCLUDED.mmr_value_at_purchase,
+  mmr_source            = EXCLUDED.mmr_source,
+  region                = EXCLUDED.region,
+  purchase_channel      = EXCLUDED.purchase_channel,
+  selling_channel       = EXCLUDED.selling_channel,
+  condition_grade_raw   = EXCLUDED.condition_grade_raw,
+  buyer_id              = EXCLUDED.buyer_id,
+  closer_id             = EXCLUDED.closer_id,
+  auction_fee           = EXCLUDED.auction_fee,
+  misc_overhead         = EXCLUDED.misc_overhead,
+  expense_total         = EXCLUDED.expense_total,
+  week_label            = EXCLUDED.week_label,
+  cot_city              = EXCLUDED.cot_city,
+  cot_state             = EXCLUDED.cot_state,
+  notes                 = EXCLUDED.notes;
   -- NOT in the SET list, by design: id, created_at, import_fingerprint,
   -- lead_id, vehicle_candidate_id. Pre-existing linkage is never overwritten.
+  -- Also never written: the §4.1 NULL columns the export cannot supply.
 
 COMMIT;
 ```
 
-Rows skipped (invalid VIN, `exclude_reason_code` set) are documented exclusions
-— quantify them with the dry-run in §6 before the merge; no silent drops.
+Rows skipped (invalid VIN — cleaned length `<> 17`) are the only documented
+exclusion in this export; quantify them with §6.5 before the merge. No silent
+drops.
+
+### 4.1 Target columns left NULL (export cannot supply them)
+
+| Target column | Why NULL |
+|---|---|
+| `purchase_price` | duplicate-pair of `price_paid`; `price_paid` is canonical |
+| `gross_profit_est` | export carries actual `gross_profit`, not an estimate |
+| `buyer` | export has `buyer_id` only, no buyer name |
+| `source` | no clean analog — `source_system` is provenance, not the acquisition `source` enum. Left NULL — owner-confirmed for this Phase 0 load (2026-05-22) |
+| `listed_price` | not in export |
+| `condition_grade_normalized` | not in export; no approved raw→normalized mapping exists. NULL satisfies its `CHECK` constraint |
+| `transport_cost` | not in export |
+| `recon_cost` | not in export |
+| `mmr_method` / `mmr_lookup_date` / `mmr_snapshot_id` | not in export |
+| `lead_id` / `vehicle_candidate_id` | never written by this load (four-concept rule) |
+
+### 4.2 CSV columns intentionally staging-only (no target column)
+
+`source_system`, `source_row_id`, `source_file`, `display_id`, `body_style`,
+`price_vs_mmr`, `consignor_dealer`, `title_collection_status`,
+`arbitration_flag`, `sale_price_manheim`, `has_dcl`, `has_gameday_cr`,
+`has_manheim`, `has_mmr`, `dealer_sold_to`, `sale_channel`, `cr_expected`,
+`condition_status`, `data_quality`. These are provenance / QA / hard-gate-flag
+fields. `tav.purchase_outcomes` has no column for them and — per the Phase 0
+scope — none is added. `source_row_id` and `source_file` are still *used* by
+the load (cycle-ordering tiebreak and the fingerprint, respectively); they are
+just not merged into a target column.
 
 ## 5. Rollback — keyed on `import_batch_id`
 
@@ -310,13 +345,18 @@ WHERE import_batch_id = md5('phase0-backfill-2026-05-22')::uuid;   -- expect 0
 
 ## 6. Dry-run validation — run on staging BEFORE the merge
 
-All `SELECT`-only. Run after `\copy` into staging, before §4.
+Reconciled 2026-05-22 to the real `buybox_master.csv`: the
+`exclude_reason_code` filter is dropped (the export has no such column — every
+staged row is included), `condition_grade_normalized` is dropped from the enum
+pre-check (not in the export; the merge leaves the target NULL), and the §6.4
+fingerprint uses `source_file`. All `SELECT`-only. Run after `\copy` into
+staging, before §4.
 
-### 6.1 The eleven required assertions
+### 6.1 The required assertions
 
 ```sql
 WITH s AS (
-  SELECT * FROM tav._stg_phase0_backfill WHERE coalesce(exclude_reason_code,'') = ''
+  SELECT * FROM tav._stg_phase0_backfill
 )
 SELECT
   count(*)                                                                 AS cycles,
@@ -351,7 +391,6 @@ WITH s AS (
         ORDER BY nullif(purchase_date,'')::date, source_row_id)::smallint
     ) AS cycle_seq_final
   FROM tav._stg_phase0_backfill
-  WHERE coalesce(exclude_reason_code,'') = ''
 )
 SELECT count(*) AS duplicate_vin_cycle_pairs           -- expect 0
 FROM (SELECT vin_clean, cycle_seq_final FROM s GROUP BY 1,2 HAVING count(*) > 1) d;
@@ -359,22 +398,22 @@ FROM (SELECT vin_clean, cycle_seq_final FROM s GROUP BY 1,2 HAVING count(*) > 1)
 
 ### 6.3 Enum pre-check (would fail the merge `CHECK` constraints)
 
+`tav.purchase_outcomes` has verified `CHECK` constraints on `purchase_channel`
+(`auction|private|dealer`) and `selling_channel` (`retail|wholesale|auction`),
+so any non-conforming value aborts the §4 merge. `condition_grade_normalized`
+is not checked here — the export has no such column and §4 leaves the target
+NULL, which satisfies its `CHECK`.
+
 ```sql
-SELECT 'condition_grade_normalized' AS field, condition_grade_normalized AS bad_value, count(*)
+SELECT 'purchase_channel' AS field, purchase_channel AS bad_value, count(*)
 FROM tav._stg_phase0_backfill
-WHERE coalesce(exclude_reason_code,'')='' AND nullif(condition_grade_normalized,'') IS NOT NULL
-  AND condition_grade_normalized NOT IN ('excellent','good','fair','poor','unknown')
-GROUP BY 2
-UNION ALL
-SELECT 'purchase_channel', purchase_channel, count(*)
-FROM tav._stg_phase0_backfill
-WHERE coalesce(exclude_reason_code,'')='' AND nullif(purchase_channel,'') IS NOT NULL
+WHERE nullif(purchase_channel,'') IS NOT NULL
   AND purchase_channel NOT IN ('auction','private','dealer')
 GROUP BY 2
 UNION ALL
 SELECT 'selling_channel', selling_channel, count(*)
 FROM tav._stg_phase0_backfill
-WHERE coalesce(exclude_reason_code,'')='' AND nullif(selling_channel,'') IS NOT NULL
+WHERE nullif(selling_channel,'') IS NOT NULL
   AND selling_channel NOT IN ('retail','wholesale','auction')
 GROUP BY 2;
 -- Expect 0 rows. Any row is a value that must be conformed before the merge.
@@ -383,7 +422,8 @@ GROUP BY 2;
 ### 6.4 Merge dry-run — insert vs update, and existing-row overlap
 
 ```sql
--- How the merge would split:
+-- How the merge would split. The fp CTE mirrors §4 exactly: invalid VINs are
+-- filtered before the cycle_seq window, and the fingerprint uses source_file.
 WITH fp AS (
   SELECT md5(
     upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g')) || '|' ||
@@ -391,16 +431,17 @@ WITH fp AS (
       row_number() OVER (
         PARTITION BY upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))
         ORDER BY nullif(purchase_date,'')::date, source_row_id)) || '|' ||
-    coalesce(source_file_name,'')) AS import_fingerprint
+    coalesce(source_file,'')) AS import_fingerprint
   FROM tav._stg_phase0_backfill
-  WHERE coalesce(exclude_reason_code,'')=''
+  WHERE length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) = 17
 )
 SELECT count(*)                                          AS staged_rows,
        count(*) FILTER (WHERE po.import_fingerprint IS NOT NULL) AS would_update,
        count(*) FILTER (WHERE po.import_fingerprint IS NULL)     AS would_insert
 FROM fp LEFT JOIN tav.purchase_outcomes po USING (import_fingerprint);
 
--- Existing-rows overlap — the pre-flight question (see §7):
+-- Existing-rows overlap (see §7). Post-archive tav.purchase_outcomes is empty,
+-- so existing_rows_total is expected to be 0 — kept as a live re-check.
 SELECT
   (SELECT count(*) FROM tav.purchase_outcomes)                          AS existing_rows_total,
   (SELECT count(*) FROM tav.purchase_outcomes
@@ -414,32 +455,31 @@ SELECT
 
 ### 6.5 Excluded-row accounting (no silent drops)
 
+This export has no `exclude_reason_code` column, so the only documented
+exclusion is an invalid VIN (cleaned length `<> 17`). Those rows are skipped by
+the §4 `length(vin_clean) = 17` gate.
+
 ```sql
-SELECT coalesce(nullif(exclude_reason_code,''),
-                CASE WHEN length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 17
-                     THEN 'invalid_vin' END) AS exclude_reason,
-       count(*) AS rows
+SELECT 'invalid_vin' AS exclude_reason, count(*) AS rows
 FROM tav._stg_phase0_backfill
-WHERE coalesce(exclude_reason_code,'') <> ''
-   OR length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 17
-GROUP BY 1;
+WHERE length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 17;
+-- Expect 0, or a small documented count. Any row here is intentionally
+-- skipped by the merge — not a silent drop.
 ```
 
 ## 7. STOP — explicit gate before the production merge
 
 **Do not run §4 until all of the following are cleared with the owner:**
 
-1. **Existing-rows decision (blocker).** `tav.purchase_outcomes` already holds
-   ~12,904 rows (per Audit 06) — the incomplete pre-backfill data. The §6.4
-   overlap query quantifies how many VINs they share with the 57,228-row
-   backfill. The upsert keys on `import_fingerprint`; legacy rows carry a
-   *different* fingerprint formula, so without a decision the merge **adds
-   57,228 rows alongside the 12,904**, duplicating VINs. Owner must choose:
-   archive/remove the legacy partial rows first (recommended — the backfill is
-   the corrected superset), or define a VIN-level reconciliation. **Not decided
-   here.**
-2. §2 migration `0045` applied; `import_fingerprint` unique-index pre-check
-   returned 0 rows.
+1. **Existing-rows decision — RESOLVED 2026-05-22.** The 12,904 legacy partial
+   rows were archived and deleted (see
+   [`20-legacy-purchase-outcomes-replacement-plan.md`](20-legacy-purchase-outcomes-replacement-plan.md)
+   §10 / §11); `tav.purchase_outcomes` is now empty. The §6.4 overlap query
+   stays as a live re-check and is expected to return `existing_rows_total = 0`.
+2. **Migration `0045` — APPLIED + VERIFIED 2026-05-22.** The ten additive
+   columns and three CHECK constraints exist; the `import_fingerprint` unique
+   index was already present (a UNIQUE constraint of that name) and is
+   confirmed.
 3. §6.1 shows `pass_57228_cycles` and `pass_53598_vins` true and the fill
    percentages on target.
 4. §6.2 returns `0`.
