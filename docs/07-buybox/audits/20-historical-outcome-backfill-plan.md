@@ -41,6 +41,10 @@ answer these questions in aggregate only:
 | Pipeline linkage | percent matchable to `vehicle_candidates`, `leads`, or existing outcomes |
 | License boundary | which fields are safe to persist vs derived-only / reference-only |
 
+Use [`templates/historical-outcome-backfill-template.csv`](templates/historical-outcome-backfill-template.csv)
+as the controlled fill-in shape, with field definitions in
+[`templates/historical-outcome-backfill-data-dictionary.csv`](templates/historical-outcome-backfill-data-dictionary.csv).
+
 ## 4. Target field contract
 
 The backfill should prioritize the smallest field set that unblocks MaxBuy
