@@ -208,3 +208,58 @@ export const IngestRunDetailSchema = z.object({
   listings: z.array(ListingDiagnosticSchema).default([]),
 });
 export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;
+
+// ── GET /app/opportunities ─────────────────────────────────────────────────────
+export const OpportunityEstimateFlagsSchema = z.object({
+  mileage: z.boolean(),
+  style: z.boolean(),
+  mmr: z.boolean(),
+});
+
+export const OpportunityRowSchema = z.object({
+  id: z.string(),
+  type: z.enum(["lead", "near_miss"]),
+  badges: z.array(z.string()),
+  source: z.string(),
+  region: z.string().nullable(),
+  sourceRunId: z.string().nullable(),
+  normalizedListingId: z.string(),
+  vehicleCandidateId: z.string().nullable(),
+  leadId: z.string().nullable(),
+  title: z.string(),
+  year: z.number().nullable(),
+  make: z.string().nullable(),
+  model: z.string().nullable(),
+  style: z.string().nullable(),
+  vin: z.string().nullable(),
+  price: z.number().nullable(),
+  mmrValue: z.number().nullable(),
+  spread: z.number().nullable(),
+  finalScore: z.number().nullable(),
+  grade: z.string().nullable(),
+  status: z.string().nullable(),
+  submittedBy: z.string().nullable(),
+  assignedTo: z.string().nullable(),
+  assignedCloserName: z.string().nullable(),
+  claimedBy: z.string().nullable(),
+  claimedAt: z.string().nullable(),
+  claimExpiresAt: z.string().nullable(),
+  lastEvaluatedBy: z.string().nullable(),
+  lastEvaluatedAt: z.string().nullable(),
+  firstSeenAt: z.string().nullable(),
+  lastSeenAt: z.string().nullable(),
+  seenCount: z.number().nullable(),
+  listingUrl: z.string().nullable(),
+  estimateFlags: OpportunityEstimateFlagsSchema,
+});
+export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
+export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;
+
+export const OpportunityDetailSchema = OpportunityRowSchema.extend({
+  reasonCodes: z.array(z.string()),
+  valuationMissingReason: z.string().nullable(),
+  scoreComponents: z.unknown().nullable(),
+  candidateListingCount: z.number().nullable(),
+  mileage: z.number().nullable(),
+});
+export type OpportunityDetail = z.infer<typeof OpportunityDetailSchema>;

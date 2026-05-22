@@ -5,6 +5,8 @@ import {
   importBatches,
   ingestRuns,
   ingestRunDetail,
+  opportunities,
+  opportunityDetail,
   kpisFull,
   mmrVinOk,
   mmrVinUnavailable,
@@ -62,6 +64,19 @@ export const handlers = [
     const match = ingestRuns.find((r) => r.id === params.id);
     if (!match) return err(404, "not_found");
     return ok({ ...ingestRunDetail, run: match });
+  }),
+
+  http.get("/api/app/opportunities", ({ request }) => {
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? "");
+    const rows =
+      Number.isFinite(limit) && limit > 0 ? opportunities.slice(0, limit) : opportunities;
+    return ok(rows);
+  }),
+
+  http.get("/api/app/opportunities/:id", ({ params }) => {
+    const match = opportunities.find((r) => r.id === params.id);
+    if (!match) return err(404, "not_found");
+    return ok({ ...opportunityDetail, ...match, id: match.id });
   }),
 
   http.post("/api/app/mmr/vin", async ({ request }) => {

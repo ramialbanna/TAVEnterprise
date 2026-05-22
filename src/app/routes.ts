@@ -13,7 +13,7 @@
  *
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
- * GET /app/ingest-runs/:id.
+ * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
@@ -25,6 +25,8 @@ import type { HistoricalSalesFilter } from "../persistence/historicalSales";
 import { getLastCronRun } from "../persistence/cronRuns";
 import { listSourceRuns, getSourceRunDetail } from "../persistence/ingestRuns";
 import type { IngestRunListFilter } from "../persistence/ingestRuns";
+import { listOpportunities, getOpportunityDetail } from "../persistence/opportunities";
+import type { OpportunityListFilter, OpportunityType } from "../persistence/opportunities";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import {
@@ -165,6 +167,13 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     if (request.method === "GET" && pathname.startsWith("/app/ingest-runs/")) {
       const id = decodeURIComponent(pathname.slice("/app/ingest-runs/".length));
       return await handleIngestRunDetail(env, id);
+    }
+    if (request.method === "GET" && pathname === "/app/opportunities") {
+      return await handleOpportunitiesList(env, url);
+    }
+    if (request.method === "GET" && pathname.startsWith("/app/opportunities/")) {
+      const id = decodeURIComponent(pathname.slice("/app/opportunities/".length));
+      return await handleOpportunityDetail(env, id);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -757,6 +766,108 @@ async function handleIngestRunDetail(env: Env, id: string): Promise<Response> {
     return json({ ok: true, data });
   } catch (err) {
     log("app.ingest_run_detail.query_failed", { id, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+const OPPORTUNITY_TYPES = ["lead", "near_miss"] as const satisfies readonly OpportunityType[];
+const LEAD_GRADES = ["excellent", "good", "fair", "pass"] as const;
+const LEAD_STATUSES = [
+  "new",
+  "assigned",
+  "claimed",
+  "contacted",
+  "negotiating",
+  "passed",
+  "duplicate",
+  "stale",
+  "sold",
+  "purchased",
+  "archived",
+] as const;
+
+/**
+ * GET /app/opportunities?limit=&source=&region=&type=&grade=&status=
+ * Read-only buyer queue. Returns camelCase product rows.
+ */
+async function handleOpportunitiesList(env: Env, url: URL): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunities.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  const filter: OpportunityListFilter = {
+    limit: parseLimitParam(url.searchParams.get("limit")),
+  };
+
+  const source = url.searchParams.get("source");
+  const region = url.searchParams.get("region");
+  const type = url.searchParams.get("type");
+  const grade = url.searchParams.get("grade");
+  const status = url.searchParams.get("status");
+
+  if (source !== null) {
+    if (!(SOURCE_NAMES as readonly string[]).includes(source)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.source = source;
+  }
+  if (region !== null) {
+    if (!(REGION_KEYS as readonly string[]).includes(region)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.region = region;
+  }
+  if (type !== null) {
+    if (!(OPPORTUNITY_TYPES as readonly string[]).includes(type as OpportunityType)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.type = type as OpportunityType;
+  }
+  if (grade !== null) {
+    if (!(LEAD_GRADES as readonly string[]).includes(grade as (typeof LEAD_GRADES)[number])) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.grade = grade;
+  }
+  if (status !== null) {
+    if (!(LEAD_STATUSES as readonly string[]).includes(status as (typeof LEAD_STATUSES)[number])) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.status = status;
+  }
+
+  try {
+    const data = await listOpportunities(db, filter);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.opportunities.query_failed", { filter, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/opportunities/:id — one opportunity detail. 404 when unknown or not
+ * reviewable (no lead and no MMR hit).
+ */
+async function handleOpportunityDetail(env: Env, id: string): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_detail.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await getOpportunityDetail(db, id);
+    if (data === null) return json({ ok: false, error: "not_found" }, 404);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.opportunity_detail.query_failed", { id, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

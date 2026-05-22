@@ -4,6 +4,8 @@ import {
   ImportBatchListSchema,
   IngestRunSummaryListSchema,
   IngestRunDetailSchema,
+  OpportunityRowListSchema,
+  OpportunityDetailSchema,
   KpisSchema,
   MmrCatalogSchema,
   MmrVinOkSchema,
@@ -12,6 +14,8 @@ import {
   type ImportBatch,
   type IngestRunSummary,
   type IngestRunDetail,
+  type OpportunityRow,
+  type OpportunityDetail,
   type Kpis,
   type MmrCatalog,
   type MmrVinOk,
@@ -167,6 +171,14 @@ export function parseIngestRuns(status: number, json: unknown): ApiResult<Ingest
 
 export function parseIngestRunDetail(status: number, json: unknown): ApiResult<IngestRunDetail> {
   return interpret(status, json, IngestRunDetailSchema);
+}
+
+export function parseOpportunities(status: number, json: unknown): ApiResult<OpportunityRow[]> {
+  return interpret(status, json, OpportunityRowListSchema);
+}
+
+export function parseOpportunityDetail(status: number, json: unknown): ApiResult<OpportunityDetail> {
+  return interpret(status, json, OpportunityDetailSchema);
 }
 
 /**

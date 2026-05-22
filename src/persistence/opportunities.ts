@@ -1,0 +1,380 @@
+import type { SupabaseClient } from "./supabase";
+import { buildListingDiagnostics } from "./ingestRuns";
+
+/**
+ * Read-only persistence for v2 Opportunities (`GET /app/opportunities[/:id]`).
+ * Assembles a buyer-facing read model from leads, normalized listings, valuations,
+ * and vehicle candidates — no writes, no workflow mutations.
+ */
+
+export type OpportunityType = "lead" | "near_miss";
+
+export interface OpportunityEstimateFlags {
+  mileage: boolean;
+  style: boolean;
+  mmr: boolean;
+}
+
+export interface OpportunityRow {
+  id: string;
+  type: OpportunityType;
+  badges: string[];
+  source: string;
+  region: string | null;
+  sourceRunId: string | null;
+  normalizedListingId: string;
+  vehicleCandidateId: string | null;
+  leadId: string | null;
+  title: string;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  style: string | null;
+  vin: string | null;
+  price: number | null;
+  mmrValue: number | null;
+  spread: number | null;
+  finalScore: number | null;
+  grade: string | null;
+  status: string | null;
+  submittedBy: string | null;
+  assignedTo: string | null;
+  assignedCloserName: string | null;
+  claimedBy: string | null;
+  claimedAt: string | null;
+  claimExpiresAt: string | null;
+  lastEvaluatedBy: string | null;
+  lastEvaluatedAt: string | null;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  seenCount: number | null;
+  listingUrl: string | null;
+  estimateFlags: OpportunityEstimateFlags;
+}
+
+export interface OpportunityDetail extends OpportunityRow {
+  reasonCodes: string[];
+  valuationMissingReason: string | null;
+  scoreComponents: unknown | null;
+  candidateListingCount: number | null;
+  mileage: number | null;
+}
+
+export interface OpportunityListFilter {
+  limit: number;
+  source?: string;
+  region?: string;
+  type?: OpportunityType;
+  grade?: string;
+  status?: string;
+}
+
+const LISTING_COLUMNS =
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed";
+
+const VALUATION_COLUMNS =
+  "normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, lookup_trim, normalization_confidence, fetched_at";
+
+const LEAD_COLUMNS =
+  "id, normalized_listing_id, vehicle_candidate_id, status, grade, final_score, reason_codes, score_components, mmr_value, assigned_to, assigned_at, lock_expires_at";
+
+type ListingRow = Record<string, unknown>;
+type ValuationRow = Record<string, unknown>;
+type LeadRow = Record<string, unknown>;
+
+function asString(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
+function asNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  return null;
+}
+
+function computeEstimateFlags(
+  listingMileage: number | null,
+  valuationMileage: number | null,
+  styleEstimated: boolean,
+): OpportunityEstimateFlags {
+  const mileage = listingMileage === null && valuationMileage !== null;
+  const style = styleEstimated;
+  const mmr = mileage || style;
+  return { mileage, style, mmr };
+}
+
+/** Build event badges from listing signals, valuation estimates, and lead context. */
+export function buildOpportunityBadges(input: {
+  scrapeCount: number;
+  priceChanged: boolean;
+  mileageChanged: boolean;
+  hasLead: boolean;
+  hasMmr: boolean;
+  estimateFlags: OpportunityEstimateFlags;
+  candidateListingCount: number | null;
+}): string[] {
+  const badges: string[] = [];
+  if (input.scrapeCount <= 1) badges.push("First seen");
+  else badges.push(`Seen again #${input.scrapeCount - 1}`);
+  if (input.priceChanged) badges.push("Price changed");
+  if (input.mileageChanged) badges.push("Mileage changed");
+  if (input.estimateFlags.mileage) badges.push("Estimated miles");
+  if (input.estimateFlags.style) badges.push("Estimated style");
+  if (input.estimateFlags.mmr) badges.push("Estimated MMR");
+  if (!input.hasLead && input.hasMmr) badges.push("Near miss");
+  if (input.candidateListingCount !== null && input.candidateListingCount > 1) {
+    badges.push("Possible duplicate");
+  }
+  return badges;
+}
+
+function resolveOpportunityType(hasLead: boolean, hasMmr: boolean): OpportunityType | null {
+  if (hasLead) return "lead";
+  if (hasMmr) return "near_miss";
+  return null;
+}
+
+function mapToOpportunityRow(
+  listing: ListingRow,
+  diagnostic: ReturnType<typeof buildListingDiagnostics>[number],
+  lead: LeadRow | null,
+  candidateListingCount: number | null,
+): OpportunityRow | null {
+  const hasLead = lead !== null;
+  const hasMmr = diagnostic.mmr_value !== null;
+  const type = resolveOpportunityType(hasLead, hasMmr);
+  if (type === null) return null;
+
+  const listingMileage = asNumber(listing.mileage);
+  const estimateFlags = computeEstimateFlags(
+    listingMileage,
+    diagnostic.valuation_mileage,
+    diagnostic.valuation_style_is_estimated,
+  );
+  const scrapeCount = asNumber(listing.scrape_count) ?? 1;
+  const price = asNumber(listing.price);
+  const mmrValue = diagnostic.mmr_value;
+  const spread =
+    mmrValue !== null && price !== null ? mmrValue - price : null;
+
+  const badges = buildOpportunityBadges({
+    scrapeCount,
+    priceChanged: listing.price_changed === true,
+    mileageChanged: listing.mileage_changed === true,
+    hasLead,
+    hasMmr,
+    estimateFlags,
+    candidateListingCount,
+  });
+
+  return {
+    id: listing.id as string,
+    type,
+    badges,
+    source: listing.source as string,
+    region: asString(listing.region),
+    sourceRunId: asString(listing.source_run_id),
+    normalizedListingId: listing.id as string,
+    vehicleCandidateId: diagnostic.vehicle_candidate_id,
+    leadId: lead ? (lead.id as string) : null,
+    title: (listing.title as string) ?? "",
+    year: asNumber(listing.year),
+    make: asString(listing.make),
+    model: asString(listing.model),
+    style: asString(listing.trim),
+    vin: asString(listing.vin),
+    price,
+    mmrValue,
+    spread,
+    finalScore: lead ? asNumber(lead.final_score) : diagnostic.lead_final_score,
+    grade: lead ? asString(lead.grade) : diagnostic.lead_grade,
+    status: lead ? asString(lead.status) : null,
+    submittedBy: null,
+    assignedTo: lead ? asString(lead.assigned_to) : null,
+    assignedCloserName: null,
+    claimedBy: lead ? asString(lead.assigned_to) : null,
+    claimedAt: lead ? asString(lead.assigned_at) : null,
+    claimExpiresAt: lead ? asString(lead.lock_expires_at) : null,
+    lastEvaluatedBy: null,
+    lastEvaluatedAt: null,
+    firstSeenAt: asString(listing.first_seen_at),
+    lastSeenAt: asString(listing.last_seen_at),
+    seenCount: scrapeCount,
+    listingUrl: asString(listing.listing_url),
+    estimateFlags,
+  };
+}
+
+function mapToOpportunityDetail(
+  row: OpportunityRow,
+  listing: ListingRow,
+  diagnostic: ReturnType<typeof buildListingDiagnostics>[number],
+  lead: LeadRow | null,
+  candidateListingCount: number | null,
+): OpportunityDetail {
+  const reasonCodes = lead?.reason_codes;
+  return {
+    ...row,
+    reasonCodes: Array.isArray(reasonCodes) ? (reasonCodes as string[]) : [],
+    valuationMissingReason: diagnostic.valuation_missing_reason,
+    scoreComponents: lead?.score_components ?? diagnostic.lead_score_components ?? null,
+    candidateListingCount,
+    mileage: asNumber(listing.mileage),
+  };
+}
+
+function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter): OpportunityRow[] {
+  let out = rows;
+  if (filter.type) out = out.filter((r) => r.type === filter.type);
+  if (filter.grade) out = out.filter((r) => r.grade === filter.grade);
+  if (filter.status) out = out.filter((r) => r.status === filter.status);
+  return out.slice(0, filter.limit);
+}
+
+async function fetchCandidateCounts(
+  db: SupabaseClient,
+  candidateIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (candidateIds.length === 0) return out;
+
+  const { data, error } = await db
+    .from("vehicle_candidates")
+    .select("id, listing_count")
+    .in("id", candidateIds);
+  if (error) throw error;
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const id = row.id as string;
+    out.set(id, asNumber(row.listing_count) ?? 1);
+  }
+  return out;
+}
+
+async function loadOpportunityContext(
+  db: SupabaseClient,
+  listingIds: string[],
+): Promise<{
+  valuations: ValuationRow[];
+  leads: LeadRow[];
+}> {
+  if (listingIds.length === 0) {
+    return { valuations: [], leads: [] };
+  }
+
+  const [{ data: valData, error: valErr }, { data: leadData, error: leadErr }] =
+    await Promise.all([
+      db.from("valuation_snapshots").select(VALUATION_COLUMNS).in("normalized_listing_id", listingIds),
+      db.from("leads").select(LEAD_COLUMNS).in("normalized_listing_id", listingIds),
+    ]);
+
+  if (valErr) throw valErr;
+  if (leadErr) throw leadErr;
+
+  return {
+    valuations: (valData ?? []) as ValuationRow[],
+    leads: (leadData ?? []) as LeadRow[],
+  };
+}
+
+function assembleRows(
+  listings: ListingRow[],
+  valuations: ValuationRow[],
+  leads: LeadRow[],
+  candidateCounts: Map<string, number>,
+): OpportunityRow[] {
+  const diagnostics = buildListingDiagnostics(listings, valuations, leads);
+  const leadByListing = new Map<string, LeadRow>();
+  for (const l of leads) {
+    const nlId = l.normalized_listing_id as string;
+    leadByListing.set(nlId, l);
+  }
+
+  const rows: OpportunityRow[] = [];
+  for (let i = 0; i < listings.length; i++) {
+    const listing = listings[i]!;
+    const nlId = listing.id as string;
+    const lead = leadByListing.get(nlId) ?? null;
+    const diagnostic = diagnostics[i]!;
+    const candidateId = diagnostic.vehicle_candidate_id;
+    const candidateListingCount =
+      candidateId !== null ? (candidateCounts.get(candidateId) ?? null) : null;
+    const row = mapToOpportunityRow(listing, diagnostic, lead, candidateListingCount);
+    if (row) rows.push(row);
+  }
+
+  rows.sort((a, b) => {
+    const aTs = a.lastSeenAt ?? "";
+    const bTs = b.lastSeenAt ?? "";
+    return bTs.localeCompare(aTs);
+  });
+
+  return rows;
+}
+
+export async function listOpportunities(
+  db: SupabaseClient,
+  filter: OpportunityListFilter,
+): Promise<OpportunityRow[]> {
+  const fetchLimit = Math.min(filter.limit * 5, MAX_FETCH);
+  let q = db
+    .from("normalized_listings")
+    .select(LISTING_COLUMNS)
+    .order("last_seen_at", { ascending: false })
+    .limit(fetchLimit);
+
+  if (filter.source) q = q.eq("source", filter.source);
+  if (filter.region) q = q.eq("region", filter.region);
+
+  const { data: listingData, error: listingErr } = await q;
+  if (listingErr) throw listingErr;
+
+  const listings = (listingData ?? []) as ListingRow[];
+  const listingIds = listings.map((l) => l.id as string);
+
+  const { valuations, leads } = await loadOpportunityContext(db, listingIds);
+
+  const candidateIds = [
+    ...new Set(
+      buildListingDiagnostics(listings, valuations, leads)
+        .map((d) => d.vehicle_candidate_id)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const candidateCounts = await fetchCandidateCounts(db, candidateIds);
+
+  const rows = assembleRows(listings, valuations, leads, candidateCounts);
+  return applyListFilter(rows, filter);
+}
+
+export async function getOpportunityDetail(
+  db: SupabaseClient,
+  id: string,
+): Promise<OpportunityDetail | null> {
+  const { data: listingRow, error: listingErr } = await db
+    .from("normalized_listings")
+    .select(LISTING_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (listingErr) throw listingErr;
+  if (!listingRow) return null;
+
+  const listing = listingRow as ListingRow;
+  const { valuations, leads } = await loadOpportunityContext(db, [id]);
+  const lead = leads[0] ?? null;
+  const diagnostics = buildListingDiagnostics([listing], valuations, leads);
+  const diagnostic = diagnostics[0]!;
+
+  const candidateId = diagnostic.vehicle_candidate_id;
+  let candidateListingCount: number | null = null;
+  if (candidateId) {
+    const counts = await fetchCandidateCounts(db, [candidateId]);
+    candidateListingCount = counts.get(candidateId) ?? null;
+  }
+
+  const row = mapToOpportunityRow(listing, diagnostic, lead, candidateListingCount);
+  if (!row) return null;
+
+  return mapToOpportunityDetail(row, listing, diagnostic, lead, candidateListingCount);
+}
+
+const MAX_FETCH = 500;

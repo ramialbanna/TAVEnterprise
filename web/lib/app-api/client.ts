@@ -16,6 +16,8 @@ import {
   parseImportBatches,
   parseIngestRuns,
   parseIngestRunDetail,
+  parseOpportunities,
+  parseOpportunityDetail,
   parseKpis,
   parseMmrCatalog,
   parseMmrYmm,
@@ -29,6 +31,8 @@ import type {
   ImportBatch,
   IngestRunSummary,
   IngestRunDetail,
+  OpportunityRow,
+  OpportunityDetail,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -44,12 +48,35 @@ export type IngestRunsFilter = {
   status?: string;
 };
 
+/** Query filter for `GET /app/opportunities`. */
+export type OpportunitiesFilter = {
+  limit?: number;
+  source?: string;
+  region?: string;
+  type?: "lead" | "near_miss";
+  grade?: string;
+  status?: string;
+};
+
 /** `?...` query string for `ingest-runs`; empty when no params. */
 export function ingestRunsQuery(filter: IngestRunsFilter = {}): string {
   const params = new URLSearchParams();
   if (filter.limit !== undefined) params.set("limit", String(filter.limit));
   if (filter.source) params.set("source", filter.source);
   if (filter.region) params.set("region", filter.region);
+  if (filter.status) params.set("status", filter.status);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** `?...` query string for `opportunities`; empty when no params. */
+export function opportunitiesQuery(filter: OpportunitiesFilter = {}): string {
+  const params = new URLSearchParams();
+  if (filter.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter.source) params.set("source", filter.source);
+  if (filter.region) params.set("region", filter.region);
+  if (filter.type) params.set("type", filter.type);
+  if (filter.grade) params.set("grade", filter.grade);
   if (filter.status) params.set("status", filter.status);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
@@ -182,6 +209,20 @@ export async function getIngestRun(id: string): Promise<ApiResult<IngestRunDetai
   const r = await getJson(`ingest-runs/${encodeURIComponent(id)}`);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseIngestRunDetail(r.status, r.json);
+}
+
+export async function listOpportunities(
+  filter: OpportunitiesFilter = {},
+): Promise<ApiResult<OpportunityRow[]>> {
+  const r = await getJson(`opportunities${opportunitiesQuery(filter)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunities(r.status, r.json);
+}
+
+export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
+  const r = await getJson(`opportunities/${encodeURIComponent(id)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {

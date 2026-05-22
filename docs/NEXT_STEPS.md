@@ -14,9 +14,9 @@ Living checklist for what to do next. For phase detail and acceptance criteria, 
 
 **North star:** Ship **v2 Opportunities** so buyers can work leads in the app (not just counts in Ingest Monitor).
 
-**Immediate engineering priority:** Phase 4 complete. Next: **Phase 5** read-only Opportunities (then region expansion after near-miss visibility ships).
+**Immediate engineering priority:** Phase 5 complete. Next: **Phase 6** manual submission + assignment foundation.
 
-**Product gap today:** Pipeline may create leads, but there is no `/opportunities` queue, assignment, or workflow mutations yet.
+**Product gap today:** Opportunities queue is live (read-only). Assignment, claim, and workflow mutations are still pending.
 
 ---
 
@@ -70,10 +70,10 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 
 **Spec:** [v2-opportunities](02-product/v2-opportunities.md) · **Platform controls:** [06-platform](06-platform/README.md)
 
-- [ ] `GET /app/opportunities` and `GET /app/opportunities/:id`
-- [ ] `/opportunities` UI: list, preview, detail, event badges (read-only)
-- [ ] Clear badges for estimated mileage / style / MMR
-- [ ] Update [app-api](03-api/app-api.md) and tests
+- [x] `GET /app/opportunities` and `GET /app/opportunities/:id` (2026-05-22)
+- [x] `/opportunities` UI: list, preview, detail, event badges (read-only) (2026-05-22)
+- [x] Clear badges for estimated mileage / style / MMR (2026-05-22)
+- [x] Update [app-api](03-api/app-api.md) and tests (2026-05-22)
 
 ### Phase 6 — Manual submit + assignment (4–7 days)
 

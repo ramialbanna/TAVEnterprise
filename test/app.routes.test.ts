@@ -12,6 +12,7 @@ import {
 } from "../src/valuation/workerClient";
 import type * as WorkerClientModule from "../src/valuation/workerClient";
 import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
+import { listOpportunities, getOpportunityDetail } from "../src/persistence/opportunities";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -55,6 +56,11 @@ vi.mock("../src/persistence/historicalSales", () => ({
 vi.mock("../src/persistence/ingestRuns", () => ({
   listSourceRuns: vi.fn(),
   getSourceRunDetail: vi.fn(),
+}));
+
+vi.mock("../src/persistence/opportunities", () => ({
+  listOpportunities: vi.fn(),
+  getOpportunityDetail: vi.fn(),
 }));
 
 // persistence/cronRuns: getLastCronRun feeds /app/system-status' `staleSweep` block.
@@ -967,5 +973,114 @@ describe("GET /app/ingest-runs/:id", () => {
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("db_error");
+  });
+});
+
+// ── GET /app/opportunities ────────────────────────────────────────────────────
+
+const OPPORTUNITY_ROW = {
+  id: "22222222-2222-2222-2222-222222222222",
+  type: "lead" as const,
+  badges: ["First seen"],
+  source: "facebook",
+  region: "dallas_tx",
+  sourceRunId: "11111111-1111-1111-1111-111111111111",
+  normalizedListingId: "22222222-2222-2222-2222-222222222222",
+  vehicleCandidateId: null,
+  leadId: "33333333-3333-3333-3333-333333333333",
+  title: "2019 Ford F-150",
+  year: 2019,
+  make: "Ford",
+  model: "F-150",
+  style: "XLT",
+  vin: "1FT8W3BT1SEC27066",
+  price: 25000,
+  mmrValue: 28000,
+  spread: 3000,
+  finalScore: 72,
+  grade: "good",
+  status: "new",
+  submittedBy: null,
+  assignedTo: null,
+  assignedCloserName: null,
+  claimedBy: null,
+  claimedAt: null,
+  claimExpiresAt: null,
+  lastEvaluatedBy: null,
+  lastEvaluatedAt: null,
+  firstSeenAt: "2026-05-20T10:00:00.000Z",
+  lastSeenAt: "2026-05-21T10:00:00.000Z",
+  seenCount: 1,
+  listingUrl: "https://example.com/listing/1",
+  estimateFlags: { mileage: false, style: false, mmr: false },
+};
+
+describe("GET /app/opportunities", () => {
+  it("returns the opportunity list in an { ok, data } envelope", async () => {
+    vi.mocked(listOpportunities).mockResolvedValue([OPPORTUNITY_ROW]);
+    const res = await worker.fetch(authedReq("/app/opportunities"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: unknown[] };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual([OPPORTUNITY_ROW]);
+  });
+
+  it("passes valid filters through", async () => {
+    await worker.fetch(
+      authedReq("/app/opportunities?source=facebook&region=dallas_tx&type=lead&grade=good&status=new"),
+      makeEnv(),
+      ctx,
+    );
+    expect(vi.mocked(listOpportunities).mock.calls[0]![1]).toMatchObject({
+      source: "facebook",
+      region: "dallas_tx",
+      type: "lead",
+      grade: "good",
+      status: "new",
+    });
+  });
+
+  it("rejects an invalid filter with 400 invalid_filter", async () => {
+    const res = await worker.fetch(
+      authedReq("/app/opportunities?type=bogus"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    expect(vi.mocked(listOpportunities)).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 db_error when the query fails", async () => {
+    vi.mocked(listOpportunities).mockRejectedValue(new Error("db down"));
+    const res = await worker.fetch(authedReq("/app/opportunities"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+  });
+});
+
+describe("GET /app/opportunities/:id", () => {
+  it("returns opportunity detail", async () => {
+    vi.mocked(getOpportunityDetail).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      reasonCodes: ["strong_spread"],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: 1,
+      mileage: 45000,
+    });
+    const res = await worker.fetch(
+      authedReq("/app/opportunities/22222222-2222-2222-2222-222222222222"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { id: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.id).toBe(OPPORTUNITY_ROW.id);
+  });
+
+  it("returns 404 when not found", async () => {
+    vi.mocked(getOpportunityDetail).mockResolvedValue(null);
+    const res = await worker.fetch(authedReq("/app/opportunities/missing"), makeEnv(), ctx);
+    expect(res.status).toBe(404);
   });
 });

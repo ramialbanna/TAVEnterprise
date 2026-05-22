@@ -45,6 +45,8 @@ export interface DataTableProps<TData> {
    * Unsupplied → rows remain plain (no-op hover only).
    */
   onRowClick?: (data: TData) => void;
+  /** Optional double-click handler (e.g. open full detail page). */
+  onRowDoubleClick?: (data: TData) => void;
   className?: string;
 }
 
@@ -78,6 +80,7 @@ export function DataTable<TData>({
   density: initialDensity = "comfortable",
   enableColumnFilters = true,
   onRowClick,
+  onRowDoubleClick,
   className,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -172,21 +175,26 @@ export function DataTable<TData>({
               </tr>
             ) : (
               rows.map((row) => {
-                const clickable = onRowClick !== undefined;
+                const clickable = onRowClick !== undefined || onRowDoubleClick !== undefined;
                 return (
                   <tr
                     key={row.id}
                     {...(clickable
                       ? {
-                          role: "button",
-                          tabIndex: 0,
-                          onClick: () => onRowClick(row.original),
-                          onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onRowClick(row.original);
-                            }
-                          },
+                          role: onRowClick ? "button" : undefined,
+                          tabIndex: onRowClick ? 0 : undefined,
+                          onClick: onRowClick ? () => onRowClick(row.original) : undefined,
+                          onDoubleClick: onRowDoubleClick
+                            ? () => onRowDoubleClick(row.original)
+                            : undefined,
+                          onKeyDown: onRowClick
+                            ? (e: KeyboardEvent<HTMLTableRowElement>) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  onRowClick(row.original);
+                                }
+                              }
+                            : undefined,
                         }
                       : {})}
                     className={cn(

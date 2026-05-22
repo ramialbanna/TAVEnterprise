@@ -1,5 +1,5 @@
 import type { Route } from "next";
-import { Activity, Database, LayoutDashboard, Search, Settings, type LucideIcon } from "lucide-react";
+import { Activity, Database, LayoutDashboard, Search, Settings, Target, type LucideIcon } from "lucide-react";
 
 export type NavItem = { href: Route; label: string; icon: LucideIcon };
 
@@ -9,6 +9,7 @@ export type NavItem = { href: Route; label: string; icon: LucideIcon };
  */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/opportunities", label: "Opportunities", icon: Target },
   { href: "/ingest", label: "Ingest Monitor", icon: Activity },
   { href: "/mmr-lab", label: "VIN / MMR Lab", icon: Search },
   { href: "/historical", label: "TAV Historical Data", icon: Database },

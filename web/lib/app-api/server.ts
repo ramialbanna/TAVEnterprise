@@ -16,6 +16,8 @@ import {
   parseImportBatches,
   parseIngestRuns,
   parseIngestRunDetail,
+  parseOpportunities,
+  parseOpportunityDetail,
   parseKpis,
   parseMmrVin,
   parseSystemStatus,
@@ -25,8 +27,10 @@ import {
   historicalSalesQuery,
   importBatchesQuery,
   ingestRunsQuery,
+  opportunitiesQuery,
   type HistoricalSalesFilter,
   type IngestRunsFilter,
+  type OpportunitiesFilter,
   type MmrVinRequest,
 } from "./client";
 import type {
@@ -34,6 +38,8 @@ import type {
   ImportBatch,
   IngestRunSummary,
   IngestRunDetail,
+  OpportunityRow,
+  OpportunityDetail,
   Kpis,
   MmrVinOk,
   SystemStatus,
@@ -144,6 +150,18 @@ export async function listIngestRuns(
 export async function getIngestRun(id: string): Promise<ApiResult<IngestRunDetail>> {
   const { status, json } = await getJson(`ingest-runs/${encodeURIComponent(id)}`);
   return parseIngestRunDetail(status, json);
+}
+
+export async function listOpportunities(
+  filter: OpportunitiesFilter = {},
+): Promise<ApiResult<OpportunityRow[]>> {
+  const { status, json } = await getJson(`opportunities${opportunitiesQuery(filter)}`);
+  return parseOpportunities(status, json);
+}
+
+export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
+  const { status, json } = await getJson(`opportunities/${encodeURIComponent(id)}`);
+  return parseOpportunityDetail(status, json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
