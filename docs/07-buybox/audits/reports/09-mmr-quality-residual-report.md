@@ -1,9 +1,10 @@
 # Report 09 — MMR Quality & Residuals
 
 **Punch item:** #9 · **Kit:** [`../09-mmr-quality-residual-audit.md`](../09-mmr-quality-residual-audit.md)
-**Date:** 2026-05-20 · **Status:** Complete — live Supabase run folded in.
-Quality metrics produced; the residual backtest is **not producible** from
-current data (see §3).
+**Date:** 2026-05-20 · **Re-audited:** 2026-05-22 · **Status:** Re-audited
+against the 57,228-row Phase 0 backfill — see **§0**. The residual backtest,
+"not producible" pre-backfill, **is now producible**. §1–§5 below are kept as
+the historical record.
 
 **Method:** read-only structural analysis plus the live SELECT-only results of
 kit §4 (queries Q9.1–Q9.4), run in Supabase Studio.
@@ -11,6 +12,40 @@ kit §4 (queries Q9.1–Q9.4), run in Supabase Studio.
 **Licensed-data guardrail (applied):** only derived numeric columns were
 queried. No `raw_response` / `mmr_payload`, no individual MMR dollar figures,
 no VINs appear in this report.
+
+---
+
+## 0. Re-audit 2026-05-22 — post-Phase-0 backfill
+
+The Phase 0 backfill loaded 57,228 rows into `tav.purchase_outcomes` — 100%
+carry `sale_price`, 92.1% carry `mmr_value_at_purchase`. The §3 finding (residual
+backtest "not producible") is **superseded — the residual IS producible.** §2
+below — the `valuation_snapshots` / `mmr_queries` quality metrics — is a
+separate table, unchanged by the backfill.
+
+**Residual backtest — now producible (read-only, 2026-05-22).** Residual =
+`sale_price − mmr_value_at_purchase`; 52,709 rows have both. One row carries a
+corrupt `mmr_value_at_purchase` (~2.14 billion — within `int` range, so not
+clamped at load); the clean subset excludes `mmr > $1M`:
+
+| metric — clean subset, 52,708 rows | value |
+|---|---|
+| mean residual | +817 |
+| median residual | +885 |
+| IQR (p25 … p75) | −335 … +2,170 |
+| mean absolute residual | 2,260 |
+| stddev | 6,394 |
+| sold above MMR | 36,168 (68.6%) |
+| sold below MMR | 16,486 (31.3%) |
+
+TAV sells ~$800–900 above day-of MMR on the median deal; ~69% of units clear
+above MMR. This is the residual evidence base that was missing for item #2's
+promotion-threshold calibration — now available.
+
+**Data-quality flag.** 1 row has `mmr_value_at_purchase ≈ 2.14B` (corrupt) — it
+loaded because it sits below the 32-bit `int` ceiling. Downstream residual work
+must filter `mmr_value_at_purchase` to a sane bound, or the value should be
+scrubbed to NULL in a small follow-up `UPDATE` (separate owner call).
 
 ---
 

@@ -834,3 +834,18 @@ columns) followed by the Phase 0 staging table, dry-run validation, and the
 then re-running audits #6 / #7 / #9 / #10. Each step is operator-run in
 Supabase Studio and requires a fresh explicit go-ahead. No migration or load
 has been run.
+
+## 12. Phase 0 load complete (2026-05-22)
+
+The load this archive cleared the way for is done. After the §10 archive,
+migrations `0045` + `0046` and the §4 merge of
+[`20-backfill-load-sql-package.md`](20-backfill-load-sql-package.md) (see its
+§8) loaded all **57,228** Phase 0 rows into `tav.purchase_outcomes` — verified:
+0 duplicate `import_fingerprint`, 0 duplicate `(vin, cycle_seq)`, 0 non-Phase-0
+rows, 0 `lead_id` / `vehicle_candidate_id` (four-concept boundary held). Audits
+#6 / #7 / #9 / #10 were re-run against the loaded table.
+
+The archive tables — `tav.purchase_outcomes_legacy_pre_phase0_20260522` (12,904)
+and `tav.import_rows_outcome_links_pre_phase0_20260522` (522) — and the staging
+table `tav._stg_phase0_backfill` (57,228) are **retained** until audit
+sign-off, then dropped. Rollback (§6 / §10.4) was not needed.

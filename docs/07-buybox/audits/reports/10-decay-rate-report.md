@@ -1,7 +1,25 @@
 # Report 10 — Decay-Rate Validation (status)
 
 **Punch item:** #10 · **Kit:** [`../10-decay-rate-validation-plan.md`](../10-decay-rate-validation-plan.md)
-**Date:** 2026-05-20 · **Status:** Plan complete; backtest not yet run.
+**Date:** 2026-05-20 · **Re-audited:** 2026-05-22 · **Status:** Plan complete;
+the `purchase_date` blocker is now removed by the Phase 0 backfill (see §0); the
+offline λ-grid backtest is still not run.
+
+---
+
+## 0. Re-audit 2026-05-22 — post-Phase-0 backfill
+
+The decay backtest's hard blocker was the absence of any purchase-time signal
+(Report 06 F1 — `purchase_date` all-NULL on the legacy table). The Phase 0
+backfill **resolves it**: `tav.purchase_outcomes` now has `purchase_date` 100%
+populated across 57,228 rows, spanning **2024-10-01 → 2026-05-20** (~19.5
+months). A walk-forward, no-leakage λ-grid backtest is now feasible against
+this table.
+
+Still pending (unchanged): the λ-grid **run** is an offline, throwaway backtest
+(Python notebook in a scratch location — not committed application code). The
+data export and offline compute have not been done. §2 below stands, minus the
+purchase-date blocker.
 
 ---
 

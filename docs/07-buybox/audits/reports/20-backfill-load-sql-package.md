@@ -1,12 +1,12 @@
 # Phase 0 Backfill — `tav.purchase_outcomes` Load SQL Package
 
 **Punch item:** #20 (Phase 0 gate) · **Date:** 2026-05-22 · **Status:**
-**SQL reconciled to the real `buybox_master.csv` export — not executed.**
-Migration `0045` applied; migration `0046` (drop `expense_total` check) is
-required before the merge — see §4.4. §3 / §4 / §6 below are reconciled to the
-actual 48-column export; the original §1.1 field table was written against the
-blank operator template and is superseded by §3 / §4. No production load has
-run. No app / UI / ML / scoring / Phase 1 work.
+**Phase 0 backfill EXECUTED 2026-05-22 — 57,228 rows merged into
+`tav.purchase_outcomes`.** Migrations `0045` + `0046` applied; the §3 staging
+table loaded; the §4 merge committed via `psql`. Final result + verification in
+**§8**. §3 / §4 / §6 are the reconciled-to-real-export SQL that was run; the
+original §1.1 field table (blank-template-based) is superseded by §3 / §4. No
+app / UI / ML / scoring / Phase 1 work.
 
 **Sources:** [`maxbuy.md`](maxbuy.md) · [`20-historical-outcome-backfill-report.md`](20-historical-outcome-backfill-report.md)
 · current `supabase/schema.sql` (`tav.purchase_outcomes`).
@@ -539,4 +539,33 @@ WHERE length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 1
 
 Only then: run §4 inside its `BEGIN; … COMMIT;`. After load, run the Audit
 6/7/9/10 verification queries in [`20-historical-outcome-backfill-report.md`](20-historical-outcome-backfill-report.md)
-§7. This package executes nothing — it is the reviewed plan.
+§7. **This package was executed on 2026-05-22 — see §8.**
+
+## 8. Merge executed — result (2026-05-22)
+
+Migrations `0045` and `0046` applied; the §3 staging table loaded with all
+57,228 export rows; the §4 merge run via `psql` (Supabase Studio's SQL editor
+reported `INSERT 0 57228` but silently did not commit — twice; `psql` is the
+reliable path for bulk production writes).
+
+`tav.purchase_outcomes` post-merge — verified read-only:
+
+| Check | Result |
+|---|---|
+| rows | 57,228 |
+| distinct VINs | 53,598 |
+| duplicate `import_fingerprint` | 0 |
+| duplicate `(vin, cycle_seq)` | 0 |
+| non-Phase-0 rows | 0 |
+| `lead_id` / `vehicle_candidate_id` populated | 0 / 0 |
+| purchase_date / sale_date / mileage / price_paid / sale_price / gross_profit | 100% |
+| `mmr_value_at_purchase` | 92.1% |
+| `trim` | 99.99% · `region` 78.2% |
+| `year` NULL | 3 — invalid `220` clamp (§4.4) |
+| `hold_days` NULL | 54 — negative `days_on_lot` clamp (§4.4) |
+| `mmr_value_at_purchase` NULL | 4,519 — 4,516 staged-blank + 3 out-of-`int` clamp |
+| `purchase_channel` / `selling_channel` NULL | 57,228 / 57,228 — deferred (§4.3) |
+
+Audits #6 / #7 / #9 / #10 were re-run against the loaded table — see those
+reports. The Report 09 residual backtest is now producible. The staging table
+and the two archive tables are retained until audit sign-off, then dropped.

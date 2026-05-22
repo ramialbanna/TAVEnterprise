@@ -1,10 +1,47 @@
 # Report 07 — Segment Support Matrix
 
 **Punch item:** #7 · **Kit:** [`../07-segment-support-matrix.md`](../07-segment-support-matrix.md)
-**Date:** 2026-05-20 · **Status:** Complete — live Supabase run folded in.
+**Date:** 2026-05-20 · **Re-audited:** 2026-05-22 · **Status:** Re-audited
+against the 57,228-row Phase 0 backfill — see **§0**. The 12,904-row
+pre-backfill findings below (§1–§6) are kept as the historical record.
 
 **Method:** read-only structural analysis plus the live SELECT-only results of
 kit §4 (queries Q7.1–Q7.4), run in Supabase Studio.
+
+---
+
+## 0. Re-audit 2026-05-22 — post-Phase-0 backfill
+
+The Phase 0 backfill loaded 57,228 rows into `tav.purchase_outcomes`. With
+`purchase_date`, `mileage`, and `trim` now populated, the §1–§5 conclusions
+below — written when the table had no date, no mileage, and no trim column —
+are superseded.
+
+**Segment support — 57,228 rows (read-only, 2026-05-22):**
+
+| Resolution | Segments | ≥30 rows | ≥15 | ≥5 | <5 |
+|---|---|---|---|---|---|
+| year/make/model | 5,138 | 409 | 771 | 1,824 | 3,314 |
+| year/make/model/trim | 16,157 | 204 | — | 2,747 | — |
+
+`trim` is now 99.99% populated, so year/make/model/trim segmentation is
+available — impossible pre-backfill (no trim column).
+
+**Recency is now computable.** `purchase_date` spans **2024-10-01 → 2026-05-20**
+(~19.5 months). Trailing-window counts (anchored 2026-05-22): last 180 days
+**18,121**, last 365 days **36,087**. Effective-N / recency weighting — declared
+impossible in §3 — is now possible; the Audit #10 decay λ can be applied.
+
+**`data_strength` outlook (DEC-3).** At year/make/model resolution, 409 of
+5,138 segments reach ≥30 rows (high) — up ~5× from 78 pre-backfill. Still a
+minority: medium/low `data_strength` dominates, so most v1 verdicts stay capped
+at Review — but the high-strength base is far larger than the legacy audit
+projected.
+
+**Training base — §3 question largely closed.** `purchase_outcomes` now carries
+year/make/model/trim, region (78%), mileage, purchase date, sale date, and
+day-of MMR. It is sufficient as the segment/time base on its own; the
+`historical_sales` join is no longer required for v1.
 
 ---
 

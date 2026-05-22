@@ -214,11 +214,11 @@ or downstream CI work only.
 | 3 | Decision replay schema | E | D | Ack — design done; CI test in Phase 1 | TECH §1.4, §3 |
 | 4 | Confidence semantics | B | P | **Closed — data strength only; low caps at Review** | CHARTER §4; TECH §2 |
 | 5 | Hard gates | A | O | **Closed — legal/title/source risks force PASS; MMR/YMM weakness routes Review** | CHARTER §7; TECH §5 |
-| 6 | Historical field completeness | C | D | **Done — live audit complete (12,904 rows); data-gap findings escalated** | [`audits/reports/06-field-completeness-report.md`](audits/reports/06-field-completeness-report.md) |
-| 7 | Segment support matrix | C | D | **Done — live audit complete; training-base decision reopened** | [`audits/reports/07-segment-support-report.md`](audits/reports/07-segment-support-report.md) |
+| 6 | Historical field completeness | C | D | **Done — re-audited 2026-05-22 vs the 57,228-row backfill; F1/F3/F5 resolved, F2 NULL by design** | [`audits/reports/06-field-completeness-report.md`](audits/reports/06-field-completeness-report.md) |
+| 7 | Segment support matrix | C | D | **Done — re-audited 2026-05-22; 5,138 ymm segments, recency now computable, training base closed** | [`audits/reports/07-segment-support-report.md`](audits/reports/07-segment-support-report.md) |
 | 8 | Survivorship & pass-on logging | E | D+O | Ack — table design done; logging at v1 | CHARTER §6; TECH §1.5 |
-| 9 | MMR quality & residuals | C | D | **Done — quality metrics live; residual backtest blocked on data gap** | [`audits/reports/09-mmr-quality-residual-report.md`](audits/reports/09-mmr-quality-residual-report.md) |
-| 10 | Decay-rate validation | C | D | **In progress — plan + status report filed; backtest pending** | [`audits/reports/10-decay-rate-report.md`](audits/reports/10-decay-rate-report.md) |
+| 9 | MMR quality & residuals | C | D | **Done — re-audited 2026-05-22; residual backtest now producible (median +$885 over MMR)** | [`audits/reports/09-mmr-quality-residual-report.md`](audits/reports/09-mmr-quality-residual-report.md) |
+| 10 | Decay-rate validation | C | D | **In progress — purchase_date blocker resolved by backfill; offline λ backtest still pending** | [`audits/reports/10-decay-rate-report.md`](audits/reports/10-decay-rate-report.md) |
 | 11 | Offline pipeline operations | D | D | Scoped — spike kit to follow | ARCH §4.1; TECH §1.7 |
 | 12 | `tav-intelligence-worker` contract | D | D | **In progress — contract pinned (`mmr-v1`); CI compat test pending** | [`audits/reports/12-worker-contract.md`](audits/reports/12-worker-contract.md) |
 | 13 | Feature & benchmark versioning | D | D | Scoped — spike kit to follow | ARCH §4.3; TECH §1.2, §1.4 |
@@ -228,7 +228,7 @@ or downstream CI work only.
 | 17 | Adoption KPIs (gating) | B | P | Blocked-P — needs item 1 (KPI-5) | CHARTER §5.2 |
 | 18 | Evaluation rubric refresh | B | P | Blocked-P | ARCH §6 |
 | 19 | MarketCheck VIN enrichment spike | D | D | **In progress — interim report filed; live API checks pending** | [`audits/reports/19-marketcheck-spike-report.md`](audits/reports/19-marketcheck-spike-report.md) |
-| 20 | Historical outcome backfill gate | C/D | D | **Planned — missing fields exist externally; load/verify before Phase 1** | [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md) |
+| 20 | Historical outcome backfill gate | C/D | D | **Done — 57,228-row backfill merged + verified 2026-05-22; audits 6/7/9/10 re-run** | [`audits/20-historical-outcome-backfill-plan.md`](audits/20-historical-outcome-backfill-plan.md) |
 
 ## 9. Audit & spike kit index
 
