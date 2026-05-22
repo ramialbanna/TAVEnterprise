@@ -212,7 +212,7 @@ INSERT INTO tav.purchase_outcomes (
   price_paid, sale_price, gross_profit, net_gross,
   mileage, odometer_at_purchase, hold_days,
   mmr_value_at_purchase, mmr_source,
-  region, purchase_channel, selling_channel,
+  region,
   condition_grade_raw,
   buyer_id, closer_id,
   auction_fee, misc_overhead, expense_total,
@@ -237,7 +237,6 @@ SELECT
   nullif(mmr_value_at_purchase,'')::numeric::int,
   nullif(mmr_source,''),
   nullif(region,''),
-  nullif(purchase_channel,''), nullif(selling_channel,''),
   nullif(condition_grade_raw,''),
   nullif(buyer_id,''), nullif(closer_id,''),
   nullif(auction_fee,'')::numeric::int,
@@ -266,8 +265,6 @@ ON CONFLICT (import_fingerprint) DO UPDATE SET
   mmr_value_at_purchase = EXCLUDED.mmr_value_at_purchase,
   mmr_source            = EXCLUDED.mmr_source,
   region                = EXCLUDED.region,
-  purchase_channel      = EXCLUDED.purchase_channel,
-  selling_channel       = EXCLUDED.selling_channel,
   condition_grade_raw   = EXCLUDED.condition_grade_raw,
   buyer_id              = EXCLUDED.buyer_id,
   closer_id             = EXCLUDED.closer_id,
@@ -302,6 +299,8 @@ drops.
 | `transport_cost` | not in export |
 | `recon_cost` | not in export |
 | `mmr_method` / `mmr_lookup_date` / `mmr_snapshot_id` | not in export |
+| `purchase_channel` | export value is opaque codes (`H/X/P/C/0`), not the `auction\|private\|dealer` enum — no legend. Loaded NULL; mapping deferred (§4.3) |
+| `selling_channel` | export value is free-text dealer / buyer names, not the `retail\|wholesale\|auction` enum. Loaded NULL; mapping deferred (§4.3) |
 | `lead_id` / `vehicle_candidate_id` | never written by this load (four-concept rule) |
 
 ### 4.2 CSV columns intentionally staging-only (no target column)
@@ -309,12 +308,34 @@ drops.
 `source_system`, `source_row_id`, `source_file`, `display_id`, `body_style`,
 `price_vs_mmr`, `consignor_dealer`, `title_collection_status`,
 `arbitration_flag`, `sale_price_manheim`, `has_dcl`, `has_gameday_cr`,
-`has_manheim`, `has_mmr`, `dealer_sold_to`, `sale_channel`, `cr_expected`,
-`condition_status`, `data_quality`. These are provenance / QA / hard-gate-flag
-fields. `tav.purchase_outcomes` has no column for them and — per the Phase 0
+`has_manheim`, `has_mmr`, `dealer_sold_to`, `cr_expected`, `condition_status`,
+`data_quality`, `purchase_channel`, `selling_channel`, `sale_channel`. These
+are provenance / QA / hard-gate-flag / unmapped-channel fields.
+`tav.purchase_outcomes` has no column for most of them and — per the Phase 0
 scope — none is added. `source_row_id` and `source_file` are still *used* by
-the load (cycle-ordering tiebreak and the fingerprint, respectively); they are
-just not merged into a target column.
+the load (cycle-ordering tiebreak and the fingerprint, respectively).
+`purchase_channel`, `selling_channel`, and `sale_channel` relate to target
+columns, but their CSV values do not conform to the target enums — their
+mapping is deferred (§4.3) and the enum-bound target columns load NULL (§4.1).
+
+### 4.3 Deferred channel mapping
+
+Two owner decisions remain before the enum-bound channel fields can be
+populated. Until then `purchase_channel` and `selling_channel` load NULL (§4.1)
+and the raw CSV values stay staging-only (§4.2).
+
+- **`purchase_channel` code legend.** The export codes `purchase_channel` as
+  `H` (30,845) · `X` (13,896) · `P` (12,446) · `0` (18) · `C` (3) · blank (20),
+  all under `source_system = 'idms'`. No legend is derivable from the data. The
+  owner must supply the `H / X / P / C / 0` → `auction | private | dealer`
+  mapping; a later merge can then backfill `purchase_channel`.
+- **`sale_channel` → `selling_channel` mapping.** The export's `sale_channel` is
+  a clean 2-value field — `Manheim` (54,928, 96%) and `Direct` (2,300, 4%) —
+  but neither literally matches the `retail | wholesale | auction` enum. One
+  owner-confirmed 2-value mapping (e.g. `Manheim` → `auction`; `Direct` →
+  `wholesale` or `retail`) would populate `selling_channel` for 100% of rows.
+  The free-text `selling_channel` CSV column (188 distinct dealer / buyer
+  names) is never forced into the enum.
 
 ## 5. Rollback — keyed on `import_batch_id`
 
@@ -347,10 +368,10 @@ WHERE import_batch_id = md5('phase0-backfill-2026-05-22')::uuid;   -- expect 0
 
 Reconciled 2026-05-22 to the real `buybox_master.csv`: the
 `exclude_reason_code` filter is dropped (the export has no such column — every
-staged row is included), `condition_grade_normalized` is dropped from the enum
-pre-check (not in the export; the merge leaves the target NULL), and the §6.4
-fingerprint uses `source_file`. All `SELECT`-only. Run after `\copy` into
-staging, before §4.
+staged row is included), §6.3 is now PASS by construction (the enum-bound
+targets `purchase_channel` / `selling_channel` are loaded NULL — see §4.3), and
+the §6.4 fingerprint uses `source_file`. All `SELECT`-only. Run after `\copy`
+into staging, before §4.
 
 ### 6.1 The required assertions
 
@@ -396,28 +417,17 @@ SELECT count(*) AS duplicate_vin_cycle_pairs           -- expect 0
 FROM (SELECT vin_clean, cycle_seq_final FROM s GROUP BY 1,2 HAVING count(*) > 1) d;
 ```
 
-### 6.3 Enum pre-check (would fail the merge `CHECK` constraints)
+### 6.3 Enum pre-check — PASS by construction
 
-`tav.purchase_outcomes` has verified `CHECK` constraints on `purchase_channel`
-(`auction|private|dealer`) and `selling_channel` (`retail|wholesale|auction`),
-so any non-conforming value aborts the §4 merge. `condition_grade_normalized`
-is not checked here — the export has no such column and §4 leaves the target
-NULL, which satisfies its `CHECK`.
-
-```sql
-SELECT 'purchase_channel' AS field, purchase_channel AS bad_value, count(*)
-FROM tav._stg_phase0_backfill
-WHERE nullif(purchase_channel,'') IS NOT NULL
-  AND purchase_channel NOT IN ('auction','private','dealer')
-GROUP BY 2
-UNION ALL
-SELECT 'selling_channel', selling_channel, count(*)
-FROM tav._stg_phase0_backfill
-WHERE nullif(selling_channel,'') IS NOT NULL
-  AND selling_channel NOT IN ('retail','wholesale','auction')
-GROUP BY 2;
--- Expect 0 rows. Any row is a value that must be conformed before the merge.
-```
+The §4 merge does **not** populate the enum-bound target columns
+`purchase_channel` or `selling_channel`. The export's values do not conform to
+their `CHECK` constraints — `purchase_channel` is opaque codes, `selling_channel`
+is free-text dealer / buyer names (see §4.3) — so both are loaded NULL, and NULL
+satisfies `purchase_outcomes_purchase_channel_check` and
+`purchase_outcomes_selling_channel_check`. `condition_grade_normalized` is
+likewise loaded NULL. No enum value reaches the merge, so this check **passes
+by construction** — there is no query to run. The raw staging values are
+profiled in §4.3 for the owner's deferred mapping decision.
 
 ### 6.4 Merge dry-run — insert vs update, and existing-row overlap
 
@@ -483,7 +493,8 @@ WHERE length(upper(regexp_replace(coalesce(vin,''),'[^A-Za-z0-9]','','g'))) <> 1
 3. §6.1 shows `pass_57228_cycles` and `pass_53598_vins` true and the fill
    percentages on target.
 4. §6.2 returns `0`.
-5. §6.3 returns 0 rows (no enum violations).
+5. §6.3 PASS by construction — `purchase_channel` / `selling_channel` load NULL
+   (§4.3), so no enum value can fail the merge.
 6. §6.5 exclusion counts reviewed and accepted.
 7. §5 pre-load snapshot taken (or a Supabase PITR timestamp recorded).
 
