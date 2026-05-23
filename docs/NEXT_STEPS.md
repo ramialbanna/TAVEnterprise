@@ -36,7 +36,7 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 
 - [x] Sync `supabase/schema.sql` with migrations `0043` and `0044` (2026-05-20 — verified locally; 0044 applied to Supabase)
 - [x] Confirm local-only env files are documented (`.dev.vars`, `web/.env.local`) (2026-05-20 — templates + README/handoff/system-overview aligned)
-- [x] Update [handoff](04-operations/handoff.md) if production state changed (2026-05-21 — production ingest, schema, repo state refreshed)
+- [x] Update [handoff](04-operations/handoff.md) if production state changed (2026-05-23 — Phase 6 deploy, migrations 0045–0047, repo HEAD)
 - [x] Verify `main` is clean except known local-only artifacts (2026-05-21 — confirmed by operator)
 - [x] Confirm no secrets in committed files (2026-05-21 — CI pattern + local grep clean; examples use `replace_me` only)
 
@@ -142,7 +142,7 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 3. `docs: apify run diagnosis` (Phase 4)
 4. `feat: add read-only opportunities app api` (Phase 5)
 5. `feat(web): add opportunities queue` (Phase 5)
-6. `feat: manual submission + assignment` (Phase 6)
+6. `feat: manual submission + assignment` (Phase 6) — **shipped** (`cf76a9c`, deployed 2026-05-23)
 7. `feat: opportunity workflow mutations` (Phase 7)
 
 ---
@@ -161,7 +161,9 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
-| 2026-05-23 | Phase 6 Slice C — assign/claim/evaluate API, workflow tables, `/opportunities` assignment UI |
+| 2026-05-23 | Production deploy — `tav-aip-production` version `647ec3e7`; Vercel green after `1a4b936`; Supabase 0045–0047 applied |
+| 2026-05-23 | Wrangler setup — `account_id` pinned in `wrangler.toml` (`73dbe6d`) |
+| 2026-05-23 | Phase 6 Slice C — assign/claim/evaluate API, workflow tables, `/opportunities` assignment UI (`cf76a9c`) |
 | 2026-05-22 | Phase 6 Slice B — identity, manual submit API, `/opportunities` submit dialog |
 | 2026-05-21 | Phase 4 production diagnosis — [diagnostics.md](04-operations/diagnostics.md) + east ingest snapshot |
 | 2026-05-21 | Phase 0 + Phase 1 verified complete (secret scan, bearer auth, Apify cap/timeouts/tests) |

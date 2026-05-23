@@ -25,7 +25,9 @@ Important routes:
 - `POST /app/mmr/vin`, `POST /app/mmr/ymm`
 - `GET /app/mmr/catalog/*`
 - `GET /admin/valuations/contract-probe`
-- `GET /app/opportunities`, `GET /app/opportunities/:id` (v2 read-only queue — Phase 5, 2026-05-22)
+- `GET /app/opportunities`, `GET /app/opportunities/:id` (v2 buyer queue — Phase 5)
+- `POST /app/opportunities/manual`, `POST /app/opportunities/:id/assign`, `/claim`, `/evaluate` (Phase 6)
+- `GET /app/me`, `GET /app/users` (identity + closer picker)
 
 ## 3. Four-Concept Rule
 
@@ -83,14 +85,21 @@ pnpm dev
 
 ## 5. Deploy
 
-Deploys are manual.
+**Web (Vercel):** auto-deploys on push to `main` (builds `web/` only).
+
+**Workers (Cloudflare):** manual for production. Staging may auto-deploy via `.github/workflows/deploy-staging.yml` when GitHub `CLOUDFLARE_*` secrets are set.
 
 ```bash
-npm run deploy
+# Production main Worker (use this — not bare npm run deploy)
+npx wrangler deploy --env production
+
+# Intelligence Worker (only when that code changed)
 npm run deploy:intelligence
 ```
 
-Do not assume a merge auto-deploys Workers.
+`wrangler.toml` pins `account_id` for Rami's Cloudflare account. Authenticate once with `npx wrangler login`.
+
+Do not assume a merge auto-deploys production Workers.
 
 ## 6. Secrets
 
@@ -117,18 +126,18 @@ Ask Rami for secret **values** through the approved secure channel. Docs list na
 
 ## 7. Production State
 
-As of 2026-05-21 (verified against Supabase + repo config):
+As of **2026-05-23** (verified: Supabase migrations, Worker deploy, Vercel build):
 
 ### Deployed surfaces
 
-| Surface | Name / URL |
-|---------|------------|
-| Main Worker (prod) | `tav-aip-production` → `https://tav-aip-production.rami-1a9.workers.dev` |
-| Main Worker (staging) | `tav-aip-staging` → `https://tav-aip-staging.rami-1a9.workers.dev` |
-| Intelligence Worker (prod) | `tav-intelligence-worker-production` |
-| Intelligence Worker (staging) | `tav-intelligence-worker-staging` |
-| Web app | Vercel (Auth.js + same-origin `/api/app/*` proxy) |
-| Database | Supabase (`tav` schema) |
+| Surface | Name / URL | Last known deploy |
+|---------|------------|-------------------|
+| Main Worker (prod) | `tav-aip-production` → `https://tav-aip-production.rami-1a9.workers.dev` | **2026-05-23** — version `647ec3e7` (Phase 6 assign/claim) |
+| Main Worker (staging) | `tav-aip-staging` → `https://tav-aip-staging.rami-1a9.workers.dev` | GitHub Actions on push to `main` (when secrets configured) |
+| Intelligence Worker (prod) | `tav-intelligence-worker-production` | unchanged by Phase 6 |
+| Intelligence Worker (staging) | `tav-intelligence-worker-staging` | — |
+| Web app | `https://tav-enterprise.vercel.app` (Vercel, Auth.js + `/api/app/*` proxy) | **2026-05-23** — commit `1a4b936`+ (Vercel build fix + Phase 6 UI) |
+| Database | Supabase (`tav` schema) | migrations **0045–0047** applied 2026-05-23 |
 
 Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY_WEBHOOK_ENABLED=true`, intel service binding active.
 
@@ -164,6 +173,11 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 - Repo migrations **0043** (valuation miss observability) and **0044** (`source_runs.status = truncated`) are reflected in `supabase/schema.sql`.
 - **0044 applied to Supabase** on 2026-05-20; `truncated` rows already present.
+- **0045–0047 applied to Supabase** on 2026-05-23:
+  - `0045` — `tav.users` (identity)
+  - `0046` — `tav.manual_opportunity_submissions`
+  - `0047` — `tav.opportunity_workflow`, `tav.opportunity_actions`
+- Supabase migration registry records `users`, `manual_opportunity_submissions`, and `opportunity_workflow` as timestamped entries (2026-05-23).
 - Migrations **0040–0043** objects exist in the live DB but are **not recorded** in Supabase's migration registry (registry jumps `0039` → timestamped `source_runs_status_truncated`). Hygiene-only gap — objects match repo.
 
 ### Cron / stale sweep
@@ -177,19 +191,28 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 ## 8. Repo and Branch State
 
-GitHub `main` (as of 2026-05-20 compare): **`8f7c415`** — *docs: add v2 platform control spine*.
+GitHub `main` (as of **2026-05-23**): **`73dbe6d`** — *chore: pin Cloudflare account_id in wrangler.toml*
 
-On `main`:
+Recent commits on `main`:
 
-- Cox/Manheim catalog + YMM valuation (#45 / PR #50 path).
-- Missing-mileage and first-catalog-style estimate fixes.
-- Ingest runs API + Ingest Monitor UI.
-- v2 direction locked in `docs/02-product/v2-opportunities.md` and `docs/06-platform/README.md`.
+| Commit | Summary |
+|--------|---------|
+| `73dbe6d` | Pin `account_id` in `wrangler.toml` (multi-account deploy fix) |
+| `1a4b936` | Fix Vercel build — `app-user-headers.ts` session null guard |
+| `cf76a9c` | Phase 6 — manual submit, assign/claim/evaluate, workflow tables, UI |
+| `e4ec4cc` | Docs: Phase 5 complete |
+| `5975d1e` | Phase 5 read-only Opportunities queue |
+
+On `main` today:
+
+- Phases 0–6 shipped (ingest monitor, opportunities read model, manual submit, assign/claim).
+- `docs/NEXT_STEPS.md`, `docs/tools.md`, and updated handoff/roadmap/v2-opportunities are **on GitHub `main`**.
+- Phase 7 (workflow status mutations + notes) is next.
 
 Local workspace notes:
 
-- This checkout may not be a git clone; `docs/NEXT_STEPS.md` and `docs/tools.md` exist locally but are **not on GitHub `main` yet**.
-- Handoff email references `docs/INDEX.md`, `final-handoff-checklist.md`, `18-new-developer-handoff.md`, and `19-v2-implementation-index.md` — **not present on GitHub `main`**; use `docs/README.md` + `NEXT_STEPS.md` until those land.
+- Known untracked artifact: `web/package-lock.json` (local npm; CI uses `pnpm-lock.yaml`) — do not commit.
+- Handoff email may still reference `docs/INDEX.md`, `final-handoff-checklist.md`, etc. — use `docs/README.md` + `NEXT_STEPS.md` as the live spine.
 
 Branch hygiene:
 
