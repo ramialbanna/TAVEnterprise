@@ -161,6 +161,7 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
+| 2026-05-23 | Git push — `f5e73ec` on `main` (Phase 7 status/notes/UI); Vercel auto-deploy triggered |
 | 2026-05-23 | Phase 7 complete — status + notes APIs, action history UI, migration 0048; Worker deploy `tav-aip-production` version `efda0005` |
 | 2026-05-23 | Production deploy — `tav-aip-production` version `647ec3e7`; Vercel green after `1a4b936`; Supabase 0045–0047 applied |
 | 2026-05-23 | Wrangler setup — `account_id` pinned in `wrangler.toml` (`73dbe6d`) |

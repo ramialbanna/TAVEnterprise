@@ -136,7 +136,7 @@ As of **2026-05-23** (verified: Supabase migrations, Worker deploy, Vercel build
 | Main Worker (staging) | `tav-aip-staging` → `https://tav-aip-staging.rami-1a9.workers.dev` | GitHub Actions on push to `main` (when secrets configured) |
 | Intelligence Worker (prod) | `tav-intelligence-worker-production` | unchanged by Phase 7 |
 | Intelligence Worker (staging) | `tav-intelligence-worker-staging` | — |
-| Web app | `https://tav-enterprise.vercel.app` (Vercel, Auth.js + `/api/app/*` proxy) | **2026-05-23** — Phase 7 UI local (push to `main` for Vercel) |
+| Web app | `https://tav-enterprise.vercel.app` (Vercel, Auth.js + `/api/app/*` proxy) | **2026-05-23** — commit `f5e73ec` pushed to `main` (Vercel auto-deploy) |
 | Database | Supabase (`tav` schema) | migrations **0045–0048** applied 2026-05-23 |
 
 Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY_WEBHOOK_ENABLED=true`, intel service binding active.
