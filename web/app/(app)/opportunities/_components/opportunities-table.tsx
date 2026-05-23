@@ -73,6 +73,16 @@ export function OpportunitiesTable({
         cell: ({ row }) => formatNumber(row.original.finalScore),
       },
       {
+        accessorKey: "assignedCloserName",
+        header: "Assignee",
+        cell: ({ row }) => row.original.assignedCloserName ?? "—",
+      },
+      {
+        accessorKey: "claimedBy",
+        header: "Claimed by",
+        cell: ({ row }) => row.original.claimedBy ?? "—",
+      },
+      {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => row.original.status ?? "—",

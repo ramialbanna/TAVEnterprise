@@ -135,14 +135,18 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 ### Shipped product surfaces
 
 - Dashboard, **Opportunities** (`/opportunities`), **Ingest Monitor** (`/ingest`), **VIN/MMR Lab** (`/mmr-lab`), Historical Data, Admin/Integrations.
-- `GET /app/opportunities` + detail API live (read-only buyer queue — Phase 5, commit `5975d1e`).
+- `GET /app/opportunities` + detail API live (buyer queue — Phase 5).
+- `POST /app/opportunities/manual` + submit dialog on `/opportunities` (Phase 6 Slice B, 2026-05-22).
+- `POST /app/opportunities/:id/assign`, `/claim`, `/evaluate` + assignment UI (Phase 6 Slice C, 2026-05-23).
+- Migrations `0045`–`0047` applied to Supabase (`users`, `manual_opportunity_submissions`, `opportunity_workflow`, `opportunity_actions`).
+- `GET /app/me`, `GET /app/users` for identity and closer picker.
 - `GET /app/ingest-runs` + detail API live (powers Ingest Monitor).
 - Cox/Manheim catalog + YMM valuation via intelligence Worker (Storefront `/mmr-lookup/*`, `/mmr/search/*`).
 - Legacy Manheim `/valuations/*` is not provisioned for this account.
 
 ### Not shipped yet
 
-- Manual submission, assignment, claim, and workflow mutations (Phase 6–7).
+- Workflow status mutations and notes (Phase 7).
 
 ### Apify / ingest
 

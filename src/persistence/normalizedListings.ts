@@ -4,12 +4,12 @@ import type { SupabaseClient } from "./supabase";
 export async function upsertNormalizedListing(
   db: SupabaseClient,
   listing: NormalizedListingInput,
-  sourceRunId: string,
+  sourceRunId?: string | null,
   rawListingId?: string,
 ): Promise<NormalizedListingUpsertResult> {
   const { data, error } = await db.rpc("upsert_normalized_listing", {
     p_source: listing.source,
-    p_source_run_id: sourceRunId,
+    p_source_run_id: sourceRunId ?? null,
     p_listing_url: listing.url,
     p_source_listing_id: listing.sourceListingId ?? null,
     p_title: listing.title,

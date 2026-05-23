@@ -4,6 +4,23 @@ import { NextRequest } from "next/server";
 // route.ts -> @/lib/env -> "server-only" (throws outside the RSC bundler). Stub it.
 vi.mock("server-only", () => ({}));
 
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn(async () => ({
+    user: {
+      email: "alice@texasautovalue.com",
+      name: "Alice Adams",
+    },
+    expires: "2026-05-22T00:00:00.000Z",
+  })),
+}));
+
+vi.mock("@/lib/app-user-headers", () => ({
+  buildAppUserHeaders: vi.fn(() => ({
+    "X-TAV-Authenticated-User-Email": "alice@texasautovalue.com",
+    "X-TAV-Authenticated-User-Name": "Alice Adams",
+  })),
+}));
+
 const ORIGINAL_ENV = process.env;
 const BASE = "https://tav-aip-staging.rami-1a9.workers.dev";
 
@@ -63,6 +80,8 @@ describe("/api/app/[...path] proxy", () => {
     expect(headers.get("authorization")).toBe("Bearer test-secret");
     expect(headers.get("authorization")).not.toContain("client-token"); // browser token not leaked
     expect(headers.get("cookie")).toBeNull(); // browser cookie not forwarded
+    expect(headers.get("X-TAV-Authenticated-User-Email")).toBe("alice@texasautovalue.com");
+    expect(headers.get("X-TAV-Authenticated-User-Name")).toBe("Alice Adams");
   });
 
   it("forwards a POST body and method verbatim", async () => {

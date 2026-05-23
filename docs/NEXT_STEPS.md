@@ -1,6 +1,6 @@
 # Next Steps
 
-**Last updated:** 2026-05-22  
+**Last updated:** 2026-05-23  
 **Owner:** Engineering (update this file when priorities shift)
 
 Living checklist for what to do next. For phase detail and acceptance criteria, see
@@ -14,9 +14,9 @@ Living checklist for what to do next. For phase detail and acceptance criteria, 
 
 **North star:** Ship **v2 Opportunities** so buyers can work leads in the app (not just counts in Ingest Monitor).
 
-**Immediate engineering priority:** Phase 5 complete. Next: **Phase 6** manual submission + assignment foundation.
+**Immediate engineering priority:** Phase 7 — workflow status mutations (reviewed/contacted/bought/passed/notes).
 
-**Product gap today:** Opportunities queue is live (read-only). Assignment, claim, and workflow mutations are still pending.
+**Product gap today:** Assign and claim are live. Workflow status mutations and notes are still pending (Phase 7).
 
 ---
 
@@ -77,9 +77,9 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 
 ### Phase 6 — Manual submit + assignment (4–7 days)
 
-- [ ] User/profile/role model (Auth.js forward or Cloudflare Access — decide in [open questions](06-platform/13-open-questions-log.md) if unclear)
-- [ ] Manual listing URL submission + optional closer routing
-- [ ] Assign / claim / 24h window / collision warnings + audit events
+- [x] User/profile/role model — `tav.users` + Auth.js identity forwarded via proxy (2026-05-22)
+- [x] Manual listing URL submission + optional closer routing (2026-05-22 — API + `/opportunities` submit dialog)
+- [x] Assign / claim / 24h window / collision warnings + audit events (2026-05-23)
 
 ### Phase 7 — Workflow mutations (4–7 days)
 
@@ -161,6 +161,8 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
+| 2026-05-23 | Phase 6 Slice C — assign/claim/evaluate API, workflow tables, `/opportunities` assignment UI |
+| 2026-05-22 | Phase 6 Slice B — identity, manual submit API, `/opportunities` submit dialog |
 | 2026-05-21 | Phase 4 production diagnosis — [diagnostics.md](04-operations/diagnostics.md) + east ingest snapshot |
 | 2026-05-21 | Phase 0 + Phase 1 verified complete (secret scan, bearer auth, Apify cap/timeouts/tests) |
 | 2026-05-21 | Refreshed `handoff.md` production state (Apify east live, schema 0044, lead-creation gap) |

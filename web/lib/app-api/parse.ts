@@ -6,6 +6,9 @@ import {
   IngestRunDetailSchema,
   OpportunityRowListSchema,
   OpportunityDetailSchema,
+  ManualSubmissionResultSchema,
+  AppUserSummaryListSchema,
+  AppUserSchema,
   KpisSchema,
   MmrCatalogSchema,
   MmrVinOkSchema,
@@ -16,6 +19,9 @@ import {
   type IngestRunDetail,
   type OpportunityRow,
   type OpportunityDetail,
+  type ManualSubmissionResult,
+  type AppUserSummary,
+  type AppUser,
   type Kpis,
   type MmrCatalog,
   type MmrVinOk,
@@ -76,7 +82,16 @@ function classifyError(code: string): ErrorKind | null {
     case "not_found":
     case "invalid_json":
     case "invalid_body":
+    case "validation_error":
+    case "invalid_listing_url":
+    case "unsupported_listing_url":
+    case "invalid_assignee":
       return "invalid";
+    case "forbidden":
+    case "claim_conflict":
+      return "invalid";
+    case "user_required":
+      return "unauthorized";
     // /web proxy (NOT Worker errors — see codeMessage)
     case "proxy_misconfigured":
     case "upstream_non_json":
@@ -179,6 +194,21 @@ export function parseOpportunities(status: number, json: unknown): ApiResult<Opp
 
 export function parseOpportunityDetail(status: number, json: unknown): ApiResult<OpportunityDetail> {
   return interpret(status, json, OpportunityDetailSchema);
+}
+
+export function parseManualSubmission(
+  status: number,
+  json: unknown,
+): ApiResult<ManualSubmissionResult> {
+  return interpret(status, json, ManualSubmissionResultSchema);
+}
+
+export function parseAppUsers(status: number, json: unknown): ApiResult<AppUserSummary[]> {
+  return interpret(status, json, AppUserSummaryListSchema);
+}
+
+export function parseAppMe(status: number, json: unknown): ApiResult<AppUser> {
+  return interpret(status, json, AppUserSchema);
 }
 
 /**

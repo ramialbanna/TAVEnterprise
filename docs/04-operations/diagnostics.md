@@ -18,7 +18,7 @@ Use this file to find **what we know about live pipeline behavior** before tunin
 | Why do most runs show `created_leads = 0`? | **Expected** at ~0.26% yield and ~7 items/run |
 | Primary blockers | Adapter reject (~38%), valuation miss (~91% of normalized), then `pass` grade on overpriced MMR hits |
 | Enable more regions? | **Not yet** — same constraints would multiply noise |
-| Next product step | **Phase 6** manual submission + assignment (Opportunities read model shipped 2026-05-22) |
+| Next product step | **Phase 7** workflow status mutations and notes (Phase 6 assign/claim shipped 2026-05-23) |
 
 ### Key metrics (7-day `dallas_tx` average)
 

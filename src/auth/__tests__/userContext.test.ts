@@ -19,6 +19,23 @@ describe("extractUserContext", () => {
     expect(ctx.userId).toBe("alice@texasautovalue.com"); // mirrors email today
   });
 
+  it("reads email from X-TAV-Authenticated-User-Email when Cf-Access is absent", () => {
+    const ctx = extractUserContext(makeRequest({
+      "X-TAV-Authenticated-User-Email": "alice@texasautovalue.com",
+      "X-TAV-Authenticated-User-Name": "Alice Adams",
+    }));
+    expect(ctx.email).toBe("alice@texasautovalue.com");
+    expect(ctx.name).toBe("Alice Adams");
+  });
+
+  it("prefers Cf-Access email over X-TAV when both are present", () => {
+    const ctx = extractUserContext(makeRequest({
+      "Cf-Access-Authenticated-User-Email": "cf@texasautovalue.com",
+      "X-TAV-Authenticated-User-Email": "proxy@texasautovalue.com",
+    }));
+    expect(ctx.email).toBe("cf@texasautovalue.com");
+  });
+
   it("reads name when present", () => {
     const ctx = extractUserContext(makeRequest({
       "Cf-Access-Authenticated-User-Email": "alice@texasautovalue.com",

@@ -38,7 +38,7 @@ export type OpportunitiesKeyFilter = {
   limit?: number;
   source?: string;
   region?: string;
-  type?: "lead" | "near_miss";
+  type?: "lead" | "near_miss" | "manual_submission";
   grade?: string;
   status?: string;
 };
@@ -53,6 +53,8 @@ export const queryKeys = {
   ingestRun: (id: string) => ["ingest-run", id] as const,
   opportunities: (filter?: OpportunitiesKeyFilter) => ["opportunities", filter ?? {}] as const,
   opportunity: (id: string) => ["opportunity", id] as const,
+  appUsers: ["app-users"] as const,
+  appMe: ["app-me"] as const,
 } as const;
 
 function looksLikeApiError(error: unknown): error is { ok: false; kind: string } {

@@ -33,6 +33,22 @@ Authorization: Bearer <APP_API_SECRET>
 
 (Mirrors `/admin/*` auth failure modes.)
 
+**User identity (v2 Phase 6):** The Next.js `/api/app/*` proxy injects trusted
+headers after Auth.js sign-in:
+
+```
+X-TAV-Authenticated-User-Email: <google workspace email>
+X-TAV-Authenticated-User-Name: <display name, optional>
+```
+
+The Worker resolves these to `tav.users` rows. Direct Worker calls may still use
+Cloudflare Access `Cf-Access-*` headers. Write routes require identity; read routes
+do not.
+
+| Condition | Response |
+|-----------|----------|
+| `GET /app/me` with no identity headers | `401 { "ok": false, "error": "user_required" }` |
+
 ## Conventions
 
 - **Content type:** every response is `application/json`.
@@ -67,9 +83,12 @@ Authorization: Bearer <APP_API_SECRET>
 | GET | `/app/ingest-runs/:id` | One source run + diagnostics |
 | GET | `/app/opportunities` | v2 Opportunities queue (read-only) |
 | GET | `/app/opportunities/:id` | One opportunity detail |
-| POST | `/app/opportunities/manual` | Planned manual opportunity submission |
-| POST | `/app/opportunities/:id/assign` | Planned assignment route |
-| POST | `/app/opportunities/:id/claim` | Planned claim route |
+| GET | `/app/me` | Current authenticated staff profile (auto-provisions `tav.users`) |
+| GET | `/app/users` | Active staff directory for assignment pickers |
+| POST | `/app/opportunities/manual` | Finder submits a listing URL into the queue |
+| POST | `/app/opportunities/:id/assign` | Admin assign / unassign closer |
+| POST | `/app/opportunities/:id/claim` | Closer claim with 24h window |
+| POST | `/app/opportunities/:id/evaluate` | Record evaluation touch (collision warnings) |
 | POST | `/app/opportunities/:id/status` | Planned status route |
 | POST | `/app/opportunities/:id/notes` | Planned note route |
 
@@ -89,7 +108,108 @@ Read-only scope:
 - spread = `mmrValue - price`
 - one row per normalized listing (`id` = `normalized_listings.id`)
 
-Not yet implemented: manual submission, assign, claim, status, notes (POST routes below).
+`POST /app/opportunities/manual` is implemented (2026-05-22). The `/opportunities`
+page includes a **Submit listing** dialog that calls this endpoint via the
+same-origin `/api/app/*` proxy. Assign, claim, and evaluate POST routes are
+implemented (2026-05-23). Status and notes POST routes are still pending.
+
+---
+
+### `POST /app/opportunities/manual`
+
+Requires authenticated user identity (Auth.js → proxy headers). Creates or updates a
+`normalized_listings` row and records a `manual_opportunity_submissions` audit row.
+
+Request body:
+
+```jsonc
+{
+  "listingUrl": "https://www.facebook.com/marketplace/item/123",  // required
+  "assignedToUserId": "<uuid>",                                   // optional
+  "source": "facebook",                                           // optional if inferrable from URL
+  "region": "dallas_tx",                                          // optional, defaults to dallas_tx
+  "year": 2020,
+  "make": "toyota",
+  "model": "camry",
+  "style": "se",
+  "price": 15000,
+  "mileage": 50000,
+  "sellerNotes": "string",
+  "submitterNotes": "string"
+}
+```
+
+Success `201`:
+
+```jsonc
+{ "ok": true, "data": {
+  "submissionId": "<uuid>",
+  "normalizedListingId": "<uuid>",
+  "isDuplicateUrl": false,
+  "warnings": [],                         // e.g. ["listing_already_exists"]
+  "opportunity": { /* OpportunityDetail or null */ }
+}}
+```
+
+Errors:
+
+| Status | `error` | When |
+|--------|---------|------|
+| 401 | `user_required` | No identity headers |
+| 400 | `validation_error` | Zod body validation failed |
+| 400 | `invalid_listing_url` | Malformed URL |
+| 400 | `unsupported_listing_url` | Host not recognized and `source` omitted |
+| 400 | `invalid_assignee` | `assignedToUserId` is not an active user |
+| 503 | `db_error` | Supabase failure |
+
+---
+
+### `POST /app/opportunities/:id/assign`
+
+Requires authenticated admin. Assigns or unassigns a closer for any reviewable opportunity (`:id` = `normalized_listings.id`).
+
+Request body:
+
+```jsonc
+{ "assignedToUserId": "<uuid>" | null }  // null = unassign
+```
+
+Success → `200 { "ok": true, "data": OpportunityDetail }`
+
+| Status | error | Meaning |
+|--------|-------|---------|
+| 401 | `user_required` | No identity headers |
+| 403 | `forbidden` | Non-admin caller |
+| 404 | `opportunity_not_found` | Listing not reviewable |
+| 400 | `invalid_assignee` | Assignee is not an active user |
+| 400 | `validation_error` | Body failed Zod validation |
+
+---
+
+### `POST /app/opportunities/:id/claim`
+
+Requires authenticated closer or admin. Sets a 24-hour claim window.
+
+Success → `200 { "ok": true, "data": OpportunityDetail }`
+
+| Status | error | Meaning |
+|--------|-------|---------|
+| 401 | `user_required` | No identity headers |
+| 403 | `forbidden` | Viewer, or assigned to another closer |
+| 409 | `claim_conflict` | Another user has an active claim (`details` includes owner + expiry) |
+| 404 | `opportunity_not_found` | Listing not reviewable |
+
+---
+
+### `POST /app/opportunities/:id/evaluate`
+
+Requires authenticated user. Records that the caller opened/evaluated the opportunity for collision warnings.
+
+Success → `200 { "ok": true, "data": OpportunityDetail }`
+
+---
+
+Not yet implemented: status, notes (POST routes below).
 
 ---
 

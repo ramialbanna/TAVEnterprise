@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 
 function badgeVariant(badge: string): "healthy" | "review" | "error" | "neutral" {
   if (badge === "Near miss") return "review";
+  if (badge === "Manual submission") return "healthy";
   if (badge.startsWith("Estimated")) return "review";
   if (badge === "Price changed") return "neutral";
   if (badge.startsWith("Seen again")) return "neutral";
@@ -33,6 +34,9 @@ export function OpportunityTypeBadge({ row }: { row: Pick<OpportunityRow, "type"
           ? "review"
           : "neutral";
     return <Badge variant={variant}>Lead{row.grade ? ` · ${row.grade}` : ""}</Badge>;
+  }
+  if (row.type === "manual_submission") {
+    return <Badge variant="healthy">Manual</Badge>;
   }
   return <Badge variant="review">Near miss</Badge>;
 }

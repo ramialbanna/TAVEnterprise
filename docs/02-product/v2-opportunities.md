@@ -1,7 +1,7 @@
 # V2 Opportunities Spec
 
 Date: 2026-05-18
-Status: Approved product direction; implementation not started
+Status: Approved product direction; Slice B manual submit shipped 2026-05-22; Slice C assignment shipped 2026-05-23
 
 ## 1. Decision
 
@@ -340,9 +340,9 @@ CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC)
 
 2. Near-miss inclusion needs a first-pass reason-code filter so obvious junk does
    not overwhelm the buyer queue.
-3. Manual submission needs a persistence design.
-4. Assignment requires a user/role model and auditable actor identity.
-5. Full workflow mutations require an identity/audit design.
+3. ~~Manual submission needs a persistence design.~~ Done — `tav.manual_opportunity_submissions` + `POST /app/opportunities/manual` + submit dialog (2026-05-22).
+4. ~~Assignment requires a user/role model and auditable actor identity.~~ Done (2026-05-23 — `tav.opportunity_workflow`, assign/claim/evaluate APIs, `tav.opportunity_actions` audit).
+5. Full workflow mutations (status/notes) remain Phase 7.
 
 ## 13. Recommended Delivery Slices
 
@@ -356,23 +356,24 @@ CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC)
 
 ### Slice B — Manual Submission and Routing Foundation
 
-- user/role table or equivalent identity mapping
-- `POST /app/opportunities/manual`
-- submitter/finder recorded
-- optional assigned closer at submission time
-- manual opportunities appear in same queue
-- audit event written for submission and assignment
+- [x] user/role table or equivalent identity mapping (2026-05-22 — `tav.users` + Auth.js proxy headers)
+- [x] `POST /app/opportunities/manual` (2026-05-22)
+- [x] submitter/finder recorded (2026-05-22)
+- [x] optional assigned closer at submission time (2026-05-22)
+- [x] manual opportunities appear in same queue (2026-05-22 — `manual_submission` type)
+- [x] `/opportunities` submit listing dialog (2026-05-22)
+- [x] audit event written for submission and assignment (2026-05-23 — `tav.opportunity_actions`)
 
-### Slice C — Live Assignment Workflow
+### Slice C — Live Assignment Workflow ✅ (2026-05-23)
 
-- claim
-- 24-hour claim window
-- notify when another user already evaluated/claimed the opportunity
-- assign
-- unassign/reassign
-- status update
-- notes
-- action history
-- concurrency protection
+- [x] claim
+- [x] 24-hour claim window
+- [x] notify when another user already evaluated/claimed the opportunity
+- [x] assign
+- [x] unassign/reassign
+- [x] concurrency protection
+- [ ] status update (Phase 7)
+- [ ] notes (Phase 7)
+- [ ] action history UI (Phase 7 — audit rows exist in `tav.opportunity_actions`)
 
-Live multi-user testing should begin after Slice C, not after Slice A alone.
+Live multi-user testing can begin for assign/claim; full workflow mutations follow in Phase 7.

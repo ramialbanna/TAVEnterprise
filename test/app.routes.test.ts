@@ -13,6 +13,12 @@ import {
 import type * as WorkerClientModule from "../src/valuation/workerClient";
 import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
 import { listOpportunities, getOpportunityDetail } from "../src/persistence/opportunities";
+import { listActiveUsers } from "../src/persistence/users";
+import { resolveAppUser } from "../src/auth/resolveAppUser";
+import {
+  submitManualOpportunity,
+  ManualSubmissionValidationError,
+} from "../src/persistence/manualOpportunities";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -62,6 +68,22 @@ vi.mock("../src/persistence/opportunities", () => ({
   listOpportunities: vi.fn(),
   getOpportunityDetail: vi.fn(),
 }));
+
+vi.mock("../src/persistence/users", () => ({
+  listActiveUsers: vi.fn(),
+}));
+
+vi.mock("../src/auth/resolveAppUser", () => ({
+  resolveAppUser: vi.fn(),
+}));
+
+vi.mock("../src/persistence/manualOpportunities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/manualOpportunities")>();
+  return {
+    ...actual,
+    submitManualOpportunity: vi.fn(),
+  };
+});
 
 // persistence/cronRuns: getLastCronRun feeds /app/system-status' `staleSweep` block.
 // The record* helpers are stubbed too so importing src/index (whose scheduled() uses
@@ -128,6 +150,11 @@ beforeEach(() => {
   vi.mocked(listSourceRuns).mockResolvedValue([]);
   vi.mocked(getSourceRunDetail).mockReset();
   vi.mocked(getSourceRunDetail).mockResolvedValue(null);
+  vi.mocked(listActiveUsers).mockReset();
+  vi.mocked(listActiveUsers).mockResolvedValue([]);
+  vi.mocked(resolveAppUser).mockReset();
+  vi.mocked(resolveAppUser).mockResolvedValue(null);
+  vi.mocked(submitManualOpportunity).mockReset();
 });
 
 describe("/app/* auth", () => {
@@ -1082,5 +1109,138 @@ describe("GET /app/opportunities/:id", () => {
     vi.mocked(getOpportunityDetail).mockResolvedValue(null);
     const res = await worker.fetch(authedReq("/app/opportunities/missing"), makeEnv(), ctx);
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /app/me", () => {
+  it("returns the resolved user profile", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue({
+      id: "user-1",
+      email: "alice@texasautovalue.com",
+      displayName: "Alice Adams",
+      role: "closer",
+      isActive: true,
+      createdAt: "2026-05-22T00:00:00.000Z",
+      updatedAt: "2026-05-22T00:00:00.000Z",
+    });
+    const res = await worker.fetch(
+      authedReq("/app/me", {
+        headers: { "X-TAV-Authenticated-User-Email": "alice@texasautovalue.com" },
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { email: string; role: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.email).toBe("alice@texasautovalue.com");
+    expect(body.data.role).toBe("closer");
+  });
+
+  it("returns 401 when identity headers are missing", async () => {
+    const res = await worker.fetch(authedReq("/app/me"), makeEnv(), ctx);
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("user_required");
+  });
+});
+
+describe("GET /app/users", () => {
+  it("returns active users for assignment pickers", async () => {
+    vi.mocked(listActiveUsers).mockResolvedValue([
+      {
+        id: "user-1",
+        email: "alice@texasautovalue.com",
+        displayName: "Alice Adams",
+        role: "admin",
+      },
+    ]);
+    const res = await worker.fetch(authedReq("/app/users"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Array<{ id: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]?.id).toBe("user-1");
+  });
+});
+
+describe("POST /app/opportunities/manual", () => {
+  const submitter = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("creates a manual submission for an authenticated user", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    vi.mocked(submitManualOpportunity).mockResolvedValue({
+      submissionId: "submission-1",
+      normalizedListingId: "listing-1",
+      isDuplicateUrl: false,
+      warnings: [],
+      opportunity: null,
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/manual", {
+        listingUrl: "https://facebook.com/marketplace/item/123",
+        year: 2020,
+        make: "toyota",
+        model: "camry",
+      }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { ok: boolean; data: { submissionId: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.submissionId).toBe("submission-1");
+  });
+
+  it("returns 401 when identity is missing", async () => {
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/manual", {
+        listingUrl: "https://facebook.com/marketplace/item/123",
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid JSON body", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    const res = await worker.fetch(
+      authedReq("/app/opportunities/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{",
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for validation errors from the submission layer", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    vi.mocked(submitManualOpportunity).mockRejectedValue(
+      new ManualSubmissionValidationError("unsupported_listing_url", "bad url"),
+    );
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/manual", {
+        listingUrl: "https://example.com/car/1",
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("unsupported_listing_url");
   });
 });

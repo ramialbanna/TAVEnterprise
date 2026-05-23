@@ -33,6 +33,14 @@ const CODE_MESSAGES: Record<string, string> = {
   not_found: "That endpoint doesn't exist (likely a dashboard bug).",
   invalid_json: "The request couldn't be read (malformed body).",
   invalid_body: "That request was rejected — check the highlighted fields.",
+  validation_error: "That request was rejected — check the highlighted fields.",
+  user_required: "Your session has expired — sign in again.",
+  invalid_listing_url: "Enter a valid listing URL.",
+  unsupported_listing_url: "That URL host isn't recognized — pick a source or use a supported marketplace link.",
+  invalid_assignee: "The selected closer is not an active user.",
+  forbidden: "You don't have permission to perform that action.",
+  claim_conflict: "Another user already has an active claim on this opportunity.",
+  opportunity_not_found: "That opportunity is not available.",
 
   // ── /web proxy error codes (the dashboard's own server layer, not the Worker) ─
   proxy_misconfigured:

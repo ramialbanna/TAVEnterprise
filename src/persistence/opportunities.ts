@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "./supabase";
 import { buildListingDiagnostics } from "./ingestRuns";
+import { fetchWorkflowMap, isActiveClaim, type WorkflowDisplayContext } from "./opportunityWorkflow";
 
 /**
  * Read-only persistence for v2 Opportunities (`GET /app/opportunities[/:id]`).
@@ -7,7 +8,7 @@ import { buildListingDiagnostics } from "./ingestRuns";
  * and vehicle candidates — no writes, no workflow mutations.
  */
 
-export type OpportunityType = "lead" | "near_miss";
+export type OpportunityType = "lead" | "near_miss" | "manual_submission";
 
 export interface OpportunityEstimateFlags {
   mileage: boolean;
@@ -82,6 +83,13 @@ type ListingRow = Record<string, unknown>;
 type ValuationRow = Record<string, unknown>;
 type LeadRow = Record<string, unknown>;
 
+interface ManualSubmissionContext {
+  submittedByUserId: string;
+  submittedByName: string;
+  assignedToUserId: string | null;
+  assignedCloserName: string | null;
+}
+
 function asString(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
@@ -109,10 +117,12 @@ export function buildOpportunityBadges(input: {
   mileageChanged: boolean;
   hasLead: boolean;
   hasMmr: boolean;
+  isManualSubmission: boolean;
   estimateFlags: OpportunityEstimateFlags;
   candidateListingCount: number | null;
 }): string[] {
   const badges: string[] = [];
+  if (input.isManualSubmission) badges.push("Manual submission");
   if (input.scrapeCount <= 1) badges.push("First seen");
   else badges.push(`Seen again #${input.scrapeCount - 1}`);
   if (input.priceChanged) badges.push("Price changed");
@@ -127,8 +137,13 @@ export function buildOpportunityBadges(input: {
   return badges;
 }
 
-function resolveOpportunityType(hasLead: boolean, hasMmr: boolean): OpportunityType | null {
+function resolveOpportunityType(
+  hasLead: boolean,
+  hasMmr: boolean,
+  isManualSubmission: boolean,
+): OpportunityType | null {
   if (hasLead) return "lead";
+  if (isManualSubmission) return "manual_submission";
   if (hasMmr) return "near_miss";
   return null;
 }
@@ -138,10 +153,13 @@ function mapToOpportunityRow(
   diagnostic: ReturnType<typeof buildListingDiagnostics>[number],
   lead: LeadRow | null,
   candidateListingCount: number | null,
+  manual: ManualSubmissionContext | null,
+  workflow: WorkflowDisplayContext | null,
 ): OpportunityRow | null {
   const hasLead = lead !== null;
   const hasMmr = diagnostic.mmr_value !== null;
-  const type = resolveOpportunityType(hasLead, hasMmr);
+  const isManualSubmission = manual !== null;
+  const type = resolveOpportunityType(hasLead, hasMmr, isManualSubmission);
   if (type === null) return null;
 
   const listingMileage = asNumber(listing.mileage);
@@ -162,9 +180,36 @@ function mapToOpportunityRow(
     mileageChanged: listing.mileage_changed === true,
     hasLead,
     hasMmr,
+    isManualSubmission,
     estimateFlags,
     candidateListingCount,
   });
+
+  const assignedTo =
+    workflow?.assignedToUserId ?? manual?.assignedToUserId ?? (lead ? asString(lead.assigned_to) : null);
+  const assignedCloserName =
+    workflow?.assignedCloserName ?? manual?.assignedCloserName ?? null;
+
+  const claimedBy =
+    workflow && isActiveClaim(workflow)
+      ? workflow.claimedByUserId
+      : workflow?.claimedByUserId ??
+        (workflow === null && lead ? asString(lead.assigned_to) : null);
+  const claimedByName =
+    workflow && isActiveClaim(workflow) ? workflow.claimedByName : null;
+  const claimedAt =
+    workflow && isActiveClaim(workflow)
+      ? workflow.claimedAt
+      : workflow?.claimedAt ?? (workflow === null && lead ? asString(lead.assigned_at) : null);
+  const claimExpiresAt =
+    workflow && isActiveClaim(workflow)
+      ? workflow.claimExpiresAt
+      : workflow?.claimExpiresAt ??
+        (workflow === null && lead ? asString(lead.lock_expires_at) : null);
+
+  const workflowStatus = workflow?.status ?? null;
+  const leadStatus = lead ? asString(lead.status) : null;
+  const status = workflowStatus ?? leadStatus ?? (manual ? "new" : null);
 
   return {
     id: listing.id as string,
@@ -187,15 +232,15 @@ function mapToOpportunityRow(
     spread,
     finalScore: lead ? asNumber(lead.final_score) : diagnostic.lead_final_score,
     grade: lead ? asString(lead.grade) : diagnostic.lead_grade,
-    status: lead ? asString(lead.status) : null,
-    submittedBy: null,
-    assignedTo: lead ? asString(lead.assigned_to) : null,
-    assignedCloserName: null,
-    claimedBy: lead ? asString(lead.assigned_to) : null,
-    claimedAt: lead ? asString(lead.assigned_at) : null,
-    claimExpiresAt: lead ? asString(lead.lock_expires_at) : null,
-    lastEvaluatedBy: null,
-    lastEvaluatedAt: null,
+    status,
+    submittedBy: manual?.submittedByName ?? null,
+    assignedTo,
+    assignedCloserName,
+    claimedBy: claimedByName ?? claimedBy,
+    claimedAt,
+    claimExpiresAt,
+    lastEvaluatedBy: workflow?.lastEvaluatedByName ?? workflow?.lastEvaluatedByUserId ?? null,
+    lastEvaluatedAt: workflow?.lastEvaluatedAt ?? null,
     firstSeenAt: asString(listing.first_seen_at),
     lastSeenAt: asString(listing.last_seen_at),
     seenCount: scrapeCount,
@@ -276,11 +321,99 @@ async function loadOpportunityContext(
   };
 }
 
+async function fetchManualSubmissionContext(
+  db: SupabaseClient,
+  listingIds: string[],
+): Promise<Map<string, ManualSubmissionContext>> {
+  const out = new Map<string, ManualSubmissionContext>();
+  if (listingIds.length === 0) return out;
+
+  const { data: submissionRows, error: submissionErr } = await db
+    .from("manual_opportunity_submissions")
+    .select("normalized_listing_id, submitted_by_user_id, assigned_to_user_id, created_at")
+    .in("normalized_listing_id", listingIds)
+    .order("created_at", { ascending: false });
+
+  if (submissionErr) throw submissionErr;
+
+  const latestByListing = new Map<string, Record<string, unknown>>();
+  for (const row of (submissionRows ?? []) as Array<Record<string, unknown>>) {
+    const listingId = row.normalized_listing_id as string;
+    if (!latestByListing.has(listingId)) latestByListing.set(listingId, row);
+  }
+
+  if (latestByListing.size === 0) return out;
+
+  const userIds = new Set<string>();
+  for (const row of latestByListing.values()) {
+    userIds.add(row.submitted_by_user_id as string);
+    const assigneeId = row.assigned_to_user_id as string | null;
+    if (assigneeId) userIds.add(assigneeId);
+  }
+
+  const { data: userRows, error: userErr } = await db
+    .from("users")
+    .select("id, display_name")
+    .in("id", [...userIds]);
+  if (userErr) throw userErr;
+
+  const userNames = new Map<string, string>();
+  for (const row of (userRows ?? []) as Array<Record<string, unknown>>) {
+    userNames.set(row.id as string, row.display_name as string);
+  }
+
+  for (const [listingId, row] of latestByListing) {
+    const submitterId = row.submitted_by_user_id as string;
+    const assigneeId = row.assigned_to_user_id as string | null;
+    out.set(listingId, {
+      submittedByUserId: submitterId,
+      submittedByName: userNames.get(submitterId) ?? submitterId,
+      assignedToUserId: assigneeId,
+      assignedCloserName: assigneeId ? (userNames.get(assigneeId) ?? assigneeId) : null,
+    });
+  }
+
+  return out;
+}
+
+async function fetchRecentManualListingIds(
+  db: SupabaseClient,
+  filter: OpportunityListFilter,
+  limit: number,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("manual_opportunity_submissions")
+    .select("normalized_listing_id, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data ?? []).map((row) => (row as Record<string, unknown>).normalized_listing_id as string);
+}
+
+async function fetchListingsByIds(
+  db: SupabaseClient,
+  listingIds: string[],
+  filter: OpportunityListFilter,
+): Promise<ListingRow[]> {
+  if (listingIds.length === 0) return [];
+
+  let q = db.from("normalized_listings").select(LISTING_COLUMNS).in("id", listingIds);
+  if (filter.source) q = q.eq("source", filter.source);
+  if (filter.region) q = q.eq("region", filter.region);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as ListingRow[];
+}
+
 function assembleRows(
   listings: ListingRow[],
   valuations: ValuationRow[],
   leads: LeadRow[],
   candidateCounts: Map<string, number>,
+  manualByListing: Map<string, ManualSubmissionContext>,
+  workflowByListing: Map<string, WorkflowDisplayContext>,
 ): OpportunityRow[] {
   const diagnostics = buildListingDiagnostics(listings, valuations, leads);
   const leadByListing = new Map<string, LeadRow>();
@@ -298,7 +431,16 @@ function assembleRows(
     const candidateId = diagnostic.vehicle_candidate_id;
     const candidateListingCount =
       candidateId !== null ? (candidateCounts.get(candidateId) ?? null) : null;
-    const row = mapToOpportunityRow(listing, diagnostic, lead, candidateListingCount);
+    const manual = manualByListing.get(nlId) ?? null;
+    const workflow = workflowByListing.get(nlId) ?? null;
+    const row = mapToOpportunityRow(
+      listing,
+      diagnostic,
+      lead,
+      candidateListingCount,
+      manual,
+      workflow,
+    );
     if (row) rows.push(row);
   }
 
@@ -331,18 +473,33 @@ export async function listOpportunities(
   const listings = (listingData ?? []) as ListingRow[];
   const listingIds = listings.map((l) => l.id as string);
 
-  const { valuations, leads } = await loadOpportunityContext(db, listingIds);
+  const manualListingIds = await fetchRecentManualListingIds(db, filter, fetchLimit);
+  const extraListingIds = manualListingIds.filter((id) => !listingIds.includes(id));
+  const extraListings = await fetchListingsByIds(db, extraListingIds, filter);
+  const allListings = [...listings, ...extraListings];
+  const allListingIds = allListings.map((l) => l.id as string);
+
+  const { valuations, leads } = await loadOpportunityContext(db, allListingIds);
+  const manualByListing = await fetchManualSubmissionContext(db, allListingIds);
+  const workflowByListing = await fetchWorkflowMap(db, allListingIds);
 
   const candidateIds = [
     ...new Set(
-      buildListingDiagnostics(listings, valuations, leads)
+      buildListingDiagnostics(allListings, valuations, leads)
         .map((d) => d.vehicle_candidate_id)
         .filter((id): id is string => id !== null),
     ),
   ];
   const candidateCounts = await fetchCandidateCounts(db, candidateIds);
 
-  const rows = assembleRows(listings, valuations, leads, candidateCounts);
+  const rows = assembleRows(
+    allListings,
+    valuations,
+    leads,
+    candidateCounts,
+    manualByListing,
+    workflowByListing,
+  );
   return applyListFilter(rows, filter);
 }
 
@@ -360,6 +517,8 @@ export async function getOpportunityDetail(
 
   const listing = listingRow as ListingRow;
   const { valuations, leads } = await loadOpportunityContext(db, [id]);
+  const manualByListing = await fetchManualSubmissionContext(db, [id]);
+  const workflowByListing = await fetchWorkflowMap(db, [id]);
   const lead = leads[0] ?? null;
   const diagnostics = buildListingDiagnostics([listing], valuations, leads);
   const diagnostic = diagnostics[0]!;
@@ -371,7 +530,14 @@ export async function getOpportunityDetail(
     candidateListingCount = counts.get(candidateId) ?? null;
   }
 
-  const row = mapToOpportunityRow(listing, diagnostic, lead, candidateListingCount);
+  const row = mapToOpportunityRow(
+    listing,
+    diagnostic,
+    lead,
+    candidateListingCount,
+    manualByListing.get(id) ?? null,
+    workflowByListing.get(id) ?? null,
+  );
   if (!row) return null;
 
   return mapToOpportunityDetail(row, listing, diagnostic, lead, candidateListingCount);

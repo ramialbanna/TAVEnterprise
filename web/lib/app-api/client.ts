@@ -18,6 +18,9 @@ import {
   parseIngestRunDetail,
   parseOpportunities,
   parseOpportunityDetail,
+  parseManualSubmission,
+  parseAppUsers,
+  parseAppMe,
   parseKpis,
   parseMmrCatalog,
   parseMmrYmm,
@@ -33,6 +36,9 @@ import type {
   IngestRunDetail,
   OpportunityRow,
   OpportunityDetail,
+  ManualSubmissionResult,
+  AppUserSummary,
+  AppUser,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -53,7 +59,7 @@ export type OpportunitiesFilter = {
   limit?: number;
   source?: string;
   region?: string;
-  type?: "lead" | "near_miss";
+  type?: "lead" | "near_miss" | "manual_submission";
   grade?: string;
   status?: string;
 };
@@ -108,6 +114,26 @@ export type MmrYmmRequest = {
   mileage: number;
 };
 
+/** Request body for `POST /app/opportunities/manual`. */
+export type ManualSubmissionRequest = {
+  listingUrl: string;
+  assignedToUserId?: string;
+  source?: "facebook" | "craigslist" | "autotrader" | "cars_com" | "offerup";
+  region?: "dallas_tx" | "houston_tx" | "austin_tx" | "san_antonio_tx";
+  year?: number;
+  make?: string;
+  model?: string;
+  style?: string;
+  price?: number;
+  mileage?: number;
+  sellerNotes?: string;
+  submitterNotes?: string;
+};
+
+export type AssignOpportunityRequest = {
+  assignedToUserId: string | null;
+};
+
 const PROXY_PREFIX = "/api/app";
 
 /** Build the `?...` query string for `historical-sales`; empty string when no filters. */
@@ -155,6 +181,23 @@ function clientTransportError<T>(): ApiResult<T> {
 
 /** Sentinel returned by the fetch wrappers when `fetch` itself rejects. */
 const FETCH_FAILED = Symbol("fetch_failed");
+
+async function postJson(
+  path: string,
+  body: unknown,
+): Promise<{ status: number; json: unknown } | typeof FETCH_FAILED> {
+  let res: Response;
+  try {
+    res = await fetch(`${PROXY_PREFIX}/${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return FETCH_FAILED;
+  }
+  return { status: res.status, json: await readJson(res) };
+}
 
 async function getJson(
   pathWithQuery: string,
@@ -221,6 +264,47 @@ export async function listOpportunities(
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
   const r = await getJson(`opportunities/${encodeURIComponent(id)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function listAppUsers(): Promise<ApiResult<AppUserSummary[]>> {
+  const r = await getJson("users");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseAppUsers(r.status, r.json);
+}
+
+export async function getAppMe(): Promise<ApiResult<AppUser>> {
+  const r = await getJson("me");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseAppMe(r.status, r.json);
+}
+
+export async function submitManualOpportunity(
+  body: ManualSubmissionRequest,
+): Promise<ApiResult<ManualSubmissionResult>> {
+  const r = await postJson("opportunities/manual", body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseManualSubmission(r.status, r.json);
+}
+
+export async function assignOpportunity(
+  id: string,
+  body: AssignOpportunityRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/assign`, body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function claimOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/claim`, {});
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function evaluateOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/evaluate`, {});
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunityDetail(r.status, r.json);
 }

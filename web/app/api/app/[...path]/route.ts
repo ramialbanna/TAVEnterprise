@@ -1,5 +1,7 @@
 import "server-only";
 import type { NextRequest } from "next/server";
+import { auth } from "@/lib/auth";
+import { buildAppUserHeaders } from "@/lib/app-user-headers";
 import { serverEnv } from "@/lib/env";
 
 /**
@@ -18,7 +20,7 @@ import { serverEnv } from "@/lib/env";
  *   error:"proxy_misconfigured" }` with 500 (no upstream call). Secrets are never logged.
  *
  * Auth: `proxy.ts` already gates `/api/app/*` (unauthenticated → 401 JSON before this handler runs).
- * This handler assumes authenticated traffic but adds no auth of its own.
+ * This handler resolves the Auth.js session and forwards trusted identity headers to the Worker.
  */
 
 // Bound the upstream call. Keep <= the Vercel function execution limit (10s on Hobby; longer on Pro).
@@ -42,11 +44,16 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
 
   const target = `${env.APP_API_BASE_URL}/app/${path.join("/")}${search}`;
 
+  const session = await auth();
+
   // Clean header set: inject the server-side Bearer; carry Content-Type through for bodied
   // requests; advertise JSON. Deliberately do NOT forward the browser's Cookie / Authorization / Host.
   const headers = new Headers();
   headers.set("authorization", `Bearer ${env.APP_API_SECRET}`);
   headers.set("accept", "application/json");
+  for (const [key, value] of Object.entries(buildAppUserHeaders(session))) {
+    headers.set(key, value);
+  }
   const incomingContentType = req.headers.get("content-type");
   if (incomingContentType) headers.set("content-type", incomingContentType);
 

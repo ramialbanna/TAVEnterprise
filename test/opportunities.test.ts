@@ -9,6 +9,7 @@ describe("buildOpportunityBadges", () => {
       mileageChanged: false,
       hasLead: false,
       hasMmr: true,
+      isManualSubmission: false,
       estimateFlags: { mileage: false, style: false, mmr: false },
       candidateListingCount: 1,
     });
@@ -23,6 +24,7 @@ describe("buildOpportunityBadges", () => {
       mileageChanged: false,
       hasLead: true,
       hasMmr: true,
+      isManualSubmission: false,
       estimateFlags: { mileage: true, style: false, mmr: true },
       candidateListingCount: 2,
     });
@@ -32,5 +34,19 @@ describe("buildOpportunityBadges", () => {
     expect(badges).toContain("Estimated MMR");
     expect(badges).toContain("Possible duplicate");
     expect(badges).not.toContain("Near miss");
+  });
+
+  it("marks manual submissions", () => {
+    const badges = buildOpportunityBadges({
+      scrapeCount: 1,
+      priceChanged: false,
+      mileageChanged: false,
+      hasLead: false,
+      hasMmr: false,
+      isManualSubmission: true,
+      estimateFlags: { mileage: false, style: false, mmr: false },
+      candidateListingCount: null,
+    });
+    expect(badges).toContain("Manual submission");
   });
 });

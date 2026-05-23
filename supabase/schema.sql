@@ -711,6 +711,105 @@ CREATE TABLE tav.user_activity (
   created_at          timestamptz NOT NULL DEFAULT now()
 );
 
+-- ── users ─────────────────────────────────────────────────────────────────────
+-- TAV staff profiles for v2 workflow identity (Auth.js → proxy → Worker).
+
+CREATE TABLE tav.users (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  email           text        NOT NULL UNIQUE,
+  display_name    text        NOT NULL,
+  role            text        NOT NULL DEFAULT 'closer'
+    CHECK (role IN ('admin', 'closer', 'viewer')),
+  is_active       boolean     NOT NULL DEFAULT true,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  deactivated_at  timestamptz
+);
+
+CREATE INDEX users_is_active_idx ON tav.users (is_active) WHERE is_active = true;
+
+CREATE TRIGGER users_set_updated_at
+  BEFORE UPDATE ON tav.users
+  FOR EACH ROW EXECUTE FUNCTION tav.set_updated_at();
+
+-- ── manual_opportunity_submissions ─────────────────────────────────────────────
+-- Finder-submitted listing URLs for the v2 Opportunities queue.
+
+CREATE TABLE tav.manual_opportunity_submissions (
+  id                    uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  normalized_listing_id uuid        NOT NULL REFERENCES tav.normalized_listings (id),
+  submitted_by_user_id  uuid        NOT NULL REFERENCES tav.users (id),
+  assigned_to_user_id   uuid        REFERENCES tav.users (id),
+  seller_notes          text,
+  submitter_notes       text,
+  created_at            timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX manual_opportunity_submissions_listing_idx
+  ON tav.manual_opportunity_submissions (normalized_listing_id);
+CREATE INDEX manual_opportunity_submissions_created_idx
+  ON tav.manual_opportunity_submissions (created_at DESC);
+CREATE INDEX manual_opportunity_submissions_submitter_idx
+  ON tav.manual_opportunity_submissions (submitted_by_user_id);
+
+-- ── opportunity_workflow ──────────────────────────────────────────────────────
+-- Listing-level assignment/claim state for v2 Opportunities (Phase 6 Slice C).
+
+CREATE TABLE tav.opportunity_workflow (
+  normalized_listing_id     uuid        NOT NULL PRIMARY KEY
+    REFERENCES tav.normalized_listings (id),
+  status                    text        NOT NULL DEFAULT 'new'
+    CHECK (status IN (
+      'new','assigned','claimed','contacted','negotiating',
+      'passed','duplicate','stale','sold','purchased','archived'
+    )),
+  assigned_to_user_id       uuid        REFERENCES tav.users (id),
+  assigned_at               timestamptz,
+  assigned_by_user_id       uuid        REFERENCES tav.users (id),
+  claimed_by_user_id        uuid        REFERENCES tav.users (id),
+  claimed_at                timestamptz,
+  claim_expires_at          timestamptz,
+  last_evaluated_by_user_id uuid        REFERENCES tav.users (id),
+  last_evaluated_at         timestamptz,
+  created_at                timestamptz NOT NULL DEFAULT now(),
+  updated_at                timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX opportunity_workflow_assigned_idx
+  ON tav.opportunity_workflow (assigned_to_user_id)
+  WHERE assigned_to_user_id IS NOT NULL;
+CREATE INDEX opportunity_workflow_claimed_idx
+  ON tav.opportunity_workflow (claimed_by_user_id)
+  WHERE claimed_by_user_id IS NOT NULL;
+CREATE INDEX opportunity_workflow_claim_expires_idx
+  ON tav.opportunity_workflow (claim_expires_at)
+  WHERE claim_expires_at IS NOT NULL;
+
+CREATE TRIGGER opportunity_workflow_set_updated_at
+  BEFORE UPDATE ON tav.opportunity_workflow
+  FOR EACH ROW EXECUTE FUNCTION tav.set_updated_at();
+
+-- ── opportunity_actions ───────────────────────────────────────────────────────
+-- Auditable assignment/submission/evaluation events for v2 Opportunities.
+
+CREATE TABLE tav.opportunity_actions (
+  id                    uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  normalized_listing_id uuid        NOT NULL REFERENCES tav.normalized_listings (id),
+  actor_user_id         uuid        NOT NULL REFERENCES tav.users (id),
+  action                text        NOT NULL
+    CHECK (action IN (
+      'submitted','assigned','unassigned','reassigned','claimed','evaluated'
+    )),
+  notes                 text,
+  metadata              jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  created_at            timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX opportunity_actions_listing_idx
+  ON tav.opportunity_actions (normalized_listing_id, created_at DESC);
+CREATE INDEX opportunity_actions_actor_idx
+  ON tav.opportunity_actions (actor_user_id);
+
 -- ── cron_runs ─────────────────────────────────────────────────────────────────
 -- Audit log of scheduled-job runs (v1: daily stale-sweep). Job-agnostic.
 -- detail: { "updated": <n> } on success, { "error": <summary> } on failure.

@@ -7,6 +7,7 @@ import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { OpportunityBadges, OpportunityTypeBadge } from "../_components/opportunity-badges";
+import { OpportunityWorkflowPanel } from "../_components/opportunity-workflow-panel";
 
 export default async function OpportunityDetailPage({
   params,
@@ -122,6 +123,8 @@ export default async function OpportunityDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      <OpportunityWorkflowPanel opportunity={opp} recordEvaluation />
 
       {opp.listingUrl ? (
         <a

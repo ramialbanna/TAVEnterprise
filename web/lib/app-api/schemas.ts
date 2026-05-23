@@ -218,7 +218,7 @@ export const OpportunityEstimateFlagsSchema = z.object({
 
 export const OpportunityRowSchema = z.object({
   id: z.string(),
-  type: z.enum(["lead", "near_miss"]),
+  type: z.enum(["lead", "near_miss", "manual_submission"]),
   badges: z.array(z.string()),
   source: z.string(),
   region: z.string().nullable(),
@@ -263,3 +263,32 @@ export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   mileage: z.number().nullable(),
 });
 export type OpportunityDetail = z.infer<typeof OpportunityDetailSchema>;
+
+export const ManualSubmissionResultSchema = z.object({
+  submissionId: z.string(),
+  normalizedListingId: z.string(),
+  isDuplicateUrl: z.boolean(),
+  warnings: z.array(z.string()),
+  opportunity: OpportunityDetailSchema.nullable(),
+});
+export type ManualSubmissionResult = z.infer<typeof ManualSubmissionResultSchema>;
+
+export const AppUserSummarySchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  role: z.enum(["admin", "closer", "viewer"]),
+});
+export const AppUserSummaryListSchema = z.array(AppUserSummarySchema);
+export type AppUserSummary = z.infer<typeof AppUserSummarySchema>;
+
+export const AppUserSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  displayName: z.string(),
+  role: z.enum(["admin", "closer", "viewer"]),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type AppUser = z.infer<typeof AppUserSchema>;

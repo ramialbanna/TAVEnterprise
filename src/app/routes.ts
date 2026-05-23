@@ -13,7 +13,10 @@
  *
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
- * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id.
+ * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
+ * GET /app/me, GET /app/users, POST /app/opportunities/manual,
+ * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
+ * POST /app/opportunities/:id/evaluate.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
@@ -27,6 +30,19 @@ import { listSourceRuns, getSourceRunDetail } from "../persistence/ingestRuns";
 import type { IngestRunListFilter } from "../persistence/ingestRuns";
 import { listOpportunities, getOpportunityDetail } from "../persistence/opportunities";
 import type { OpportunityListFilter, OpportunityType } from "../persistence/opportunities";
+import { listActiveUsers } from "../persistence/users";
+import { resolveAppUser } from "../auth/resolveAppUser";
+import type { AppUser } from "../persistence/users";
+import {
+  submitManualOpportunity,
+  ManualSubmissionValidationError,
+} from "../persistence/manualOpportunities";
+import {
+  assignOpportunity,
+  claimOpportunity,
+  recordOpportunityEvaluation,
+  OpportunityWorkflowError,
+} from "../persistence/opportunityWorkflow";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import {
@@ -77,6 +93,27 @@ const IntelMmrEnvelopeSchema = z.object({
   success: z.literal(true),
   data: MmrResponseEnvelopeSchema,
 });
+
+const ManualOpportunitySubmissionSchema = z.object({
+  listingUrl: z.string().trim().url().max(2048),
+  assignedToUserId: z.string().uuid().optional(),
+  source: z.enum(SOURCE_NAMES).optional(),
+  region: z.enum(REGION_KEYS).optional(),
+  year: z.number().int().min(1900).max(2100).optional(),
+  make: z.string().trim().min(1).max(64).optional(),
+  model: z.string().trim().min(1).max(128).optional(),
+  style: z.string().trim().min(1).max(128).optional(),
+  price: z.number().int().nonnegative().optional(),
+  mileage: z.number().int().nonnegative().max(2_000_000).optional(),
+  sellerNotes: z.string().trim().max(2000).optional(),
+  submitterNotes: z.string().trim().max(2000).optional(),
+});
+
+const AssignOpportunitySchema = z.object({
+  assignedToUserId: z.string().uuid().nullable(),
+});
+
+const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate)$/;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -168,12 +205,39 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
       const id = decodeURIComponent(pathname.slice("/app/ingest-runs/".length));
       return await handleIngestRunDetail(env, id);
     }
+    if (request.method === "GET" && pathname === "/app/me") {
+      return await handleMe(request, env);
+    }
+    if (request.method === "GET" && pathname === "/app/users") {
+      return await handleUsersList(env);
+    }
     if (request.method === "GET" && pathname === "/app/opportunities") {
       return await handleOpportunitiesList(env, url);
     }
+    const opportunityActionMatch = pathname.match(OPPORTUNITY_ACTION_RE);
+    if (request.method === "POST" && opportunityActionMatch) {
+      const id = opportunityActionMatch[1];
+      const action = opportunityActionMatch[2];
+      if (!id || !action) {
+        return json({ ok: false, error: "not_found" }, 404);
+      }
+      if (action === "assign") {
+        return await handleOpportunityAssign(request, env, decodeURIComponent(id));
+      }
+      if (action === "claim") {
+        return await handleOpportunityClaim(request, env, decodeURIComponent(id));
+      }
+      return await handleOpportunityEvaluate(request, env, decodeURIComponent(id));
+    }
     if (request.method === "GET" && pathname.startsWith("/app/opportunities/")) {
       const id = decodeURIComponent(pathname.slice("/app/opportunities/".length));
+      if (id.includes("/")) {
+        return json({ ok: false, error: "not_found" }, 404);
+      }
       return await handleOpportunityDetail(env, id);
+    }
+    if (request.method === "POST" && pathname === "/app/opportunities/manual") {
+      return await handleManualOpportunitySubmit(request, env);
     }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
@@ -868,6 +932,243 @@ async function handleOpportunityDetail(env: Env, id: string): Promise<Response> 
     return json({ ok: true, data });
   } catch (err) {
     log("app.opportunity_detail.query_failed", { id, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/me — current authenticated staff profile.
+ * Requires identity headers from the trusted Next.js proxy (or Cf-Access).
+ * Auto-provisions tav.users on first request.
+ */
+async function handleMe(request: Request, env: Env): Promise<Response> {
+  try {
+    const user = await resolveAppUser(request, env);
+    if (!user) return json({ ok: false, error: "user_required" }, 401);
+    return json({
+      ok: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+        isActive: user.isActive,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (err) {
+    log("app.me.resolve_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/users — active staff directory for assignment pickers.
+ */
+async function handleUsersList(env: Env): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.users.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await listActiveUsers(db);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.users.query_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+async function requireAppUser(request: Request, env: Env): Promise<AppUser | Response> {
+  try {
+    const user = await resolveAppUser(request, env);
+    if (!user) return json({ ok: false, error: "user_required" }, 401);
+    return user;
+  } catch (err) {
+    log("app.user.resolve_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/manual — finder submits a listing URL into the queue.
+ */
+async function handleManualOpportunitySubmit(request: Request, env: Env): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = ManualOpportunitySubmissionSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.manual_submit.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await submitManualOpportunity(db, userOrResponse, parsed.data);
+    log("app.manual_submit.created", {
+      submissionId: data.submissionId,
+      normalizedListingId: data.normalizedListingId,
+      submitterId: userOrResponse.id,
+      isDuplicateUrl: data.isDuplicateUrl,
+    });
+    return json({ ok: true, data }, 201);
+  } catch (err) {
+    if (err instanceof ManualSubmissionValidationError) {
+      return json({ ok: false, error: err.code }, 400);
+    }
+    log("app.manual_submit.failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+function mapWorkflowError(err: OpportunityWorkflowError): Response {
+  const status =
+    err.code === "claim_conflict"
+      ? 409
+      : err.code === "forbidden"
+        ? 403
+        : err.code === "opportunity_not_found"
+          ? 404
+          : 400;
+  return json(
+    {
+      ok: false,
+      error: err.code,
+      ...(err.details ? { details: err.details } : {}),
+    },
+    status,
+  );
+}
+
+/**
+ * POST /app/opportunities/:id/assign — admin assigns or unassigns a closer.
+ */
+async function handleOpportunityAssign(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = AssignOpportunitySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_assign.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await assignOpportunity(
+      db,
+      normalizedListingId,
+      userOrResponse,
+      parsed.data.assignedToUserId,
+    );
+    log("app.opportunity_assign.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+      assignedToUserId: parsed.data.assignedToUserId,
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_assign.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/:id/claim — closer claims an opportunity for 24 hours.
+ */
+async function handleOpportunityClaim(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_claim.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await claimOpportunity(db, normalizedListingId, userOrResponse);
+    log("app.opportunity_claim.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+      claimExpiresAt: data.claimExpiresAt,
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_claim.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/:id/evaluate — record that the current user opened/evaluated.
+ */
+async function handleOpportunityEvaluate(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_evaluate.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await recordOpportunityEvaluation(db, normalizedListingId, userOrResponse);
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_evaluate.failed", { normalizedListingId, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

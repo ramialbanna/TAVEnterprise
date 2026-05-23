@@ -13,9 +13,9 @@ export default async function OpportunitiesPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Opportunities</h1>
         <p className="text-sm text-muted-foreground">
-          Review scored leads and near-miss listings in one queue. Compare asking price
-          to MMR, scan event badges, and decide what to call, watch, or pass. Read-only
-          for now — claim, assign, and notes arrive in later v2 phases.
+          Review scored leads, near-miss listings, and finder submissions in one queue.
+          Compare asking price to MMR, scan event badges, and submit new listing links.
+          Claim, reassign, and workflow notes arrive in the next phase.
         </p>
       </header>
 

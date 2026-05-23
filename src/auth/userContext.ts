@@ -2,15 +2,20 @@
  * Single source of truth for resolving the authenticated user behind an
  * incoming Worker request.
  *
- * Reads Cloudflare Access headers (`Cf-Access-*`). No JWT parsing yet — that
- * is a deliberate Phase F.1 deferral; promote `userId` to the JWT `sub`
- * claim once the parser lands.
+ * Reads identity from:
+ *   1. Cloudflare Access headers (`Cf-Access-*`) — direct Worker access.
+ *   2. Auth.js proxy headers (`X-TAV-Authenticated-User-*`) — Next.js /api/app/*
+ *      proxy after Google sign-in.
  *
- * Handlers MUST NOT parse `Cf-Access-*` headers themselves. Always go
- * through `extractUserContext`.
+ * Handlers MUST NOT parse these headers themselves. Always go through
+ * `extractUserContext`.
  *
  * See docs/03-api/intelligence-contracts.md §C and §D for the frozen contract.
  */
+
+/** Injected by the trusted Next.js /api/app/* proxy after Auth.js sign-in. */
+export const TAV_USER_EMAIL_HEADER = "X-TAV-Authenticated-User-Email";
+export const TAV_USER_NAME_HEADER = "X-TAV-Authenticated-User-Name";
 
 export interface UserContext {
   userId: string | null;
@@ -28,12 +33,16 @@ export interface UserContext {
 export function extractUserContext(request: Request): UserContext {
   const headers = request.headers;
 
-  const email = readHeader(headers, "Cf-Access-Authenticated-User-Email");
-  const name  = readHeader(headers, "Cf-Access-Authenticated-User-Name");
+  const email =
+    readHeader(headers, "Cf-Access-Authenticated-User-Email")
+    ?? readHeader(headers, TAV_USER_EMAIL_HEADER);
+  const name =
+    readHeader(headers, "Cf-Access-Authenticated-User-Name")
+    ?? readHeader(headers, TAV_USER_NAME_HEADER);
   const rolesHeader = readHeader(headers, "Cf-Access-Authenticated-User-Roles");
 
   // No JWT parsing yet (Phase F.1 deferral). userId mirrors email today;
-  // promote to JWT `sub` claim once the parser lands.
+  // promote to JWT `sub` / tav.users.id once write paths require it.
   const userId = email;
 
   const roles = rolesHeader

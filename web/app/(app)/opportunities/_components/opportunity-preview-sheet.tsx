@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/sheet";
 
 import { OpportunityBadges, OpportunityTypeBadge } from "./opportunity-badges";
+import { OpportunityWorkflowPanel } from "./opportunity-workflow-panel";
 
 export function OpportunityPreviewSheet({
   row,
@@ -106,6 +107,8 @@ export function OpportunityPreviewSheet({
                 </dl>
               </section>
             ) : null}
+
+            <OpportunityWorkflowPanel opportunity={row} recordEvaluation />
 
             <div className="flex flex-wrap gap-3 pt-2">
               {row.listingUrl ? (
