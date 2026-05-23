@@ -19,7 +19,7 @@ export function buildAppUserHeaders(session: Session | null): Record<string, str
     [TAV_USER_EMAIL_HEADER]: email,
   };
 
-  const name = session.user?.name?.trim();
+  const name = session?.user?.name?.trim();
   if (name) headers[TAV_USER_NAME_HEADER] = name;
 
   return headers;
