@@ -6,6 +6,7 @@ import {
   parseIngestRunDetail,
   parseKpis,
   parseMmrVin,
+  parseOpportunityDetail,
   parseSystemStatus,
 } from "./parse";
 
@@ -86,6 +87,63 @@ const HISTORICAL_SALES_OK = {
   ],
 };
 
+const OPPORTUNITY_DETAIL_OK = {
+  ok: true,
+  data: {
+    id: "22222222-2222-2222-2222-222222222222",
+    type: "lead",
+    badges: ["First seen"],
+    source: "facebook",
+    region: "dallas_tx",
+    sourceRunId: "11111111-1111-1111-1111-111111111111",
+    normalizedListingId: "22222222-2222-2222-2222-222222222222",
+    vehicleCandidateId: null,
+    leadId: "33333333-3333-3333-3333-333333333333",
+    title: "2019 Ford F-150",
+    year: 2019,
+    make: "Ford",
+    model: "F-150",
+    style: "XLT",
+    vin: "1FT8W3BT1SEC27066",
+    price: 25000,
+    mmrValue: 28000,
+    spread: 3000,
+    finalScore: 72,
+    grade: "good",
+    status: "reviewed",
+    submittedBy: null,
+    assignedTo: null,
+    assignedCloserName: null,
+    claimedBy: "Closer One",
+    claimedAt: "2026-05-23T00:00:00.000Z",
+    claimExpiresAt: "2026-05-24T00:00:00.000Z",
+    lastEvaluatedBy: null,
+    lastEvaluatedAt: null,
+    firstSeenAt: "2026-05-20T10:00:00.000Z",
+    lastSeenAt: "2026-05-21T10:00:00.000Z",
+    seenCount: 1,
+    listingUrl: "https://example.com/listing/1",
+    estimateFlags: { mileage: false, style: false, mmr: false },
+    reasonCodes: ["strong_spread"],
+    valuationMissingReason: null,
+    scoreComponents: null,
+    candidateListingCount: 1,
+    mileage: 45000,
+    actions: [
+      {
+        id: "action-1",
+        normalizedListingId: "22222222-2222-2222-2222-222222222222",
+        actorUserId: "user-1",
+        actorName: "Alice Adams",
+        action: "status_changed",
+        notes: null,
+        metadata: { previousStatus: "claimed", newStatus: "reviewed" },
+        createdAt: "2026-05-23T00:00:00.000Z",
+      },
+    ],
+  },
+};
+
 describe("parse — happy paths", () => {
   it("parses GET /app/kpis", () => {
     const r = parseKpis(200, KPIS_OK);
@@ -130,6 +188,24 @@ describe("parse — happy paths", () => {
     if (!r.ok) throw new Error("expected ok");
     expect(r.data).toEqual({ mmrValue: 68600, confidence: "high", method: "vin" });
   });
+
+  it("parses GET /app/opportunities/:id with action history", () => {
+    const r = parseOpportunityDetail(200, OPPORTUNITY_DETAIL_OK);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.status).toBe("reviewed");
+    expect(r.data.actions).toHaveLength(1);
+    expect(r.data.actions[0]?.action).toBe("status_changed");
+  });
+
+  it("defaults missing opportunity actions to [] for staggered deploys", () => {
+    const dataWithoutActions = { ...OPPORTUNITY_DETAIL_OK.data };
+    delete (dataWithoutActions as { actions?: unknown }).actions;
+    const r = parseOpportunityDetail(200, { ok: true, data: dataWithoutActions });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.actions).toEqual([]);
+  });
 });
 
 describe("parse — MMR null + missingReason", () => {
@@ -145,6 +221,21 @@ describe("parse — MMR null + missingReason", () => {
 });
 
 describe("parse — Worker error envelopes", () => {
+  it("maps invalid_status to invalid", () => {
+    const r = parseOpportunityDetail(400, { ok: false, error: "invalid_status" });
+    expect(r).toMatchObject({ ok: false, kind: "invalid", error: "invalid_status", status: 400 });
+  });
+
+  it("maps invalid_status_transition to invalid", () => {
+    const r = parseOpportunityDetail(409, { ok: false, error: "invalid_status_transition" });
+    expect(r).toMatchObject({
+      ok: false,
+      kind: "invalid",
+      error: "invalid_status_transition",
+      status: 409,
+    });
+  });
+
   it("maps unauthorized", () => {
     const r = parseKpis(401, { ok: false, error: "unauthorized" });
     expect(r).toMatchObject({ ok: false, kind: "unauthorized", error: "unauthorized", status: 401 });

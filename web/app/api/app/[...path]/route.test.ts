@@ -106,6 +106,28 @@ describe("/api/app/[...path] proxy", () => {
     expect(new Headers(call[1]!.headers).get("content-type")).toBe("application/json");
   });
 
+  it("forwards opportunity status POSTs with identity headers", async () => {
+    const fetchMock = stubFetch(() => jsonResponse({ ok: true, data: { id: "listing-1", status: "reviewed" } }));
+    const { POST } = await import("./route");
+
+    const bodyStr = JSON.stringify({ status: "reviewed" });
+    const req = new NextRequest("http://localhost:3000/api/app/opportunities/listing-1/status", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: bodyStr,
+    });
+    const res = await POST(req, ctxFor("opportunities", "listing-1", "status"));
+
+    expect(res.status).toBe(200);
+    const call = fetchMock.mock.calls[0]!;
+    expect(call[0]).toBe(`${BASE}/app/opportunities/listing-1/status`);
+    expect(call[1]!.method).toBe("POST");
+    expect(call[1]!.body).toBe(bodyStr);
+    expect(new Headers(call[1]!.headers).get("X-TAV-Authenticated-User-Email")).toBe(
+      "alice@texasautovalue.com",
+    );
+  });
+
   it("returns the upstream status + JSON body verbatim (e.g. a 503 db_error from the Worker)", async () => {
     stubFetch(() => jsonResponse({ ok: false, error: "db_error" }, 503));
     const { GET } = await import("./route");

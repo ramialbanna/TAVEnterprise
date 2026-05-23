@@ -108,7 +108,11 @@ export function OpportunityPreviewSheet({
               </section>
             ) : null}
 
-            <OpportunityWorkflowPanel opportunity={row} recordEvaluation />
+            <OpportunityWorkflowPanel
+              opportunity={detail ?? row}
+              actions={detail?.actions ?? []}
+              recordEvaluation
+            />
 
             <div className="flex flex-wrap gap-3 pt-2">
               {row.listingUrl ? (

@@ -95,4 +95,74 @@ describe("app-api server transport", () => {
       status: 503,
     });
   });
+
+  it("posts opportunity status updates to the Worker with the server bearer", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            id: "listing-1",
+            type: "lead",
+            badges: [],
+            source: "facebook",
+            region: "dallas_tx",
+            sourceRunId: null,
+            normalizedListingId: "listing-1",
+            vehicleCandidateId: null,
+            leadId: null,
+            title: "2019 Ford F-150",
+            year: 2019,
+            make: "Ford",
+            model: "F-150",
+            style: null,
+            vin: null,
+            price: 25000,
+            mmrValue: 28000,
+            spread: 3000,
+            finalScore: 72,
+            grade: "good",
+            status: "reviewed",
+            submittedBy: null,
+            assignedTo: null,
+            assignedCloserName: null,
+            claimedBy: null,
+            claimedAt: null,
+            claimExpiresAt: null,
+            lastEvaluatedBy: null,
+            lastEvaluatedAt: null,
+            firstSeenAt: null,
+            lastSeenAt: null,
+            seenCount: 1,
+            listingUrl: null,
+            estimateFlags: { mileage: false, style: false, mmr: false },
+            reasonCodes: [],
+            valuationMissingReason: null,
+            scoreComponents: null,
+            candidateListingCount: null,
+            mileage: null,
+            actions: [],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { updateOpportunityStatus } = await import("./server");
+    const result = await updateOpportunityStatus("listing-1", { status: "reviewed" });
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://tav-aip-staging.rami-1a9.workers.dev/app/opportunities/listing-1/status",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer staging-secret",
+          "content-type": "application/json",
+        }),
+        body: JSON.stringify({ status: "reviewed" }),
+      }),
+    );
+  });
 });

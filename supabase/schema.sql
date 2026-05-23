@@ -760,7 +760,7 @@ CREATE TABLE tav.opportunity_workflow (
     REFERENCES tav.normalized_listings (id),
   status                    text        NOT NULL DEFAULT 'new'
     CHECK (status IN (
-      'new','assigned','claimed','contacted','negotiating',
+      'new','assigned','claimed','reviewed','contacted','negotiating',
       'passed','duplicate','stale','sold','purchased','archived'
     )),
   assigned_to_user_id       uuid        REFERENCES tav.users (id),
@@ -798,7 +798,8 @@ CREATE TABLE tav.opportunity_actions (
   actor_user_id         uuid        NOT NULL REFERENCES tav.users (id),
   action                text        NOT NULL
     CHECK (action IN (
-      'submitted','assigned','unassigned','reassigned','claimed','evaluated'
+      'submitted','assigned','unassigned','reassigned','claimed','evaluated',
+      'status_changed','note_added'
     )),
   notes                 text,
   metadata              jsonb       NOT NULL DEFAULT '{}'::jsonb,

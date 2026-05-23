@@ -255,12 +255,48 @@ export const OpportunityRowSchema = z.object({
 export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
 export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;
 
+export const OpportunityActionTypeSchema = z.enum([
+  "submitted",
+  "assigned",
+  "unassigned",
+  "reassigned",
+  "claimed",
+  "evaluated",
+  "status_changed",
+  "note_added",
+]);
+export type OpportunityActionType = z.infer<typeof OpportunityActionTypeSchema>;
+
+export const OpportunityActionSchema = z.object({
+  id: z.string(),
+  normalizedListingId: z.string(),
+  actorUserId: z.string(),
+  actorName: z.string().nullable(),
+  action: OpportunityActionTypeSchema,
+  notes: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+});
+export type OpportunityAction = z.infer<typeof OpportunityActionSchema>;
+
+/** Values accepted by POST /app/opportunities/:id/status (`bought` maps to `purchased` on the Worker). */
+export const MutatableWorkflowStatusSchema = z.enum([
+  "reviewed",
+  "contacted",
+  "negotiating",
+  "purchased",
+  "bought",
+  "passed",
+]);
+export type MutatableWorkflowStatus = z.infer<typeof MutatableWorkflowStatusSchema>;
+
 export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   reasonCodes: z.array(z.string()),
   valuationMissingReason: z.string().nullable(),
   scoreComponents: z.unknown().nullable(),
   candidateListingCount: z.number().nullable(),
   mileage: z.number().nullable(),
+  actions: z.array(OpportunityActionSchema).default([]),
 });
 export type OpportunityDetail = z.infer<typeof OpportunityDetailSchema>;
 

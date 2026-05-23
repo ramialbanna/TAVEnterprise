@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  addOpportunityNote,
   getKpis,
   getSystemStatus,
   historicalSalesQuery,
   importBatchesQuery,
   listHistoricalSales,
   postMmrVin,
+  updateOpportunityStatus,
 } from "./client";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -101,5 +103,142 @@ describe("happy path delegates to parsers", () => {
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.mmrValue).toBe(68600);
+  });
+
+  it("updateOpportunityStatus posts to /api/app/opportunities/:id/status", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        ok: true,
+        data: {
+          id: "listing-1",
+          type: "lead",
+          badges: [],
+          source: "facebook",
+          region: "dallas_tx",
+          sourceRunId: null,
+          normalizedListingId: "listing-1",
+          vehicleCandidateId: null,
+          leadId: null,
+          title: "2019 Ford F-150",
+          year: 2019,
+          make: "Ford",
+          model: "F-150",
+          style: null,
+          vin: null,
+          price: 25000,
+          mmrValue: 28000,
+          spread: 3000,
+          finalScore: 72,
+          grade: "good",
+          status: "reviewed",
+          submittedBy: null,
+          assignedTo: null,
+          assignedCloserName: null,
+          claimedBy: null,
+          claimedAt: null,
+          claimExpiresAt: null,
+          lastEvaluatedBy: null,
+          lastEvaluatedAt: null,
+          firstSeenAt: null,
+          lastSeenAt: null,
+          seenCount: 1,
+          listingUrl: null,
+          estimateFlags: { mileage: false, style: false, mmr: false },
+          reasonCodes: [],
+          valuationMissingReason: null,
+          scoreComponents: null,
+          candidateListingCount: null,
+          mileage: null,
+          actions: [],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await updateOpportunityStatus("listing-1", { status: "reviewed" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/app/opportunities/listing-1/status",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ status: "reviewed" }),
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.status).toBe("reviewed");
+  });
+
+  it("addOpportunityNote posts to /api/app/opportunities/:id/notes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        ok: true,
+        data: {
+          id: "listing-1",
+          type: "lead",
+          badges: [],
+          source: "facebook",
+          region: "dallas_tx",
+          sourceRunId: null,
+          normalizedListingId: "listing-1",
+          vehicleCandidateId: null,
+          leadId: null,
+          title: "2019 Ford F-150",
+          year: 2019,
+          make: "Ford",
+          model: "F-150",
+          style: null,
+          vin: null,
+          price: 25000,
+          mmrValue: 28000,
+          spread: 3000,
+          finalScore: 72,
+          grade: "good",
+          status: "claimed",
+          submittedBy: null,
+          assignedTo: null,
+          assignedCloserName: null,
+          claimedBy: null,
+          claimedAt: null,
+          claimExpiresAt: null,
+          lastEvaluatedBy: null,
+          lastEvaluatedAt: null,
+          firstSeenAt: null,
+          lastSeenAt: null,
+          seenCount: 1,
+          listingUrl: null,
+          estimateFlags: { mileage: false, style: false, mmr: false },
+          reasonCodes: [],
+          valuationMissingReason: null,
+          scoreComponents: null,
+          candidateListingCount: null,
+          mileage: null,
+          actions: [
+            {
+              id: "action-1",
+              normalizedListingId: "listing-1",
+              actorUserId: "user-1",
+              actorName: "Alice Adams",
+              action: "note_added",
+              notes: "Seller asked for best offer",
+              metadata: {},
+              createdAt: "2026-05-23T00:00:00.000Z",
+            },
+          ],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await addOpportunityNote("listing-1", { note: "Seller asked for best offer" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/app/opportunities/listing-1/notes",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ note: "Seller asked for best offer" }),
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.actions[0]?.notes).toBe("Seller asked for best offer");
   });
 });

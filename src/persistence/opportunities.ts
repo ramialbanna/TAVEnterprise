@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "./supabase";
 import { buildListingDiagnostics } from "./ingestRuns";
-import { fetchWorkflowMap, isActiveClaim, type WorkflowDisplayContext } from "./opportunityWorkflow";
+import { fetchWorkflowMap, isActiveClaim, listOpportunityActions, type OpportunityActionRecord, type WorkflowDisplayContext } from "./opportunityWorkflow";
 
 /**
  * Read-only persistence for v2 Opportunities (`GET /app/opportunities[/:id]`).
@@ -59,6 +59,7 @@ export interface OpportunityDetail extends OpportunityRow {
   scoreComponents: unknown | null;
   candidateListingCount: number | null;
   mileage: number | null;
+  actions: OpportunityActionRecord[];
 }
 
 export interface OpportunityListFilter {
@@ -255,6 +256,7 @@ function mapToOpportunityDetail(
   diagnostic: ReturnType<typeof buildListingDiagnostics>[number],
   lead: LeadRow | null,
   candidateListingCount: number | null,
+  actions: OpportunityActionRecord[],
 ): OpportunityDetail {
   const reasonCodes = lead?.reason_codes;
   return {
@@ -264,6 +266,7 @@ function mapToOpportunityDetail(
     scoreComponents: lead?.score_components ?? diagnostic.lead_score_components ?? null,
     candidateListingCount,
     mileage: asNumber(listing.mileage),
+    actions,
   };
 }
 
@@ -540,7 +543,8 @@ export async function getOpportunityDetail(
   );
   if (!row) return null;
 
-  return mapToOpportunityDetail(row, listing, diagnostic, lead, candidateListingCount);
+  const actions = await listOpportunityActions(db, id);
+  return mapToOpportunityDetail(row, listing, diagnostic, lead, candidateListingCount, actions);
 }
 
 const MAX_FETCH = 500;

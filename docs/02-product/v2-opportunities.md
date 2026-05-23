@@ -1,7 +1,7 @@
 # V2 Opportunities Spec
 
 Date: 2026-05-18
-Status: Approved product direction; Slice B manual submit shipped 2026-05-22; Slice C assignment shipped 2026-05-23
+Status: Approved product direction; Slice B manual submit shipped 2026-05-22; Slice C assignment shipped 2026-05-23; Phase 7 workflow mutations shipped 2026-05-23
 
 ## 1. Decision
 
@@ -342,7 +342,7 @@ CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC)
    not overwhelm the buyer queue.
 3. ~~Manual submission needs a persistence design.~~ Done — `tav.manual_opportunity_submissions` + `POST /app/opportunities/manual` + submit dialog (2026-05-22).
 4. ~~Assignment requires a user/role model and auditable actor identity.~~ Done (2026-05-23 — `tav.opportunity_workflow`, assign/claim/evaluate APIs, `tav.opportunity_actions` audit).
-5. Full workflow mutations (status/notes) remain Phase 7.
+5. ~~Full workflow mutations (status/notes) remain Phase 7.~~ Done (2026-05-23 — migration 0048, `POST .../status`, `POST .../notes`, action history UI).
 
 ## 13. Recommended Delivery Slices
 
@@ -372,8 +372,8 @@ CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC)
 - [x] assign
 - [x] unassign/reassign
 - [x] concurrency protection
-- [ ] status update (Phase 7)
-- [ ] notes (Phase 7)
-- [ ] action history UI (Phase 7 — audit rows exist in `tav.opportunity_actions`)
+- [x] status update (Phase 7, 2026-05-23)
+- [x] notes (Phase 7, 2026-05-23)
+- [x] action history UI (Phase 7, 2026-05-23 — `OpportunityActionHistory` on detail page)
 
-Live multi-user testing can begin for assign/claim; full workflow mutations follow in Phase 7.
+Live multi-user testing can proceed for the full buyer workflow (assign → claim → status → notes).

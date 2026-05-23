@@ -12,11 +12,11 @@ Living checklist for what to do next. For phase detail and acceptance criteria, 
 
 ## Current focus
 
-**North star:** Ship **v2 Opportunities** so buyers can work leads in the app (not just counts in Ingest Monitor).
+**North star:** v2 Opportunities is **feature-complete** for buyer workflow (queue → assign → claim → status → notes).
 
-**Immediate engineering priority:** Phase 7 — workflow status mutations (reviewed/contacted/bought/passed/notes).
+**Immediate engineering priority:** Phase 8 — region expansion soak, plus tactical follow-ups (ingest Playwright smoke, near-miss filter polish).
 
-**Product gap today:** Assign and claim are live. Workflow status mutations and notes are still pending (Phase 7).
+**Product gap today:** None blocking live buyer workflow testing. Region expansion and KPI polish remain.
 
 ---
 
@@ -83,9 +83,9 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 
 ### Phase 7 — Workflow mutations (4–7 days)
 
-- [ ] reviewed / contacted / bought / passed / notes
-- [ ] Every mutation audited (actor, timestamp, old/new state)
-- [ ] No anonymous shared-bearer-only writes
+- [x] reviewed / contacted / negotiating / bought (`purchased`) / passed / notes (2026-05-23 — migration 0048, status + notes APIs, web UI)
+- [x] Every mutation audited (actor, timestamp, old/new state) (2026-05-23 — `status_changed` + `note_added` in `tav.opportunity_actions`)
+- [x] No anonymous shared-bearer-only writes (2026-05-23 — Auth.js identity required via proxy headers)
 
 ### Phase 8 — Region expansion (ongoing)
 
@@ -143,7 +143,7 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 4. `feat: add read-only opportunities app api` (Phase 5)
 5. `feat(web): add opportunities queue` (Phase 5)
 6. `feat: manual submission + assignment` (Phase 6) — **shipped** (`cf76a9c`, deployed 2026-05-23)
-7. `feat: opportunity workflow mutations` (Phase 7)
+7. `feat: opportunity workflow mutations` (Phase 7) — **shipped** (2026-05-23 — Worker `efda0005`, migration 0048, web UI)
 
 ---
 
@@ -161,6 +161,7 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
+| 2026-05-23 | Phase 7 complete — status + notes APIs, action history UI, migration 0048; Worker deploy `tav-aip-production` version `efda0005` |
 | 2026-05-23 | Production deploy — `tav-aip-production` version `647ec3e7`; Vercel green after `1a4b936`; Supabase 0045–0047 applied |
 | 2026-05-23 | Wrangler setup — `account_id` pinned in `wrangler.toml` (`73dbe6d`) |
 | 2026-05-23 | Phase 6 Slice C — assign/claim/evaluate API, workflow tables, `/opportunities` assignment UI (`cf76a9c`) |

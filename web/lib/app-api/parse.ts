@@ -86,9 +86,12 @@ function classifyError(code: string): ErrorKind | null {
     case "invalid_listing_url":
     case "unsupported_listing_url":
     case "invalid_assignee":
+    case "invalid_status":
       return "invalid";
     case "forbidden":
     case "claim_conflict":
+    case "invalid_status_transition":
+    case "opportunity_not_found":
       return "invalid";
     case "user_required":
       return "unauthorized";

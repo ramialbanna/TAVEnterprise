@@ -41,6 +41,8 @@ const CODE_MESSAGES: Record<string, string> = {
   forbidden: "You don't have permission to perform that action.",
   claim_conflict: "Another user already has an active claim on this opportunity.",
   opportunity_not_found: "That opportunity is not available.",
+  invalid_status: "That status update is not allowed.",
+  invalid_status_transition: "This opportunity is closed and can only be updated by an admin.",
 
   // ── /web proxy error codes (the dashboard's own server layer, not the Worker) ─
   proxy_misconfigured:

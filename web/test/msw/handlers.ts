@@ -79,6 +79,62 @@ export const handlers = [
     return ok({ ...opportunityDetail, ...match, id: match.id });
   }),
 
+  http.post("/api/app/opportunities/:id/status", async ({ params, request }) => {
+    const match = opportunities.find((r) => r.id === params.id);
+    if (!match) return err(404, "opportunity_not_found");
+    const body = (await request.json().catch(() => null)) as { status?: unknown } | null;
+    const status = typeof body?.status === "string" ? body.status : "";
+    if (!["reviewed", "contacted", "negotiating", "purchased", "bought", "passed"].includes(status)) {
+      return err(400, "invalid_status");
+    }
+    const nextStatus = status === "bought" ? "purchased" : status;
+    return ok({
+      ...opportunityDetail,
+      ...match,
+      id: match.id,
+      status: nextStatus,
+      actions: [
+        ...opportunityDetail.actions,
+        {
+          id: "action-status",
+          normalizedListingId: match.id,
+          actorUserId: "user-closer-1",
+          actorName: "Closer One",
+          action: "status_changed",
+          notes: null,
+          metadata: { previousStatus: match.status ?? "new", newStatus: nextStatus },
+          createdAt: "2026-05-23T18:00:00.000Z",
+        },
+      ],
+    });
+  }),
+
+  http.post("/api/app/opportunities/:id/notes", async ({ params, request }) => {
+    const match = opportunities.find((r) => r.id === params.id);
+    if (!match) return err(404, "opportunity_not_found");
+    const body = (await request.json().catch(() => null)) as { note?: unknown } | null;
+    const note = typeof body?.note === "string" ? body.note.trim() : "";
+    if (!note) return err(400, "validation_error");
+    return ok({
+      ...opportunityDetail,
+      ...match,
+      id: match.id,
+      actions: [
+        ...opportunityDetail.actions,
+        {
+          id: "action-note",
+          normalizedListingId: match.id,
+          actorUserId: "user-closer-1",
+          actorName: "Closer One",
+          action: "note_added",
+          notes: note,
+          metadata: {},
+          createdAt: "2026-05-23T18:00:00.000Z",
+        },
+      ],
+    });
+  }),
+
   http.post("/api/app/mmr/vin", async ({ request }) => {
     const body = (await request.json().catch(() => null)) as { vin?: unknown } | null;
     const vin = typeof body?.vin === "string" ? body.vin : "";

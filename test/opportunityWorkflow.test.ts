@@ -3,8 +3,13 @@ import {
   assignOpportunity,
   claimOpportunity,
   isActiveClaim,
+  normalizeMutatableWorkflowStatus,
   OpportunityWorkflowError,
   recordOpportunityEvaluation,
+  updateOpportunityStatus,
+  addOpportunityNote,
+  listOpportunityActions,
+  writeOpportunityAction,
 } from "../src/persistence/opportunityWorkflow";
 import { getOpportunityDetail } from "../src/persistence/opportunities";
 import { getActiveUserById } from "../src/persistence/users";
@@ -88,6 +93,7 @@ const baseOpportunity = {
   scoreComponents: null,
   candidateListingCount: null,
   mileage: 50000,
+  actions: [],
 };
 
 type WorkflowState = Record<string, unknown> | null;
@@ -188,6 +194,28 @@ function makeWorkflowDb(initial: WorkflowState = null) {
           insert(row: Record<string, unknown>) {
             actions.push(row);
             return Promise.resolve({ error: null });
+          },
+          select(_cols?: string) {
+            return {
+              eq(_col: string, _val: string) {
+                return {
+                  order(_col: string, _opts?: { ascending?: boolean }) {
+                    return Promise.resolve({
+                      data: actions.map((row, index) => ({
+                        id: `action-${index}`,
+                        normalized_listing_id: row.normalized_listing_id,
+                        actor_user_id: row.actor_user_id,
+                        action: row.action,
+                        notes: row.notes ?? null,
+                        metadata: row.metadata ?? {},
+                        created_at: "2026-05-23T00:00:00.000Z",
+                      })),
+                      error: null,
+                    });
+                  },
+                };
+              },
+            };
           },
         };
       }
@@ -303,5 +331,110 @@ describe("recordOpportunityEvaluation", () => {
     const db = makeWorkflowDb();
     await recordOpportunityEvaluation(db as never, "listing-1", closer);
     expect(db.actions.some((a) => a.action === "evaluated")).toBe(true);
+  });
+});
+
+describe("normalizeMutatableWorkflowStatus", () => {
+  it("accepts bought as an alias for purchased", () => {
+    expect(normalizeMutatableWorkflowStatus("bought")).toBe("purchased");
+  });
+
+  it("rejects unknown statuses", () => {
+    expect(normalizeMutatableWorkflowStatus("claimed")).toBeNull();
+  });
+});
+
+describe("updateOpportunityStatus", () => {
+  it("rejects viewers", async () => {
+    await expect(
+      updateOpportunityStatus(makeWorkflowDb() as never, "listing-1", viewer, "reviewed"),
+    ).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("updates status for the active claim owner and writes audit", async () => {
+    const db = makeWorkflowDb({
+      normalized_listing_id: "listing-1",
+      status: "claimed",
+      assigned_to_user_id: "closer-1",
+      assigned_at: "2026-05-22T00:00:00.000Z",
+      assigned_by_user_id: "closer-1",
+      claimed_by_user_id: "closer-1",
+      claimed_at: "2026-05-22T00:00:00.000Z",
+      claim_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      last_evaluated_by_user_id: null,
+      last_evaluated_at: null,
+    });
+
+    vi.mocked(getOpportunityDetail).mockResolvedValue({
+      ...baseOpportunity,
+      status: "reviewed",
+    });
+
+    const result = await updateOpportunityStatus(db as never, "listing-1", closer, "reviewed");
+
+    expect(result.status).toBe("reviewed");
+    expect(db.actions.some((a) => a.action === "status_changed")).toBe(true);
+  });
+
+  it("rejects non-admin updates from closed opportunities", async () => {
+    const db = makeWorkflowDb({
+      normalized_listing_id: "listing-1",
+      status: "passed",
+      assigned_to_user_id: "closer-1",
+      assigned_at: "2026-05-22T00:00:00.000Z",
+      assigned_by_user_id: "closer-1",
+      claimed_by_user_id: "closer-1",
+      claimed_at: "2026-05-22T00:00:00.000Z",
+      claim_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      last_evaluated_by_user_id: null,
+      last_evaluated_at: null,
+    });
+
+    await expect(
+      updateOpportunityStatus(db as never, "listing-1", closer, "contacted"),
+    ).rejects.toMatchObject({ code: "invalid_status_transition" });
+  });
+});
+
+describe("addOpportunityNote", () => {
+  it("writes a note action for the assignee", async () => {
+    const db = makeWorkflowDb({
+      normalized_listing_id: "listing-1",
+      status: "assigned",
+      assigned_to_user_id: "closer-1",
+      assigned_at: "2026-05-22T00:00:00.000Z",
+      assigned_by_user_id: "admin-1",
+      claimed_by_user_id: null,
+      claimed_at: null,
+      claim_expires_at: null,
+      last_evaluated_by_user_id: null,
+      last_evaluated_at: null,
+    });
+
+    vi.mocked(getOpportunityDetail).mockResolvedValue(baseOpportunity);
+
+    await addOpportunityNote(db as never, "listing-1", closer, "Seller asked for best offer");
+
+    expect(db.actions.some((a) => a.action === "note_added" && a.notes === "Seller asked for best offer")).toBe(
+      true,
+    );
+  });
+});
+
+describe("listOpportunityActions", () => {
+  it("returns actions with actor names", async () => {
+    const db = makeWorkflowDb();
+    await writeOpportunityAction(db as never, {
+      normalizedListingId: "listing-1",
+      actorUserId: "closer-1",
+      action: "note_added",
+      notes: "Follow up tomorrow",
+    });
+
+    const actions = await listOpportunityActions(db as never, "listing-1");
+
+    expect(actions).toHaveLength(1);
+    expect(actions[0]?.action).toBe("note_added");
+    expect(actions[0]?.actorName).toBe("Closer One");
   });
 });

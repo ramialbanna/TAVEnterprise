@@ -19,6 +19,11 @@ import {
   submitManualOpportunity,
   ManualSubmissionValidationError,
 } from "../src/persistence/manualOpportunities";
+import {
+  updateOpportunityStatus,
+  addOpportunityNote,
+  OpportunityWorkflowError,
+} from "../src/persistence/opportunityWorkflow";
 
 // ── Supabase mock ───────────────────────────────────────────────────────────────
 // `dbState` is hoisted so the vi.mock factory can reference it; tests mutate it.
@@ -82,6 +87,15 @@ vi.mock("../src/persistence/manualOpportunities", async (importOriginal) => {
   return {
     ...actual,
     submitManualOpportunity: vi.fn(),
+  };
+});
+
+vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/opportunityWorkflow")>();
+  return {
+    ...actual,
+    updateOpportunityStatus: vi.fn(),
+    addOpportunityNote: vi.fn(),
   };
 });
 
@@ -155,6 +169,8 @@ beforeEach(() => {
   vi.mocked(resolveAppUser).mockReset();
   vi.mocked(resolveAppUser).mockResolvedValue(null);
   vi.mocked(submitManualOpportunity).mockReset();
+  vi.mocked(updateOpportunityStatus).mockReset();
+  vi.mocked(addOpportunityNote).mockReset();
 });
 
 describe("/app/* auth", () => {
@@ -1093,6 +1109,7 @@ describe("GET /app/opportunities/:id", () => {
       scoreComponents: null,
       candidateListingCount: 1,
       mileage: 45000,
+      actions: [],
     });
     const res = await worker.fetch(
       authedReq("/app/opportunities/22222222-2222-2222-2222-222222222222"),
@@ -1242,5 +1259,141 @@ describe("POST /app/opportunities/manual", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("unsupported_listing_url");
+  });
+});
+
+describe("POST /app/opportunities/:id/status", () => {
+  const closer = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("updates workflow status for an authenticated closer", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(updateOpportunityStatus).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      status: "reviewed",
+      reasonCodes: [],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: null,
+      mileage: 45000,
+      actions: [],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/status", { status: "reviewed" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(updateOpportunityStatus)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      "reviewed",
+    );
+  });
+
+  it("returns 401 when identity is missing", async () => {
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/status", { status: "reviewed" }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid status values", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/status", { status: "claimed" }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_status");
+  });
+
+  it("maps workflow errors to HTTP status codes", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(updateOpportunityStatus).mockRejectedValue(
+      new OpportunityWorkflowError("forbidden", "Viewers cannot change opportunity workflow"),
+    );
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/status", { status: "passed" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /app/opportunities/:id/notes", () => {
+  const closer = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("adds a note for an authenticated closer", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(addOpportunityNote).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      reasonCodes: [],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: null,
+      mileage: 45000,
+      actions: [
+        {
+          id: "action-1",
+          normalizedListingId: OPPORTUNITY_ROW.id,
+          actorUserId: closer.id,
+          actorName: closer.displayName,
+          action: "note_added",
+          notes: "Seller wants a callback",
+          metadata: {},
+          createdAt: "2026-05-23T00:00:00.000Z",
+        },
+      ],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/notes", { note: "Seller wants a callback" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(addOpportunityNote)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      "Seller wants a callback",
+    );
+  });
+
+  it("returns 400 for empty notes", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/notes", { note: "   " }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
   });
 });

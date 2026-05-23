@@ -12,7 +12,45 @@ export type OpportunityActionType =
   | "unassigned"
   | "reassigned"
   | "claimed"
-  | "evaluated";
+  | "evaluated"
+  | "status_changed"
+  | "note_added";
+
+/** Status values callers may set via POST /app/opportunities/:id/status. */
+export type MutatableWorkflowStatus =
+  | "reviewed"
+  | "contacted"
+  | "negotiating"
+  | "purchased"
+  | "passed";
+
+export const MUTATABLE_WORKFLOW_STATUSES: readonly MutatableWorkflowStatus[] = [
+  "reviewed",
+  "contacted",
+  "negotiating",
+  "purchased",
+  "passed",
+] as const;
+
+const TERMINAL_WORKFLOW_STATUSES = new Set([
+  "passed",
+  "purchased",
+  "duplicate",
+  "stale",
+  "sold",
+  "archived",
+]);
+
+export interface OpportunityActionRecord {
+  id: string;
+  normalizedListingId: string;
+  actorUserId: string;
+  actorName: string | null;
+  action: OpportunityActionType;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
 
 export interface OpportunityWorkflowRow {
   normalizedListingId: string;
@@ -69,6 +107,52 @@ export function isActiveClaim(workflow: Pick<OpportunityWorkflowRow, "claimedByU
 
 function canMutateWorkflow(role: UserRole): boolean {
   return role === "admin" || role === "closer";
+}
+
+/** Accept API alias `bought` and normalize to persisted `purchased`. */
+export function normalizeMutatableWorkflowStatus(raw: string): MutatableWorkflowStatus | null {
+  const normalized = raw === "bought" ? "purchased" : raw;
+  return (MUTATABLE_WORKFLOW_STATUSES as readonly string[]).includes(normalized)
+    ? (normalized as MutatableWorkflowStatus)
+    : null;
+}
+
+function assertCanMutateWorkflowState(
+  actor: AppUser,
+  workflow: OpportunityWorkflowRow | null,
+): void {
+  if (!canMutateWorkflow(actor.role)) {
+    throw new OpportunityWorkflowError("forbidden", "Viewers cannot change opportunity workflow");
+  }
+
+  if (actor.role === "admin") return;
+
+  const activeClaim = workflow ? isActiveClaim(workflow) : false;
+  const isClaimOwner = activeClaim && workflow!.claimedByUserId === actor.id;
+  const isAssignee = workflow?.assignedToUserId === actor.id;
+
+  if (!isClaimOwner && !isAssignee) {
+    throw new OpportunityWorkflowError(
+      "forbidden",
+      "Only the active claim owner, assignee, or an admin can update this opportunity",
+    );
+  }
+}
+
+function assertStatusTransitionAllowed(
+  actor: AppUser,
+  currentStatus: string,
+  nextStatus: MutatableWorkflowStatus,
+): void {
+  if (currentStatus === nextStatus) return;
+
+  if (TERMINAL_WORKFLOW_STATUSES.has(currentStatus) && actor.role !== "admin") {
+    throw new OpportunityWorkflowError(
+      "invalid_status_transition",
+      "Closed opportunities can only be updated by an admin",
+      { currentStatus, nextStatus },
+    );
+  }
 }
 
 async function assertListingExists(db: SupabaseClient, normalizedListingId: string): Promise<void> {
@@ -451,4 +535,126 @@ export async function recordManualSubmissionAction(
     action: "submitted",
     metadata,
   });
+}
+
+function mapActionRow(row: Record<string, unknown>): OpportunityActionRecord {
+  return {
+    id: row.id as string,
+    normalizedListingId: row.normalized_listing_id as string,
+    actorUserId: row.actor_user_id as string,
+    actorName: null,
+    action: row.action as OpportunityActionType,
+    notes: (row.notes as string | null) ?? null,
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
+    createdAt: row.created_at as string,
+  };
+}
+
+export async function listOpportunityActions(
+  db: SupabaseClient,
+  normalizedListingId: string,
+): Promise<OpportunityActionRecord[]> {
+  const { data, error } = await db
+    .from("opportunity_actions")
+    .select("id, normalized_listing_id, actor_user_id, action, notes, metadata, created_at")
+    .eq("normalized_listing_id", normalizedListingId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  if (rows.length === 0) return [];
+
+  const actorIds = [...new Set(rows.map((row) => row.actor_user_id as string))];
+  const actorNames = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: userRows, error: userErr } = await db
+      .from("users")
+      .select("id, display_name")
+      .in("id", actorIds);
+    if (userErr) throw userErr;
+    for (const row of (userRows ?? []) as Array<Record<string, unknown>>) {
+      actorNames.set(row.id as string, row.display_name as string);
+    }
+  }
+
+  return rows.map((row) => {
+    const mapped = mapActionRow(row);
+    return {
+      ...mapped,
+      actorName: actorNames.get(mapped.actorUserId) ?? null,
+    };
+  });
+}
+
+export async function updateOpportunityStatus(
+  db: SupabaseClient,
+  normalizedListingId: string,
+  actor: AppUser,
+  nextStatus: MutatableWorkflowStatus,
+): Promise<OpportunityDetail> {
+  await assertListingExists(db, normalizedListingId);
+  await assertReviewableOpportunity(db, normalizedListingId);
+
+  const existing = await getWorkflowRow(db, normalizedListingId);
+  assertCanMutateWorkflowState(actor, existing);
+
+  const currentStatus = existing?.status ?? "new";
+  assertStatusTransitionAllowed(actor, currentStatus, nextStatus);
+
+  if (currentStatus === nextStatus) {
+    const opportunity = await getOpportunityDetail(db, normalizedListingId);
+    if (!opportunity) {
+      throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+    }
+    return opportunity;
+  }
+
+  const workflow = await upsertWorkflowRow(db, normalizedListingId, { status: nextStatus });
+  await syncLeadFromWorkflow(db, normalizedListingId, workflow);
+  await writeOpportunityAction(db, {
+    normalizedListingId,
+    actorUserId: actor.id,
+    action: "status_changed",
+    metadata: {
+      previousStatus: currentStatus,
+      newStatus: nextStatus,
+    },
+  });
+
+  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  if (!opportunity) {
+    throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+  }
+  return opportunity;
+}
+
+export async function addOpportunityNote(
+  db: SupabaseClient,
+  normalizedListingId: string,
+  actor: AppUser,
+  note: string,
+): Promise<OpportunityDetail> {
+  await assertListingExists(db, normalizedListingId);
+  await assertReviewableOpportunity(db, normalizedListingId);
+
+  const existing = await getWorkflowRow(db, normalizedListingId);
+  assertCanMutateWorkflowState(actor, existing);
+
+  const trimmed = note.trim();
+  if (!trimmed) {
+    throw new OpportunityWorkflowError("validation_error", "Note cannot be empty");
+  }
+
+  await writeOpportunityAction(db, {
+    normalizedListingId,
+    actorUserId: actor.id,
+    action: "note_added",
+    notes: trimmed,
+  });
+
+  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  if (!opportunity) {
+    throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+  }
+  return opportunity;
 }

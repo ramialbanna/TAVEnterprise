@@ -89,8 +89,8 @@ do not.
 | POST | `/app/opportunities/:id/assign` | Admin assign / unassign closer |
 | POST | `/app/opportunities/:id/claim` | Closer claim with 24h window |
 | POST | `/app/opportunities/:id/evaluate` | Record evaluation touch (collision warnings) |
-| POST | `/app/opportunities/:id/status` | Planned status route |
-| POST | `/app/opportunities/:id/notes` | Planned note route |
+| POST | `/app/opportunities/:id/status` | Update workflow status (reviewed/contacted/etc.) |
+| POST | `/app/opportunities/:id/notes` | Add an auditable note |
 
 Unknown path / method under `/app/*` → `404 { "ok": false, "error": "not_found" }`.
 
@@ -110,8 +110,8 @@ Read-only scope:
 
 `POST /app/opportunities/manual` is implemented (2026-05-22). The `/opportunities`
 page includes a **Submit listing** dialog that calls this endpoint via the
-same-origin `/api/app/*` proxy. Assign, claim, and evaluate POST routes are
-implemented (2026-05-23). Status and notes POST routes are still pending.
+same-origin `/api/app/*` proxy. Assign, claim, evaluate, status, and notes POST routes are
+implemented (2026-05-23). Status and notes complete Phase 7 backend.
 
 ---
 
@@ -209,7 +209,57 @@ Success → `200 { "ok": true, "data": OpportunityDetail }`
 
 ---
 
-Not yet implemented: status, notes (POST routes below).
+### `POST /app/opportunities/:id/status`
+
+Requires authenticated closer or admin. Updates the listing-level workflow status
+(`:id` = `normalized_listings.id`). Accepts API alias `bought` → persisted `purchased`.
+
+Request body:
+
+```jsonc
+{ "status": "reviewed" | "contacted" | "negotiating" | "purchased" | "bought" | "passed" }
+```
+
+Success → `200 { "ok": true, "data": OpportunityDetail }`
+
+| Status | error | Meaning |
+|--------|-------|---------|
+| 401 | `user_required` | No identity headers |
+| 403 | `forbidden` | Viewer, or non-owner closer without assignee/claim rights |
+| 404 | `opportunity_not_found` | Listing not reviewable |
+| 409 | `invalid_status_transition` | Closed opportunity updated by non-admin |
+| 400 | `invalid_status` | Status not in the allowed mutation set |
+| 400 | `validation_error` | Body failed Zod validation |
+
+Every successful change writes a `status_changed` row to `tav.opportunity_actions`
+with `metadata.previousStatus` and `metadata.newStatus`.
+
+---
+
+### `POST /app/opportunities/:id/notes`
+
+Requires authenticated closer or admin. Appends an auditable note without changing
+workflow status.
+
+Request body:
+
+```jsonc
+{ "note": "string" }   // 1–2000 chars, trimmed
+```
+
+Success → `200 { "ok": true, "data": OpportunityDetail }`
+
+| Status | error | Meaning |
+|--------|-------|---------|
+| 401 | `user_required` | No identity headers |
+| 403 | `forbidden` | Viewer, or non-owner closer without assignee/claim rights |
+| 404 | `opportunity_not_found` | Listing not reviewable |
+| 400 | `validation_error` | Empty note or Zod validation failed |
+
+Notes are stored on `tav.opportunity_actions` with `action = note_added`.
+
+`GET /app/opportunities/:id` includes an `actions` array (newest first) on
+`OpportunityDetail` for action history.
 
 ---
 

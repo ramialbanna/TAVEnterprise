@@ -332,4 +332,16 @@ export const opportunityDetail: OpportunityDetail = {
   scoreComponents: { deal: 40, buyBox: 38 },
   candidateListingCount: 1,
   mileage: 48000,
+  actions: [
+    {
+      id: "action-1",
+      normalizedListingId: "opp_lead_1",
+      actorUserId: "user-closer-1",
+      actorName: "Closer One",
+      action: "claimed",
+      notes: null,
+      metadata: { claimExpiresAt: "2026-05-24T00:00:00.000Z" },
+      createdAt: "2026-05-23T12:00:00.000Z",
+    },
+  ],
 };

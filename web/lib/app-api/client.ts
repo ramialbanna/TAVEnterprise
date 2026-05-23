@@ -39,6 +39,7 @@ import type {
   ManualSubmissionResult,
   AppUserSummary,
   AppUser,
+  MutatableWorkflowStatus,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -132,6 +133,16 @@ export type ManualSubmissionRequest = {
 
 export type AssignOpportunityRequest = {
   assignedToUserId: string | null;
+};
+
+/** Request body for POST /app/opportunities/:id/status. */
+export type UpdateOpportunityStatusRequest = {
+  status: MutatableWorkflowStatus;
+};
+
+/** Request body for POST /app/opportunities/:id/notes. */
+export type AddOpportunityNoteRequest = {
+  note: string;
 };
 
 const PROXY_PREFIX = "/api/app";
@@ -305,6 +316,24 @@ export async function claimOpportunity(id: string): Promise<ApiResult<Opportunit
 
 export async function evaluateOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
   const r = await postJson(`opportunities/${encodeURIComponent(id)}/evaluate`, {});
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function updateOpportunityStatus(
+  id: string,
+  body: UpdateOpportunityStatusRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/status`, body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function addOpportunityNote(
+  id: string,
+  body: AddOpportunityNoteRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/notes`, body);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunityDetail(r.status, r.json);
 }

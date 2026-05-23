@@ -132,12 +132,12 @@ As of **2026-05-23** (verified: Supabase migrations, Worker deploy, Vercel build
 
 | Surface | Name / URL | Last known deploy |
 |---------|------------|-------------------|
-| Main Worker (prod) | `tav-aip-production` → `https://tav-aip-production.rami-1a9.workers.dev` | **2026-05-23** — version `647ec3e7` (Phase 6 assign/claim) |
+| Main Worker (prod) | `tav-aip-production` → `https://tav-aip-production.rami-1a9.workers.dev` | **2026-05-23** — version `efda0005` (Phase 7 status/notes) |
 | Main Worker (staging) | `tav-aip-staging` → `https://tav-aip-staging.rami-1a9.workers.dev` | GitHub Actions on push to `main` (when secrets configured) |
-| Intelligence Worker (prod) | `tav-intelligence-worker-production` | unchanged by Phase 6 |
+| Intelligence Worker (prod) | `tav-intelligence-worker-production` | unchanged by Phase 7 |
 | Intelligence Worker (staging) | `tav-intelligence-worker-staging` | — |
-| Web app | `https://tav-enterprise.vercel.app` (Vercel, Auth.js + `/api/app/*` proxy) | **2026-05-23** — commit `1a4b936`+ (Vercel build fix + Phase 6 UI) |
-| Database | Supabase (`tav` schema) | migrations **0045–0047** applied 2026-05-23 |
+| Web app | `https://tav-enterprise.vercel.app` (Vercel, Auth.js + `/api/app/*` proxy) | **2026-05-23** — Phase 7 UI local (push to `main` for Vercel) |
+| Database | Supabase (`tav` schema) | migrations **0045–0048** applied 2026-05-23 |
 
 Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY_WEBHOOK_ENABLED=true`, intel service binding active.
 
@@ -147,7 +147,9 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 - `GET /app/opportunities` + detail API live (buyer queue — Phase 5).
 - `POST /app/opportunities/manual` + submit dialog on `/opportunities` (Phase 6 Slice B, 2026-05-22).
 - `POST /app/opportunities/:id/assign`, `/claim`, `/evaluate` + assignment UI (Phase 6 Slice C, 2026-05-23).
-- Migrations `0045`–`0047` applied to Supabase (`users`, `manual_opportunity_submissions`, `opportunity_workflow`, `opportunity_actions`).
+- `POST /app/opportunities/:id/status`, `/notes` + workflow UI (Phase 7, 2026-05-23).
+- `GET /app/opportunities/:id` includes `actions[]` audit history (Phase 7).
+- Migrations `0045`–`0048` applied to Supabase (`users`, `manual_opportunity_submissions`, `opportunity_workflow`, `opportunity_actions`, Phase 7 status/notes).
 - `GET /app/me`, `GET /app/users` for identity and closer picker.
 - `GET /app/ingest-runs` + detail API live (powers Ingest Monitor).
 - Cox/Manheim catalog + YMM valuation via intelligence Worker (Storefront `/mmr-lookup/*`, `/mmr/search/*`).
@@ -155,7 +157,8 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 
 ### Not shipped yet
 
-- Workflow status mutations and notes (Phase 7).
+- Phase 8 region expansion (`tav-tx-west`, `tav-tx-south`, `tav-ok` soak).
+- Near-miss reason-code filter and valuation snapshots index (v2 polish — see [v2-opportunities](../02-product/v2-opportunities.md)).
 
 ### Apify / ingest
 
@@ -173,10 +176,11 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 - Repo migrations **0043** (valuation miss observability) and **0044** (`source_runs.status = truncated`) are reflected in `supabase/schema.sql`.
 - **0044 applied to Supabase** on 2026-05-20; `truncated` rows already present.
-- **0045–0047 applied to Supabase** on 2026-05-23:
+- **0045–0048 applied to Supabase** on 2026-05-23:
   - `0045` — `tav.users` (identity)
   - `0046` — `tav.manual_opportunity_submissions`
   - `0047` — `tav.opportunity_workflow`, `tav.opportunity_actions`
+  - `0048` — `reviewed` status + `status_changed` / `note_added` audit actions (Phase 7)
 - Supabase migration registry records `users`, `manual_opportunity_submissions`, and `opportunity_workflow` as timestamped entries (2026-05-23).
 - Migrations **0040–0043** objects exist in the live DB but are **not recorded** in Supabase's migration registry (registry jumps `0039` → timestamped `source_runs_status_truncated`). Hygiene-only gap — objects match repo.
 
@@ -205,9 +209,9 @@ Recent commits on `main`:
 
 On `main` today:
 
-- Phases 0–6 shipped (ingest monitor, opportunities read model, manual submit, assign/claim).
-- `docs/NEXT_STEPS.md`, `docs/tools.md`, and updated handoff/roadmap/v2-opportunities are **on GitHub `main`**.
-- Phase 7 (workflow status mutations + notes) is next.
+- Phases 0–7 shipped (ingest monitor, opportunities queue, manual submit, assign/claim, status/notes).
+- `docs/NEXT_STEPS.md`, `docs/tools.md`, and updated handoff/roadmap/v2-opportunities are **on GitHub `main`** (Phase 7 docs updated locally 2026-05-23).
+- Phase 8 (region expansion) is next.
 
 Local workspace notes:
 

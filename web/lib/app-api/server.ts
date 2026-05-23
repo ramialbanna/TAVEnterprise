@@ -32,6 +32,8 @@ import {
   type IngestRunsFilter,
   type OpportunitiesFilter,
   type MmrVinRequest,
+  type UpdateOpportunityStatusRequest,
+  type AddOpportunityNoteRequest,
 } from "./client";
 import type {
   HistoricalSale,
@@ -45,7 +47,7 @@ import type {
   SystemStatus,
 } from "./schemas";
 
-export type { HistoricalSalesFilter, MmrVinRequest } from "./client";
+export type { HistoricalSalesFilter, MmrVinRequest, UpdateOpportunityStatusRequest, AddOpportunityNoteRequest } from "./client";
 
 const SERVER_FETCH_TIMEOUT_MS = 12_000;
 
@@ -161,6 +163,30 @@ export async function listOpportunities(
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
   const { status, json } = await getJson(`opportunities/${encodeURIComponent(id)}`);
+  return parseOpportunityDetail(status, json);
+}
+
+async function postJson(path: string, body: unknown): Promise<{ status: number; json: unknown }> {
+  return requestJson(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateOpportunityStatus(
+  id: string,
+  body: UpdateOpportunityStatusRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const { status, json } = await postJson(`opportunities/${encodeURIComponent(id)}/status`, body);
+  return parseOpportunityDetail(status, json);
+}
+
+export async function addOpportunityNote(
+  id: string,
+  body: AddOpportunityNoteRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const { status, json } = await postJson(`opportunities/${encodeURIComponent(id)}/notes`, body);
   return parseOpportunityDetail(status, json);
 }
 

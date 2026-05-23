@@ -124,7 +124,12 @@ export default async function OpportunityDetailPage({
         </Card>
       </div>
 
-      <OpportunityWorkflowPanel opportunity={opp} recordEvaluation />
+      <OpportunityWorkflowPanel
+        opportunity={opp}
+        actions={opp.actions}
+        recordEvaluation
+        showActionHistory
+      />
 
       {opp.listingUrl ? (
         <a

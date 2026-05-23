@@ -104,6 +104,7 @@ beforeEach(() => {
     scoreComponents: null,
     candidateListingCount: null,
     mileage: 50000,
+    actions: [],
   });
 });
 

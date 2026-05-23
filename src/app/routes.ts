@@ -16,7 +16,8 @@
  * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
  * GET /app/me, GET /app/users, POST /app/opportunities/manual,
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
- * POST /app/opportunities/:id/evaluate.
+ * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
+ * POST /app/opportunities/:id/notes.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
@@ -41,6 +42,9 @@ import {
   assignOpportunity,
   claimOpportunity,
   recordOpportunityEvaluation,
+  updateOpportunityStatus,
+  addOpportunityNote,
+  normalizeMutatableWorkflowStatus,
   OpportunityWorkflowError,
 } from "../persistence/opportunityWorkflow";
 import { SOURCE_NAMES } from "../validate";
@@ -113,7 +117,15 @@ const AssignOpportunitySchema = z.object({
   assignedToUserId: z.string().uuid().nullable(),
 });
 
-const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate)$/;
+const UpdateOpportunityStatusSchema = z.object({
+  status: z.string().trim().min(1).max(32),
+});
+
+const AddOpportunityNoteSchema = z.object({
+  note: z.string().trim().min(1).max(2000),
+});
+
+const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|notes)$/;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -227,7 +239,16 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
       if (action === "claim") {
         return await handleOpportunityClaim(request, env, decodeURIComponent(id));
       }
-      return await handleOpportunityEvaluate(request, env, decodeURIComponent(id));
+      if (action === "evaluate") {
+        return await handleOpportunityEvaluate(request, env, decodeURIComponent(id));
+      }
+      if (action === "status") {
+        return await handleOpportunityStatus(request, env, decodeURIComponent(id));
+      }
+      if (action === "notes") {
+        return await handleOpportunityNotes(request, env, decodeURIComponent(id));
+      }
+      return json({ ok: false, error: "not_found" }, 404);
     }
     if (request.method === "GET" && pathname.startsWith("/app/opportunities/")) {
       const id = decodeURIComponent(pathname.slice("/app/opportunities/".length));
@@ -1048,7 +1069,9 @@ function mapWorkflowError(err: OpportunityWorkflowError): Response {
         ? 403
         : err.code === "opportunity_not_found"
           ? 404
-          : 400;
+          : err.code === "invalid_status_transition"
+            ? 409
+            : 400;
   return json(
     {
       ok: false,
@@ -1169,6 +1192,107 @@ async function handleOpportunityEvaluate(
   } catch (err) {
     if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
     log("app.opportunity_evaluate.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/:id/status — closer/admin updates workflow status.
+ */
+async function handleOpportunityStatus(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = UpdateOpportunityStatusSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  const nextStatus = normalizeMutatableWorkflowStatus(parsed.data.status);
+  if (!nextStatus) {
+    return json({ ok: false, error: "invalid_status" }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_status.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await updateOpportunityStatus(db, normalizedListingId, userOrResponse, nextStatus);
+    log("app.opportunity_status.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+      status: nextStatus,
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_status.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/:id/notes — closer/admin adds an auditable note.
+ */
+async function handleOpportunityNotes(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = AddOpportunityNoteSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_notes.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await addOpportunityNote(
+      db,
+      normalizedListingId,
+      userOrResponse,
+      parsed.data.note,
+    );
+    log("app.opportunity_notes.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_notes.failed", { normalizedListingId, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }
