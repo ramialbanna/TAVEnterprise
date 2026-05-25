@@ -44,7 +44,8 @@ const ctx = {
 
 // Task IDs that the regionMap actually recognises.
 const TASK_EAST = "nccVufFs2grLH4Qsj"; // → dallas_tx
-const TASK_WEST = "vk7OijnAOOo8V1ekc"; // → unmapped
+const TASK_WEST = "vk7OijnAOOo8V1ekc"; // → lubbock_tx
+const TASK_OK   = "Xpq656NgueqfXDHvU"; // → unmapped
 
 const APIFY_SECRET = "test-apify-webhook-secret";
 const APIFY_PAT    = "test-apify-pat";
@@ -232,9 +233,9 @@ describe("POST /apify-webhook — event type filter", () => {
 // ── 3. Task → region mapping ──────────────────────────────────────────────────
 
 describe("POST /apify-webhook — region mapping", () => {
-  it("noops 200 with apify.bridge.unmapped_task for tx-west", async () => {
+  it("noops 200 with apify.bridge.unmapped_task for tav-ok", async () => {
     const env = makeEnv();
-    const req = makeRequest(succeededPayload({ actor_task_id: TASK_WEST }), {
+    const req = makeRequest(succeededPayload({ actor_task_id: TASK_OK }), {
       Authorization: `Bearer ${APIFY_SECRET}`,
     });
     const res = await worker.fetch(req, env, ctx);
@@ -243,6 +244,21 @@ describe("POST /apify-webhook — region mapping", () => {
     expect(body.skipped).toBe("unmapped_task");
     expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
     expect(vi.mocked(fetchApifyDatasetItems)).not.toHaveBeenCalled();
+  });
+
+  it("dispatches with region=lubbock_tx for tx-west", async () => {
+    vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({
+      items: [{ url: "https://fb.com/1", title: "2020 Toyota Camry SE" }],
+      truncated: false,
+    });
+    const env = makeEnv();
+    const req = makeRequest(succeededPayload({ actor_task_id: TASK_WEST }), {
+      Authorization: `Bearer ${APIFY_SECRET}`,
+    });
+    await worker.fetch(req, env, ctx);
+    const call = vi.mocked(ingestCore).mock.calls[0];
+    expect(call).toBeDefined();
+    expect(call![0].region).toBe("lubbock_tx");
   });
 
   it("returns 400 when resource.actorTaskId is missing entirely", async () => {
