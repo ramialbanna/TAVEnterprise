@@ -435,7 +435,7 @@ Query params (all optional):
 |-------|-----------|
 | `limit` | Default `20`, clamped to `100`; non-positive-integer values fall back to `20` (same rule as `/app/import-batches`). |
 | `source` | Exact match. Validated against the schema enum (`facebook`, `craigslist`, `autotrader`, `cars_com`, `offerup`). Unknown value → `400 invalid_filter`. |
-| `region` | Exact match. Validated against the region enum (`dallas_tx`, `houston_tx`, `austin_tx`, `san_antonio_tx`). Unknown value → `400 invalid_filter`. |
+| `region` | Exact match. Validated against the region enum (`dallas_tx`, `houston_tx`, `austin_tx`, `san_antonio_tx`, `lubbock_tx`). Unknown value → `400 invalid_filter`. |
 | `status` | Exact match. One of `running`, `completed`, `failed`, `truncated`. Unknown value → `400 invalid_filter`. |
 
 Success → `200 { "ok": true, "data": IngestRunSummary[] }` where:

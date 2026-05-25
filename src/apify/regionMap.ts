@@ -3,10 +3,9 @@ import type { RegionKey } from "../types/domain";
 /**
  * Apify actor-task ID → TAV region key.
  *
- * Initial scope: tx-east (Dallas) and tx-south (San Antonio) only. tx-west
- * (Lubbock) and tav-ok (Oklahoma City) intentionally absent — their locations
- * are outside REGION_KEYS, so the bridge no-ops them until REGION_KEYS is
- * expanded via a separate ADR + DB migration.
+ * tx-east (Dallas), tx-south (San Antonio), and tx-west (Lubbock) are mapped.
+ * tav-ok (Oklahoma City) remains unmapped until a separate ADR adds a non-TX
+ * region key.
  *
  * Keys are Apify task IDs (17-char alphanumeric, e.g. `nccVufFs2grLH4Qsj`).
  * Source of truth confirmed by `GET /v2/actor-tasks/{id}` against the Rami_TAV
@@ -15,6 +14,7 @@ import type { RegionKey } from "../types/domain";
 export const APIFY_TASK_REGION_MAP: Record<string, RegionKey> = {
   nccVufFs2grLH4Qsj: "dallas_tx",      // tav-tx-east   (Dallas, TX)
   MWtcjZFWqJrnYChgp: "san_antonio_tx", // tav-tx-south  (San Antonio, TX)
+  vk7OijnAOOo8V1ekc: "lubbock_tx",     // tav-tx-west   (Lubbock, TX)
 };
 
 /**

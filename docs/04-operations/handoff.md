@@ -157,7 +157,7 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 
 ### Not shipped yet
 
-- Phase 8 region expansion (`tav-tx-west`, `tav-tx-south`, `tav-ok` soak).
+- Phase 8 west soak in progress (`lubbock_tx`, `tav-tx-west` map); south + ok remain.
 - Near-miss reason-code filter and valuation snapshots index (v2 polish — see [v2-opportunities](../02-product/v2-opportunities.md)).
 
 ### Apify / ingest
@@ -165,8 +165,9 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 | Task | Region map | Schedule status |
 |------|------------|-----------------|
 | `tav-tx-east` (`nccVufFs2grLH4Qsj`) | `dallas_tx` | **Live** — production `source_runs` show ~5‑min `facebook`/`dallas_tx` runs through 2026-05-21 |
+| `tav-tx-west` (`vk7OijnAOOo8V1ekc`) | `lubbock_tx` | **Soak started 2026-05-23** — migration 0049 + Worker `b81fae54`; enable Apify schedule `KD49MXipQmFUEiIRc` if not already on |
 | `tav-tx-south` (`MWtcjZFWqJrnYChgp`) | `san_antonio_tx` | Mapped in code; **not enabled for soak yet** |
-| `tav-tx-west`, `tav-ok` | unmapped | Bridge no-ops (`unmapped_task`) until `REGION_KEYS` + map expanded |
+| `tav-ok` (`Xpq656NgueqfXDHvU`) | unmapped | Bridge no-ops until non-TX region ADR |
 
 Recent production runs are completing but often show **`created_leads = 0`** — expected at current yield (~0.26% of processed listings) and small batch sizes. See [diagnostics.md](diagnostics.md) and the [2026-05-21 snapshot](apify-production-diagnosis-2026-05-21.md).
 
@@ -176,11 +177,12 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 - Repo migrations **0043** (valuation miss observability) and **0044** (`source_runs.status = truncated`) are reflected in `supabase/schema.sql`.
 - **0044 applied to Supabase** on 2026-05-20; `truncated` rows already present.
-- **0045–0048 applied to Supabase** on 2026-05-23:
+- **0045–0049 applied to Supabase** on 2026-05-23:
   - `0045` — `tav.users` (identity)
   - `0046` — `tav.manual_opportunity_submissions`
   - `0047` — `tav.opportunity_workflow`, `tav.opportunity_actions`
   - `0048` — `reviewed` status + `status_changed` / `note_added` audit actions (Phase 7)
+  - `0049` — `lubbock_tx` region key + buy-box coverage (Phase 8 west soak)
 - Supabase migration registry records `users`, `manual_opportunity_submissions`, and `opportunity_workflow` as timestamped entries (2026-05-23).
 - Migrations **0040–0043** objects exist in the live DB but are **not recorded** in Supabase's migration registry (registry jumps `0039` → timestamped `source_runs_status_truncated`). Hygiene-only gap — objects match repo.
 

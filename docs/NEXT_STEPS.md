@@ -14,7 +14,7 @@ Living checklist for what to do next. For phase detail and acceptance criteria, 
 
 **North star:** v2 Opportunities is **feature-complete** for buyer workflow (queue → assign → claim → status → notes).
 
-**Immediate engineering priority:** Phase 8 — region expansion soak, plus tactical follow-ups (ingest Playwright smoke, near-miss filter polish).
+**Immediate engineering priority:** Phase 8 — `lubbock_tx` / `tav-tx-west` code shipped (Apify schedule deferred); then south + ok when ready.
 
 **Product gap today:** None blocking live buyer workflow testing. Region expansion and KPI polish remain.
 
@@ -90,7 +90,7 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 ### Phase 8 — Region expansion (ongoing)
 
 - [x] `tav-tx-east` schedule live (5 min) — verify still healthy
-- [ ] Soak + enable `tav-tx-west`
+- [~] Soak + enable `tav-tx-west` (2026-05-23 — `lubbock_tx` region + map shipped, migration 0049 applied, Worker `b81fae54`; Apify schedule deferred)
 - [ ] Soak + enable `tav-tx-south`
 - [ ] Soak + enable `tav-ok`
 
@@ -161,7 +161,7 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
-| 2026-05-23 | Git push — `f5e73ec` on `main` (Phase 7 status/notes/UI); Vercel auto-deploy triggered |
+| 2026-05-23 | Phase 8 start — `lubbock_tx` region (migration 0049), `tav-tx-west` map, Worker `b81fae54` |
 | 2026-05-23 | Phase 7 complete — status + notes APIs, action history UI, migration 0048; Worker deploy `tav-aip-production` version `efda0005` |
 | 2026-05-23 | Production deploy — `tav-aip-production` version `647ec3e7`; Vercel green after `1a4b936`; Supabase 0045–0047 applied |
 | 2026-05-23 | Wrangler setup — `account_id` pinned in `wrangler.toml` (`73dbe6d`) |

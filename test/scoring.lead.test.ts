@@ -55,6 +55,10 @@ describe("computeRegionScore", () => {
     expect(computeRegionScore("san_antonio_tx")).toBe(75);
   });
 
+  it("lubbock_tx (secondary market) → 75", () => {
+    expect(computeRegionScore("lubbock_tx")).toBe(75);
+  });
+
   it("undefined (out-of-region) → 50", () => {
     expect(computeRegionScore(undefined)).toBe(50);
   });

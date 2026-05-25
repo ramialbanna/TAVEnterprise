@@ -29,7 +29,7 @@ Ingest + MMR Foundations -> v2 Opportunities Read Model -> Manual Submission + A
 - Production Worker `/app/*` API is live.
 - Apify production bridge is enabled.
 - `tav-tx-east` Apify schedule is enabled every 5 minutes and verified.
-- `tav-tx-west`, `tav-tx-south`, and `tav-ok` remain disabled pending separate soaks.
+- `tav-tx-west` mapped to `lubbock_tx` (Phase 8 soak started 2026-05-23); `tav-tx-south` and `tav-ok` remain disabled pending separate soaks.
 - The frontend surfaces Dashboard, **Opportunities** (`/opportunities`), Ingest Monitor, VIN/MMR Lab, Historical Data, and Admin/Integrations.
 - `/opportunities` shows leads, near-misses, and manual submissions with full buyer workflow: assign, claim, status updates, and notes (Phases 5–7, 2026-05-23).
 - Finders can submit listing URLs; admins assign closers; closers claim with a 24h window and update status (reviewed → contacted → bought/passed) with auditable notes (2026-05-23).

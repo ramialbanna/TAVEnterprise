@@ -6,7 +6,7 @@ import type { SourceName, LeadGrade } from "../types/domain";
 // Unknown/missing region is penalised — cannot target buyers correctly.
 
 const PRIMARY_REGIONS = new Set(["dallas_tx", "houston_tx"]);
-const SECONDARY_REGIONS = new Set(["austin_tx", "san_antonio_tx"]);
+const SECONDARY_REGIONS = new Set(["austin_tx", "san_antonio_tx", "lubbock_tx"]);
 
 export function computeRegionScore(region: string | undefined): number {
   if (!region) return 50;

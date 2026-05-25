@@ -36,6 +36,7 @@ export const REGION_KEYS = [
   "houston_tx",
   "austin_tx",
   "san_antonio_tx",
+  "lubbock_tx",
 ] as const;
 export type RegionKey = (typeof REGION_KEYS)[number];
 

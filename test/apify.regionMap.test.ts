@@ -10,8 +10,8 @@ describe("Apify task → TAV region mapping", () => {
     expect(mapApifyTaskToRegion("MWtcjZFWqJrnYChgp")).toBe("san_antonio_tx");
   });
 
-  it("returns null for tav-tx-west (Lubbock) — not in REGION_KEYS yet", () => {
-    expect(mapApifyTaskToRegion("vk7OijnAOOo8V1ekc")).toBeNull();
+  it("maps tav-tx-west (vk7OijnAOOo8V1ekc) to lubbock_tx", () => {
+    expect(mapApifyTaskToRegion("vk7OijnAOOo8V1ekc")).toBe("lubbock_tx");
   });
 
   it("returns null for tav-ok (Oklahoma City) — outside Texas REGION_KEYS", () => {
@@ -22,10 +22,9 @@ describe("Apify task → TAV region mapping", () => {
     expect(mapApifyTaskToRegion("not-a-real-task-id")).toBeNull();
   });
 
-  it("only the two intentionally-mapped tasks are in the map", () => {
-    // Guard against accidentally expanding REGION_KEYS / mapping without ADR.
+  it("only the three intentionally-mapped tasks are in the map", () => {
     expect(Object.keys(APIFY_TASK_REGION_MAP).sort()).toEqual(
-      ["MWtcjZFWqJrnYChgp", "nccVufFs2grLH4Qsj"],
+      ["MWtcjZFWqJrnYChgp", "nccVufFs2grLH4Qsj", "vk7OijnAOOo8V1ekc"],
     );
   });
 });
