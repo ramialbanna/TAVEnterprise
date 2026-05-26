@@ -86,7 +86,7 @@ Before running SQL, confirm the active MCP is **supabase-TAVEnterprise**.
 | Intelligence Worker | `tav-intelligence-worker-production` |
 | Web app | `tav-enterprise.vercel.app` (Vercel) |
 | Database | Supabase project `fjnevgakkhnsrcimfivw` |
-| Scrape (live region) | Apify schedule `tav-tx-east` (others disabled until soak) |
+| Scrape (live regions) | Apify schedules — see [apify-phase8-regions](04-operations/apify-phase8-regions.md) |
 
 ---
 

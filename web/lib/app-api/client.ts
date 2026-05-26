@@ -120,7 +120,13 @@ export type ManualSubmissionRequest = {
   listingUrl: string;
   assignedToUserId?: string;
   source?: "facebook" | "craigslist" | "autotrader" | "cars_com" | "offerup";
-  region?: "dallas_tx" | "houston_tx" | "austin_tx" | "san_antonio_tx" | "lubbock_tx";
+  region?:
+    | "dallas_tx"
+    | "houston_tx"
+    | "austin_tx"
+    | "san_antonio_tx"
+    | "lubbock_tx"
+    | "oklahoma_city_ok";
   year?: number;
   make?: string;
   model?: string;

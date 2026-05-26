@@ -28,6 +28,7 @@ const REGIONS = [
   { value: "austin_tx", label: "Austin TX" },
   { value: "san_antonio_tx", label: "San Antonio TX" },
   { value: "lubbock_tx", label: "Lubbock TX" },
+  { value: "oklahoma_city_ok", label: "Oklahoma City OK" },
 ] as const;
 
 const SOURCES = [

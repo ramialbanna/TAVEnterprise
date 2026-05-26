@@ -36,7 +36,7 @@ CREATE TABLE tav.source_runs (
     CHECK (source IN ('facebook','craigslist','autotrader','cars_com','offerup')),
   run_id        text        NOT NULL,
   region        text        NOT NULL
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
   scraped_at    timestamptz NOT NULL,
   item_count    integer,
   processed     integer,
@@ -84,7 +84,7 @@ CREATE TABLE tav.normalized_listings (
   city                text,
   state               char(2),
   region              text        NOT NULL
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
   seller_name         text,
   seller_url          text,
   images              text[],
@@ -117,7 +117,7 @@ CREATE TABLE tav.vehicle_candidates (
   model         text,
   trim          text,
   region        text
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
   listing_count integer     NOT NULL DEFAULT 0,
   first_seen_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at  timestamptz NOT NULL DEFAULT now(),
@@ -221,7 +221,7 @@ CREATE TABLE tav.leads (
   source                  text        NOT NULL
     CHECK (source IN ('facebook','craigslist','autotrader','cars_com','offerup')),
   region                  text
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
   year                    smallint,
   make                    text,
   model                   text,
@@ -554,7 +554,7 @@ CREATE TABLE tav.market_velocities (
   model                    text          NOT NULL,
   trim                     text,
   region                   text
-    CHECK (region IS NULL OR region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx')),
+    CHECK (region IS NULL OR region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
   sales_count_7d           integer       NOT NULL DEFAULT 0,
   sales_count_30d          integer       NOT NULL DEFAULT 0,
   sales_count_90d          integer       NOT NULL DEFAULT 0,

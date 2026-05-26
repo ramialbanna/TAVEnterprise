@@ -157,7 +157,7 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 
 ### Not shipped yet
 
-- Phase 8 west soak in progress (`lubbock_tx`, `tav-tx-west` map); south + ok remain.
+- Phase 8 code complete (all four Apify tasks mapped); west/south/ok schedules enabled per soak — see [apify-phase8-regions.md](apify-phase8-regions.md).
 - Near-miss reason-code filter and valuation snapshots index (v2 polish — see [v2-opportunities](../02-product/v2-opportunities.md)).
 
 ### Apify / ingest
@@ -165,9 +165,9 @@ Production Worker config (`wrangler.toml`): `MANHEIM_LOOKUP_MODE=worker`, `APIFY
 | Task | Region map | Schedule status |
 |------|------------|-----------------|
 | `tav-tx-east` (`nccVufFs2grLH4Qsj`) | `dallas_tx` | **Live** — production `source_runs` show ~5‑min `facebook`/`dallas_tx` runs through 2026-05-21 |
-| `tav-tx-west` (`vk7OijnAOOo8V1ekc`) | `lubbock_tx` | **Soak started 2026-05-23** — migration 0049 + Worker `b81fae54`; enable Apify schedule `KD49MXipQmFUEiIRc` if not already on |
-| `tav-tx-south` (`MWtcjZFWqJrnYChgp`) | `san_antonio_tx` | Mapped in code; **not enabled for soak yet** |
-| `tav-ok` (`Xpq656NgueqfXDHvU`) | unmapped | Bridge no-ops until non-TX region ADR |
+| `tav-tx-west` (`vk7OijnAOOo8V1ekc`) | `lubbock_tx` | Code live (0049); enable schedule `KD49MXipQmFUEiIRc` for soak |
+| `tav-tx-south` (`MWtcjZFWqJrnYChgp`) | `san_antonio_tx` | Mapped; enable schedule `6yk59JRahCfbTy2h8` after west soak |
+| `tav-ok` (`Xpq656NgueqfXDHvU`) | `oklahoma_city_ok` | Code live (0050); enable schedule `0qdlWHsaojVZxEb1s` after south soak |
 
 Recent production runs are completing but often show **`created_leads = 0`** — expected at current yield (~0.26% of processed listings) and small batch sizes. See [diagnostics.md](diagnostics.md) and the [2026-05-21 snapshot](apify-production-diagnosis-2026-05-21.md).
 

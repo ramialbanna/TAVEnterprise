@@ -14,17 +14,22 @@ describe("Apify task → TAV region mapping", () => {
     expect(mapApifyTaskToRegion("vk7OijnAOOo8V1ekc")).toBe("lubbock_tx");
   });
 
-  it("returns null for tav-ok (Oklahoma City) — outside Texas REGION_KEYS", () => {
-    expect(mapApifyTaskToRegion("Xpq656NgueqfXDHvU")).toBeNull();
+  it("maps tav-ok (Xpq656NgueqfXDHvU) to oklahoma_city_ok", () => {
+    expect(mapApifyTaskToRegion("Xpq656NgueqfXDHvU")).toBe("oklahoma_city_ok");
   });
 
   it("returns null for an unknown task id", () => {
     expect(mapApifyTaskToRegion("not-a-real-task-id")).toBeNull();
   });
 
-  it("only the three intentionally-mapped tasks are in the map", () => {
+  it("only the four Apify Facebook tasks are in the map", () => {
     expect(Object.keys(APIFY_TASK_REGION_MAP).sort()).toEqual(
-      ["MWtcjZFWqJrnYChgp", "nccVufFs2grLH4Qsj", "vk7OijnAOOo8V1ekc"],
+      [
+        "MWtcjZFWqJrnYChgp",
+        "Xpq656NgueqfXDHvU",
+        "nccVufFs2grLH4Qsj",
+        "vk7OijnAOOo8V1ekc",
+      ],
     );
   });
 });
