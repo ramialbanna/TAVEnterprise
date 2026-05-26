@@ -1,6 +1,6 @@
 # Next Steps
 
-**Last updated:** 2026-05-23  
+**Last updated:** 2026-05-24  
 **Owner:** Engineering (update this file when priorities shift)
 
 Living checklist for what to do next. For phase detail and acceptance criteria, see
@@ -90,7 +90,7 @@ Aligned with [roadmap](02-product/roadmap.md). Do not skip Phase 4 before Phase 
 ### Phase 8 — Region expansion (ongoing)
 
 - [x] `tav-tx-east` schedule live (5 min) — verify still healthy
-- [~] Soak + enable `tav-tx-west` (2026-05-23 — `lubbock_tx` region + map shipped, migration 0049 applied, Worker `b81fae54`; Apify schedule deferred)
+- [~] Soak + enable `tav-tx-west` (2026-05-23 — `lubbock_tx` on `main` `4afdd9e`, migration 0049, Worker `b81fae54`, CI fix `b5247cc`; Apify schedule + soak deferred)
 - [ ] Soak + enable `tav-tx-south`
 - [ ] Soak + enable `tav-ok`
 
@@ -143,7 +143,8 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 4. `feat: add read-only opportunities app api` (Phase 5)
 5. `feat(web): add opportunities queue` (Phase 5)
 6. `feat: manual submission + assignment` (Phase 6) — **shipped** (`cf76a9c`, deployed 2026-05-23)
-7. `feat: opportunity workflow mutations` (Phase 7) — **shipped** (2026-05-23 — Worker `efda0005`, migration 0048, web UI)
+7. `feat: opportunity workflow mutations` (Phase 7) — **shipped** (`f5e73ec`, 2026-05-23 — Worker `efda0005`, migration 0048, web UI)
+8. `feat: add lubbock_tx region for Phase 8 tav-tx-west` — **shipped** (`4afdd9e`, `b5247cc` CI test fix)
 
 ---
 
@@ -161,6 +162,9 @@ Not blocking v2. Revisit when ingest volume or region fan-out stresses the sync 
 
 | Date | Item |
 |------|------|
+| 2026-05-24 | CI fix — `b5247cc` Apify webhook tests for `lubbock_tx` mapping (Verification Loop + staging deploy green) |
+| 2026-05-23 | Git push — `4afdd9e` on `main` (Phase 8 `lubbock_tx`); Vercel auto-deploy; migration 0049 applied |
+| 2026-05-23 | Git push — `f5e73ec` + `55ecfab` on `main` (Phase 7 status/notes/UI); Vercel auto-deploy |
 | 2026-05-23 | Phase 8 start — `lubbock_tx` region (migration 0049), `tav-tx-west` map, Worker `b81fae54` |
 | 2026-05-23 | Phase 7 complete — status + notes APIs, action history UI, migration 0048; Worker deploy `tav-aip-production` version `efda0005` |
 | 2026-05-23 | Production deploy — `tav-aip-production` version `647ec3e7`; Vercel green after `1a4b936`; Supabase 0045–0047 applied |
