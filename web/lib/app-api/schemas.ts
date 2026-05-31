@@ -210,11 +210,13 @@ export const IngestRunDetailSchema = z.object({
 export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;
 
 // ── GET /app/opportunities ─────────────────────────────────────────────────────
-export const OpportunityEstimateFlagsSchema = z.object({
-  mileage: z.boolean(),
-  style: z.boolean(),
-  mmr: z.boolean(),
-});
+export const OpportunityEstimateFlagsSchema = z
+  .object({
+    mileage: z.boolean().default(false),
+    style: z.boolean().default(false),
+    mmr: z.boolean().default(false),
+  })
+  .default({ mileage: false, style: false, mmr: false });
 
 export const OpportunityRowSchema = z.object({
   id: z.string(),
@@ -258,7 +260,7 @@ export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;
 export const OpportunityListPageSchema = z.object({
   items: OpportunityRowListSchema,
   total: z.number(),
-  offset: z.number(),
+  offset: z.number().default(0),
 });
 export type OpportunityListPage = z.infer<typeof OpportunityListPageSchema>;
 

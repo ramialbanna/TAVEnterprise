@@ -201,7 +201,28 @@ export function parseOpportunitiesPage(
   status: number,
   json: unknown,
 ): ApiResult<OpportunityListPage> {
-  return interpret(status, json, OpportunityListPageSchema);
+  const pageResult = interpret(status, json, OpportunityListPageSchema);
+  if (pageResult.ok) return pageResult;
+
+  // Backward compat: pre-Phase-1 Worker returns a plain array even when sort/offset/view
+  // params are present. Wrap it as a single page so New mode still loads.
+  if (
+    pageResult.error === "schema_mismatch" &&
+    isObject(json) &&
+    json.ok === true &&
+    Array.isArray(json.data)
+  ) {
+    const rows = OpportunityRowListSchema.safeParse(json.data);
+    if (rows.success) {
+      return {
+        ok: true,
+        status,
+        data: { items: rows.data, total: rows.data.length, offset: 0 },
+      };
+    }
+  }
+
+  return pageResult;
 }
 
 export function parseOpportunityDetail(status: number, json: unknown): ApiResult<OpportunityDetail> {

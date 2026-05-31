@@ -7,6 +7,7 @@ import {
   parseKpis,
   parseMmrVin,
   parseOpportunityDetail,
+  parseOpportunitiesPage,
   parseSystemStatus,
 } from "./parse";
 
@@ -144,6 +145,43 @@ const OPPORTUNITY_DETAIL_OK = {
   },
 };
 
+const OPPORTUNITY_ROW = {
+  id: "22222222-2222-2222-2222-222222222222",
+  type: "lead",
+  badges: ["First seen"],
+  source: "facebook",
+  region: "dallas_tx",
+  sourceRunId: "11111111-1111-1111-1111-111111111111",
+  normalizedListingId: "22222222-2222-2222-2222-222222222222",
+  vehicleCandidateId: null,
+  leadId: "33333333-3333-3333-3333-333333333333",
+  title: "2019 Ford F-150",
+  year: 2019,
+  make: "Ford",
+  model: "F-150",
+  style: "XLT",
+  vin: "1FT8W3BT1SEC27066",
+  price: 25000,
+  mmrValue: 28000,
+  spread: 3000,
+  finalScore: 72,
+  grade: "good",
+  status: "reviewed",
+  submittedBy: null,
+  assignedTo: null,
+  assignedCloserName: null,
+  claimedBy: "Closer One",
+  claimedAt: "2026-05-23T00:00:00.000Z",
+  claimExpiresAt: "2026-05-24T00:00:00.000Z",
+  lastEvaluatedBy: null,
+  lastEvaluatedAt: null,
+  firstSeenAt: "2026-05-20T10:00:00.000Z",
+  lastSeenAt: "2026-05-21T10:00:00.000Z",
+  seenCount: 1,
+  listingUrl: "https://example.com/listing/1",
+  estimateFlags: { mileage: false, style: false, mmr: false },
+};
+
 describe("parse — happy paths", () => {
   it("parses GET /app/kpis", () => {
     const r = parseKpis(200, KPIS_OK);
@@ -205,6 +243,40 @@ describe("parse — happy paths", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error("expected ok");
     expect(r.data.actions).toEqual([]);
+  });
+
+  it("parses paginated GET /app/opportunities", () => {
+    const r = parseOpportunitiesPage(200, {
+      ok: true,
+      data: { items: [OPPORTUNITY_ROW], total: 1, offset: 0 },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.items).toHaveLength(1);
+    expect(r.data.total).toBe(1);
+  });
+
+  it("wraps a legacy array GET /app/opportunities response as a page", () => {
+    const r = parseOpportunitiesPage(200, { ok: true, data: [OPPORTUNITY_ROW] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data).toEqual({ items: [OPPORTUNITY_ROW], total: 1, offset: 0 });
+  });
+
+  it("defaults missing estimateFlags on opportunity rows", () => {
+    const rowWithoutFlags = { ...OPPORTUNITY_ROW };
+    delete (rowWithoutFlags as { estimateFlags?: unknown }).estimateFlags;
+    const r = parseOpportunitiesPage(200, {
+      ok: true,
+      data: { items: [rowWithoutFlags], total: 1 },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.items[0]?.estimateFlags).toEqual({
+      mileage: false,
+      style: false,
+      mmr: false,
+    });
   });
 });
 
