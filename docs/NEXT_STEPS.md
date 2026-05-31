@@ -1,9 +1,9 @@
 # Next Steps — UX Rollout
 
-**Last updated:** 2026-05-31 · **Start at Phase 3** · Implement one phase per PR unless asked otherwise.
+**Last updated:** 2026-05-31 · **Start at Phase 4** · Implement one phase per PR unless asked otherwise.
 
 > **Fresh chat prompt:**  
-> Read `docs/NEXT_STEPS.md` and implement **UX Phase 3** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
+> Read `docs/NEXT_STEPS.md` and implement **UX Phase 4** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -67,13 +67,13 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | **0** | Toggle + code split | [x] |
 | **1** | API pagination, sort, filters | [x] |
 | **2** | Plain-language copy | [x] |
-| **3** | Table at scale | [ ] |
+| **3** | Table at scale | [x] |
 | **4** | Queue tabs | [ ] |
 | **5** | Workflow panel | [ ] |
 | **6** | Role-based shell | [ ] |
 | **7** | Polish + UAT | [ ] |
 
-**Current phase:** 3
+**Current phase:** 4
 
 ---
 
@@ -118,13 +118,13 @@ Web only. **Exit:** New copy; Classic unchanged.
 
 New mode only; needs Phase 1. **Exit:** scannable table at volume.
 
-- [ ] Pagination UI (25–50 per page)
-- [ ] Column sort UI where API supports
-- [ ] Colored spread / deal signal; compact Vehicle + merged Signal column
-- [ ] Column picker + defaults (hide Region, Last seen); sticky header
-- [ ] Row hover/selected; single-click → preview sheet
-- [ ] Quick actions: View listing, Claim
-- [ ] Optional density toggle
+- [x] Pagination UI (25–50 per page)
+- [x] Column sort UI where API supports
+- [x] Colored spread / deal signal; compact Vehicle + merged Signal column
+- [x] Column picker + defaults (hide Region, Last seen); sticky header
+- [x] Row hover/selected; single-click → preview sheet
+- [x] Quick actions: View listing, Claim
+- [x] Optional density toggle
 
 ---
 
@@ -176,3 +176,4 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 | 2026-05-31 | 0 | Classic/New toggle, code split, stub New client |
 | 2026-05-31 | 1 | Paginated opportunities API; New client uses spread sort + total |
 | 2026-05-31 | 2 | Plain-language labels map; New table, badges, preview sheet, page intro |
+| 2026-05-31 | 3 | Server pagination, sort, column picker, spread signal, quick actions |

@@ -9,7 +9,7 @@ import { OpportunitiesPageIntro } from "./_components/opportunities-page-intro";
 export default async function OpportunitiesPage() {
   const [initialClassic, initialNew] = await Promise.all([
     listOpportunities({ limit: 50 }),
-    listOpportunitiesPage({ limit: 50, offset: 0, sort: "spread_desc", view: "all" }),
+    listOpportunitiesPage({ limit: 25, offset: 0, sort: "spread_desc", view: "all" }),
   ]);
 
   return (

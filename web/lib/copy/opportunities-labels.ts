@@ -69,7 +69,7 @@ export const PAGE_COPY = {
   queueManual: "Team submissions",
   tableTitle: "Your queue",
   tableFooter:
-    "Sorted by room to make (best deals first). Click a row for a quick preview, or open the full detail page from there.",
+    "Click a row for a quick preview. Use the action icons to view the listing or start working a deal.",
   emptyTitle: "No deals in your queue yet",
   emptyHint:
     "Leads, almost-deals, and team submissions show up here. Submit a listing link with the button above.",
