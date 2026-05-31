@@ -1,9 +1,9 @@
 # Next Steps — UX Rollout
 
-**Last updated:** 2026-05-31 · **Start at Phase 5** · Implement one phase per PR unless asked otherwise.
+**Last updated:** 2026-05-31 · **Start at Phase 6** · Implement one phase per PR unless asked otherwise.
 
 > **Fresh chat prompt:**  
-> Read `docs/NEXT_STEPS.md` and implement **UX Phase 5** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
+> Read `docs/NEXT_STEPS.md` and implement **UX Phase 6** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -69,11 +69,11 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | **2** | Plain-language copy | [x] |
 | **3** | Table at scale | [x] |
 | **4** | Queue tabs | [x] |
-| **5** | Workflow panel | [ ] |
+| **5** | Workflow panel | [x] |
 | **6** | Role-based shell | [ ] |
 | **7** | Polish + UAT | [ ] |
 
-**Current phase:** 5
+**Current phase:** 6
 
 ---
 
@@ -142,11 +142,11 @@ Needs Phases 1 + 3. **Exit:** tabs drive filtered lists + human summary line.
 
 Fork `OpportunityWorkflowPanelNew`. **Exit:** guided actions; Classic panel untouched.
 
-- [ ] Stepper: Found → Assigned → Working → Contacted → Bought/Passed
-- [ ] One primary action per state; claim countdown; collision banner
-- [ ] Details accordion for audit metadata; sentence-case headers
-- [ ] Preview sheet: View listing + Open full page; no double-click reliance
-- [ ] Mobile sticky action bar when row selected
+- [x] Stepper: Found → Assigned → Working → Contacted → Bought/Passed
+- [x] One primary action per state; claim countdown; collision banner
+- [x] Details accordion for audit metadata; sentence-case headers
+- [x] Preview sheet: View listing + Open full page; no double-click reliance
+- [x] Mobile sticky action bar when row selected
 
 ---
 
@@ -179,3 +179,4 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 | 2026-05-31 | 3 | Server pagination, sort, column picker, spread signal, quick actions |
 | 2026-05-31 | fix | New mode paginated parse tolerance + classic-list fallback (`ea791e9`, `652c310`) |
 | 2026-05-31 | 4 | Queue tabs, human summary line, per-tab empty states |
+| 2026-05-31 | 5 | New workflow panel stepper, preview actions, mobile bar |

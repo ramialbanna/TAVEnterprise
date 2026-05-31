@@ -72,7 +72,7 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 | 1 | Tabbed/filtered Opportunities views — **New mode only** | M | Yes — filters + pagination on `GET /app/opportunities` | [x] |
 | 2 | Plain-language labels + hide ops pages from buyer nav — **New mode only** | S | No | [~] Labels done (Opportunities); nav Phase 6 |
 | 3 | **Better table rows** — **New mode only**; Classic unchanged | M | Yes — pagination; optional sort params | [x] |
-| 4 | Simplified workflow panel — **New mode only** | M | No | [ ] Phase 5 |
+| 4 | Simplified workflow panel — **New mode only** | M | No | [x] |
 
 ---
 
@@ -153,14 +153,14 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 4.1 | **Progress stepper:** Found → Assigned → Working → Contacted → Bought / Passed | [ ] |
-| 4.2 | **One primary action per state** (e.g. unclaimed → “Start working this”) | [ ] |
-| 4.3 | Collapse audit metadata into “Details” or “History” accordion | [ ] |
+| 4.1 | **Progress stepper:** Found → Assigned → Working → Contacted → Bought / Passed | [x] New mode |
+| 4.2 | **One primary action per state** (e.g. unclaimed → “Start working this”) | [x] New mode |
+| 4.3 | Collapse audit metadata into “Details” or “History” accordion | [x] New mode |
 | 4.4 | **Inline note on status change** — “Mark contacted” prompts for callback notes | [ ] |
 | 4.5 | Friendlier assignee picker (avatars / names, not `displayName (role)` in raw select) | [ ] |
-| 4.6 | Show claim countdown prominently after claim (“Your 24h window · expires Tue 3pm”) | [ ] |
-| 4.7 | Visual distinction when another user has claimed (collision) — banner + disabled actions | [ ] |
-| 4.8 | Replace uppercase micro-headers (`ASSIGNMENT`, `WORKFLOW`) with sentence case | [ ] |
+| 4.6 | Show claim countdown prominently after claim (“Your 24h window · expires Tue 3pm”) | [x] New mode |
+| 4.7 | Visual distinction when another user has claimed (collision) — banner + disabled actions | [x] New mode |
+| 4.8 | Replace uppercase micro-headers (`ASSIGNMENT`, `WORKFLOW`) with sentence case | [x] New mode |
 
 ---
 

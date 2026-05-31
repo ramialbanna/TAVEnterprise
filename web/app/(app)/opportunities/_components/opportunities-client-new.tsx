@@ -25,9 +25,11 @@ import {
 } from "@/lib/opportunities/queue-views";
 import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { queryKeys } from "@/lib/query";
+import { cn } from "@/lib/utils";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { OpportunitiesMobileActionBar } from "./opportunities-mobile-action-bar";
 import { OpportunitiesQueueTabs } from "./opportunities-queue-tabs";
 import { OpportunitiesTableNew } from "./opportunities-table-new";
 import { OpportunityPreviewSheetNew } from "./opportunity-preview-sheet-new";
@@ -194,7 +196,7 @@ export function OpportunitiesClientNew({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", selected && "pb-28 md:pb-0")}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManualSubmitDialog />
       </div>
@@ -231,6 +233,16 @@ export function OpportunitiesClientNew({
       </Card>
 
       <OpportunityPreviewSheetNew row={selected} onClose={() => setSelected(null)} />
+
+      {selected ? (
+        <OpportunitiesMobileActionBar
+          row={selected}
+          claimActor={claimActor}
+          claimPending={claimMutation.isPending}
+          onClaim={() => claimMutation.mutate(selected)}
+          onOpenDetail={() => router.push(`/opportunities/${selected.id}`)}
+        />
+      ) : null}
     </div>
   );
 }

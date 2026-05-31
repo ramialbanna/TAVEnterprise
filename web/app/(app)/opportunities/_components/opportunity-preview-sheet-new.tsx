@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink, PanelRightOpen } from "lucide-react";
 
 import { getOpportunity } from "@/lib/app-api/client";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
@@ -13,6 +14,7 @@ import {
 import { queryKeys } from "@/lib/query";
 import { formatNumber, formatMoney, formatDateTime } from "@/lib/format";
 import { ErrorState, UnavailableState } from "@/components/data-state";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -29,7 +31,7 @@ import {
 import { Info } from "lucide-react";
 
 import { OpportunityBadgesNew, OpportunityTypeBadgeNew } from "./opportunity-badges-new";
-import { OpportunityWorkflowPanel } from "./opportunity-workflow-panel";
+import { OpportunityWorkflowPanelNew } from "./opportunity-workflow-panel-new";
 
 export function OpportunityPreviewSheetNew({
   row,
@@ -52,13 +54,31 @@ export function OpportunityPreviewSheetNew({
     <Sheet open={open} onOpenChange={(o) => (o ? null : onClose())}>
       <SheetContent
         side="right"
-        className="w-full max-w-md sm:max-w-md md:max-w-xl overflow-y-auto"
+        className="w-full max-w-md overflow-y-auto pb-24 sm:max-w-md md:max-w-xl md:pb-6"
       >
-        <SheetHeader>
+        <SheetHeader className="space-y-3">
           <SheetTitle>{row?.title ?? "Opportunity"}</SheetTitle>
           <SheetDescription>
             {row ? [row.year, row.make, row.model].filter(Boolean).join(" ") : null}
           </SheetDescription>
+          {row ? (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {row.listingUrl ? (
+                <Button size="sm" variant="default" asChild>
+                  <a href={row.listingUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" />
+                    View listing
+                  </a>
+                </Button>
+              ) : null}
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/opportunities/${row.id}`}>
+                  <PanelRightOpen className="size-4" />
+                  Open full page
+                </Link>
+              </Button>
+            </div>
+          ) : null}
         </SheetHeader>
         {row ? (
           <TooltipProvider delayDuration={300}>
@@ -122,31 +142,11 @@ export function OpportunityPreviewSheetNew({
                 </section>
               ) : null}
 
-              <OpportunityWorkflowPanel
+              <OpportunityWorkflowPanelNew
                 opportunity={detail ?? row}
                 actions={detail?.actions ?? []}
                 recordEvaluation
-                claimButtonLabel={PAGE_COPY.claimAction}
               />
-
-              <div className="flex flex-wrap gap-3 pt-2">
-                {row.listingUrl ? (
-                  <a
-                    href={row.listingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-medium text-primary underline underline-offset-2"
-                  >
-                    View listing
-                  </a>
-                ) : null}
-                <Link
-                  href={`/opportunities/${row.id}`}
-                  className="text-xs font-medium text-primary underline underline-offset-2"
-                >
-                  Open full page
-                </Link>
-              </div>
             </div>
           </TooltipProvider>
         ) : null}
