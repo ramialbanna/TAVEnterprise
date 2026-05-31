@@ -5,6 +5,7 @@ import { Menu } from "lucide-react";
 import type { EnvLabel } from "@/lib/env";
 import { navTitle } from "./nav";
 import { EnvBadge } from "./env-badge";
+import { InterfaceToggle } from "./interface-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu, type SessionUser } from "./user-menu";
 
@@ -31,6 +32,7 @@ export function AppTopbar({
       <h1 className="truncate text-sm font-semibold tracking-tight">{navTitle(pathname)}</h1>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <EnvBadge label={envLabel} />
+        <InterfaceToggle />
         <ThemeToggle />
         <UserMenu user={user} />
       </div>

@@ -17,7 +17,7 @@ import { ManualSubmitDialog } from "./manual-submit-dialog";
 
 const LIST_LIMIT = 50;
 
-export function OpportunitiesClient({
+export function OpportunitiesClientClassic({
   initial,
 }: {
   initial: ApiResult<OpportunityRow[]>;
