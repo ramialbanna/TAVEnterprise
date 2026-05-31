@@ -1,9 +1,9 @@
 # Next Steps — UX Rollout
 
-**Last updated:** 2026-05-30 · **Start at Phase 0** · Implement one phase per PR unless asked otherwise.
+**Last updated:** 2026-05-31 · **Start at Phase 3** · Implement one phase per PR unless asked otherwise.
 
 > **Fresh chat prompt:**  
-> Read `docs/NEXT_STEPS.md` and implement **UX Phase 0** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
+> Read `docs/NEXT_STEPS.md` and implement **UX Phase 3** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -66,14 +66,14 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 |-------|--------|--------|
 | **0** | Toggle + code split | [x] |
 | **1** | API pagination, sort, filters | [x] |
-| **2** | Plain-language copy | [ ] |
+| **2** | Plain-language copy | [x] |
 | **3** | Table at scale | [ ] |
 | **4** | Queue tabs | [ ] |
 | **5** | Workflow panel | [ ] |
 | **6** | Role-based shell | [ ] |
 | **7** | Polish + UAT | [ ] |
 
-**Current phase:** 2
+**Current phase:** 3
 
 ---
 
@@ -108,9 +108,9 @@ Worker + web types. Classic keeps `limit=50` unchanged. **Exit:** New mode gets 
 
 Web only. **Exit:** New copy; Classic unchanged.
 
-- [ ] `web/lib/copy/opportunities-labels.ts`
-- [ ] New table headers, badges, status labels, region names, page intro
-- [ ] Tooltips where technical terms remain
+- [x] `web/lib/copy/opportunities-labels.ts`
+- [x] New table headers, badges, status labels, region names, page intro
+- [x] Tooltips where technical terms remain
 
 ---
 
@@ -175,3 +175,4 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 |------|-------|------------|
 | 2026-05-31 | 0 | Classic/New toggle, code split, stub New client |
 | 2026-05-31 | 1 | Paginated opportunities API; New client uses spread sort + total |
+| 2026-05-31 | 2 | Plain-language labels map; New table, badges, preview sheet, page intro |

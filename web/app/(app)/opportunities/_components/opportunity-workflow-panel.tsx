@@ -90,11 +90,14 @@ export function OpportunityWorkflowPanel({
   actions = [],
   recordEvaluation = false,
   showActionHistory = false,
+  claimButtonLabel = "Claim opportunity",
 }: {
   opportunity: WorkflowTarget;
   actions?: OpportunityAction[];
   recordEvaluation?: boolean;
   showActionHistory?: boolean;
+  /** Override claim button text (New interface uses plain-language copy). */
+  claimButtonLabel?: string;
 }) {
   const queryClient = useQueryClient();
   const [noteDraft, setNoteDraft] = useState("");
@@ -233,7 +236,7 @@ export function OpportunityWorkflowPanel({
             >
               {claimActive && opportunity.claimedBy === me?.displayName
                 ? "Renew 24h claim"
-                : "Claim opportunity"}
+                : claimButtonLabel}
             </Button>
           ) : null}
 

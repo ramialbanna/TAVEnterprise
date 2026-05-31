@@ -7,12 +7,13 @@ import { useQuery } from "@tanstack/react-query";
 import { listOpportunitiesPage, type OpportunitiesPageFilter } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type { OpportunityListPage } from "@/lib/app-api/schemas";
+import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import { queryKeys } from "@/lib/query";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { OpportunitiesTable } from "./opportunities-table";
-import { OpportunityPreviewSheet } from "./opportunity-preview-sheet";
+import { OpportunitiesTableNew } from "./opportunities-table-new";
+import { OpportunityPreviewSheetNew } from "./opportunity-preview-sheet-new";
 import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
@@ -70,42 +71,49 @@ export function OpportunitiesClientNew({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Queue summary
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {PAGE_COPY.queueSummaryTitle}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-          <span>Total in queue: {total}</span>
-          <span>Showing: {rows.length}</span>
-          <span>Leads: {leads}</span>
-          <span>Near misses: {nearMisses}</span>
-          <span>Manual: {manual}</span>
+          <span>
+            {PAGE_COPY.queueTotal}: {total}
+          </span>
+          <span>
+            {PAGE_COPY.queueShowing}: {rows.length}
+          </span>
+          <span>
+            {PAGE_COPY.queueLeads}: {leads}
+          </span>
+          <span>
+            {PAGE_COPY.queueNearMisses}: {nearMisses}
+          </span>
+          <span>
+            {PAGE_COPY.queueManual}: {manual}
+          </span>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Opportunities
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {PAGE_COPY.tableTitle}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <OpportunitiesTable
+          <OpportunitiesTableNew
             rows={rows}
             loading={query.isLoading}
             onSelect={(row) => setSelected(row)}
             onOpenDetail={(row) => router.push(`/opportunities/${row.id}`)}
-            emptyTitle="No opportunities yet"
-            emptyHint="Leads, near-miss listings, and manual submissions appear here. Submit a listing link with the button above."
+            emptyTitle={PAGE_COPY.emptyTitle}
+            emptyHint={PAGE_COPY.emptyHint}
           />
-          <p className="pt-3 text-xs text-muted-foreground">
-            Sorted by spread (highest room first). Click a row for a quick preview. Double-click
-            or use the preview link for the full detail page.
-          </p>
+          <p className="pt-3 text-xs text-muted-foreground">{PAGE_COPY.tableFooter}</p>
         </CardContent>
       </Card>
 
-      <OpportunityPreviewSheet row={selected} onClose={() => setSelected(null)} />
+      <OpportunityPreviewSheetNew row={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
