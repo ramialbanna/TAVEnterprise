@@ -1,9 +1,9 @@
 # Next Steps — UX Rollout
 
-**Last updated:** 2026-05-31 · **Start at Phase 4** · Implement one phase per PR unless asked otherwise.
+**Last updated:** 2026-05-31 · **Start at Phase 5** · Implement one phase per PR unless asked otherwise.
 
 > **Fresh chat prompt:**  
-> Read `docs/NEXT_STEPS.md` and implement **UX Phase 4** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
+> Read `docs/NEXT_STEPS.md` and implement **UX Phase 5** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -68,12 +68,12 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | **1** | API pagination, sort, filters | [x] |
 | **2** | Plain-language copy | [x] |
 | **3** | Table at scale | [x] |
-| **4** | Queue tabs | [ ] |
+| **4** | Queue tabs | [x] |
 | **5** | Workflow panel | [ ] |
 | **6** | Role-based shell | [ ] |
 | **7** | Polish + UAT | [ ] |
 
-**Current phase:** 4
+**Current phase:** 5
 
 ---
 
@@ -132,9 +132,9 @@ New mode only; needs Phase 1. **Exit:** scannable table at volume.
 
 Needs Phases 1 + 3. **Exit:** tabs drive filtered lists + human summary line.
 
-- [ ] Tabs: Needs action · Mine · Worth a look · All → `view=` param
-- [ ] Summary: e.g. “3 need you · 12 new today”
-- [ ] Empty states per tab
+- [x] Tabs: Needs action · Mine · Worth a look · All → `view=` param
+- [x] Summary: e.g. “3 need you · 12 new today”
+- [x] Empty states per tab
 
 ---
 
@@ -177,3 +177,5 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 | 2026-05-31 | 1 | Paginated opportunities API; New client uses spread sort + total |
 | 2026-05-31 | 2 | Plain-language labels map; New table, badges, preview sheet, page intro |
 | 2026-05-31 | 3 | Server pagination, sort, column picker, spread signal, quick actions |
+| 2026-05-31 | fix | New mode paginated parse tolerance + classic-list fallback (`ea791e9`, `652c310`) |
+| 2026-05-31 | 4 | Queue tabs, human summary line, per-tab empty states |

@@ -1,7 +1,7 @@
 # UI Improvements Backlog
 
-**Status:** Draft — ideas only, no implementation yet  
-**Last updated:** 2026-05-30  
+**Status:** In progress — Phases 0–3 shipped on Opportunities (New mode); see [NEXT_STEPS.md](../NEXT_STEPS.md)  
+**Last updated:** 2026-05-31  
 **Owner:** UX / product  
 **Related:** [V2 Opportunities](v2-opportunities.md) · [06-platform UX spec (pending)](../06-platform/README.md) · **[Implementation checklist → NEXT_STEPS.md](../NEXT_STEPS.md)**
 
@@ -52,11 +52,11 @@ Both modes share the same API and data; only presentation and interaction change
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 8.1 | Define **Classic** = today’s Opportunities UI (current table, copy, workflow panel) — no regressions when toggle is Classic | [ ] |
-| 8.2 | Define **New** = backlog items in §1–4, §7 applied to Opportunities first | [ ] |
-| 8.3 | **Interface toggle** in app shell (Classic / New) | [ ] |
-| 8.4 | Persist choice in `localStorage`; restore on load | [ ] |
-| 8.5 | Document toggle in UAT runbook so testers try both | [ ] |
+| 8.1 | Define **Classic** = today’s Opportunities UI (current table, copy, workflow panel) — no regressions when toggle is Classic | [x] |
+| 8.2 | Define **New** = backlog items in §1–4, §7 applied to Opportunities first | [~] Partial — §2–3 on Opportunities; §1 tabs + §4 workflow pending |
+| 8.3 | **Interface toggle** in app shell (Classic / New) | [x] |
+| 8.4 | Persist choice in `localStorage`; restore on load | [x] |
+| 8.5 | Document toggle in UAT runbook so testers try both | [x] |
 | 8.6 | (Optional) Sync preference to `tav.users` via API | [ ] |
 | 8.7 | (Optional) Admin-only force-new flag for staged rollout | [ ] |
 
@@ -66,13 +66,13 @@ Both modes share the same API and data; only presentation and interaction change
 
 Highest impact for least backend work. Good first slice if we pick one UX milestone.
 
-| # | Change | Effort | API change? |
-|---|--------|--------|-------------|
-| 0 | **Classic / New toggle** + keep current UI as Classic (§8) | S–M | No (optional user pref later) |
-| 1 | Tabbed/filtered Opportunities views — **New mode only** | M | Yes — filters + pagination on `GET /app/opportunities` |
-| 2 | Plain-language labels + hide ops pages from buyer nav — **New mode only** | S | No |
-| 3 | **Better table rows** — **New mode only**; Classic unchanged | M | Yes — pagination; optional sort params |
-| 4 | Simplified workflow panel — **New mode only** | M | No |
+| # | Change | Effort | API change? | Status |
+|---|--------|--------|-------------|--------|
+| 0 | **Classic / New toggle** + keep current UI as Classic (§8) | S–M | No (optional user pref later) | [x] |
+| 1 | Tabbed/filtered Opportunities views — **New mode only** | M | Yes — filters + pagination on `GET /app/opportunities` | [x] |
+| 2 | Plain-language labels + hide ops pages from buyer nav — **New mode only** | S | No | [~] Labels done (Opportunities); nav Phase 6 |
+| 3 | **Better table rows** — **New mode only**; Classic unchanged | M | Yes — pagination; optional sort params | [x] |
+| 4 | Simplified workflow panel — **New mode only** | M | No | [ ] Phase 5 |
 
 ---
 
@@ -84,12 +84,12 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 1.1 | **“Needs action” view** — unassigned, newly submitted, or expiring claims | [ ] |
-| 1.2 | **“Mine” view** — assigned or claimed by the signed-in user | [ ] |
-| 1.3 | **“Worth a look” view** — strong spread vs wholesale value, not stale | [ ] |
-| 1.4 | Tabs or segmented controls at top of queue (instead of one flat list) | [ ] |
-| 1.5 | Hide or collapse advanced columns by default; show on demand | [ ] |
-| 1.6 | Replace “Queue summary” stat line with human copy (e.g. “3 need you · 12 new today”) | [ ] |
+| 1.1 | **“Needs action” view** — unassigned, newly submitted, or expiring claims | [x] New mode |
+| 1.2 | **“Mine” view** — assigned or claimed by the signed-in user | [x] New mode |
+| 1.3 | **“Worth a look” view** — strong spread vs wholesale value, not stale | [x] New mode |
+| 1.4 | Tabs or segmented controls at top of queue (instead of one flat list) | [x] New mode |
+| 1.5 | Hide or collapse advanced columns by default; show on demand | [x] New mode column picker |
+| 1.6 | Replace “Queue summary” stat line with human copy (e.g. “3 need you · 12 new today”) | [x] New mode |
 
 ---
 
@@ -101,22 +101,22 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 
 | Today | Proposed label | Status |
 |-------|----------------|--------|
-| Near miss | “Almost a deal” / “Worth reviewing” | [ ] |
-| MMR | “Wholesale value” (tooltip: MMR) | [ ] |
-| Spread | “Room to make” / “Under or over market” | [ ] |
-| Ingest Monitor | Hide from buyer nav; keep for admin/ops | [ ] |
-| VIN / MMR Lab | “Value a vehicle” or admin-only | [ ] |
-| Claim opportunity | “I’m working this” | [ ] |
-| Manual submission | “Submitted by team” | [ ] |
-| Region keys (`dallas_tx`) | “Dallas”, “Lubbock”, etc. | [ ] |
-| Score | “Deal score” with short explanation on hover | [ ] |
-| Status values (`reviewed`, `contacted`) | Sentence-case, buyer-friendly labels | [ ] |
+| Near miss | “Almost a deal” / “Worth reviewing” | [x] New mode |
+| MMR | “Wholesale value” (tooltip: MMR) | [x] New mode |
+| Spread | “Room to make” / “Under or over market” | [x] New mode |
+| Ingest Monitor | Hide from buyer nav; keep for admin/ops | [ ] Phase 6 |
+| VIN / MMR Lab | “Value a vehicle” or admin-only | [ ] Phase 6 |
+| Claim opportunity | “I’m working this” | [x] New mode |
+| Manual submission | “Submitted by team” | [x] New mode |
+| Region keys (`dallas_tx`) | “Dallas”, “Lubbock”, etc. | [x] New mode |
+| Score | “Deal score” with short explanation on hover | [x] New mode |
+| Status values (`reviewed`, `contacted`) | Sentence-case, buyer-friendly labels | [x] New mode |
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 2.1 | Glossary pass on all page titles, headers, and table columns | [ ] |
-| 2.2 | Tooltips on retained technical terms (MMR, near miss, etc.) | [ ] |
-| 2.3 | Rewrite page intro copy (e.g. Opportunities header) for finders/closers, not engineers | [ ] |
+| 2.1 | Glossary pass on all page titles, headers, and table columns | [x] Opportunities New mode |
+| 2.2 | Tooltips on retained technical terms (MMR, near miss, etc.) | [x] New mode |
+| 2.3 | Rewrite page intro copy (e.g. Opportunities header) for finders/closers, not engineers | [x] New mode |
 
 ---
 
@@ -128,17 +128,17 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 3.1 | **Server-side pagination** (page size 25–50, total count, next/prev) | [ ] |
-| 3.2 | **Server-side sort** — default e.g. spread desc or score desc; user-chosen column sort | [ ] |
-| 3.3 | **Column visibility picker** — show/hide columns; save preference per user | [ ] |
-| 3.4 | **Sensible default columns** — hide low-priority fields (Region, Last seen) until expanded | [ ] |
-| 3.5 | **Deal signal in Spread column** — color + arrow (e.g. green “$2,400 under”) not plain number | [ ] |
-| 3.6 | **Compact Vehicle cell** — YMM on one line; badges as small chips inline, not a whole column | [ ] |
-| 3.7 | Merge **Type + Badges** into one “Signal” column where possible | [ ] |
-| 3.8 | **Row hover + selected state** — clear highlight; single-click opens preview sheet | [ ] |
-| 3.9 | **Quick actions column** — icon buttons: View listing, Claim (when eligible) | [ ] |
-| 3.10 | **Sticky header** on scroll so column labels stay visible | [ ] |
-| 3.11 | Optional **density toggle** — comfortable vs compact row height (same layout) | [ ] |
+| 3.1 | **Server-side pagination** (page size 25–50, total count, next/prev) | [x] New mode (+ classic-list fallback when Worker unpaginated) |
+| 3.2 | **Server-side sort** — default e.g. spread desc or score desc; user-chosen column sort | [x] New mode sort dropdown |
+| 3.3 | **Column visibility picker** — show/hide columns; save preference per user | [x] `localStorage` |
+| 3.4 | **Sensible default columns** — hide low-priority fields (Region, Last seen) until expanded | [x] |
+| 3.5 | **Deal signal in Spread column** — color + arrow (e.g. green “$2,400 under”) not plain number | [x] |
+| 3.6 | **Compact Vehicle cell** — YMM on one line; badges as small chips inline, not a whole column | [x] |
+| 3.7 | Merge **Type + Badges** into one “Signal” column where possible | [x] Inline under Vehicle |
+| 3.8 | **Row hover + selected state** — clear highlight; single-click opens preview sheet | [x] |
+| 3.9 | **Quick actions column** — icon buttons: View listing, Claim (when eligible) | [x] |
+| 3.10 | **Sticky header** on scroll so column labels stay visible | [x] |
+| 3.11 | Optional **density toggle** — comfortable vs compact row height (same layout) | [x] |
 | 3.12 | **Virtual scroll** only if needed after pagination — avoid rendering 1,000 DOM rows at once | [ ] |
 | 3.13 | **Listing photos** — small thumbnail in Vehicle column only if it doesn’t widen rows; otherwise skip | [—] |
 | 3.14 | ~~Card layout / card-table toggle~~ | [—] Rejected — UX-D001 |
@@ -189,12 +189,12 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 6.1 | Single click opens side panel with clear **Open full page** and **View listing** buttons | [ ] |
-| 6.2 | Remove reliance on double-click for primary flows | [ ] |
+| 6.1 | Single click opens side panel with clear **Open full page** and **View listing** buttons | [~] New preview sheet |
+| 6.2 | Remove reliance on double-click for primary flows | [~] New mode footer + quick actions |
 | 6.3 | **Sticky action bar** on mobile when a row is selected | [ ] |
 | 6.4 | **Empty states with examples** — “Submit your first listing” with sample, not bare “No opportunities yet” | [ ] |
 | 6.5 | First-run hints or optional tour for submit → assign → claim (dismissible) | [ ] |
-| 6.6 | External listing link opens in new tab with clear icon on every opportunity surface | [ ] |
+| 6.6 | External listing link opens in new tab with clear icon on every opportunity surface | [x] New table quick action |
 
 ---
 
@@ -206,7 +206,7 @@ Lower effort, still noticeable across the shell.
 |------|-------------|--------|
 | 7.1 | Soften or hide loud **PRODUCTION** env badge for normal `@texasautovalue.com` users | [ ] |
 | 7.2 | Keep env badge for staging / local / admin | [ ] |
-| 7.3 | Replace uppercase micro-headers site-wide (`QUEUE SUMMARY`, etc.) with sentence case | [ ] |
+| 7.3 | Replace uppercase micro-headers site-wide (`QUEUE SUMMARY`, etc.) with sentence case | [~] New Opportunities queue/table headers |
 | 7.4 | **Home** page: 3 tiles — “X deals need you”, “Submit a listing”, “Recent activity” | [ ] |
 | 7.5 | Move charts / KPIs behind **Analytics** or secondary section on Home | [ ] |
 | 7.6 | Success feedback beyond toasts (inline confirmation, claim timer) | [ ] |
@@ -254,4 +254,9 @@ Lower effort, still noticeable across the shell.
 
 | Date | Item | PR / notes |
 |------|------|------------|
-| — | — | — |
+| 2026-05-31 | §8 Classic/New toggle | Phase 0 — `InterfaceProvider`, top-bar toggle |
+| 2026-05-31 | §3 Table at scale | Phase 3 — New `OpportunitiesTableNew` |
+| 2026-05-31 | §2 Plain language | Phase 2 — `opportunities-labels.ts` |
+| 2026-05-31 | §1 API views | Phase 1 — Worker `view=` + pagination (UI tabs pending Phase 4) |
+| 2026-05-31 | §1 queue tabs | Phase 4 — New mode tabs, summary line, per-tab empty states |
+| 2026-05-31 | New mode deploy compat | Schema tolerance + classic-list fallback when Worker returns array shape |

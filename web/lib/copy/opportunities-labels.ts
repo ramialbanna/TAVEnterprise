@@ -61,12 +61,7 @@ export const PAGE_COPY = {
   intro:
     "Your deal queue — scored leads, listings worth a second look, and team submissions. " +
     "Compare asking price to wholesale value, then claim a deal and track it through close.",
-  queueSummaryTitle: "Queue at a glance",
-  queueTotal: "Total in queue",
-  queueShowing: "Showing",
-  queueLeads: "Leads",
-  queueNearMisses: "Almost deals",
-  queueManual: "Team submissions",
+  queueSummaryTitle: "Your day at a glance",
   tableTitle: "Your queue",
   tableFooter:
     "Click a row for a quick preview. Use the action icons to view the listing or start working a deal.",

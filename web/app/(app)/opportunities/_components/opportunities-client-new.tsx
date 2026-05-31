@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -11,29 +11,58 @@ import {
   listOpportunitiesPage,
   type OpportunitiesPageFilter,
   type OpportunitySort,
+  type OpportunityView,
 } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import { codeMessage } from "@/lib/app-api";
 import type { OpportunityListPage } from "@/lib/app-api/schemas";
 import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
+import {
+  countFirstSeenToday,
+  DEFAULT_QUEUE_VIEW,
+  emptyCopyForView,
+  formatQueueSummaryLine,
+} from "@/lib/opportunities/queue-views";
 import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { queryKeys } from "@/lib/query";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { OpportunitiesQueueTabs } from "./opportunities-queue-tabs";
 import { OpportunitiesTableNew } from "./opportunities-table-new";
 import { OpportunityPreviewSheetNew } from "./opportunity-preview-sheet-new";
 import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
+const SUMMARY_FETCH_LIMIT = 100;
+
+function countFilter(
+  filter: OpportunitiesPageFilter,
+): Pick<OpportunitiesPageFilter, "limit" | "offset" | "sort" | "view"> {
+  return {
+    limit: 1,
+    offset: 0,
+    sort: filter.sort ?? "spread_desc",
+    view: filter.view,
+  };
+}
+
+function extractTotal(result: ApiResult<OpportunityListPage> | undefined): number | undefined {
+  if (!result?.ok) return undefined;
+  return result.data.total;
+}
+
 export function OpportunitiesClientNew({
   initial,
+  initialView = DEFAULT_QUEUE_VIEW,
 }: {
   initial: ApiResult<OpportunityListPage>;
+  initialView?: OpportunityView;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<OpportunityRow | null>(null);
+  const [view, setView] = useState<OpportunityView>(initialView);
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [sort, setSort] = useState<OpportunitySort>("spread_desc");
@@ -42,13 +71,19 @@ export function OpportunitiesClientNew({
     limit,
     offset,
     sort,
-    view: "all",
+    view,
   };
+
+  const matchesInitialFetch =
+    view === initialView &&
+    offset === 0 &&
+    limit === DEFAULT_PAGE_SIZE &&
+    sort === "spread_desc";
 
   const query = useQuery({
     queryKey: queryKeys.opportunitiesPage(listFilter),
     queryFn: () => listOpportunitiesPage(listFilter),
-    initialData: offset === 0 && limit === DEFAULT_PAGE_SIZE && sort === "spread_desc" ? initial : undefined,
+    initialData: matchesInitialFetch ? initial : undefined,
     placeholderData: (previous) => previous,
   });
 
@@ -57,12 +92,44 @@ export function OpportunitiesClientNew({
     queryFn: getAppMe,
   });
 
+  const summaryQueries = useQueries({
+    queries: [
+      {
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })),
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" })),
+        staleTime: 60_000,
+      },
+      {
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "mine" })),
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" })),
+        staleTime: 60_000,
+      },
+      {
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })),
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" })),
+        staleTime: 60_000,
+      },
+      {
+        queryKey: ["opportunities-summary", "new-today"] as const,
+        queryFn: () =>
+          listOpportunitiesPage({
+            limit: SUMMARY_FETCH_LIMIT,
+            offset: 0,
+            sort: "last_seen_desc",
+            view: "all",
+          }),
+        staleTime: 60_000,
+      },
+    ],
+  });
+
   const claimMutation = useMutation({
     mutationFn: (row: OpportunityRow) => claimOpportunity(row.id),
     onSuccess: (result, row) => {
       if (result.ok) {
         toast.success(PAGE_COPY.claimAction);
         void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
+        void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(row.id) });
         setSelected(result.data);
         return;
@@ -73,6 +140,22 @@ export function OpportunitiesClientNew({
 
   const result = query.data;
   const claimActor = meQuery.data?.ok ? meQuery.data.data : null;
+
+  const tabCounts: Partial<Record<OpportunityView, number>> = {
+    needs_action: extractTotal(summaryQueries[0].data),
+    mine: extractTotal(summaryQueries[1].data),
+    worth_a_look: extractTotal(summaryQueries[2].data),
+  };
+
+  const needsYou = tabCounts.needs_action ?? 0;
+  const newTodayResult = summaryQueries[3].data;
+  const newToday =
+    newTodayResult?.ok === true
+      ? countFirstSeenToday(newTodayResult.data.items)
+      : 0;
+
+  const summaryLine = formatQueueSummaryLine({ needsYou, newToday });
+  const emptyCopy = emptyCopyForView(view);
 
   if (result === undefined) {
     return <p className="text-sm text-muted-foreground">Loading opportunities…</p>;
@@ -93,9 +176,12 @@ export function OpportunitiesClientNew({
   }
 
   const { items: rows, total } = result.data;
-  const leads = rows.filter((r) => r.type === "lead").length;
-  const nearMisses = rows.filter((r) => r.type === "near_miss").length;
-  const manual = rows.filter((r) => r.type === "manual_submission").length;
+
+  function handleViewChange(nextView: OpportunityView) {
+    setView(nextView);
+    setOffset(0);
+    setSelected(null);
+  }
 
   function handlePaginationChange(nextOffset: number, nextLimit: number) {
     setOffset(nextOffset);
@@ -114,35 +200,12 @@ export function OpportunitiesClientNew({
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-3 pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             {PAGE_COPY.queueSummaryTitle}
           </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-x-6 gap-y-1 text-sm tabular-nums">
-          <span>
-            {PAGE_COPY.queueTotal}: {total}
-          </span>
-          <span>
-            {PAGE_COPY.queueShowing}: {rows.length}
-          </span>
-          <span>
-            {PAGE_COPY.queueLeads}: {leads}
-          </span>
-          <span>
-            {PAGE_COPY.queueNearMisses}: {nearMisses}
-          </span>
-          <span>
-            {PAGE_COPY.queueManual}: {manual}
-          </span>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {PAGE_COPY.tableTitle}
-          </CardTitle>
+          <p className="text-base font-medium text-foreground">{summaryLine}</p>
+          <OpportunitiesQueueTabs view={view} counts={tabCounts} onViewChange={handleViewChange} />
         </CardHeader>
         <CardContent>
           <OpportunitiesTableNew
@@ -160,8 +223,8 @@ export function OpportunitiesClientNew({
             onPaginationChange={handlePaginationChange}
             onSortChange={handleSortChange}
             onClaim={(row) => claimMutation.mutate(row)}
-            emptyTitle={PAGE_COPY.emptyTitle}
-            emptyHint={PAGE_COPY.emptyHint}
+            emptyTitle={emptyCopy.title}
+            emptyHint={emptyCopy.hint}
           />
           <p className="pt-3 text-xs text-muted-foreground">{PAGE_COPY.tableFooter}</p>
         </CardContent>
