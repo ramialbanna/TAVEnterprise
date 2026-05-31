@@ -1,3 +1,4 @@
+import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
 import { listHistoricalSales } from "@/lib/app-api/server";
 
 import { HistoricalClient } from "./_components/historical-client";
@@ -15,6 +16,7 @@ export default async function HistoricalPage() {
   const initial = await listHistoricalSales({ limit: 100 });
 
   return (
+    <NewModeOpsGuard>
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">TAV Historical Data</h1>
@@ -26,5 +28,6 @@ export default async function HistoricalPage() {
 
       <HistoricalClient initial={initial} />
     </div>
+    </NewModeOpsGuard>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import {
   claimOpportunity,
   getAppMe,
   listOpportunitiesPage,
+  type ListOpportunitiesPageOptions,
   type OpportunitiesPageFilter,
   type OpportunitySort,
   type OpportunityView,
@@ -20,23 +21,40 @@ import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import {
   countFirstSeenToday,
   DEFAULT_QUEUE_VIEW,
-  emptyCopyForView,
   formatQueueSummaryLine,
 } from "@/lib/opportunities/queue-views";
+import { paginateOpportunityRowsClient } from "@/lib/opportunities/list-page";
+import { filterOpportunityRowsByView } from "@/lib/opportunities/view-filter";
 import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { ClaimFeedbackInline } from "./claim-feedback-inline";
 import { OpportunitiesMobileActionBar } from "./opportunities-mobile-action-bar";
 import { OpportunitiesQueueTabs } from "./opportunities-queue-tabs";
 import { OpportunitiesTableNew } from "./opportunities-table-new";
+import { OpportunitiesTourNew } from "./opportunities-tour-new";
 import { OpportunityPreviewSheetNew } from "./opportunity-preview-sheet-new";
 import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
 const SUMMARY_FETCH_LIMIT = 100;
+
+const QUEUE_VIEWS = new Set<OpportunityView>(["needs_action", "mine", "worth_a_look", "all"]);
+
+function parseViewParam(raw: string | null): OpportunityView {
+  if (raw && QUEUE_VIEWS.has(raw as OpportunityView)) return raw as OpportunityView;
+  return DEFAULT_QUEUE_VIEW;
+}
+
+function viewerFetchOptions(
+  me: Awaited<ReturnType<typeof getAppMe>> | undefined,
+): ListOpportunitiesPageOptions | undefined {
+  if (!me?.ok) return undefined;
+  return { viewerUserId: me.data.id, viewerDisplayName: me.data.displayName };
+}
 
 function countFilter(
   filter: OpportunitiesPageFilter,
@@ -62,12 +80,14 @@ export function OpportunitiesClientNew({
   initialView?: OpportunityView;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<OpportunityRow | null>(null);
   const [view, setView] = useState<OpportunityView>(initialView);
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [sort, setSort] = useState<OpportunitySort>("spread_desc");
+  const [claimFeedbackRow, setClaimFeedbackRow] = useState<OpportunityRow | null>(null);
 
   const listFilter: OpportunitiesPageFilter = {
     limit,
@@ -82,44 +102,57 @@ export function OpportunitiesClientNew({
     limit === DEFAULT_PAGE_SIZE &&
     sort === "spread_desc";
 
-  const query = useQuery({
-    queryKey: queryKeys.opportunitiesPage(listFilter),
-    queryFn: () => listOpportunitiesPage(listFilter),
-    initialData: matchesInitialFetch ? initial : undefined,
-    placeholderData: (previous) => previous,
-  });
-
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
     queryFn: getAppMe,
   });
 
+  const viewerOpts = viewerFetchOptions(meQuery.data);
+
+  const query = useQuery({
+    queryKey: [queryKeys.opportunitiesPage(listFilter), viewerOpts?.viewerUserId ?? null] as const,
+    queryFn: () => listOpportunitiesPage(listFilter, viewerOpts),
+    initialData: matchesInitialFetch ? initial : undefined,
+    enabled: view !== "mine" || meQuery.isSuccess,
+  });
+
+  useEffect(() => {
+    const next = parseViewParam(searchParams.get("view"));
+    setView((current) => (current === next ? current : next));
+    setOffset(0);
+    setSelected(null);
+  }, [searchParams]);
+
   const summaryQueries = useQueries({
     queries: [
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" })),
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" }), viewerOpts),
         staleTime: 60_000,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "mine" })),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" })),
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "mine" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" }), viewerOpts),
+        enabled: meQuery.isSuccess,
         staleTime: 60_000,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" })),
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" }), viewerOpts),
         staleTime: 60_000,
       },
       {
-        queryKey: ["opportunities-summary", "new-today"] as const,
+        queryKey: ["opportunities-summary", "new-today", viewerOpts?.viewerUserId] as const,
         queryFn: () =>
-          listOpportunitiesPage({
-            limit: SUMMARY_FETCH_LIMIT,
-            offset: 0,
-            sort: "last_seen_desc",
-            view: "all",
-          }),
+          listOpportunitiesPage(
+            {
+              limit: SUMMARY_FETCH_LIMIT,
+              offset: 0,
+              sort: "last_seen_desc",
+              view: "all",
+            },
+            viewerOpts,
+          ),
         staleTime: 60_000,
       },
     ],
@@ -134,6 +167,7 @@ export function OpportunitiesClientNew({
         void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(row.id) });
         setSelected(result.data);
+        setClaimFeedbackRow(result.data);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -142,6 +176,19 @@ export function OpportunitiesClientNew({
 
   const result = query.data;
   const claimActor = meQuery.data?.ok ? meQuery.data.data : null;
+
+  /** Always align table rows with the active tab (API count can differ from list body). */
+  const displayResult = useMemo((): ApiResult<OpportunityListPage> | undefined => {
+    if (!result?.ok) return result;
+    if (view === "all") return result;
+
+    const filtered = filterOpportunityRowsByView(result.data.items, view, {
+      viewerUserId: viewerOpts?.viewerUserId,
+      viewerDisplayName: viewerOpts?.viewerDisplayName,
+    });
+    const page = paginateOpportunityRowsClient(filtered, { limit, offset, sort, view });
+    return { ok: true, status: result.status, data: page };
+  }, [result, view, viewerOpts, limit, offset, sort]);
 
   const tabCounts: Partial<Record<OpportunityView, number>> = {
     needs_action: extractTotal(summaryQueries[0].data),
@@ -157,7 +204,6 @@ export function OpportunitiesClientNew({
       : 0;
 
   const summaryLine = formatQueueSummaryLine({ needsYou, newToday });
-  const emptyCopy = emptyCopyForView(view);
 
   if (result === undefined) {
     return <p className="text-sm text-muted-foreground">Loading opportunities…</p>;
@@ -177,12 +223,21 @@ export function OpportunitiesClientNew({
     );
   }
 
-  const { items: rows, total } = result.data;
+  const listResult = displayResult ?? result;
+  const { items: rows, total } = listResult.data;
 
   function handleViewChange(nextView: OpportunityView) {
     setView(nextView);
     setOffset(0);
     setSelected(null);
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextView === DEFAULT_QUEUE_VIEW) {
+      params.delete("view");
+    } else {
+      params.set("view", nextView);
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/opportunities?${qs}` : "/opportunities", { scroll: false });
   }
 
   function handlePaginationChange(nextOffset: number, nextLimit: number) {
@@ -197,6 +252,12 @@ export function OpportunitiesClientNew({
 
   return (
     <div className={cn("space-y-4", selected && "pb-28 md:pb-0")}>
+      <OpportunitiesTourNew />
+
+      {claimFeedbackRow ? (
+        <ClaimFeedbackInline row={claimFeedbackRow} onDismiss={() => setClaimFeedbackRow(null)} />
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ManualSubmitDialog />
       </div>
@@ -225,10 +286,8 @@ export function OpportunitiesClientNew({
             onPaginationChange={handlePaginationChange}
             onSortChange={handleSortChange}
             onClaim={(row) => claimMutation.mutate(row)}
-            emptyTitle={emptyCopy.title}
-            emptyHint={emptyCopy.hint}
+            queueView={view}
           />
-          <p className="pt-3 text-xs text-muted-foreground">{PAGE_COPY.tableFooter}</p>
         </CardContent>
       </Card>
 

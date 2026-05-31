@@ -1,3 +1,5 @@
+import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
+
 import { MmrLabClient } from "./_components/mmr-lab-client";
 
 /**
@@ -9,5 +11,9 @@ import { MmrLabClient } from "./_components/mmr-lab-client";
  * provisioned (issue #45). No hardcoded catalog, no scraping, no dummy data.
  */
 export default function MmrLabPage() {
-  return <MmrLabClient />;
+  return (
+    <NewModeOpsGuard>
+      <MmrLabClient />
+    </NewModeOpsGuard>
+  );
 }

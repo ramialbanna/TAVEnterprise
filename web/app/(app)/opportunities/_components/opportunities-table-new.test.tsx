@@ -57,12 +57,13 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        queueView="needs_action"
       />,
     );
 
     expect(screen.getByText("$3,000 under")).toBeInTheDocument();
     expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
-    expect(screen.getByLabelText("View listing")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("View listing").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText("I'm working this")).toBeInTheDocument();
   });
 
@@ -81,6 +82,7 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        queueView="needs_action"
       />,
     );
 
@@ -102,6 +104,7 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        queueView="needs_action"
       />,
     );
 

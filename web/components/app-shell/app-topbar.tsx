@@ -4,7 +4,9 @@ import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import type { EnvLabel } from "@/lib/env";
 import { navTitle } from "./nav";
-import { EnvBadge } from "./env-badge";
+import { navTitleNew } from "@/lib/app-shell/nav-new";
+import { useInterface } from "@/lib/interface/interface-provider";
+import { EnvBadgeShell } from "./env-badge-shell";
 import { InterfaceToggle } from "./interface-toggle";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu, type SessionUser } from "./user-menu";
@@ -19,6 +21,9 @@ export function AppTopbar({
   onOpenMobileNav: () => void;
 }) {
   const pathname = usePathname();
+  const { interfaceMode } = useInterface();
+  const title = interfaceMode === "new" ? navTitleNew(pathname) : navTitle(pathname);
+
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
       <button
@@ -29,9 +34,9 @@ export function AppTopbar({
       >
         <Menu className="size-4" />
       </button>
-      <h1 className="truncate text-sm font-semibold tracking-tight">{navTitle(pathname)}</h1>
+      <h1 className="truncate text-sm font-semibold tracking-tight">{title}</h1>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        <EnvBadge label={envLabel} />
+        <EnvBadgeShell label={envLabel} />
         <InterfaceToggle />
         <ThemeToggle />
         <UserMenu user={user} />

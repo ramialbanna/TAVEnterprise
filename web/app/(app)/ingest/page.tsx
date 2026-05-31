@@ -1,3 +1,4 @@
+import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
 import { listIngestRuns } from "@/lib/app-api/server";
 
 import { IngestClient } from "./_components/ingest-client";
@@ -14,6 +15,7 @@ export default async function IngestPage() {
   const initial = await listIngestRuns({ limit: 50 });
 
   return (
+    <NewModeOpsGuard>
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Ingest Monitor</h1>
@@ -26,5 +28,6 @@ export default async function IngestPage() {
 
       <IngestClient initial={initial} />
     </div>
+    </NewModeOpsGuard>
   );
 }

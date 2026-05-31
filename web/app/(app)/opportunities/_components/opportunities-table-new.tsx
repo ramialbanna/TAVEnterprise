@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Columns3, Info } from "lucide-react";
 
-import type { OpportunitySort } from "@/lib/app-api/client";
+import type { OpportunitySort, OpportunityView } from "@/lib/app-api/client";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 import {
   formatOpportunityStatus,
@@ -27,7 +27,8 @@ import {
 import { formatNumber, formatMoney, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { EmptyState, LoadingState } from "@/components/data-state";
+import { emptyStateForView } from "@/lib/opportunities/empty-state-new";
+import { LoadingState } from "@/components/data-state";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -43,6 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+import { OpportunitiesEmptyStateNew } from "./opportunities-empty-state-new";
 import { OpportunityVehicleCellNew } from "./opportunity-vehicle-cell-new";
 import { OpportunityRowActionsNew, SpreadSignalCell } from "./opportunity-row-actions-new";
 
@@ -149,8 +151,7 @@ export function OpportunitiesTableNew({
   onPaginationChange,
   onSortChange,
   onClaim,
-  emptyTitle,
-  emptyHint,
+  queueView,
 }: {
   rows: OpportunityRow[];
   total: number;
@@ -166,8 +167,7 @@ export function OpportunitiesTableNew({
   onPaginationChange: (offset: number, limit: number) => void;
   onSortChange: (sort: OpportunitySort) => void;
   onClaim: (row: OpportunityRow) => void;
-  emptyTitle?: string;
-  emptyHint?: React.ReactNode;
+  queueView: OpportunityView;
 }) {
   const [columnVisibility, setColumnVisibility] = useState(() =>
     typeof window === "undefined" ? defaultColumnVisibility() : readColumnVisibility(),
@@ -201,7 +201,7 @@ export function OpportunitiesTableNew({
   }
 
   if (!loading && total === 0) {
-    return <EmptyState title={emptyTitle} hint={emptyHint} />;
+    return <OpportunitiesEmptyStateNew state={emptyStateForView(queueView)} />;
   }
 
   function renderCell(columnId: TableColumnId, row: OpportunityRow) {

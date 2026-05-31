@@ -1,9 +1,9 @@
 # Next Steps — UX Rollout
 
-**Last updated:** 2026-05-31 · **Start at Phase 6** · Implement one phase per PR unless asked otherwise.
+**Last updated:** 2026-05-31 · **UX rollout complete** · Classic remains default until team UAT sign-off.
 
 > **Fresh chat prompt:**  
-> Read `docs/NEXT_STEPS.md` and implement **UX Phase 6** only. Follow Rules and Key files. Do not change Classic behavior. Run verify commands before done. Check off completed items in this file.
+> Run team UAT per `docs/05-process/opportunities-uat.md` (Classic + New). Optional follow-ups: pref on `tav.users`, virtual scroll, retire Classic.
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -70,10 +70,10 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | **3** | Table at scale | [x] |
 | **4** | Queue tabs | [x] |
 | **5** | Workflow panel | [x] |
-| **6** | Role-based shell | [ ] |
-| **7** | Polish + UAT | [ ] |
+| **6** | Role-based shell | [x] |
+| **7** | Polish + UAT | [x] |
 
-**Current phase:** 6
+**Current phase:** UAT sign-off
 
 ---
 
@@ -154,17 +154,17 @@ Fork `OpportunityWorkflowPanelNew`. **Exit:** guided actions; Classic panel unto
 
 New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 
-- [ ] Buyer nav: Opportunities, Submit listing, My work
-- [ ] Ops: Ingest, MMR Lab, Historical, Admin — hide from non-admin
-- [ ] Home tiles; KPIs → Analytics; softer env badge; sidebar labels on smaller screens
+- [x] Buyer nav: Opportunities, Submit listing, My work
+- [x] Ops: Ingest, MMR Lab, Historical, Admin — hide from non-admin
+- [x] Home tiles; KPIs → Analytics; softer env badge; sidebar labels on smaller screens
 
 ---
 
 ## Phase 7 — Polish + UAT
 
-- [ ] Empty states, optional tour, listing icons, inline claim feedback
-- [ ] E2E: Classic unchanged; New happy path
-- [ ] UAT both modes → `docs/05-process/opportunities-uat.md`
+- [x] Empty states, optional tour, listing icons, inline claim feedback
+- [x] E2E: Classic unchanged; New happy path
+- [x] UAT both modes → `docs/05-process/opportunities-uat.md`
 - [ ] Optional: pref on `tav.users`; virtual scroll; retire Classic
 
 ---
@@ -180,3 +180,5 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 | 2026-05-31 | fix | New mode paginated parse tolerance + classic-list fallback (`ea791e9`, `652c310`) |
 | 2026-05-31 | 4 | Queue tabs, human summary line, per-tab empty states |
 | 2026-05-31 | 5 | New workflow panel stepper, preview actions, mobile bar |
+| 2026-05-31 | 6 | Role-based New shell: buyer nav, Home tiles, Analytics, ops guard |
+| 2026-05-31 | 7 | Empty states, tour, listing icons, claim feedback, opportunities e2e, UAT doc |

@@ -1,3 +1,4 @@
+import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
 import { auth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
 import { getSystemStatus } from "@/lib/app-api/server";
@@ -30,6 +31,7 @@ export default async function AdminPage() {
   const name = session?.user?.name ?? null;
 
   return (
+    <NewModeOpsGuard>
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Admin / Integrations</h1>
@@ -50,5 +52,6 @@ export default async function AdminPage() {
 
       <AdminClient initial={systemStatus} />
     </div>
+    </NewModeOpsGuard>
   );
 }

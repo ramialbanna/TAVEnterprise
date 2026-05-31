@@ -1,12 +1,22 @@
 import type { Page, Route } from "@playwright/test";
 
 import type {
+  AppUser,
   HistoricalSale,
   IngestRunSummary,
   IngestRunDetail,
   Kpis,
+  OpportunityDetail,
+  OpportunityListPage,
+  OpportunityRow,
   SystemStatus,
 } from "@/lib/app-api/schemas";
+import {
+  E2E_APP_ME,
+  E2E_OPPORTUNITIES,
+  e2eOpportunitiesPage,
+  e2eOpportunityDetail,
+} from "../fixtures/opportunities";
 
 /**
  * Fixtures mirror `web/test/msw/fixtures.ts` shape — kept inline here so the e2e
@@ -178,6 +188,9 @@ export type AppApiOverrides = {
   historicalSales?: HistoricalSale[] | { status: number; body: unknown };
   ingestRuns?: IngestRunSummary[] | { status: number; body: unknown };
   ingestRunDetail?: IngestRunDetail | { status: number; body: unknown };
+  opportunities?: OpportunityRow[] | OpportunityListPage | { status: number; body: unknown };
+  opportunitiesEmpty?: boolean;
+  appMe?: AppUser | { status: number; body: unknown };
 };
 
 /**
@@ -203,6 +216,34 @@ export async function mockAppApi(page: Page, overrides: AppApiOverrides = {}): P
   // the later-registered detail handler wins for the detail path.
   await page.route("**/api/app/ingest-runs*", (route) => respond(route, ingestRunsValue));
   await page.route("**/api/app/ingest-runs/*", (route) => respond(route, ingestRunDetailValue));
+
+  const opportunitiesItems =
+    overrides.opportunitiesEmpty === true
+      ? []
+      : Array.isArray(overrides.opportunities)
+        ? overrides.opportunities
+        : E2E_OPPORTUNITIES;
+  const opportunitiesPage =
+    overrides.opportunities && !Array.isArray(overrides.opportunities)
+      ? overrides.opportunities
+      : e2eOpportunitiesPage(opportunitiesItems);
+
+  await page.route("**/api/app/me", (route) => respond(route, overrides.appMe ?? E2E_APP_ME));
+  await page.route("**/api/app/opportunities", (route) => {
+    const url = route.request().url();
+    const paginated = url.includes("offset=") || url.includes("view=");
+    return respond(route, paginated ? opportunitiesPage : opportunitiesItems);
+  });
+  await page.route("**/api/app/opportunities/*", (route) => {
+    const url = new URL(route.request().url());
+    const segments = url.pathname.split("/");
+    const id = decodeURIComponent(segments[segments.length - 1] ?? "");
+    const row = opportunitiesItems.find((r) => r.id === id);
+    if (!row) {
+      return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, error: "not_found" }) });
+    }
+    return respond(route, e2eOpportunityDetail(row));
+  });
 }
 
 function respond(route: Route, value: unknown): Promise<void> {

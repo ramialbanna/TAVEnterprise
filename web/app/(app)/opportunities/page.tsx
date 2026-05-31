@@ -1,20 +1,37 @@
+import { Suspense } from "react";
+
+import type { OpportunityView } from "@/lib/app-api/client";
 import { listOpportunities, listOpportunitiesPage } from "@/lib/app-api/server";
 import { DEFAULT_QUEUE_VIEW } from "@/lib/opportunities/queue-views";
 
 import { OpportunitiesInterfaceClient } from "./_components/opportunities-interface-client";
 import { OpportunitiesPageIntro } from "./_components/opportunities-page-intro";
 
+const QUEUE_VIEWS = new Set<OpportunityView>(["needs_action", "mine", "worth_a_look", "all"]);
+
+function parseQueueView(raw: string | undefined): OpportunityView {
+  if (raw && QUEUE_VIEWS.has(raw as OpportunityView)) return raw as OpportunityView;
+  return DEFAULT_QUEUE_VIEW;
+}
+
 /**
  * `/opportunities` — v2 read-only buyer queue.
  */
-export default async function OpportunitiesPage() {
+export default async function OpportunitiesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  const { view: viewParam } = await searchParams;
+  const initialView = parseQueueView(viewParam);
+
   const [initialClassic, initialNew] = await Promise.all([
     listOpportunities({ limit: 50 }),
     listOpportunitiesPage({
       limit: 25,
       offset: 0,
       sort: "spread_desc",
-      view: DEFAULT_QUEUE_VIEW,
+      view: initialView,
     }),
   ]);
 
@@ -22,7 +39,13 @@ export default async function OpportunitiesPage() {
     <div className="space-y-6">
       <OpportunitiesPageIntro />
 
-      <OpportunitiesInterfaceClient initialClassic={initialClassic} initialNew={initialNew} />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading queue…</p>}>
+        <OpportunitiesInterfaceClient
+          initialClassic={initialClassic}
+          initialNew={initialNew}
+          initialView={initialView}
+        />
+      </Suspense>
     </div>
   );
 }

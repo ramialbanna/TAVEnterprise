@@ -187,11 +187,74 @@ function ok<T>(data: T) {
   return NextResponse.json({ ok: true, data });
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ path: string[] }> }) {
+const E2E_OPPORTUNITIES = [
+  {
+    id: "opp_e2e_1",
+    type: "lead",
+    badges: ["First seen"],
+    source: "facebook",
+    region: "dallas_tx",
+    sourceRunId: "sr_e2e_2",
+    normalizedListingId: "opp_e2e_1",
+    vehicleCandidateId: "vc_e2e_1",
+    leadId: "lead_e2e_1",
+    title: "2019 Honda Civic EX",
+    year: 2019,
+    make: "Honda",
+    model: "Civic",
+    style: "EX",
+    vin: "2HGFC2FAC",
+    price: 16000,
+    mmrValue: 17200,
+    spread: 1200,
+    finalScore: 78,
+    grade: "good",
+    status: "new",
+    submittedBy: null,
+    assignedTo: null,
+    assignedCloserName: null,
+    claimedBy: null,
+    claimedAt: null,
+    claimExpiresAt: null,
+    lastEvaluatedBy: null,
+    lastEvaluatedAt: null,
+    firstSeenAt: "2026-05-20T10:00:00.000Z",
+    lastSeenAt: "2026-05-21T10:00:00.000Z",
+    seenCount: 1,
+    listingUrl: "https://www.facebook.com/marketplace/item/e2e-1/",
+    estimateFlags: { mileage: false, style: false, mmr: false },
+  },
+];
+
+const E2E_APP_ME = {
+  id: "user-e2e-closer",
+  email: "qa@texasautovalue.com",
+  displayName: "QA User",
+  role: "closer",
+  isActive: true,
+  createdAt: "2026-05-01T00:00:00.000Z",
+  updatedAt: "2026-05-01T00:00:00.000Z",
+};
+
+function opportunitiesResponse(req: Request) {
+  const url = new URL(req.url);
+  const paginated = url.searchParams.has("offset") || url.searchParams.has("view");
+  if (paginated) {
+    return ok({ items: E2E_OPPORTUNITIES, total: E2E_OPPORTUNITIES.length, offset: 0 });
+  }
+  const limit = Number(url.searchParams.get("limit") ?? 50);
+  return ok(E2E_OPPORTUNITIES.slice(0, Number.isFinite(limit) ? limit : 50));
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   if (process.env.E2E_MOCKS !== "1") return notFound();
   const { path } = await ctx.params;
   const key = (path ?? []).join("/");
   switch (key) {
+    case "me":
+      return ok(E2E_APP_ME);
+    case "opportunities":
+      return opportunitiesResponse(req);
     case "system-status":
       return ok(SYSTEM_STATUS);
     case "kpis":
@@ -201,6 +264,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ path: string[]
     case "ingest-runs":
       return ok(INGEST_RUNS);
     default:
+      if (key.startsWith("opportunities/")) {
+        const id = decodeURIComponent(key.slice("opportunities/".length));
+        const row = E2E_OPPORTUNITIES.find((r) => r.id === id);
+        if (!row) return notFound();
+        return ok({
+          ...row,
+          reasonCodes: [],
+          valuationMissingReason: null,
+          scoreComponents: null,
+          candidateListingCount: 1,
+          mileage: 48000,
+          actions: [],
+        });
+      }
       if (key.startsWith("ingest-runs/")) {
         const id = decodeURIComponent(key.slice("ingest-runs/".length));
         const match = INGEST_RUNS.find((r) => r.id === id);

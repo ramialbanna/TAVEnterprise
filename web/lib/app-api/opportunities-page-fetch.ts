@@ -6,13 +6,36 @@ import {
 } from "./client";
 import { parseOpportunities, parseOpportunitiesPage } from "./parse";
 import type { ApiResult } from "./parse";
-import type { OpportunityListPage } from "./schemas";
+import type { OpportunityListPage, OpportunityRow } from "./schemas";
 import { paginateOpportunityRowsClient } from "@/lib/opportunities/list-page";
+import { filterOpportunityRowsByView, shouldApplyClientViewFilter } from "@/lib/opportunities/view-filter";
 
 /** Max rows the Worker returns on the classic (non-paginated) list endpoint. */
 const CLASSIC_FALLBACK_LIMIT = 100;
 
 type JsonFetcher = (path: string) => Promise<{ status: number; json: unknown } | null>;
+
+export type FetchOpportunitiesPageOptions = {
+  viewerUserId?: string;
+  viewerDisplayName?: string | null;
+};
+
+function buildPageFromRows(
+  rows: OpportunityRow[],
+  filter: OpportunitiesPageFilter,
+  status: number,
+  options?: FetchOpportunitiesPageOptions,
+): ApiResult<OpportunityListPage> {
+  const filtered = filterOpportunityRowsByView(rows, filter.view, {
+    viewerUserId: options?.viewerUserId,
+    viewerDisplayName: options?.viewerDisplayName,
+  });
+  return {
+    ok: true,
+    status,
+    data: paginateOpportunityRowsClient(filtered, filter),
+  };
+}
 
 const TRANSPORT_ERROR: ApiResult<OpportunityListPage> = {
   ok: false,
@@ -29,12 +52,19 @@ const TRANSPORT_ERROR: ApiResult<OpportunityListPage> = {
 export async function fetchOpportunitiesPage(
   getJson: JsonFetcher,
   filter: OpportunitiesPageFilter = {},
+  options?: FetchOpportunitiesPageOptions,
 ): Promise<ApiResult<OpportunityListPage>> {
   const paginated = await getJson(`opportunities${opportunitiesPageQuery(filter)}`);
   if (!paginated) return TRANSPORT_ERROR;
 
   const parsed = parseOpportunitiesPage(paginated.status, paginated.json);
-  if (parsed.ok) return parsed;
+  if (parsed.ok) {
+    const { items, total, offset } = parsed.data;
+    if (shouldApplyClientViewFilter(filter, { items, total, offset })) {
+      return buildPageFromRows(items, filter, parsed.status, options);
+    }
+    return parsed;
+  }
 
   const classicFilter: OpportunitiesFilter = {
     limit: CLASSIC_FALLBACK_LIMIT,
@@ -49,11 +79,7 @@ export async function fetchOpportunitiesPage(
 
   const rows = parseOpportunities(classic.status, classic.json);
   if (rows.ok) {
-    return {
-      ok: true,
-      status: classic.status,
-      data: paginateOpportunityRowsClient(rows.data, filter),
-    };
+    return buildPageFromRows(rows.data, filter, classic.status, options);
   }
 
   return parsed;

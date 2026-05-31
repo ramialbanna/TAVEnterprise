@@ -9,7 +9,8 @@ import type { OpportunityListPage, OpportunityRow } from "@/lib/app-api/schemas"
 import { OpportunitiesClientNew } from "./opportunities-client-new";
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/app-api/client", async (importOriginal) => {

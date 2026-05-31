@@ -307,13 +307,23 @@ export async function listOpportunities(
   return parseOpportunities(r.status, r.json);
 }
 
+export type ListOpportunitiesPageOptions = {
+  viewerUserId?: string;
+  viewerDisplayName?: string | null;
+};
+
 export async function listOpportunitiesPage(
   filter: OpportunitiesPageFilter = {},
+  options?: ListOpportunitiesPageOptions,
 ): Promise<ApiResult<OpportunityListPage>> {
-  return fetchOpportunitiesPage(async (path) => {
-    const r = await getJson(path);
-    return r === FETCH_FAILED ? null : r;
-  }, filter);
+  return fetchOpportunitiesPage(
+    async (path) => {
+      const r = await getJson(path);
+      return r === FETCH_FAILED ? null : r;
+    },
+    filter,
+    options,
+  );
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {

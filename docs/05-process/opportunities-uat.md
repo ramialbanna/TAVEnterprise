@@ -5,7 +5,7 @@
 **Environment:** Production — [https://tav-enterprise.vercel.app/opportunities](https://tav-enterprise.vercel.app/opportunities)  
 **API reference:** [app-api.md § Opportunities](../03-api/app-api.md)
 
-Buyer workflow shipped in Phases 5–7 (read queue, manual submit, assign, claim, status, notes, audit history). **UX Phase 0** adds a **Classic / New** interface toggle in the top bar (panels icon, next to theme). Default is **Classic** — same UI as before. Testers should try both modes on `/opportunities`; New is a stub until later UX phases land.
+Buyer workflow shipped in Phases 5–7 (read queue, manual submit, assign, claim, status, notes, audit history). **UX Phases 0–7** add a **Classic / New** interface toggle (panels icon, next to theme). Default is **Classic** — production UI frozen except bugfixes. **New** mode ships buyer-first nav, queue tabs, guided workflow, Home tiles, and polish through Phase 7. Run this checklist in **both** modes before sign-off.
 
 ---
 
@@ -62,16 +62,45 @@ WHERE email = 'your-admin@texasautovalue.com';
 
 ---
 
-## Interface toggle (UX Phase 0)
+## Interface toggle (UX Phases 0–7)
 
 | Step | Expected |
 |------|----------|
 | Open any app page while signed in | Top bar shows panels icon (left of theme toggle) |
-| Click panels icon → **Classic** | Check mark on Classic; `/opportunities` unchanged from production |
-| Click panels icon → **New** | Check mark on New; queue still loads (stub matches Classic for now) |
-| Reload browser | Last choice persists |
+| Click panels icon → **Classic** | Check mark on Classic; `/opportunities` uses classic table (50-row list, original footer copy) |
+| Click panels icon → **New** | Check mark on New; queue tabs, “Your day at a glance”, plain-language headers |
+| Reload browser | Last choice persists (`localStorage` key `tav.interface`) |
 
 **Record:** Classic OK? _____ · New OK? _____
+
+---
+
+## New mode — navigation & Home (UX Phase 6)
+
+| Step | User | Expected |
+|------|------|----------|
+| Switch to **New**, open `/dashboard` | A | **Home** with three tiles (deals need you, submit, my work) + Analytics link |
+| Open **Analytics** | A | KPI charts load; Classic users redirected to `/dashboard` if they hit this URL in Classic |
+| Sidebar (buyer) | A | Home, Opportunities, Submit listing, My work, Analytics — no Ingest/MMR/Admin |
+| **More tools** (admin only) | Admin | Ingest, Value a vehicle, Historical, Admin grouped under collapsible section |
+| Closer opens `/ingest` directly | B | Redirected to `/opportunities` (ops URLs blocked in New for non-admin) |
+
+**Record:** Home tiles OK? _____ · Ops guard OK? _____
+
+---
+
+## New mode — queue & polish (UX Phases 3–5, 7)
+
+| Step | User | Expected |
+|------|------|----------|
+| Open `/opportunities` | A | Tabs: Needs action · Mine · Worth a look · All; summary line under “Your day at a glance” |
+| Single-click a row | A | Preview sheet with **View listing** + **Open full page** (no double-click required) |
+| Empty **Mine** tab (if none assigned) | B | Friendly empty state + link to Needs action |
+| Dismiss **Quick start** tour | A | Tour hides; reload keeps it dismissed |
+| **Claim** from row hand icon | B | Toast + inline banner with countdown; preview workflow stepper updates |
+| Listing link | A | External-link icon on vehicle column and in preview |
+
+**Record:** New queue OK? _____ · Claim feedback OK? _____
 
 ---
 
