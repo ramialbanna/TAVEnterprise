@@ -186,7 +186,7 @@ export function OpportunitiesClientNew({
       viewerUserId: viewerOpts?.viewerUserId,
       viewerDisplayName: viewerOpts?.viewerDisplayName,
     });
-    const page = paginateOpportunityRowsClient(filtered, { limit, offset, sort, view });
+    const page = paginateOpportunityRowsClient(filtered, { limit, offset, sort });
     return { ok: true, status: result.status, data: page };
   }, [result, view, viewerOpts, limit, offset, sort]);
 
@@ -223,8 +223,8 @@ export function OpportunitiesClientNew({
     );
   }
 
-  const listResult = displayResult ?? result;
-  const { items: rows, total } = listResult.data;
+  const pageData = displayResult?.ok === true ? displayResult.data : result.data;
+  const { items: rows, total } = pageData;
 
   function handleViewChange(nextView: OpportunityView) {
     setView(nextView);
