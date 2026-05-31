@@ -255,6 +255,13 @@ export const OpportunityRowSchema = z.object({
 export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
 export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;
 
+export const OpportunityListPageSchema = z.object({
+  items: OpportunityRowListSchema,
+  total: z.number(),
+  offset: z.number(),
+});
+export type OpportunityListPage = z.infer<typeof OpportunityListPageSchema>;
+
 export const OpportunityActionTypeSchema = z.enum([
   "submitted",
   "assigned",

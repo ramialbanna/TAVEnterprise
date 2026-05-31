@@ -65,7 +65,7 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | Phase | Focus | Status |
 |-------|--------|--------|
 | **0** | Toggle + code split | [x] |
-| **1** | API pagination, sort, filters | [ ] |
+| **1** | API pagination, sort, filters | [x] |
 | **2** | Plain-language copy | [ ] |
 | **3** | Table at scale | [ ] |
 | **4** | Queue tabs | [ ] |
@@ -73,7 +73,7 @@ More rationale (optional): [ui-improvements-backlog.md](02-product/ui-improvemen
 | **6** | Role-based shell | [ ] |
 | **7** | Polish + UAT | [ ] |
 
-**Current phase:** 1
+**Current phase:** 2
 
 ---
 
@@ -95,12 +95,12 @@ No API changes. **Exit:** toggle works; Classic identical to production.
 
 Worker + web types. Classic keeps `limit=50` unchanged. **Exit:** New mode gets paged/sorted/filtered lists.
 
-- [ ] `GET /app/opportunities`: `offset`, `total`; keep backward-compatible response for Classic
-- [ ] `sort=spread_desc|score_desc|last_seen_desc`
-- [ ] `view=needs_action|mine|worth_a_look|all` (+ claim-expiring / assigned logic in Worker)
-- [ ] Tests in `test/opportunities.test.ts`
-- [ ] Update `web/lib/app-api` + `docs/03-api/app-api.md`
-- [ ] New client only uses new params
+- [x] `GET /app/opportunities`: `offset`, `total`; keep backward-compatible response for Classic
+- [x] `sort=spread_desc|score_desc|last_seen_desc`
+- [x] `view=needs_action|mine|worth_a_look|all` (+ claim-expiring / assigned logic in Worker)
+- [x] Tests in `test/opportunities.test.ts`
+- [x] Update `web/lib/app-api` + `docs/03-api/app-api.md`
+- [x] New client only uses new params
 
 ---
 
@@ -174,3 +174,4 @@ New mode app-wide. **Exit:** buyer-first nav; ops under More tools.
 | Date | Phase | PR / notes |
 |------|-------|------------|
 | 2026-05-31 | 0 | Classic/New toggle, code split, stub New client |
+| 2026-05-31 | 1 | Paginated opportunities API; New client uses spread sort + total |

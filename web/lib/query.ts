@@ -43,6 +43,18 @@ export type OpportunitiesKeyFilter = {
   status?: string;
 };
 
+export type OpportunitiesPageKeyFilter = {
+  limit?: number;
+  offset?: number;
+  sort?: "spread_desc" | "score_desc" | "last_seen_desc";
+  view?: "needs_action" | "mine" | "worth_a_look" | "all";
+  source?: string;
+  region?: string;
+  type?: "lead" | "near_miss" | "manual_submission";
+  grade?: string;
+  status?: string;
+};
+
 /** Stable query-key factory. Object/array identity is irrelevant to TanStack — it deep-compares. */
 export const queryKeys = {
   systemStatus: ["system-status"] as const,
@@ -52,6 +64,8 @@ export const queryKeys = {
   ingestRuns: (filter?: IngestRunsKeyFilter) => ["ingest-runs", filter ?? {}] as const,
   ingestRun: (id: string) => ["ingest-run", id] as const,
   opportunities: (filter?: OpportunitiesKeyFilter) => ["opportunities", filter ?? {}] as const,
+  opportunitiesPage: (filter?: OpportunitiesPageKeyFilter) =>
+    ["opportunities-page", filter ?? {}] as const,
   opportunity: (id: string) => ["opportunity", id] as const,
   appUsers: ["app-users"] as const,
   appMe: ["app-me"] as const,

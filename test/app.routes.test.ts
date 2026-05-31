@@ -1060,7 +1060,11 @@ const OPPORTUNITY_ROW = {
 
 describe("GET /app/opportunities", () => {
   it("returns the opportunity list in an { ok, data } envelope", async () => {
-    vi.mocked(listOpportunities).mockResolvedValue([OPPORTUNITY_ROW]);
+    vi.mocked(listOpportunities).mockResolvedValue({
+      items: [OPPORTUNITY_ROW],
+      total: 1,
+      offset: 0,
+    });
     const res = await worker.fetch(authedReq("/app/opportunities"), makeEnv(), ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; data: unknown[] };
@@ -1068,7 +1072,35 @@ describe("GET /app/opportunities", () => {
     expect(body.data).toEqual([OPPORTUNITY_ROW]);
   });
 
+  it("returns a paginated envelope when offset/sort/view params are present", async () => {
+    vi.mocked(listOpportunities).mockResolvedValue({
+      items: [OPPORTUNITY_ROW],
+      total: 42,
+      offset: 10,
+    });
+    const res = await worker.fetch(
+      authedReq("/app/opportunities?offset=10&limit=20&sort=spread_desc&view=all"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: boolean;
+      data: { items: unknown[]; total: number; offset: number };
+    };
+    expect(body.data.total).toBe(42);
+    expect(body.data.offset).toBe(10);
+    expect(body.data.items).toEqual([OPPORTUNITY_ROW]);
+    expect(vi.mocked(listOpportunities).mock.calls[0]![1]).toMatchObject({
+      offset: 10,
+      limit: 20,
+      sort: "spread_desc",
+      view: "all",
+    });
+  });
+
   it("passes valid filters through", async () => {
+    vi.mocked(listOpportunities).mockResolvedValue({ items: [], total: 0, offset: 0 });
     await worker.fetch(
       authedReq("/app/opportunities?source=facebook&region=dallas_tx&type=lead&grade=good&status=new"),
       makeEnv(),
@@ -1083,9 +1115,30 @@ describe("GET /app/opportunities", () => {
     });
   });
 
+  it("requires user identity for view=mine", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(null);
+    const res = await worker.fetch(
+      authedReq("/app/opportunities?view=mine&offset=0"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(listOpportunities)).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid filter with 400 invalid_filter", async () => {
     const res = await worker.fetch(
       authedReq("/app/opportunities?type=bogus"),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    expect(vi.mocked(listOpportunities)).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid sort with 400 invalid_filter", async () => {
+    const res = await worker.fetch(
+      authedReq("/app/opportunities?sort=price_asc"),
       makeEnv(),
       ctx,
     );

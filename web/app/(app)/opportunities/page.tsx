@@ -1,4 +1,4 @@
-import { listOpportunities } from "@/lib/app-api/server";
+import { listOpportunities, listOpportunitiesPage } from "@/lib/app-api/server";
 
 import { OpportunitiesInterfaceClient } from "./_components/opportunities-interface-client";
 
@@ -6,7 +6,10 @@ import { OpportunitiesInterfaceClient } from "./_components/opportunities-interf
  * `/opportunities` — v2 read-only buyer queue.
  */
 export default async function OpportunitiesPage() {
-  const initial = await listOpportunities({ limit: 50 });
+  const [initialClassic, initialNew] = await Promise.all([
+    listOpportunities({ limit: 50 }),
+    listOpportunitiesPage({ limit: 50, offset: 0, sort: "spread_desc", view: "all" }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -19,7 +22,7 @@ export default async function OpportunitiesPage() {
         </p>
       </header>
 
-      <OpportunitiesInterfaceClient initial={initial} />
+      <OpportunitiesInterfaceClient initialClassic={initialClassic} initialNew={initialNew} />
     </div>
   );
 }

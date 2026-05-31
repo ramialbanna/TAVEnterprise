@@ -17,6 +17,7 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseOpportunities,
+  parseOpportunitiesPage,
   parseOpportunityDetail,
   parseKpis,
   parseMmrVin,
@@ -28,9 +29,11 @@ import {
   importBatchesQuery,
   ingestRunsQuery,
   opportunitiesQuery,
+  opportunitiesPageQuery,
   type HistoricalSalesFilter,
   type IngestRunsFilter,
   type OpportunitiesFilter,
+  type OpportunitiesPageFilter,
   type MmrVinRequest,
   type UpdateOpportunityStatusRequest,
   type AddOpportunityNoteRequest,
@@ -41,13 +44,20 @@ import type {
   IngestRunSummary,
   IngestRunDetail,
   OpportunityRow,
+  OpportunityListPage,
   OpportunityDetail,
   Kpis,
   MmrVinOk,
   SystemStatus,
 } from "./schemas";
 
-export type { HistoricalSalesFilter, MmrVinRequest, UpdateOpportunityStatusRequest, AddOpportunityNoteRequest } from "./client";
+export type {
+  HistoricalSalesFilter,
+  MmrVinRequest,
+  UpdateOpportunityStatusRequest,
+  AddOpportunityNoteRequest,
+  OpportunitiesPageFilter,
+} from "./client";
 
 const SERVER_FETCH_TIMEOUT_MS = 12_000;
 
@@ -159,6 +169,13 @@ export async function listOpportunities(
 ): Promise<ApiResult<OpportunityRow[]>> {
   const { status, json } = await getJson(`opportunities${opportunitiesQuery(filter)}`);
   return parseOpportunities(status, json);
+}
+
+export async function listOpportunitiesPage(
+  filter: OpportunitiesPageFilter = {},
+): Promise<ApiResult<OpportunityListPage>> {
+  const { status, json } = await getJson(`opportunities${opportunitiesPageQuery(filter)}`);
+  return parseOpportunitiesPage(status, json);
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {

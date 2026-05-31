@@ -63,14 +63,38 @@ export interface OpportunityDetail extends OpportunityRow {
   actions: OpportunityActionRecord[];
 }
 
+export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc";
+
+export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
+
 export interface OpportunityListFilter {
   limit: number;
+  offset?: number;
+  sort?: OpportunitySort;
+  view?: OpportunityView;
+  /** Required for `view=mine`; used for assignee / active-claim matching. */
+  viewerUserId?: string;
   source?: string;
   region?: string;
   type?: OpportunityType;
   grade?: string;
   status?: string;
 }
+
+export interface OpportunityListPage {
+  items: OpportunityRow[];
+  total: number;
+  offset: number;
+}
+
+/** Minimum spread ($) for `view=worth_a_look`. */
+export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
+
+/** Max age (days since last seen) for `view=worth_a_look`. */
+export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
+
+/** Claim window ending within this many ms counts as needs-action. */
+export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 const LISTING_COLUMNS =
   "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status";
@@ -314,7 +338,106 @@ function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter):
   if (filter.type) out = out.filter((r) => r.type === filter.type);
   if (filter.grade) out = out.filter((r) => r.grade === filter.grade);
   if (filter.status) out = out.filter((r) => r.status === filter.status);
-  return out.slice(0, filter.limit);
+  return out;
+}
+
+export function matchesNeedsAction(
+  row: OpportunityRow,
+  workflow: WorkflowDisplayContext | null,
+  now: Date = new Date(),
+): boolean {
+  if (!row.assignedTo) return true;
+  if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
+    return true;
+  }
+  if (workflow && isActiveClaim(workflow) && workflow.claimExpiresAt) {
+    const msLeft = new Date(workflow.claimExpiresAt).getTime() - now.getTime();
+    if (msLeft > 0 && msLeft <= CLAIM_EXPIRING_SOON_MS) return true;
+  }
+  return false;
+}
+
+export function matchesMine(
+  row: OpportunityRow,
+  workflow: WorkflowDisplayContext | null,
+  viewerUserId: string,
+): boolean {
+  if (row.assignedTo === viewerUserId) return true;
+  if (workflow && isActiveClaim(workflow) && workflow.claimedByUserId === viewerUserId) {
+    return true;
+  }
+  return false;
+}
+
+export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (row.spread === null || row.spread < WORTH_A_LOOK_MIN_SPREAD) return false;
+  if (row.mmrValue === null || row.mmrValue <= 0) return false;
+  if (row.lastSeenAt) {
+    const ageDays = (now.getTime() - new Date(row.lastSeenAt).getTime()) / (24 * 60 * 60 * 1000);
+    if (ageDays > WORTH_A_LOOK_MAX_STALE_DAYS) return false;
+  }
+  return true;
+}
+
+export function sortOpportunityRows(
+  rows: OpportunityRow[],
+  sort: OpportunitySort = "last_seen_desc",
+): void {
+  rows.sort((a, b) => {
+    switch (sort) {
+      case "spread_desc": {
+        const diff = (b.spread ?? Number.NEGATIVE_INFINITY) - (a.spread ?? Number.NEGATIVE_INFINITY);
+        return diff !== 0 ? diff : (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
+      }
+      case "score_desc": {
+        const diff =
+          (b.finalScore ?? Number.NEGATIVE_INFINITY) - (a.finalScore ?? Number.NEGATIVE_INFINITY);
+        return diff !== 0 ? diff : (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
+      }
+      case "last_seen_desc":
+      default:
+        return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
+    }
+  });
+}
+
+function applyViewFilter(
+  rows: OpportunityRow[],
+  filter: OpportunityListFilter,
+  workflowByListing: Map<string, WorkflowDisplayContext>,
+): OpportunityRow[] {
+  const view = filter.view ?? "all";
+  if (view === "all") return rows;
+
+  const now = new Date();
+  return rows.filter((row) => {
+    const workflow = workflowByListing.get(row.id) ?? null;
+    switch (view) {
+      case "needs_action":
+        return matchesNeedsAction(row, workflow, now);
+      case "mine":
+        return filter.viewerUserId
+          ? matchesMine(row, workflow, filter.viewerUserId)
+          : false;
+      case "worth_a_look":
+        return matchesWorthALook(row, now);
+      default:
+        return true;
+    }
+  });
+}
+
+export function paginateOpportunityRows(
+  rows: OpportunityRow[],
+  offset: number,
+  limit: number,
+): OpportunityListPage {
+  const safeOffset = Math.max(offset, 0);
+  return {
+    items: rows.slice(safeOffset, safeOffset + limit),
+    total: rows.length,
+    offset: safeOffset,
+  };
 }
 
 async function fetchCandidateCounts(
@@ -486,20 +609,16 @@ function assembleRows(
     if (row) rows.push(row);
   }
 
-  rows.sort((a, b) => {
-    const aTs = a.lastSeenAt ?? "";
-    const bTs = b.lastSeenAt ?? "";
-    return bTs.localeCompare(aTs);
-  });
-
   return rows;
 }
 
 export async function listOpportunities(
   db: SupabaseClient,
   filter: OpportunityListFilter,
-): Promise<OpportunityRow[]> {
-  const fetchLimit = Math.min(filter.limit * 5, MAX_FETCH);
+): Promise<OpportunityListPage> {
+  const offset = filter.offset ?? 0;
+  const usesView = filter.view !== undefined && filter.view !== "all";
+  const fetchLimit = usesView ? MAX_FETCH : Math.min(filter.limit * 5, MAX_FETCH);
   let q = db
     .from("normalized_listings")
     .select(LISTING_COLUMNS)
@@ -542,7 +661,10 @@ export async function listOpportunities(
     manualByListing,
     workflowByListing,
   );
-  return applyListFilter(rows, filter);
+  const filtered = applyListFilter(rows, filter);
+  const viewed = applyViewFilter(filtered, filter, workflowByListing);
+  sortOpportunityRows(viewed, filter.sort ?? "last_seen_desc");
+  return paginateOpportunityRows(viewed, offset, filter.limit);
 }
 
 export async function getOpportunityDetail(

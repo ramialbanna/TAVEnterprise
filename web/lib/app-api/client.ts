@@ -17,6 +17,7 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseOpportunities,
+  parseOpportunitiesPage,
   parseOpportunityDetail,
   parseManualSubmission,
   parseAppUsers,
@@ -35,6 +36,7 @@ import type {
   IngestRunSummary,
   IngestRunDetail,
   OpportunityRow,
+  OpportunityListPage,
   OpportunityDetail,
   ManualSubmissionResult,
   AppUserSummary,
@@ -55,7 +57,7 @@ export type IngestRunsFilter = {
   status?: string;
 };
 
-/** Query filter for `GET /app/opportunities`. */
+/** Query filter for `GET /app/opportunities` (Classic — plain array response). */
 export type OpportunitiesFilter = {
   limit?: number;
   source?: string;
@@ -63,6 +65,16 @@ export type OpportunitiesFilter = {
   type?: "lead" | "near_miss" | "manual_submission";
   grade?: string;
   status?: string;
+};
+
+export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc";
+export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
+
+/** Paginated list filter — triggers `{ items, total, offset }` response from the Worker. */
+export type OpportunitiesPageFilter = OpportunitiesFilter & {
+  offset?: number;
+  sort?: OpportunitySort;
+  view?: OpportunityView;
 };
 
 /** `?...` query string for `ingest-runs`; empty when no params. */
@@ -76,10 +88,26 @@ export function ingestRunsQuery(filter: IngestRunsFilter = {}): string {
   return qs ? `?${qs}` : "";
 }
 
-/** `?...` query string for `opportunities`; empty when no params. */
+/** `?...` query string for opportunities (Classic); empty when no params. */
 export function opportunitiesQuery(filter: OpportunitiesFilter = {}): string {
   const params = new URLSearchParams();
   if (filter.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter.source) params.set("source", filter.source);
+  if (filter.region) params.set("region", filter.region);
+  if (filter.type) params.set("type", filter.type);
+  if (filter.grade) params.set("grade", filter.grade);
+  if (filter.status) params.set("status", filter.status);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** `?...` query string for paginated opportunities (New mode). */
+export function opportunitiesPageQuery(filter: OpportunitiesPageFilter = {}): string {
+  const params = new URLSearchParams();
+  if (filter.limit !== undefined) params.set("limit", String(filter.limit));
+  if (filter.offset !== undefined) params.set("offset", String(filter.offset));
+  if (filter.sort) params.set("sort", filter.sort);
+  if (filter.view) params.set("view", filter.view);
   if (filter.source) params.set("source", filter.source);
   if (filter.region) params.set("region", filter.region);
   if (filter.type) params.set("type", filter.type);
@@ -277,6 +305,14 @@ export async function listOpportunities(
   const r = await getJson(`opportunities${opportunitiesQuery(filter)}`);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunities(r.status, r.json);
+}
+
+export async function listOpportunitiesPage(
+  filter: OpportunitiesPageFilter = {},
+): Promise<ApiResult<OpportunityListPage>> {
+  const r = await getJson(`opportunities${opportunitiesPageQuery(filter)}`);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunitiesPage(r.status, r.json);
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {

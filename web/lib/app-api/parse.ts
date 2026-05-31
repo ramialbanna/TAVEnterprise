@@ -5,6 +5,7 @@ import {
   IngestRunSummaryListSchema,
   IngestRunDetailSchema,
   OpportunityRowListSchema,
+  OpportunityListPageSchema,
   OpportunityDetailSchema,
   ManualSubmissionResultSchema,
   AppUserSummaryListSchema,
@@ -18,6 +19,7 @@ import {
   type IngestRunSummary,
   type IngestRunDetail,
   type OpportunityRow,
+  type OpportunityListPage,
   type OpportunityDetail,
   type ManualSubmissionResult,
   type AppUserSummary,
@@ -193,6 +195,13 @@ export function parseIngestRunDetail(status: number, json: unknown): ApiResult<I
 
 export function parseOpportunities(status: number, json: unknown): ApiResult<OpportunityRow[]> {
   return interpret(status, json, OpportunityRowListSchema);
+}
+
+export function parseOpportunitiesPage(
+  status: number,
+  json: unknown,
+): ApiResult<OpportunityListPage> {
+  return interpret(status, json, OpportunityListPageSchema);
 }
 
 export function parseOpportunityDetail(status: number, json: unknown): ApiResult<OpportunityDetail> {

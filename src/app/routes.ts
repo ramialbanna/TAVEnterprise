@@ -30,7 +30,7 @@ import { getLastCronRun } from "../persistence/cronRuns";
 import { listSourceRuns, getSourceRunDetail } from "../persistence/ingestRuns";
 import type { IngestRunListFilter } from "../persistence/ingestRuns";
 import { listOpportunities, getOpportunityDetail } from "../persistence/opportunities";
-import type { OpportunityListFilter, OpportunityType } from "../persistence/opportunities";
+import type { OpportunityListFilter, OpportunityType, OpportunitySort, OpportunityView } from "../persistence/opportunities";
 import { listActiveUsers } from "../persistence/users";
 import { resolveAppUser } from "../auth/resolveAppUser";
 import type { AppUser } from "../persistence/users";
@@ -139,6 +139,13 @@ function json(body: unknown, status = 200): Response {
  * a positive integer (missing, empty, zero, negative, fractional, non-numeric)
  * falls back to the default.
  */
+function parseOffsetParam(raw: string | null): number {
+  if (raw === null) return 0;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) return 0;
+  return n;
+}
+
 function parseLimitParam(raw: string | null): number {
   if (raw === null) return DEFAULT_LIST_LIMIT;
   const n = Number(raw);
@@ -224,7 +231,7 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
       return await handleUsersList(env);
     }
     if (request.method === "GET" && pathname === "/app/opportunities") {
-      return await handleOpportunitiesList(env, url);
+      return await handleOpportunitiesList(request, env, url);
     }
     const opportunityActionMatch = pathname.match(OPPORTUNITY_ACTION_RE);
     if (request.method === "POST" && opportunityActionMatch) {
@@ -855,6 +862,9 @@ async function handleIngestRunDetail(env: Env, id: string): Promise<Response> {
   }
 }
 
+const OPPORTUNITY_SORTS = ["spread_desc", "score_desc", "last_seen_desc"] as const satisfies readonly OpportunitySort[];
+const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all"] as const satisfies readonly OpportunityView[];
+
 const OPPORTUNITY_TYPES = ["lead", "near_miss"] as const satisfies readonly OpportunityType[];
 const LEAD_GRADES = ["excellent", "good", "fair", "pass"] as const;
 const LEAD_STATUSES = [
@@ -872,10 +882,16 @@ const LEAD_STATUSES = [
 ] as const;
 
 /**
- * GET /app/opportunities?limit=&source=&region=&type=&grade=&status=
+ * GET /app/opportunities?limit=&offset=&sort=&view=&source=&region=&type=&grade=&status=
  * Read-only buyer queue. Returns camelCase product rows.
+ * Classic callers (no offset/sort/view) receive a plain array; paginated callers receive
+ * `{ items, total, offset }`.
  */
-async function handleOpportunitiesList(env: Env, url: URL): Promise<Response> {
+async function handleOpportunitiesList(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response> {
   let db: ReturnType<typeof getSupabaseClient>;
   try {
     db = getSupabaseClient(env);
@@ -884,9 +900,39 @@ async function handleOpportunitiesList(env: Env, url: URL): Promise<Response> {
     return json({ ok: false, error: "db_error" }, 503);
   }
 
+  const hasOffset = url.searchParams.has("offset");
+  const sortParam = url.searchParams.get("sort");
+  const viewParam = url.searchParams.get("view");
+  const paginatedResponse = hasOffset || sortParam !== null || viewParam !== null;
+
   const filter: OpportunityListFilter = {
     limit: parseLimitParam(url.searchParams.get("limit")),
   };
+
+  if (hasOffset) {
+    filter.offset = parseOffsetParam(url.searchParams.get("offset"));
+  }
+
+  if (sortParam !== null) {
+    if (!(OPPORTUNITY_SORTS as readonly string[]).includes(sortParam)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.sort = sortParam as OpportunitySort;
+  }
+
+  if (viewParam !== null) {
+    if (!(OPPORTUNITY_VIEWS as readonly string[]).includes(viewParam)) {
+      return json({ ok: false, error: "invalid_filter" }, 400);
+    }
+    filter.view = viewParam as OpportunityView;
+    if (filter.view === "mine") {
+      const user = await resolveAppUser(request, env);
+      if (!user) {
+        return json({ ok: false, error: "user_required" }, 401);
+      }
+      filter.viewerUserId = user.id;
+    }
+  }
 
   const source = url.searchParams.get("source");
   const region = url.searchParams.get("region");
@@ -926,8 +972,11 @@ async function handleOpportunitiesList(env: Env, url: URL): Promise<Response> {
   }
 
   try {
-    const data = await listOpportunities(db, filter);
-    return json({ ok: true, data });
+    const page = await listOpportunities(db, filter);
+    if (paginatedResponse) {
+      return json({ ok: true, data: page });
+    }
+    return json({ ok: true, data: page.items });
   } catch (err) {
     log("app.opportunities.query_failed", { filter, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);

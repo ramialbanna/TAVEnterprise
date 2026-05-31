@@ -553,13 +553,29 @@ Query params (all optional):
 | Param | Behaviour |
 |-------|-----------|
 | `limit` | Default `20`, clamped to `100`. |
+| `offset` | Default `0`. When present (with `sort` or `view`), response is paginated — see below. |
+| `sort` | `spread_desc`, `score_desc`, or `last_seen_desc`. Invalid → `400 invalid_filter`. |
+| `view` | `needs_action`, `mine`, `worth_a_look`, or `all`. Invalid → `400 invalid_filter`. `mine` requires authenticated user → `401 user_required` when missing. |
 | `source` | Listing source enum. Unknown → `400 invalid_filter`. |
 | `region` | Region enum. Unknown → `400 invalid_filter`. |
 | `type` | `lead` or `near_miss`. Unknown → `400 invalid_filter`. |
 | `grade` | Lead grade. Unknown → `400 invalid_filter`. |
 | `status` | Lead status. Unknown → `400 invalid_filter`. |
 
-Success → `200 { "ok": true, "data": OpportunityRow[] }`, newest `lastSeenAt` first.
+**Classic response** (no `offset`, `sort`, or `view` params):
+
+Success → `200 { "ok": true, "data": OpportunityRow[] }`, default sort `last_seen_desc`, capped at `limit`.
+
+**Paginated response** (any of `offset`, `sort`, or `view` present):
+
+Success → `200 { "ok": true, "data": { "items": OpportunityRow[], "total": number, "offset": number } }`.
+
+View semantics:
+
+- `needs_action` — unassigned, new manual submissions, or active claims expiring within 4 hours
+- `mine` — assigned to or actively claimed by the signed-in user
+- `worth_a_look` — spread ≥ $1,000, seen within 7 days
+- `all` — no view filter (default when `view` is omitted in paginated mode)
 
 Failure: query error → `503 db_error`.
 
