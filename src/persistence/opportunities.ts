@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "./supabase";
 import { buildListingDiagnostics } from "./ingestRuns";
+import { computeDealScore } from "../scoring/deal";
 import { fetchWorkflowMap, isActiveClaim, listOpportunityActions, type OpportunityActionRecord, type WorkflowDisplayContext } from "./opportunityWorkflow";
 
 /**
@@ -72,7 +73,31 @@ export interface OpportunityListFilter {
 }
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status";
+
+/** Freshness values that must not appear in the buyer queue (OQ-002). */
+const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
+
+/**
+ * First-pass near-miss gate: MMR-hit listings that did not become leads (pass grade)
+ * only surface when a buyer could plausibly act — not stale/removed, incomplete YMM,
+ * or clearly overpriced vs MMR.
+ */
+export function isReviewableNearMiss(input: {
+  freshnessStatus: string | null;
+  price: number | null;
+  mmrValue: number | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+}): boolean {
+  const freshness = input.freshnessStatus ?? "new";
+  if (SUPPRESSED_FRESHNESS.has(freshness)) return false;
+  if (input.year === null || !input.make?.trim() || !input.model?.trim()) return false;
+  if (input.price === null || input.mmrValue === null || input.mmrValue <= 0) return false;
+  // Same deal ladder as ingest: pass-grade junk is typically asking above MMR (deal score < 25).
+  return computeDealScore(input.price, input.mmrValue) >= 25;
+}
 
 const VALUATION_COLUMNS =
   "normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, lookup_trim, normalization_confidence, fetched_at";
@@ -162,6 +187,20 @@ function mapToOpportunityRow(
   const isManualSubmission = manual !== null;
   const type = resolveOpportunityType(hasLead, hasMmr, isManualSubmission);
   if (type === null) return null;
+
+  if (
+    type === "near_miss" &&
+    !isReviewableNearMiss({
+      freshnessStatus: asString(listing.freshness_status),
+      price: asNumber(listing.price),
+      mmrValue: diagnostic.mmr_value,
+      year: asNumber(listing.year),
+      make: asString(listing.make),
+      model: asString(listing.model),
+    })
+  ) {
+    return null;
+  }
 
   const listingMileage = asNumber(listing.mileage);
   const estimateFlags = computeEstimateFlags(

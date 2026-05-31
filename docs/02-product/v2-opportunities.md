@@ -332,14 +332,12 @@ type ManualOpportunitySubmission = {
 
 **Remaining before live workflow (Slices B–C):**
 
-1. Latest valuation lookup may need an index:
+1. ~~Latest valuation lookup may need an index~~ — Done (migration `0051`, `vs_normalized_listing_fetched_at_idx`).
 
-```sql
-CREATE INDEX ON tav.valuation_snapshots (normalized_listing_id, fetched_at DESC);
-```
-
-2. Near-miss inclusion needs a first-pass reason-code filter so obvious junk does
-   not overwhelm the buyer queue.
+2. ~~Near-miss inclusion needs a first-pass reason-code filter~~ — Done (2026-05-26):
+   `isReviewableNearMiss` in `persistence/opportunities.ts` excludes `stale_confirmed` /
+   `removed`, incomplete YMM, and listings priced above MMR (deal score &lt; 25, same
+   ladder as ingest).
 3. ~~Manual submission needs a persistence design.~~ Done — `tav.manual_opportunity_submissions` + `POST /app/opportunities/manual` + submit dialog (2026-05-22).
 4. ~~Assignment requires a user/role model and auditable actor identity.~~ Done (2026-05-23 — `tav.opportunity_workflow`, assign/claim/evaluate APIs, `tav.opportunity_actions` audit).
 5. ~~Full workflow mutations (status/notes) remain Phase 7.~~ Done (2026-05-23 — migration 0048, `POST .../status`, `POST .../notes`, action history UI).

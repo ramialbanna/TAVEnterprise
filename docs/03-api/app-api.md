@@ -544,7 +544,9 @@ Supabase client cannot be constructed, or any diagnostic query throws →
 
 ### `GET /app/opportunities`
 
-v2 read-only buyer queue. CamelCase product rows from `persistence/opportunities.ts`.
+v2 buyer queue. CamelCase product rows from `persistence/opportunities.ts`. Near-miss rows
+(MMR hit, no lead) are omitted when stale/removed, YMM is incomplete, or asking price is
+above MMR (same deal-score ladder as ingest).
 
 Query params (all optional):
 

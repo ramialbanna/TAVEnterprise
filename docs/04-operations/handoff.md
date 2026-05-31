@@ -4,6 +4,8 @@ Current durable handoff for the next engineering session.
 
 For the living task checklist, see [NEXT_STEPS.md](../NEXT_STEPS.md).
 
+**Active UAT:** [Opportunities team UAT](../05-process/opportunities-uat.md) on production `/opportunities`.
+
 ## 1. What This Is
 
 TAV-AIP is the Texas Auto Value acquisition intelligence platform. It ingests marketplace listings, normalizes and dedupes inventory, values vehicles through Cox/Manheim MMR, and exposes an authenticated internal web app.
