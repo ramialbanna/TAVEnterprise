@@ -17,7 +17,6 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseOpportunities,
-  parseOpportunitiesPage,
   parseOpportunityDetail,
   parseManualSubmission,
   parseAppUsers,
@@ -29,6 +28,7 @@ import {
   parseSystemStatus,
   type ApiResult,
 } from "./parse";
+import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
 import { codeMessage } from "./missing-reason";
 import type {
   HistoricalSale,
@@ -310,9 +310,10 @@ export async function listOpportunities(
 export async function listOpportunitiesPage(
   filter: OpportunitiesPageFilter = {},
 ): Promise<ApiResult<OpportunityListPage>> {
-  const r = await getJson(`opportunities${opportunitiesPageQuery(filter)}`);
-  if (r === FETCH_FAILED) return clientTransportError();
-  return parseOpportunitiesPage(r.status, r.json);
+  return fetchOpportunitiesPage(async (path) => {
+    const r = await getJson(path);
+    return r === FETCH_FAILED ? null : r;
+  }, filter);
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {

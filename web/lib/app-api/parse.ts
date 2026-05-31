@@ -1,5 +1,8 @@
 import type { z } from "zod";
 import {
+  normalizeOpportunityListPagePayload,
+} from "@/lib/opportunities/list-page";
+import {
   HistoricalSaleListSchema,
   ImportBatchListSchema,
   IngestRunSummaryListSchema,
@@ -201,7 +204,12 @@ export function parseOpportunitiesPage(
   status: number,
   json: unknown,
 ): ApiResult<OpportunityListPage> {
-  const pageResult = interpret(status, json, OpportunityListPageSchema);
+  const normalizedJson =
+    isObject(json) && json.ok === true
+      ? { ...json, data: normalizeOpportunityListPagePayload(json.data) }
+      : json;
+
+  const pageResult = interpret(status, normalizedJson, OpportunityListPageSchema);
   if (pageResult.ok) return pageResult;
 
   // Backward compat: pre-Phase-1 Worker returns a plain array even when sort/offset/view

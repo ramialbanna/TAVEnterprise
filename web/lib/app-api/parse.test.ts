@@ -263,6 +263,16 @@ describe("parse — happy paths", () => {
     expect(r.data).toEqual({ items: [OPPORTUNITY_ROW], total: 1, offset: 0 });
   });
 
+  it("accepts partial paginated payloads missing offset", () => {
+    const r = parseOpportunitiesPage(200, {
+      ok: true,
+      data: { items: [OPPORTUNITY_ROW], total: 1 },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.data.offset).toBe(0);
+  });
+
   it("defaults missing estimateFlags on opportunity rows", () => {
     const rowWithoutFlags = { ...OPPORTUNITY_ROW };
     delete (rowWithoutFlags as { estimateFlags?: unknown }).estimateFlags;

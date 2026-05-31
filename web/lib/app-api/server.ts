@@ -17,7 +17,6 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseOpportunities,
-  parseOpportunitiesPage,
   parseOpportunityDetail,
   parseKpis,
   parseMmrVin,
@@ -29,7 +28,6 @@ import {
   importBatchesQuery,
   ingestRunsQuery,
   opportunitiesQuery,
-  opportunitiesPageQuery,
   type HistoricalSalesFilter,
   type IngestRunsFilter,
   type OpportunitiesFilter,
@@ -38,6 +36,7 @@ import {
   type UpdateOpportunityStatusRequest,
   type AddOpportunityNoteRequest,
 } from "./client";
+import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
 import type {
   HistoricalSale,
   ImportBatch,
@@ -174,8 +173,7 @@ export async function listOpportunities(
 export async function listOpportunitiesPage(
   filter: OpportunitiesPageFilter = {},
 ): Promise<ApiResult<OpportunityListPage>> {
-  const { status, json } = await getJson(`opportunities${opportunitiesPageQuery(filter)}`);
-  return parseOpportunitiesPage(status, json);
+  return fetchOpportunitiesPage((path) => getJson(path), filter);
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {
