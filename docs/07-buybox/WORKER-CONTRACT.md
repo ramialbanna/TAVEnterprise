@@ -1,7 +1,7 @@
 # MaxBuy — Intelligence Worker MMR Contract
 
 **Contract version:** `mmr-v1` · **Pinned:** 2026-05-20  
-**Status:** Pinned from source; CI compatibility test pending (Phase 1)
+**Status:** Pinned from source; CI compatibility test shipped (`test/maxbuy.mmr-contract.test.ts`)
 
 **Source files:** `src/types/intelligence.ts` · `workers/tav-intelligence-worker/src/services/mmrLookup.ts`
 
@@ -62,10 +62,10 @@ Record `intelligence_worker_contract_version = "mmr-v1"` on every recommendation
 
 ---
 
-## Phase 1 CI test (not yet built)
+## Phase 1 CI test (shipped)
 
-1. Frozen fixture with synthetic MMR values (no real VIN/payload)
-2. Parse with `MmrResponseEnvelopeSchema`
-3. Assert pinned field list — drift fails the build
+1. Frozen fixture: `test/fixtures/mmr-v1-envelope.json`
+2. Parse with `MmrResponseEnvelopeSchema` — `test/maxbuy.mmr-contract.test.ts`
+3. Assert pinned safe-persist field list — drift fails the build
 
 Change procedure: ADR in `docs/01-architecture/adr/` + bump contract version.

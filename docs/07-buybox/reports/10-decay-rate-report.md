@@ -39,4 +39,4 @@ None for v1 — global half-life applied to all segments.
 ## Follow-ups
 
 - Region/mileage decay sensitivity (out of scope for this spike).
-- Regenerate Audit Kit 07 effective-N column with chosen λ before Phase 2 views ship.
+- Regenerate Audit Kit 07 effective-N column with chosen λ (180d applied in migration `0056` benchmark views).

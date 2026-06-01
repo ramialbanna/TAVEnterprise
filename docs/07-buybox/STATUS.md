@@ -1,6 +1,6 @@
 # MaxBuy — Status
 
-**Last updated:** 2026-06-01 · **Phase:** Pre-code → Phase 1  
+**Last updated:** 2026-06-01 · **Phase:** P0–P2 complete → **P5 next** (evaluate API)  
 **Repo prefix:** `TAV-BB`
 
 Single checklist for what's closed, what's open, and when to start building.
@@ -13,12 +13,30 @@ Single checklist for what's closed, what's open, and when to start building.
 |---|---|---|
 | 1 | Owner/product decisions (items 1, 2, 4, 5) closed | ✅ Closed 2026-05-20 |
 | 2 | Data audits 6, 7, 9 done; backfill (#20) loaded | ✅ 57,228 rows in Supabase |
-| 3 | Worker contract pinned (#12) + CI compat test | ⚠️ Pinned `mmr-v1`; CI test pending Phase 1 |
-| 4 | Architecture spikes 11, 13, 14 scoped | ⬜ Scoped only — run during Phase 1 setup |
+| 3 | Worker contract pinned (#12) + CI compat test | ✅ `mmr-v1` + `test/maxbuy.mmr-contract.test.ts` |
+| 4 | Architecture spikes 11, 13, 14 scoped | ⚠️ #13 versioning live in views; #11/#14 still scoped |
 | 5 | UI mocks for override + two-state display (#15, #16) | ⬜ Blocked on Product |
 | 6 | Adoption KPI floors + rubric refresh (#17, #18) | ⬜ Blocked on Product |
 
-**Practical gate:** Dev can start Phase 1 (benchmark views + schema) now. Full MVP ship waits on product items 15–18.
+**Practical gate:** P0–P2 shipped. Start **P5** (`maxbuy-worker` + evaluate API). P4 workflow UI shell can run in parallel. Full buyer-facing MVP still waits on product items 15–18 for UI polish.
+
+---
+
+## Unified plan progress (IMPLEMENTATION-PLAN P0–P10)
+
+| Phase | Ships | Status |
+|---|---|---|
+| **0** | `purchase_outcomes` prod schema reconcile | ✅ `0052` on `main` |
+| **1** | λ backtest → 180d half-life | ✅ [`reports/10-decay-rate-report.md`](reports/10-decay-rate-report.md) |
+| **2** | `maxbuy_*` DDL, benchmark mat views, scoring module | ✅ `0053`–`0056`, `src/maxbuy/scoring/` |
+| **3** | Parse endpoint, `entry_method`, submit validation | ⬜ |
+| **4** | Nav, deal detail hero, MaxBuyCard shell | ⬜ |
+| **5** | `POST /maxbuy/evaluate` | ⬜ **Next** |
+| **6** | `/maxbuy` + deal detail evaluate live | ⬜ |
+| **7–9** | Overrides, async badges, retire Classic | ⬜ |
+| **10** | Shadow ML | ⬜ Future |
+
+Detail: [`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) §2.3
 
 ---
 
@@ -28,22 +46,22 @@ Legend: ✅ Done · ⚠️ In progress · ⬜ Open · 📋 Design done, code pen
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | Target net gross ($800/unit) | O | ✅ |
+| 1 | Target net gross ($800/unit) | O | ✅ Seeded in `tav.maxbuy_policy` |
 | 2 | ML promotion gate (8-week shadow proof) | P | ✅ |
-| 3 | Decision replay schema | D | 📋 CI test in Phase 1 |
-| 4 | Data strength semantics (no % confidence) | P | ✅ |
-| 5 | Hard gates catalog | O | ✅ |
+| 3 | Decision replay schema | D | 📋 Tables exist; replay CI test at P5+ |
+| 4 | Data strength semantics (no % confidence) | P | ✅ In `src/maxbuy/scoring/` |
+| 5 | Hard gates catalog | O | ✅ MMR-missing active in scoring; stub framework at P5 |
 | 6 | Field completeness audit | D | ✅ Re-audited post-backfill |
 | 7 | Segment support matrix | D | ✅ |
-| 8 | Pass-on logging design | D+O | 📋 Table spec done; code at v1 ship |
+| 8 | Pass-on logging design | D+O | ✅ Table `maxbuy_evaluated_passes`; API at P5+ |
 | 9 | MMR quality & residuals | D | ✅ Median +$885 over MMR |
-| 10 | Decay-rate λ backtest | D | ⚠️ Plan done; offline run pending |
+| 10 | Decay-rate λ backtest | D | ✅ **180d** — report committed |
 | 11 | Offline pipeline host | D | ⬜ Scoped |
-| 12 | Intelligence worker contract | D | ⚠️ `mmr-v1` pinned; CI pending |
-| 13 | Benchmark versioning | D | ⬜ Scoped |
+| 12 | Intelligence worker contract | D | ✅ `mmr-v1` pinned + CI fixture test |
+| 13 | Benchmark versioning | D | ✅ `benchmark_version` on mat views (`bm-*-180d`) |
 | 14 | Retention split + vendor sign-off | D+O | ⬜ Scoped |
 | 15 | Override capture UI | P | ⬜ Needs mock |
-| 16 | Two-state display UI | P | ⬜ Needs mock |
+| 16 | Two-state display UI | P | ⬜ Needs mock (logic in scoring module) |
 | 17 | Adoption KPI floors | P | ⬜ |
 | 18 | Evaluation rubric refresh | P | ⬜ |
 | 19 | MarketCheck enrichment spike | D | ⚠️ Interim; live API checks pending |
@@ -80,23 +98,23 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 
 ## Next actions (dev)
 
-1. Commit prod `purchase_outcomes` schema extensions to `supabase/migrations/`
-2. Run decay λ offline backtest (#10) → pick half-life for benchmark views
-3. Branch `TAV-BB-phase-1-data-foundation` — benchmark views + `tav.maxbuy_*` DDL
-4. Add MMR contract CI compat test (#12)
-5. Product: approve mocks for #15, #16; set KPI floors for #17
+1. **P5** — scaffold `workers/maxbuy-worker/`, `POST /maxbuy/evaluate`, main worker proxy `/app/maxbuy/*`
+2. **P4** (parallel) — Max buy nav stub, `MaxBuyCard` placeholder on deal detail
+3. **P3** (parallel) — `entry_method`, `POST /app/opportunities/parse`
+4. Product: approve mocks for #15, #16; set KPI floors for #17
+5. After outcome loads: `REFRESH MATERIALIZED VIEW` on `mv_maxbuy_*` benchmarks
 
 ---
 
-## Build phases (after pre-code)
+## Build phases (legacy numbering — see IMPLEMENTATION-PLAN for canonical P0–P10)
 
 | Phase | Ships | Gate |
 |---|---|---|
-| 1 | Benchmark views, schema, λ chosen | Audits signed off |
-| 2 | MVP API + snapshots + gates | KPI-1 buyer lookup rate |
-| 3 | Create-Opportunity from snapshot | AC-6 = 100% |
-| 4 | Shadow ML pipeline | DEC-2 framework live |
-| 5 | ML promotion governance | KPI-4 + human approval |
-| 6 | Per-VIN hybrid (optional) | Beats B1 on decision metrics |
+| 1 | Benchmark views, schema, λ chosen | ✅ Complete (P0–P2) |
+| 2 | MVP API + snapshots + gates | ⬜ P5 |
+| 3 | Create-Opportunity from snapshot | ⬜ P7 |
+| 4 | Shadow ML pipeline | ⬜ P10 |
+| 5 | ML promotion governance | ⬜ P10 |
+| 6 | Per-VIN hybrid (optional) | ⬜ Future |
 
 Full phase detail: [`archive/pre-code/00-LEADERSHIP-BRIEF.md`](archive/pre-code/00-LEADERSHIP-BRIEF.md)

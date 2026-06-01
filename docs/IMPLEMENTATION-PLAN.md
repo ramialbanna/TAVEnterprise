@@ -1,7 +1,7 @@
 # TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
 
 **Status:** Active execution plan  
-**Last updated:** 2026-06-01  
+**Last updated:** 2026-06-01 (progress: P0–P2 shipped)  
 **Audience:** Cursor agents, solo dev, reviewers  
 **Repo prefixes:** `TAV-BB-*` (MaxBuy) · `TAV-WF-*` (workflow/UI) · combined milestones may use `TAV-MVP-*`
 
@@ -31,29 +31,47 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 
 ## 2. Current state (verified 2026-06-01)
 
-### 2.1 Shipped today
+### 2.1 Platform (unchanged)
 
 | Area | State |
 |------|-------|
 | Ingest pipeline | Live — scraper → normalize → score → `leads` |
 | Opportunities v2 | Phases 5–7 done — assign, claim, status, notes |
 | MMR / intelligence | `tav-intelligence-worker` live; contract `mmr-v1` pinned |
-| `/mmr-lab` | Wholesale lookup only — **not** MaxBuy |
+| `/mmr-lab` | Wholesale lookup only — **not** MaxBuy evaluate |
 | Ingest buy-box rules | Live — `tav.buy_box_rules` at scrape time (**separate from MaxBuy**) |
 | New UI shell | Partial — `opportunities/_components/*-new.tsx`, Classic/New toggle still exists |
 
-### 2.2 MaxBuy pre-code (done)
+### 2.2 MaxBuy — shipped through Phase 2
 
 | Item | State |
 |------|-------|
 | Historical outcomes | **57,228** rows in prod `tav.purchase_outcomes` |
 | `tav.historical_sales` | **0 rows** — do not use for λ backtest |
-| MaxBuy code | **None** — no `maxbuy_*` tables, no worker, no `/maxbuy` route |
-| Repo schema vs prod | **Drift** — prod has columns not in committed migrations (see §4.3) |
-| λ backtest (#10) | Plan only — **must run before benchmark views** |
+| Schema reconcile (P0) | **Done** — `0052_purchase_outcomes_prod_reconcile.sql` on `main` |
+| λ backtest (P1) | **Done** — **180d** half-life; [`07-buybox/reports/10-decay-rate-report.md`](07-buybox/reports/10-decay-rate-report.md) |
+| MaxBuy DDL + views (P2) | **Done** — `0053`–`0056`; benchmark views live in prod (`bm-*-180d`) |
+| Scoring module (P2) | **Done** — `src/maxbuy/scoring/` + unit tests |
+| MMR contract CI (P2) | **Done** — `test/maxbuy.mmr-contract.test.ts` |
+| MaxBuy API / worker (P5) | **Not built** — no `maxbuy-worker`, no `/maxbuy` route |
+| MaxBuy UI (P4–P6) | **Not built** — no nav item, no `MaxBuyCard` live |
 | Decisions DEC-1–4 | Closed — $800 target, data strength not %, stub gates, etc. |
 
-### 2.3 Workflow redesign (planning)
+### 2.3 Execution progress (unified phases)
+
+| Phase | Focus | Status | Branch / commit area |
+|-------|--------|--------|----------------------|
+| **0** | Schema reconcile | ✅ Shipped | `0052` · `main` |
+| **1** | λ decay backtest | ✅ Shipped | `scripts/maxbuy/decay-backtest/` · report · `main` |
+| **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
+| **3** | Intake parse + `entry_method` | ⬜ Not started | — |
+| **4** | Workflow UI shell + MaxBuy card placeholder | ⬜ Not started | — |
+| **5** | `maxbuy-worker` evaluate API | ⬜ **Next** | — |
+| **6** | MaxBuy UI live | ⬜ Blocked on P4 + P5 | — |
+| **7–9** | Hand-off, async badges, UAT / retire Classic | ⬜ Not started | — |
+| **10** | Shadow ML | ⬜ Future | — |
+
+### 2.4 Workflow redesign (planning)
 
 | Item | State |
 |------|-------|
@@ -223,9 +241,9 @@ flowchart LR
 
 ## 6. Phase details (actionable)
 
-### Phase 0 — Schema reconcile
+### Phase 0 — Schema reconcile ✅
 
-**Branch:** `TAV-MVP-phase-0-schema-reconcile`  
+**Branch:** `TAV-MVP-phase-0-schema-reconcile` (merged to `main`)  
 **Blocks:** Phase 1, 2, and any `entry_method` work
 
 | # | Task | Files / artifacts |
@@ -239,9 +257,9 @@ flowchart LR
 
 ---
 
-### Phase 1 — Decay λ backtest (#10)
+### Phase 1 — Decay λ backtest (#10) ✅
 
-**Branch:** `TAV-BB-phase-1-decay-backtest`  
+**Branch:** `TAV-BB-phase-1-decay-backtest` (merged to `main`) · **Chosen λ:** 180 days  
 **Blocks:** Phase 2 benchmark views
 
 | # | Task | Files / artifacts |
@@ -268,9 +286,9 @@ ORDER BY sale_date;
 
 ---
 
-### Phase 2 — MaxBuy data foundation
+### Phase 2 — MaxBuy data foundation ✅
 
-**Branch:** `TAV-BB-phase-1-data-foundation` (per buybox README)  
+**Branch:** `TAV-BB-phase-2-data-foundation` (merge to `main`)  
 **Depends on:** Phase 0, 1
 
 | # | Task | Files / artifacts |
@@ -545,3 +563,4 @@ PRs 4–5 can run **parallel** to PR 2–3 after PR 1 merges. PR 6 requires PR 3
 | Date | Change |
 |------|--------|
 | 2026-06-01 | Initial unified plan — MaxBuy + workflow redesign, interlinked phases P0–P10 |
+| 2026-06-01 | Mark P0–P2 complete; refresh §2 current state and progress table |
