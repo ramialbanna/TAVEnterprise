@@ -283,9 +283,14 @@ CREATE TABLE tav.purchase_outcomes (
   vehicle_candidate_id        uuid        REFERENCES tav.vehicle_candidates (id),
   purchase_price              integer,
   mmr_value_at_purchase       integer,
+  mmr_source                  text,
+  mmr_method                  text,
+  mmr_lookup_date             date,
+  mmr_snapshot_id             uuid,
   gross_profit_est            integer,
   odometer_at_purchase        integer,
   purchase_date               date,
+  sale_date                   date,
   buyer                       text,
   notes                       text,
   -- denormalized vehicle fields (captured at purchase time)
@@ -293,6 +298,7 @@ CREATE TABLE tav.purchase_outcomes (
   year                        smallint    CHECK (year BETWEEN 1900 AND 2100),
   make                        text,
   model                       text,
+  trim                        text,
   mileage                     integer     CHECK (mileage >= 0),
   source                      text,
   region                      text,
@@ -301,10 +307,13 @@ CREATE TABLE tav.purchase_outcomes (
   price_paid                  integer,
   sale_price                  integer,
   gross_profit                integer,
+  net_gross                   integer,
   hold_days                   integer,
   transport_cost              integer,
   auction_fee                 integer,
   misc_overhead               integer,
+  recon_cost                  integer,
+  expense_total               integer,
   -- condition
   condition_grade_raw         text,
   condition_grade_normalized  text
@@ -322,6 +331,7 @@ CREATE TABLE tav.purchase_outcomes (
   cot_state                   text,
   import_batch_id             uuid,
   import_fingerprint          text,
+  cycle_seq                   smallint,
   created_at                  timestamptz NOT NULL DEFAULT now()
 );
 
@@ -832,6 +842,12 @@ CREATE UNIQUE INDEX ON tav.purchase_outcomes (lead_id)
   WHERE lead_id IS NOT NULL;
 ALTER TABLE tav.purchase_outcomes
   ADD CONSTRAINT purchase_outcomes_import_fingerprint_key UNIQUE (import_fingerprint);
+ALTER TABLE tav.purchase_outcomes
+  ADD CONSTRAINT purchase_outcomes_cycle_seq_chk
+  CHECK (cycle_seq IS NULL OR cycle_seq >= 1);
+ALTER TABLE tav.purchase_outcomes
+  ADD CONSTRAINT purchase_outcomes_recon_cost_chk
+  CHECK (recon_cost IS NULL OR recon_cost >= 0);
 
 -- import_rows
 CREATE INDEX ON tav.import_rows (import_batch_id);
