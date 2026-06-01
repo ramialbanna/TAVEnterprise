@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "mmr_value": 18500,
+  "mileage_used": 84210,
+  "is_inferred_mileage": false,
+  "cache_hit": true,
+  "source": "manheim",
+  "fetched_at": "2026-05-20T14:30:00.000Z",
+  "expires_at": "2026-05-21T14:30:00.000Z",
+  "error_code": null,
+  "error_message": null
+}
