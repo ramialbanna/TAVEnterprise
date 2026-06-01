@@ -7,6 +7,7 @@ preserved for history and should not be treated as current instructions unless a
 current doc links to them explicitly.
 
 **Start here for what to do next:** [NEXT_STEPS.md](NEXT_STEPS.md)  
+**MaxBuy + workflow/UI build plan (Cursor):** [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md)  
 **Agent MCP / tools reference:** [tools.md](tools.md)
 
 ## Current Docs

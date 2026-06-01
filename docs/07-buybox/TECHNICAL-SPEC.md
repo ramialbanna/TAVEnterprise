@@ -1,8 +1,8 @@
 # MaxBuy — Technical Specification
 
-**What this is / who it's for:** The engineering contract for MaxBuy: database schema extensions to the `tav` schema, the versioned serving API request/response shape, the decision-replay mechanism, and the promotion/governance + hard-gate mechanics. Concrete enough to implement against. Audience: the solo dev (implementer + data-modeler) and reviewers. Companion docs: [`00-LEADERSHIP-BRIEF.md`](00-LEADERSHIP-BRIEF.md) · [`01-CHARTER.md`](01-CHARTER.md) · [`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).
+**What this is / who it's for:** The engineering contract for MaxBuy: database schema extensions to the `tav` schema, the versioned serving API request/response shape, the decision-replay mechanism, and the promotion/governance + hard-gate mechanics. Concrete enough to implement against. Audience: the solo dev (implementer + data-modeler) and reviewers. Companion docs: [`README.md`](README.md) · [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`STATUS.md`](STATUS.md) · [`DATA-SUMMARY.md`](DATA-SUMMARY.md) · [`WORKER-CONTRACT.md`](WORKER-CONTRACT.md)
 
-**Date:** 2026-05-20 · **Status:** Pre-code · **Repo prefix:** `TAV-BB`
+**Date:** 2026-05-20 · **Status:** Active · **Repo prefix:** `TAV-BB`
 
 > **Conventions** (matching the existing TAV-AIP data model): all tables additive, under the `tav` schema; `gen_random_uuid()` for PKs; `timestamptz NOT NULL DEFAULT now()`; `smallint` for model year. This supersedes the standalone `buybox_*` / `uuid_generate_v4()` / Redis DDL in the master spec — that script predates the platform-reuse decision. All DDL below is a **design contract**, not a migration; real migrations cite the items they implement.
 
@@ -12,7 +12,7 @@
 
 ### 1.1 Extend `tav.purchase_outcomes` (item 6 / R17)
 
-Unit-economics + anti-survivorship fields. Each is tagged with its expected availability per the item-6 audit (**backfillable** = present in 18-mo history; **future-only** = capture starts now; **unavailable** = audit-pending). Run the null-rate audit ([`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §5) before training; define NULL handling per field.
+Unit-economics + anti-survivorship fields. Each is tagged with its expected availability per the item-6 audit (**backfillable** = present in 18-mo history; **future-only** = capture starts now; **unavailable** = audit-pending). Run the null-rate audit ([`DATA-SUMMARY.md`](DATA-SUMMARY.md)) before training; define NULL handling per field.
 
 ```sql
 ALTER TABLE tav.purchase_outcomes
@@ -45,7 +45,7 @@ v_maxbuy_expense_benchmarks   -- expenses: YMM-trim → YMM → make/model → g
 v_maxbuy_net_benchmarks       -- expected net gross by segment
 v_maxbuy_market_index         -- weekly wholesale level/drift (public Manheim Index first, per CHARTER §7)
 ```
-Segment key = `year / make / model / trim / region / mileage_band`, carrying VIN-match-vs-YMM and effective-N. Every rebuild is stamped with a `benchmark_version`; old outputs are preserved for replay ([`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §4.3).
+Segment key = `year / make / model / trim / region / mileage_band`, carrying VIN-match-vs-YMM and effective-N. Every rebuild is stamped with a `benchmark_version`; old outputs are preserved for replay ([`ARCHITECTURE.md`](ARCHITECTURE.md) §4.3).
 
 ### 1.3 Policy table (item 1 / CHARTER DEC-1)
 
@@ -274,7 +274,7 @@ When targets disagree (e.g. strong gross but slow predicted turn), apply a fixed
 
 **What is pinned** (all on `maxbuy_recommendations`, §1.4): `valuation_snapshot_id` (immutable MMR snapshot), `benchmark_version` + `feature_view_version`, the exact `feature_vector` jsonb, `policy_version` + `scoring_version`, `model_artifact_hash`, `worker_version`, `intelligence_worker_contract_version`, and full MMR provenance (method, source, cache age, missing reason, VIN-vs-YMM, timestamp).
 
-**Immutability guarantees:** the snapshot row is append-only (no app-role UPDATE/DELETE); benchmark/feature-view outputs for a given version are preserved, never rebuilt in place ([`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §4.3); the MMR snapshot is referenced by immutable ID, not re-fetched. Detailed lookup rows may be purged at 90 days, but the snapshot survives ([`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §4.4).
+**Immutability guarantees:** the snapshot row is append-only (no app-role UPDATE/DELETE); benchmark/feature-view outputs for a given version are preserved, never rebuilt in place ([`ARCHITECTURE.md`](ARCHITECTURE.md) §4.3); the MMR snapshot is referenced by immutable ID, not re-fetched. Detailed lookup rows may be purged at 90 days, but the snapshot survives ([`ARCHITECTURE.md`](ARCHITECTURE.md) §4.4).
 
 **Replay query sketch** — recompute the verdict from pinned inputs and diff against what was served:
 ```sql
@@ -301,7 +301,7 @@ A model reaches production **only** through this gate. Thresholds marked **OPEN*
 | **Holdout window** | At least **8 recent sale weeks** that were not used for training. Also require enough shadow recommendations to make the comparison meaningful. |
 | **Segment guardrails** | No regression in major vehicle segments, at minimum trucks, SUVs, sedans, high-mileage units, and higher-dollar units. **A model cannot be promoted on a global improvement if it hurts an important buying bucket.** |
 | **Manual approval** | A human approval is **recorded** (`maxbuy_models.approved_by_user_id` + `approved_at`) before any production promotion. No auto-promote. |
-| **Rollback** | On pipeline failure or failed gate, the prior production model stays live ([`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) §4.1). |
+| **Rollback** | On pipeline failure or failed gate, the prior production model stays live ([`ARCHITECTURE.md`](ARCHITECTURE.md) §4.1). |
 | **Champion/challenger** | Challenger runs in `shadow` predicting in parallel (not shown to buyers, CHARTER AC-5), compared against actuals + the Phase-1 benchmark baseline, before any promotion. |
 
 ## 5. Hard gates vs review routing (item 5 / CHARTER DEC-4 / R15)

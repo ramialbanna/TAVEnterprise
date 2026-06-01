@@ -100,7 +100,7 @@ Phase 0 is closed when:
 3. The import/backfill path has a rollback plan and does not violate vendor
    retention or persistence restrictions.
 4. Audits 6, 7, 9, and 10 are re-run and their reports updated.
-5. The Phase 1 go/no-go decision is updated in `06-EXECUTION-PLAN.md`.
+5. The Phase 1 go/no-go decision is updated in `STATUS.md`.
 
 Only then should MaxBuy start `TAV-BB-phase-1-data-foundation`.
 

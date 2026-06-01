@@ -1,10 +1,10 @@
 # MaxBuy — Historical Outcome Backfill & Source of Truth (Phase 0)
 
-**What this is / who it's for:** The record of the **Phase 0 historical outcome backfill** — how 18 months of TAV sale outcomes were reconstructed from fragmented department spreadsheets into one keyed, deduplicated dataset that loads into `tav.purchase_outcomes`. It documents the source corpus, the lifecycle stitch, the output schema, the field-by-field completeness results (the deliverable Audit Kit 06 was waiting on), and what is recoverable vs structurally absent. Audience: the solo dev (data owner) and reviewers. Companion docs: [`00-LEADERSHIP-BRIEF.md`](../../00-LEADERSHIP-BRIEF.md) · [`03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) · [`05-PUNCH-LIST.md`](../../05-PUNCH-LIST.md) · [`06-EXECUTION-PLAN.md`](../../06-EXECUTION-PLAN.md) · [`audits/06-field-completeness-audit.md`](../06-field-completeness-audit.md).
+**What this is / who it's for:** The record of the **Phase 0 historical outcome backfill** — how 18 months of TAV sale outcomes were reconstructed from fragmented department spreadsheets into one keyed, deduplicated dataset that loads into `tav.purchase_outcomes`. It documents the source corpus, the lifecycle stitch, the output schema, the field-by-field completeness results (the deliverable Audit Kit 06 was waiting on), and what is recoverable vs structurally absent. Audience: the solo dev (data owner) and reviewers. Companion docs: [`00-LEADERSHIP-BRIEF.md`](../../00-LEADERSHIP-BRIEF.md) · [`TECHNICAL-SPEC.md`](../../../TECHNICAL-SPEC.md) · [`05-PUNCH-LIST.md`](../../05-PUNCH-LIST.md) · [`STATUS.md`](../../../STATUS.md) · [`audits/06-field-completeness-audit.md`](../06-field-completeness-audit.md).
 
 **Date:** 2026-05-22 · **Status:** Backfill complete — pending load into `tav` schema · **Repo prefix:** `TAV-BB`
 
-> **Why this exists:** [`05-PUNCH-LIST.md`](../../05-PUNCH-LIST.md) item 20 and [`06-EXECUTION-PLAN.md`](../../06-EXECUTION-PLAN.md) made a **Phase 0 historical outcome backfill gate** the prerequisite to Phase 1 code: ownership confirmed the history exists *outside* the DB (department spreadsheets), and audits 6/7/9 can't run until it's staged. This document is that backfill, executed. It produces the rows and the per-field completeness needed to close item 20 and execute Audit Kit 06 / R17.
+> **Why this exists:** [`05-PUNCH-LIST.md`](../../05-PUNCH-LIST.md) item 20 and [`STATUS.md`](../../../STATUS.md) made a **Phase 0 historical outcome backfill gate** the prerequisite to Phase 1 code: ownership confirmed the history exists *outside* the DB (department spreadsheets), and audits 6/7/9 can't run until it's staged. This document is that backfill, executed. It produces the rows and the per-field completeness needed to close item 20 and execute Audit Kit 06 / R17.
 
 ---
 
@@ -16,7 +16,7 @@ A single canonical dataset — **57,228 sold vehicle-cycles, Oct 2024 → May 20
 - Labels are complete and trustworthy: **price paid, sale price, gross, mileage = 100%** (iDMS system-of-record), independently reconciled against Manheim.
 - Deliverables live in `…/Data for BuyBox - IDMS Reports/BuyBox Output/` (data folder, not this repo): `buybox_master.csv` (48-col canonical), `tav_import_full.csv` (model-shape), `coverage_by_month.csv`, `FULL_18mo_QA.md`, and the Supabase schema/load SQL (see §9).
 
-**Survivorship caveat (R3/R4):** every backfill row is a unit TAV **bought and sold**. There are no `no_sale` / pass-on / counterfactual rows — those are `future-only` (logging starts day one per [`03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.5). The backfill is a bought-unit dataset by construction, consistent with the v1/v2 scope.
+**Survivorship caveat (R3/R4):** every backfill row is a unit TAV **bought and sold**. There are no `no_sale` / pass-on / counterfactual rows — those are `future-only` (logging starts day one per [`TECHNICAL-SPEC.md`](../../../TECHNICAL-SPEC.md) §1.5). The backfill is a bought-unit dataset by construction, consistent with the v1/v2 scope.
 
 ## 2. Source corpus & lifecycle stages
 
@@ -51,7 +51,7 @@ Key engineering choices:
 
 ## 4. Mapping to `tav.purchase_outcomes`
 
-The backfill columns map onto the existing `tav.purchase_outcomes` baseline (per [`audits/06-field-completeness-audit.md`](../06-field-completeness-audit.md) §3) plus the [`03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1 additions. Measured fill rate is over all 57,228 rows.
+The backfill columns map onto the existing `tav.purchase_outcomes` baseline (per [`audits/06-field-completeness-audit.md`](../06-field-completeness-audit.md) §3) plus the [`TECHNICAL-SPEC.md`](../../../TECHNICAL-SPEC.md) §1.1 additions. Measured fill rate is over all 57,228 rows.
 
 | `tav.purchase_outcomes` field | Backfill source | Fill | §1.1 tag — confirmed / updated |
 |---|---|---|---|
@@ -133,7 +133,7 @@ Recent window (Apr-2025+, 41,446 rows) is **91% full-core** and is the most repr
 
 Deliverable SQL stages the dataset into Postgres, keyed on `vin + cycle_seq` so forward loads **upsert** (no duplicates). Files in `BuyBox Output/`: `supabase_buybox_schema.sql`, `supabase_buybox_load.sql`, `SUPABASE_SETUP.md`.
 
-> **Schema reconciliation (important):** the delivered SQL uses a standalone `buybox` schema for portability. Per [`03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1 conventions, the **canonical home is `tav.purchase_outcomes`** (additive `ALTER`, `gen_random_uuid()`, `smallint` year) — the standalone `buybox_*` form is explicitly superseded. The §4 mapping makes the merge into `tav.*` mechanical; the recommended path is to load the backfill into `tav.purchase_outcomes` (+ the §1.1 additions) rather than a parallel `buybox` table.
+> **Schema reconciliation (important):** the delivered SQL uses a standalone `buybox` schema for portability. Per [`TECHNICAL-SPEC.md`](../../../TECHNICAL-SPEC.md) §1.1 conventions, the **canonical home is `tav.purchase_outcomes`** (additive `ALTER`, `gen_random_uuid()`, `smallint` year) — the standalone `buybox_*` form is explicitly superseded. The §4 mapping makes the merge into `tav.*` mechanical; the recommended path is to load the backfill into `tav.purchase_outcomes` (+ the §1.1 additions) rather than a parallel `buybox` table.
 
 ## 10. How this closes Phase 0 / Audit 06
 

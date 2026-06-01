@@ -160,4 +160,4 @@ Per-field completeness: **done (live, 12,904 rows).** Duplicate-pair verdicts:
 [`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1, which must
 account for the no-date / no-mileage / no-pipeline-link reality. F1–F3 are
 escalation-grade: they shrink MaxBuy's v1 feature set and need a charter /
-architecture review before Phase 1 (see [`06-EXECUTION-PLAN.md`](../../06-EXECUTION-PLAN.md)).
+architecture review before Phase 1 (see [`STATUS.md`](../../../STATUS.md)).

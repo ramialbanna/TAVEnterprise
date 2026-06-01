@@ -1,8 +1,8 @@
 # MaxBuy — System Architecture
 
-**What this is / who it's for:** The system architecture for MaxBuy and, specifically, the **serving decision** — how a recommendation gets from a trained artifact to a buyer at the lane. It covers where MaxBuy sits relative to TAV-AIP, the offline/online split, three concrete serving options (A/B/C) with a recommendation, the offline-pipeline operational contract, the `tav-intelligence-worker` dependency, versioning/retention, and architecture-layer risks. Audience: the solo dev (architect + implementer) and any reviewer. Companion docs: [`00-LEADERSHIP-BRIEF.md`](00-LEADERSHIP-BRIEF.md) · [`01-CHARTER.md`](01-CHARTER.md) · [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).
+**What this is / who it's for:** The system architecture for MaxBuy and, specifically, the **serving decision** — how a recommendation gets from a trained artifact to a buyer at the lane. It covers where MaxBuy sits relative to TAV-AIP, the offline/online split, three concrete serving options (A/B/C) with a recommendation, the offline-pipeline operational contract, the `tav-intelligence-worker` dependency, versioning/retention, and architecture-layer risks. Audience: the solo dev (architect + implementer) and any reviewer. Companion docs: [`README.md`](README.md) · [`STATUS.md`](STATUS.md) · [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) · [`WORKER-CONTRACT.md`](WORKER-CONTRACT.md) · [`DATA-SUMMARY.md`](DATA-SUMMARY.md)
 
-**Date:** 2026-05-20 · **Status:** Pre-code · **Repo prefix:** `TAV-BB`
+**Date:** 2026-05-20 · **Status:** Active · **Repo prefix:** `TAV-BB`
 
 ---
 
@@ -59,7 +59,7 @@ The split is the right spine — the risk is the **operational contract around i
 | **Online** | MaxBuy Worker (TS, pure fns) | Read benchmarks + current model output + policy; assemble verdict. Never trains. | < 1.5s P99 incl. MMR call (master spec KPI). |
 | **Offline** | Scheduled Python job (NOT a Worker) | Weekly: ingest → rebuild features/benchmarks → train → backtest → promote (gated) → register versioned artifact + benchmark/feature-view version. | Hours; no user-facing SLA. |
 
-The offline pipeline produces **versioned artifacts**: a model artifact (with hash), benchmark/feature-view refresh IDs, and write-back of segment predictions/benchmark medians the online path reads. The online path consumes only versioned, immutable inputs — which is what makes decision replay possible ([`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §3).
+The offline pipeline produces **versioned artifacts**: a model artifact (with hash), benchmark/feature-view refresh IDs, and write-back of segment predictions/benchmark medians the online path reads. The online path consumes only versioned, immutable inputs — which is what makes decision replay possible ([`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §3).
 
 ## 3. Serving decision — Option A / B / C
 
@@ -96,7 +96,7 @@ Precomputed segment benchmark (Option A) is the **base**; a real-time adjustment
 **Rationale, tied to charter criteria:**
 - **Explainability (CHARTER AC-1):** Option A is maximally defensible at the lane — the buyer can read the segment comp behind the number. B1 keeps that explainability; B2/ONNX-in-Worker erodes it.
 - **Cost / moving parts:** A and B1 add zero always-on infrastructure. C's inference service is the only option that adds recurring cost and a network hop — it must earn its keep. The owner has signalled willingness to run one small Python service, so C is *on the table*, but gated behind backtest evidence.
-- **Replay (CHARTER AC-8):** A and B1 are trivially replayable because every recommendation pins `benchmark_version` / `model_artifact_hash` against immutable, versioned inputs. B2's request-time scoring and C's live adjustment must additionally pin the exact feature vector and the live-MMR snapshot — which [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §3 already requires.
+- **Replay (CHARTER AC-8):** A and B1 are trivially replayable because every recommendation pins `benchmark_version` / `model_artifact_hash` against immutable, versioned inputs. B2's request-time scoring and C's live adjustment must additionally pin the exact feature vector and the live-MMR snapshot — which [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §3 already requires.
 
 ### Dual training target for v2 ML (R1 hedge)
 
@@ -108,14 +108,14 @@ When ML is trained (Phase 4), train **two targets in parallel**: `sale_pct_mmr` 
 | Concern | Decision / spike |
 |---|---|
 | Scheduler / runtime | Scheduled Python job (cron-style), anchored to TAV's existing **Wednesday sale week**. Candidate hosts: Cloud Run Job / Fly Machine / Modal — pick one in the spike; same host can later serve Option C inference. |
-| Run log | `tav.maxbuy_pipeline_runs` — one row per run: started/finished, status, rows ingested, benchmark/feature-view version produced, model artifact hash, promotion decision, error. DDL in [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.7. |
+| Run log | `tav.maxbuy_pipeline_runs` — one row per run: started/finished, status, rows ingested, benchmark/feature-view version produced, model artifact hash, promotion decision, error. DDL in [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §1.7. |
 | Artifact storage + hash | Store the trained artifact in object storage; record a content **hash** in `maxbuy_models`. The hash is stamped on every recommendation that used it (replay). |
 | Retry / alert / rollback | Retry transient ingest failures with backoff; alert the dev on hard failure or skipped run (a silent missed retrain is the solo-dev failure mode — R8). Rollback = keep the prior production model live; never auto-promote on failure. |
 
 ### 4.2 `tav-intelligence-worker` contract (item 12)
 - **Document and version** the request/response schema MaxBuy depends on. Store the contract version in the recommendation snapshot — a worker change must not silently alter MaxBuy decisions (R9).
 - **Decide which normalized MMR fields are safe + sufficient to persist:** VIN-vs-YMM path, MMR method, source, day-of value (contract-allowed only), cache age, missing reason, timestamp. **Never** persist licensed raw payloads (R18 / CHARTER AC-7).
-- Add compatibility tests before MaxBuy depends on the worker. Versioned API contract detailed in [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §2.
+- Add compatibility tests before MaxBuy depends on the worker. Versioned API contract detailed in [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §2.
 
 ### 4.3 Feature & benchmark versioning (item 13)
 - Every benchmark/materialized-view rebuild gets a **refresh ID / version** (`benchmark_version`, `feature_view_version`).
@@ -149,7 +149,7 @@ These are read-only investigations to run **before** ML, not code:
 
 | Spike | Item | What to produce |
 |---|---|---|
-| Historical field completeness | 6 | Null-rate audit for every proposed `purchase_outcomes` extension; mark each field **backfillable / future-only / unavailable** ([`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.1); define model behavior for NULL-heavy fields before training. |
+| Historical field completeness | 6 | Null-rate audit for every proposed `purchase_outcomes` extension; mark each field **backfillable / future-only / unavailable** ([`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §1.1); define model behavior for NULL-heavy fields before training. |
 | Segment support matrix | 7 | Count rows by `year/make/model/trim/region/mileage_band`; count **effective** rows after recency weighting; define minimum effective N for exact segment, fallback segment, global fallback. |
 | MMR quality & residuals | 9 | Audit VIN-MMR vs YMM-fallback rates; track missing reasons + cache age; backtest `actual_sale_price − day_of_mmr` by segment / price band / MMR method (R1). |
 | Decay-rate validation | 10 | Backtest a λ grid by sale week (e.g. 90/180/365/540-day half-life); compare sale-price MAE, gross-hit classification error, and segment-level stability before fixing λ. |
@@ -163,11 +163,11 @@ Re-run the earlier buybox solution-evaluation weighted rubric with **v1 adoption
 
 ## 7. Architecture-layer risks
 
-Full register in [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md). The architecture-class risks owned by this document:
+Full register in [`archive/pre-code/04-RISK-REGISTER.md`](archive/pre-code/04-RISK-REGISTER.md). The architecture-class risks owned by this document:
 
 | ID | Severity | Issue | Mitigation in this doc |
 |---|---|---|---|
-| R2 | BLOCKER | Recommendation log can't replay a past decision. | Versioned inputs (§4.3); pinned fields enumerated in [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.4 + §3. |
+| R2 | BLOCKER | Recommendation log can't replay a past decision. | Versioned inputs (§4.3); pinned fields enumerated in [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §1.4 + §3. |
 | R7 | HIGH | Weekly views create staleness/replay ambiguity. | Version every refresh; preserve old outputs; stamp the version used (§4.3). |
 | R8 | HIGH | Offline pipeline has no scheduler/monitoring/recovery. | Run table, retry/alert, rollback-to-prior-model (§4.1). |
 | R9 | HIGH | `tav-intelligence-worker` contract implied, not versioned. | Pin + version contract; store schema version (§4.2). |

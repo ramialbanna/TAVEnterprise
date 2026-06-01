@@ -6,8 +6,8 @@ before code; this plan defines *the order the dev works it*, *what is unblocked
 today*, *what is blocked on owner/product*, and *where each closed item is
 written*. Audience: the solo dev (execution owner). Companion docs:
 [`00-LEADERSHIP-BRIEF.md`](00-LEADERSHIP-BRIEF.md) ·
-[`01-CHARTER.md`](01-CHARTER.md) · [`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) ·
-[`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) ·
+[`01-CHARTER.md`](01-CHARTER.md) · [`ARCHITECTURE.md`](../../ARCHITECTURE.md) ·
+[`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) ·
 [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md).
 
 **Date:** 2026-05-20 · **Status:** Pre-code · **Repo prefix:** `TAV-BB`
@@ -68,7 +68,7 @@ are true:
 
 1. Items **1, 2, 4, 5** (owner / product blocker decisions) are closed and
    recorded in [`01-CHARTER.md`](01-CHARTER.md) §7 +
-   [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md).
+   [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md).
 2. Items **6, 7, 9, 10** (read-only data audits) are closed with reports
    committed and field/segment tags reconciled against the audit findings.
    If the missing fields are supplied by an external source, the Phase 0
@@ -100,7 +100,7 @@ must not merge, rename, or repurpose any of the four.
   `tav.valuation_snapshots`, `tav.mmr_queries`, `tav.mmr_cache`,
   `tav.market_velocities`.
 - MaxBuy **writes** only to future `tav.maxbuy_*` tables (a parallel decision
-  layer specified in [`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1).
+  layer specified in [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §1).
 - MaxBuy **never writes** to `raw_listings`, `normalized_listings`,
   `vehicle_candidates`, or `leads`, and never collapses two pipeline concepts
   into one.
@@ -151,7 +151,7 @@ or stage them, re-run audits 6/7/9/10, then decide whether Phase 1 may start.
 
 ### WS-E — Acknowledgements (design already done)
 Item **3** (decision replay schema) — design is written in
-[`03-TECHNICAL-SPEC.md`](03-TECHNICAL-SPEC.md) §1.4 + §3; the dev's remaining
+[`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §1.4 + §3; the dev's remaining
 work is the CI replay test (Phase 1). Item **8** (pass-on logging) — table
 design done; logging code starts at v1 ship.
 
