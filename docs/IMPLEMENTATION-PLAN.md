@@ -1,7 +1,7 @@
 # TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
 
 **Status:** Active execution plan  
-**Last updated:** 2026-06-01 (progress: P0–P2 shipped)  
+**Last updated:** 2026-06-01 (progress: P0–P2 shipped; **P3 in progress** — 3.1–3.4 on `TAV-WF-phase-3-intake`)  
 **Audience:** Cursor agents, solo dev, reviewers  
 **Repo prefixes:** `TAV-BB-*` (MaxBuy) · `TAV-WF-*` (workflow/UI) · combined milestones may use `TAV-MVP-*`
 
@@ -64,9 +64,9 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | **0** | Schema reconcile | ✅ Shipped | `0052` · `main` |
 | **1** | λ decay backtest | ✅ Shipped | `scripts/maxbuy/decay-backtest/` · report · `main` |
 | **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
-| **3** | Intake parse + `entry_method` | ⬜ Not started | — |
+| **3** | Intake parse + `entry_method` | ⚠️ **In progress** — 3.1–3.4 shipped (`0057`–`0058` prod); 3.5–3.7 remain | `TAV-WF-phase-3-intake` |
 | **4** | Workflow UI shell + MaxBuy card placeholder | ⬜ Not started | — |
-| **5** | `maxbuy-worker` evaluate API | ⬜ **Next** | — |
+| **5** | `maxbuy-worker` evaluate API | ⬜ **Next** (MaxBuy track) | — |
 | **6** | MaxBuy UI live | ⬜ Blocked on P4 + P5 | — |
 | **7–9** | Hand-off, async badges, UAT / retire Classic | ⬜ Not started | — |
 | **10** | Shadow ML | ⬜ Future | — |
@@ -77,8 +77,9 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 |------|-------|
 | Product spec | Draft — [`workflow-and-ui-redesign.md`](02-product/workflow-and-ui-redesign.md) |
 | Confirmed decisions | WF-1–10, MB-1–2, MB-4 in §11.1 of workflow doc |
-| Parse-from-link | **Not built** — `POST /app/opportunities/parse` proposed |
-| `entry_method` column | **Not built** |
+| Parse-from-link | **Built** — `POST /app/opportunities/parse` (Facebook v1); `OPPORTUNITIES_PARSE_ENABLED` default off |
+| `entry_method` column | **Live in prod** — `0057`; backfill done; write path at 3.5 |
+| Manual submit WF-1 / WF-7 | **Partial** — required fields + duplicate URL block (`0058` attribution events) |
 | MaxBuy in nav | **Not built** |
 
 ---
@@ -310,17 +311,18 @@ ORDER BY sale_date;
 **Branch:** `TAV-WF-phase-3-intake`  
 **Depends on:** Phase 0 (for `entry_method` if same migration batch)
 
-| # | Task | Files / artifacts |
-|---|------|-------------------|
-| 3.1 | Add `entry_method` to `normalized_listings` (or submissions) | Migration `0057_entry_method.sql` |
-| 3.2 | `POST /app/opportunities/parse` — Facebook v1 | `src/app/routes.ts`, parse handler, tests |
-| 3.3 | Tighten `POST /app/opportunities/manual` — required fields WF-1 | Handler + validation |
-| 3.4 | Duplicate URL block + attribution log WF-7 | Handler + optional `lead_attribution_events` |
-| 3.5 | Stamp `entry_method = manual` on submit; scraper stamps `scraper` on ingest | `handleIngest.ts`, manual handler |
-| 3.6 | Submit page: URL-first, parse CTA, progressive disclosure | `web/app/(app)/opportunities/submit/` |
-| 3.7 | “Mileage unknown” badge when absent WF-8 | Submit UI + opportunities display |
+| # | Task | Files / artifacts | Status |
+|---|------|-------------------|--------|
+| 3.1 | Add `entry_method` to `normalized_listings` (or submissions) | Migration `0057_entry_method.sql` | ✅ Prod |
+| 3.2 | `POST /app/opportunities/parse` — Facebook v1 | `src/intake/`, `src/app/routes.ts`, tests | ✅ Flag off |
+| 3.3 | Tighten `POST /app/opportunities/manual` — required fields WF-1 | `manualSubmissionSchema.ts`, form validation | ✅ |
+| 3.4 | Duplicate URL block + attribution log WF-7 | `leadAttribution.ts`, `0058_lead_attribution_events.sql` | ✅ Prod |
+| 3.5 | Stamp `entry_method = manual` on submit; scraper stamps `scraper` on ingest | `handleIngest.ts`, manual handler | ⬜ |
+| 3.6 | Submit page: URL-first, parse CTA, progressive disclosure | `web/app/(app)/opportunities/submit/` | ⬜ |
+| 3.7 | “Mileage unknown” badge when absent WF-8 | Submit UI + opportunities display | ⬜ (`mileage_unknown` warning in API only) |
 
-**Exit criteria:** Parse works for Facebook URLs; blocked duplicate submits; required fields enforced; provenance visible in API.
+**Exit criteria:** Parse works for Facebook URLs; blocked duplicate submits; required fields enforced; provenance visible in API.  
+**Met so far:** 3.2–3.4 (parse API, validation, duplicate block). **Remaining:** 3.5–3.7 for full provenance + UI.
 
 ---
 
@@ -506,7 +508,7 @@ docs/07-buybox/reports/        # λ backtest report (Phase 1)
 | ID | Question | Default if silent |
 |----|----------|-------------------|
 | **OPEN-1** | Standalone MaxBuy → create new manual opportunity on hand-off? | Attach metadata only; no auto-create |
-| **OPEN-2** | `lead_attribution_events` table vs logging re-submits elsewhere | Simple insert table |
+| **OPEN-2** | `lead_attribution_events` table vs logging re-submits elsewhere | ✅ **`0058`** — `duplicate_url_resubmit` events |
 | **OPEN-3** | Prod schema reconcile — any columns beyond §4.3 list? | Owner confirms before Phase 0 apply |
 | **OPEN-4** | MB-3: FK `normalized_listing_id` on recommendations | **Yes** — nullable FK |
 
@@ -564,3 +566,4 @@ PRs 4–5 can run **parallel** to PR 2–3 after PR 1 merges. PR 6 requires PR 3
 |------|--------|
 | 2026-06-01 | Initial unified plan — MaxBuy + workflow redesign, interlinked phases P0–P10 |
 | 2026-06-01 | Mark P0–P2 complete; refresh §2 current state and progress table |
+| 2026-06-01 | Mark P3 steps 3.1–3.4 complete on `TAV-WF-phase-3-intake`; migrations `0057`–`0058` applied prod |

@@ -85,6 +85,8 @@ CREATE TABLE tav.normalized_listings (
   state               char(2),
   region              text        NOT NULL
     CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok')),
+  entry_method        text
+    CHECK (entry_method IN ('manual','scraper','import')),
   seller_name         text,
   seller_url          text,
   images              text[],
@@ -390,6 +392,7 @@ CREATE UNIQUE INDEX ON tav.normalized_listings (source, source_listing_id)
 CREATE INDEX ON tav.normalized_listings (source);
 CREATE INDEX ON tav.normalized_listings (source_run_id);
 CREATE INDEX ON tav.normalized_listings (region);
+CREATE INDEX normalized_listings_entry_method_idx ON tav.normalized_listings (entry_method);
 CREATE INDEX ON tav.normalized_listings (freshness_status);
 CREATE INDEX ON tav.normalized_listings (stale_score);
 CREATE INDEX ON tav.normalized_listings (last_seen_at);
@@ -763,6 +766,24 @@ CREATE INDEX manual_opportunity_submissions_created_idx
   ON tav.manual_opportunity_submissions (created_at DESC);
 CREATE INDEX manual_opportunity_submissions_submitter_idx
   ON tav.manual_opportunity_submissions (submitted_by_user_id);
+
+-- ── lead_attribution_events ────────────────────────────────────────────────────
+-- WF-7 duplicate URL re-submits and future attribution analytics.
+
+CREATE TABLE tav.lead_attribution_events (
+  id                    uuid        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  normalized_listing_id uuid        NOT NULL REFERENCES tav.normalized_listings (id),
+  actor_user_id         uuid        NOT NULL REFERENCES tav.users (id),
+  event_type            text        NOT NULL
+    CHECK (event_type IN ('duplicate_url_resubmit')),
+  metadata              jsonb       NOT NULL DEFAULT '{}'::jsonb,
+  created_at            timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX lead_attribution_events_listing_idx
+  ON tav.lead_attribution_events (normalized_listing_id, created_at DESC);
+CREATE INDEX lead_attribution_events_actor_idx
+  ON tav.lead_attribution_events (actor_user_id, created_at DESC);
 
 -- ── opportunity_workflow ──────────────────────────────────────────────────────
 -- Listing-level assignment/claim state for v2 Opportunities (Phase 6 Slice C).

@@ -81,6 +81,11 @@ describe("ManualSubmitDialog", () => {
       screen.getByLabelText(/listing url/i),
       "https://www.facebook.com/marketplace/item/123",
     );
+    await user.selectOptions(screen.getByLabelText(/region/i), "dallas_tx");
+    await user.type(screen.getByLabelText(/^year$/i), "2020");
+    await user.type(screen.getByLabelText(/^make$/i), "toyota");
+    await user.type(screen.getByLabelText(/^model$/i), "camry");
+    await user.type(screen.getByLabelText(/^price$/i), "15000");
     await user.click(screen.getByRole("button", { name: /^submit listing$/i }));
 
     await waitFor(() => {
@@ -88,6 +93,10 @@ describe("ManualSubmitDialog", () => {
         expect.objectContaining({
           listingUrl: "https://www.facebook.com/marketplace/item/123",
           region: "dallas_tx",
+          year: 2020,
+          make: "toyota",
+          model: "camry",
+          price: 15000,
         }),
       );
     });

@@ -1,4 +1,3 @@
-import type { RegionKey, SourceName } from "../types/domain";
 import type { AppUser } from "./users";
 import { getActiveUserById } from "./users";
 import type { SupabaseClient } from "./supabase";
@@ -9,25 +8,20 @@ import {
   recordManualSubmissionAction,
 } from "./opportunityWorkflow";
 import {
+  findNormalizedListingBySourceUrl,
+  recordDuplicateUrlResubmit,
+} from "./leadAttribution";
+import {
   buildManualListingTitle,
   detectListingSource,
   normalizeListingUrl,
 } from "../manual/listingSource";
+import {
+  ManualOpportunitySubmissionSchema,
+  type ManualOpportunitySubmission,
+} from "../manual/manualSubmissionSchema";
 
-export interface ManualSubmissionInput {
-  listingUrl: string;
-  assignedToUserId?: string;
-  source?: SourceName;
-  region?: RegionKey;
-  year?: number;
-  make?: string;
-  model?: string;
-  style?: string;
-  price?: number;
-  mileage?: number;
-  sellerNotes?: string;
-  submitterNotes?: string;
-}
+export type ManualSubmissionInput = ManualOpportunitySubmission;
 
 export interface ManualSubmissionResult {
   submissionId: string;
@@ -39,11 +33,13 @@ export interface ManualSubmissionResult {
 
 export class ManualSubmissionValidationError extends Error {
   readonly code: string;
+  readonly details?: Record<string, unknown>;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, details?: Record<string, unknown>) {
     super(message);
     this.name = "ManualSubmissionValidationError";
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -68,14 +64,23 @@ export async function submitManualOpportunity(
   submitter: AppUser,
   input: ManualSubmissionInput,
 ): Promise<ManualSubmissionResult> {
+  const validated = ManualOpportunitySubmissionSchema.safeParse(input);
+  if (!validated.success) {
+    throw new ManualSubmissionValidationError(
+      "validation_error",
+      "Required fields: listingUrl, region, year, make, model, price",
+    );
+  }
+  const fields = validated.data;
+
   let listingUrl: string;
   try {
-    listingUrl = normalizeListingUrl(input.listingUrl);
+    listingUrl = normalizeListingUrl(fields.listingUrl);
   } catch {
     throw new ManualSubmissionValidationError("invalid_listing_url", "listingUrl must be a valid URL");
   }
 
-  const source = input.source ?? detectListingSource(listingUrl);
+  const source = fields.source ?? detectListingSource(listingUrl);
   if (!source) {
     throw new ManualSubmissionValidationError(
       "unsupported_listing_url",
@@ -83,10 +88,8 @@ export async function submitManualOpportunity(
     );
   }
 
-  const region = input.region ?? "dallas_tx";
-
-  if (input.assignedToUserId) {
-    const assignee = await getActiveUserById(db, input.assignedToUserId);
+  if (fields.assignedToUserId) {
+    const assignee = await getActiveUserById(db, fields.assignedToUserId);
     if (!assignee) {
       throw new ManualSubmissionValidationError("invalid_assignee", "assignedToUserId is not an active user");
     }
@@ -94,10 +97,28 @@ export async function submitManualOpportunity(
 
   const title = buildManualListingTitle({
     listingUrl,
-    year: input.year,
-    make: input.make,
-    model: input.model,
+    year: fields.year,
+    make: fields.make,
+    model: fields.model,
   });
+
+  const existingListing = await findNormalizedListingBySourceUrl(db, source, listingUrl);
+  if (existingListing) {
+    await recordDuplicateUrlResubmit(db, existingListing.id, submitter.id, {
+      listingUrl,
+      source,
+      region: fields.region,
+      year: fields.year,
+      make: normalizeVehicleToken(fields.make) ?? fields.make,
+      model: normalizeVehicleToken(fields.model) ?? fields.model,
+      price: fields.price,
+    });
+    throw new ManualSubmissionValidationError(
+      "duplicate_listing_url",
+      "This listing URL is already in the queue",
+      { normalizedListingId: existingListing.id },
+    );
+  }
 
   const upsert = await upsertNormalizedListing(
     db,
@@ -105,29 +126,29 @@ export async function submitManualOpportunity(
       source,
       url: listingUrl,
       title,
-      year: input.year,
-      make: normalizeVehicleToken(input.make),
-      model: normalizeVehicleToken(input.model),
-      trim: normalizeVehicleToken(input.style),
-      price: input.price,
-      mileage: input.mileage,
-      region,
+      year: fields.year,
+      make: normalizeVehicleToken(fields.make),
+      model: normalizeVehicleToken(fields.model),
+      trim: normalizeVehicleToken(fields.style),
+      price: fields.price,
+      mileage: fields.mileage,
+      region: fields.region,
       scrapedAt: new Date().toISOString(),
     },
     null,
   );
 
   const warnings: string[] = [];
-  if (!upsert.isNew) warnings.push("listing_already_exists");
+  if (fields.mileage === undefined) warnings.push("mileage_unknown");
 
   const { data: submissionRow, error: insertErr } = await db
     .from("manual_opportunity_submissions")
     .insert({
       normalized_listing_id: upsert.id,
       submitted_by_user_id: submitter.id,
-      assigned_to_user_id: input.assignedToUserId ?? null,
-      seller_notes: normalizeOptionalText(input.sellerNotes, 2000),
-      submitter_notes: normalizeOptionalText(input.submitterNotes, 2000),
+      assigned_to_user_id: fields.assignedToUserId ?? null,
+      seller_notes: normalizeOptionalText(fields.sellerNotes, 2000),
+      submitter_notes: normalizeOptionalText(fields.submitterNotes, 2000),
     })
     .select("id")
     .single();
@@ -137,11 +158,11 @@ export async function submitManualOpportunity(
 
   await recordManualSubmissionAction(db, upsert.id, submitter.id, {
     submissionId: submissionRow.id as string,
-    assignedToUserId: input.assignedToUserId ?? null,
+    assignedToUserId: fields.assignedToUserId ?? null,
   });
 
-  if (input.assignedToUserId) {
-    await initializeWorkflowAssignment(db, upsert.id, submitter, input.assignedToUserId);
+  if (fields.assignedToUserId) {
+    await initializeWorkflowAssignment(db, upsert.id, submitter, fields.assignedToUserId);
   }
 
   const opportunity = await getOpportunityDetail(db, upsert.id);
@@ -149,7 +170,7 @@ export async function submitManualOpportunity(
   return {
     submissionId: submissionRow.id as string,
     normalizedListingId: upsert.id,
-    isDuplicateUrl: !upsert.isNew,
+    isDuplicateUrl: false,
     warnings,
     opportunity,
   };

@@ -19,6 +19,7 @@ import {
   submitManualOpportunity,
   ManualSubmissionValidationError,
 } from "../src/persistence/manualOpportunities";
+import { parseListingUrl } from "../src/intake/parseListingUrl";
 import {
   updateOpportunityStatus,
   addOpportunityNote,
@@ -89,6 +90,10 @@ vi.mock("../src/persistence/manualOpportunities", async (importOriginal) => {
     submitManualOpportunity: vi.fn(),
   };
 });
+
+vi.mock("../src/intake/parseListingUrl", () => ({
+  parseListingUrl: vi.fn(),
+}));
 
 vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/persistence/opportunityWorkflow")>();
@@ -1258,9 +1263,11 @@ describe("POST /app/opportunities/manual", () => {
     const res = await worker.fetch(
       authedPost("/app/opportunities/manual", {
         listingUrl: "https://facebook.com/marketplace/item/123",
+        region: "dallas_tx",
         year: 2020,
         make: "toyota",
         model: "camry",
+        price: 15000,
       }),
       makeEnv(),
       ctx,
@@ -1305,6 +1312,11 @@ describe("POST /app/opportunities/manual", () => {
     const res = await worker.fetch(
       authedPost("/app/opportunities/manual", {
         listingUrl: "https://example.com/car/1",
+        region: "dallas_tx",
+        year: 2020,
+        make: "toyota",
+        model: "camry",
+        price: 15000,
       }),
       makeEnv(),
       ctx,
@@ -1312,6 +1324,139 @@ describe("POST /app/opportunities/manual", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("unsupported_listing_url");
+  });
+
+  it("returns 400 when required manual submit fields are missing", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/manual", {
+        listingUrl: "https://facebook.com/marketplace/item/123",
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("validation_error");
+    expect(vi.mocked(submitManualOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when the listing URL already exists", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    vi.mocked(submitManualOpportunity).mockRejectedValue(
+      new ManualSubmissionValidationError("duplicate_listing_url", "duplicate", {
+        normalizedListingId: "listing-existing",
+      }),
+    );
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/manual", {
+        listingUrl: "https://facebook.com/marketplace/item/existing",
+        region: "dallas_tx",
+        year: 2020,
+        make: "toyota",
+        model: "camry",
+        price: 15000,
+      }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as {
+      ok: boolean;
+      error: string;
+      details?: { normalizedListingId: string };
+    };
+    expect(body.error).toBe("duplicate_listing_url");
+    expect(body.details?.normalizedListingId).toBe("listing-existing");
+  });
+});
+
+describe("POST /app/opportunities/parse", () => {
+  const submitter = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("returns 503 when parse is disabled", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/parse", {
+        listingUrl: "https://www.facebook.com/marketplace/item/123",
+      }),
+      makeEnv({ OPPORTUNITIES_PARSE_ENABLED: "false" }),
+      ctx,
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("parse_disabled");
+  });
+
+  it("returns parsed fields when enabled", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    vi.mocked(parseListingUrl).mockResolvedValue({
+      ok: true,
+      data: {
+        listingUrl: "https://www.facebook.com/marketplace/item/123",
+        source: "facebook",
+        year: 2019,
+        make: "toyota",
+        model: "camry",
+        price: 18500,
+        mileage: 62000,
+        warnings: [],
+      },
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/parse", {
+        listingUrl: "https://www.facebook.com/marketplace/item/123",
+      }),
+      makeEnv({ OPPORTUNITIES_PARSE_ENABLED: "true" }),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { make: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.make).toBe("toyota");
+  });
+
+  it("returns 401 when identity is missing", async () => {
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/parse", {
+        listingUrl: "https://www.facebook.com/marketplace/item/123",
+      }),
+      makeEnv({ OPPORTUNITIES_PARSE_ENABLED: "true" }),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("returns parse failure payload without throwing", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(submitter);
+    vi.mocked(parseListingUrl).mockResolvedValue({
+      ok: false,
+      error: "fetch_failed",
+      warnings: [],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/parse", {
+        listingUrl: "https://www.facebook.com/marketplace/item/123",
+      }),
+      makeEnv({ OPPORTUNITIES_PARSE_ENABLED: "true" }),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe("fetch_failed");
   });
 });
 

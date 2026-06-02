@@ -143,23 +143,23 @@ export type MmrYmmRequest = {
   mileage: number;
 };
 
-/** Request body for `POST /app/opportunities/manual`. */
+/** Request body for `POST /app/opportunities/manual` (WF-1 required fields). */
 export type ManualSubmissionRequest = {
   listingUrl: string;
-  assignedToUserId?: string;
-  source?: "facebook" | "craigslist" | "autotrader" | "cars_com" | "offerup";
-  region?:
+  region:
     | "dallas_tx"
     | "houston_tx"
     | "austin_tx"
     | "san_antonio_tx"
     | "lubbock_tx"
     | "oklahoma_city_ok";
-  year?: number;
-  make?: string;
-  model?: string;
+  year: number;
+  make: string;
+  model: string;
+  price: number;
+  assignedToUserId?: string;
+  source?: "facebook" | "craigslist" | "autotrader" | "cars_com" | "offerup";
   style?: string;
-  price?: number;
   mileage?: number;
   sellerNotes?: string;
   submitterNotes?: string;

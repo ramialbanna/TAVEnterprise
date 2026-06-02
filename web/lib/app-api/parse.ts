@@ -61,6 +61,8 @@ export type ApiResult<T> =
       error: string;
       status: number;
       message: string;
+      /** Forwarded from `{ error, details }` (e.g. duplicate_listing_url). */
+      details?: Record<string, unknown>;
       /** Forwarded from `{ error:"invalid_body", issues:[...] }` (Worker Zod issues). */
       issues?: unknown[];
     };
@@ -92,6 +94,7 @@ function classifyError(code: string): ErrorKind | null {
     case "unsupported_listing_url":
     case "invalid_assignee":
     case "invalid_status":
+    case "duplicate_listing_url":
       return "invalid";
     case "forbidden":
     case "claim_conflict":
@@ -124,6 +127,7 @@ function mapErrorEnvelope(status: number, body: Record<string, unknown>): Extrac
   }
   const kind = classifyError(error) ?? (status >= 500 ? "server" : "unknown");
   const issues = Array.isArray(body.issues) ? body.issues : undefined;
+  const details = isObject(body.details) ? body.details : undefined;
   return {
     ok: false,
     kind,
@@ -131,6 +135,7 @@ function mapErrorEnvelope(status: number, body: Record<string, unknown>): Extrac
     status,
     message: codeMessage(error),
     ...(issues ? { issues } : {}),
+    ...(details ? { details } : {}),
   };
 }
 

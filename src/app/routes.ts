@@ -14,7 +14,8 @@
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
  * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
- * GET /app/me, GET /app/users, POST /app/opportunities/manual,
+ * GET /app/me, GET /app/users, POST /app/opportunities/parse,
+ * POST /app/opportunities/manual,
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
  * POST /app/opportunities/:id/notes.
@@ -38,6 +39,8 @@ import {
   submitManualOpportunity,
   ManualSubmissionValidationError,
 } from "../persistence/manualOpportunities";
+import { parseListingUrl } from "../intake/parseListingUrl";
+import { ManualOpportunitySubmissionSchema } from "../manual/manualSubmissionSchema";
 import {
   assignOpportunity,
   claimOpportunity,
@@ -98,19 +101,8 @@ const IntelMmrEnvelopeSchema = z.object({
   data: MmrResponseEnvelopeSchema,
 });
 
-const ManualOpportunitySubmissionSchema = z.object({
-  listingUrl: z.string().trim().url().max(2048),
-  assignedToUserId: z.string().uuid().optional(),
-  source: z.enum(SOURCE_NAMES).optional(),
-  region: z.enum(REGION_KEYS).optional(),
-  year: z.number().int().min(1900).max(2100).optional(),
-  make: z.string().trim().min(1).max(64).optional(),
-  model: z.string().trim().min(1).max(128).optional(),
-  style: z.string().trim().min(1).max(128).optional(),
-  price: z.number().int().nonnegative().optional(),
-  mileage: z.number().int().nonnegative().max(2_000_000).optional(),
-  sellerNotes: z.string().trim().max(2000).optional(),
-  submitterNotes: z.string().trim().max(2000).optional(),
+const ParseListingUrlSchema = z.object({
+  listingUrl: z.string().trim().min(1).max(2048),
 });
 
 const AssignOpportunitySchema = z.object({
@@ -263,6 +255,9 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
         return json({ ok: false, error: "not_found" }, 404);
       }
       return await handleOpportunityDetail(env, id);
+    }
+    if (request.method === "POST" && pathname === "/app/opportunities/parse") {
+      return await handleParseListingUrl(request, env);
     }
     if (request.method === "POST" && pathname === "/app/opportunities/manual") {
       return await handleManualOpportunitySubmit(request, env);
@@ -1066,6 +1061,53 @@ async function requireAppUser(request: Request, env: Env): Promise<AppUser | Res
 }
 
 /**
+ * POST /app/opportunities/parse — server-side listing URL parse (Facebook v1).
+ * Does not persist rows; returns prefilled fields for the submit form.
+ */
+async function handleParseListingUrl(request: Request, env: Env): Promise<Response> {
+  if (env.OPPORTUNITIES_PARSE_ENABLED !== "true") {
+    return json({ ok: false, error: "parse_disabled" }, 503);
+  }
+
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = ParseListingUrlSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  const result = await parseListingUrl(parsed.data.listingUrl);
+  if (result.ok) {
+    log("app.parse_listing.ok", {
+      source: result.data.source,
+      submitterId: userOrResponse.id,
+      warningCount: result.data.warnings.length,
+    });
+    return json({ ok: true, data: result.data });
+  }
+
+  log("app.parse_listing.failed", {
+    error: result.error,
+    submitterId: userOrResponse.id,
+    warnings: result.warnings,
+  });
+  return json({
+    ok: false,
+    error: result.error,
+    warnings: result.warnings,
+    ...(result.supportedSources ? { supportedSources: result.supportedSources } : {}),
+  });
+}
+
+/**
  * POST /app/opportunities/manual — finder submits a listing URL into the queue.
  */
 async function handleManualOpportunitySubmit(request: Request, env: Env): Promise<Response> {
@@ -1103,11 +1145,23 @@ async function handleManualOpportunitySubmit(request: Request, env: Env): Promis
     return json({ ok: true, data }, 201);
   } catch (err) {
     if (err instanceof ManualSubmissionValidationError) {
-      return json({ ok: false, error: err.code }, 400);
+      return mapManualSubmissionError(err);
     }
     log("app.manual_submit.failed", { error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
+}
+
+function mapManualSubmissionError(err: ManualSubmissionValidationError): Response {
+  const status = err.code === "duplicate_listing_url" ? 409 : 400;
+  return json(
+    {
+      ok: false,
+      error: err.code,
+      ...(err.details ? { details: err.details } : {}),
+    },
+    status,
+  );
 }
 
 function mapWorkflowError(err: OpportunityWorkflowError): Response {

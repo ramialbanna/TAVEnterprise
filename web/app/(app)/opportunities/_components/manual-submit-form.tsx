@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { listAppUsers, submitManualOpportunity, type ManualSubmissionRequest } from "@/lib/app-api/client";
-import { codeMessage } from "@/lib/app-api";
 import { queryKeys } from "@/lib/query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +48,7 @@ const EMPTY_FORM: FormState = {
   listingUrl: "",
   assignedToUserId: "",
   source: "",
-  region: "dallas_tx",
+  region: "",
   year: "",
   make: "",
   model: "",
@@ -59,6 +58,46 @@ const EMPTY_FORM: FormState = {
   sellerNotes: "",
   submitterNotes: "",
 };
+
+function isRequiredFieldMissing(form: FormState): string | null {
+  if (!form.listingUrl.trim()) return "Listing URL is required";
+  if (!form.region) return "Region is required";
+  if (!form.year.trim()) return "Year is required";
+  if (!form.make.trim()) return "Make is required";
+  if (!form.model.trim()) return "Model is required";
+  if (!form.price.trim()) return "Price is required";
+  return null;
+}
+
+function buildRequest(form: FormState): ManualSubmissionRequest | null {
+  const missing = isRequiredFieldMissing(form);
+  if (missing) return null;
+
+  const year = parseOptionalInt(form.year);
+  const price = parseOptionalInt(form.price);
+  if (year === undefined || price === undefined) return null;
+
+  const body: ManualSubmissionRequest = {
+    listingUrl: form.listingUrl.trim(),
+    region: form.region as ManualSubmissionRequest["region"],
+    year,
+    make: form.make.trim(),
+    model: form.model.trim(),
+    price,
+  };
+
+  if (form.assignedToUserId) body.assignedToUserId = form.assignedToUserId;
+  if (form.source) body.source = form.source as ManualSubmissionRequest["source"];
+  if (form.style.trim()) body.style = form.style.trim();
+
+  const mileage = parseOptionalInt(form.mileage);
+  if (mileage !== undefined) body.mileage = mileage;
+
+  if (form.sellerNotes.trim()) body.sellerNotes = form.sellerNotes.trim();
+  if (form.submitterNotes.trim()) body.submitterNotes = form.submitterNotes.trim();
+
+  return body;
+}
 
 const selectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
@@ -70,31 +109,8 @@ function parseOptionalInt(raw: string): number | undefined {
   return Number.isInteger(n) ? n : undefined;
 }
 
-function buildRequest(form: FormState): ManualSubmissionRequest | null {
-  const listingUrl = form.listingUrl.trim();
-  if (!listingUrl) return null;
-
-  const body: ManualSubmissionRequest = { listingUrl };
-
-  if (form.assignedToUserId) body.assignedToUserId = form.assignedToUserId;
-  if (form.source) body.source = form.source as ManualSubmissionRequest["source"];
-  if (form.region) body.region = form.region as ManualSubmissionRequest["region"];
-
-  const year = parseOptionalInt(form.year);
-  if (year !== undefined) body.year = year;
-  if (form.make.trim()) body.make = form.make.trim();
-  if (form.model.trim()) body.model = form.model.trim();
-  if (form.style.trim()) body.style = form.style.trim();
-
-  const price = parseOptionalInt(form.price);
-  if (price !== undefined) body.price = price;
-  const mileage = parseOptionalInt(form.mileage);
-  if (mileage !== undefined) body.mileage = mileage;
-
-  if (form.sellerNotes.trim()) body.sellerNotes = form.sellerNotes.trim();
-  if (form.submitterNotes.trim()) body.submitterNotes = form.submitterNotes.trim();
-
-  return body;
+function isFormComplete(form: FormState): boolean {
+  return isRequiredFieldMissing(form) === null && parseOptionalInt(form.year) !== undefined && parseOptionalInt(form.price) !== undefined;
 }
 
 export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClose?: () => void }) {
@@ -112,27 +128,33 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
     mutationFn: submitManualOpportunity,
     onSuccess: (result) => {
       if (!result.ok) {
-        toast.error(codeMessage(result.error));
+        if (
+          result.error === "duplicate_listing_url" &&
+          typeof result.details?.normalizedListingId === "string"
+        ) {
+          const listingId = result.details.normalizedListingId;
+          toast.error(result.message, {
+            action: {
+              label: "View deal",
+              onClick: () => router.push(`/opportunities/${listingId}`),
+            },
+          });
+          return;
+        }
+        toast.error(result.message);
         return;
       }
 
       void queryClient.invalidateQueries({ queryKey: queryKeys.opportunities() });
       void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
 
-      const { data } = result;
-      if (data.warnings.includes("listing_already_exists")) {
-        toast.message("Listing already in the queue", {
-          description: "Your submission was recorded, but this URL was seen before.",
-        });
-      } else {
-        toast.success("Listing submitted");
-      }
+      toast.success("Listing submitted");
 
       setForm(EMPTY_FORM);
       options.onSuccessClose?.();
 
-      if (data.opportunity?.id) {
-        router.push(`/opportunities/${data.opportunity.id}`);
+      if (result.data.opportunity?.id) {
+        router.push(`/opportunities/${result.data.opportunity.id}`);
       }
     },
   });
@@ -143,16 +165,21 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    const missing = isRequiredFieldMissing(form);
+    if (missing) {
+      toast.error(missing);
+      return;
+    }
     const body = buildRequest(form);
     if (!body) {
-      toast.error("Listing URL is required");
+      toast.error("Check year and price — whole numbers only");
       return;
     }
     mutation.mutate(body);
   }
 
   const users = usersQuery.data?.ok ? usersQuery.data.data : [];
-  const canSubmit = form.listingUrl.trim().length > 0 && !mutation.isPending;
+  const canSubmit = isFormComplete(form) && !mutation.isPending;
 
   return {
     form,
@@ -202,9 +229,13 @@ export function ManualSubmitFormFields({
           <select
             id={pid("region")}
             className={selectClass}
+            required
             value={form.region}
             onChange={(e) => updateField("region", e.target.value)}
           >
+            <option value="" disabled>
+              Select region
+            </option>
             {REGIONS.map((region) => (
               <option key={region.value} value={region.value}>
                 {region.label}
@@ -235,6 +266,7 @@ export function ManualSubmitFormFields({
           <Input
             id={pid("year")}
             inputMode="numeric"
+            required
             placeholder="2020"
             value={form.year}
             onChange={(e) => updateField("year", e.target.value)}
@@ -244,6 +276,7 @@ export function ManualSubmitFormFields({
           <Label htmlFor={pid("make")}>Make</Label>
           <Input
             id={pid("make")}
+            required
             placeholder="toyota"
             value={form.make}
             onChange={(e) => updateField("make", e.target.value)}
@@ -253,6 +286,7 @@ export function ManualSubmitFormFields({
           <Label htmlFor={pid("model")}>Model</Label>
           <Input
             id={pid("model")}
+            required
             placeholder="camry"
             value={form.model}
             onChange={(e) => updateField("model", e.target.value)}
@@ -275,6 +309,7 @@ export function ManualSubmitFormFields({
           <Input
             id={pid("price")}
             inputMode="numeric"
+            required
             placeholder="15000"
             value={form.price}
             onChange={(e) => updateField("price", e.target.value)}

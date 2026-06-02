@@ -78,6 +78,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     APIFY_WEBHOOK_SECRET: APIFY_SECRET,
     APIFY_TOKEN: APIFY_PAT,
     APIFY_WEBHOOK_ENABLED: "true",
+    OPPORTUNITIES_PARSE_ENABLED: "false",
     ...overrides,
   };
 }

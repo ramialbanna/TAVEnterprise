@@ -36,6 +36,7 @@ const CODE_MESSAGES: Record<string, string> = {
   validation_error: "That request was rejected — check the highlighted fields.",
   user_required: "Your session has expired — sign in again.",
   invalid_listing_url: "Enter a valid listing URL.",
+  duplicate_listing_url: "This listing is already in the queue — open the existing deal instead of submitting again.",
   unsupported_listing_url: "That URL host isn't recognized — pick a source or use a supported marketplace link.",
   invalid_assignee: "The selected closer is not an active user.",
   forbidden: "You don't have permission to perform that action.",

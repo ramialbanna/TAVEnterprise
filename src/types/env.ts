@@ -104,4 +104,10 @@ export interface Env {
    * code. Set in wrangler.toml [vars].
    */
   APIFY_WEBHOOK_ENABLED: string;
+
+  /**
+   * Master switch for POST /app/opportunities/parse. When not exactly "true",
+   * the route returns 503. Set in wrangler.toml [vars].
+   */
+  OPPORTUNITIES_PARSE_ENABLED: string;
 }

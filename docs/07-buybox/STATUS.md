@@ -1,6 +1,6 @@
 # MaxBuy — Status
 
-**Last updated:** 2026-06-01 · **Phase:** P0–P2 complete → **P5 next** (evaluate API)  
+**Last updated:** 2026-06-01 · **Phase:** P0–P2 complete · **P3 in progress** (3.1–3.4) · **P5 next** (MaxBuy evaluate API)  
 **Repo prefix:** `TAV-BB`
 
 Single checklist for what's closed, what's open, and when to start building.
@@ -29,7 +29,7 @@ Single checklist for what's closed, what's open, and when to start building.
 | **0** | `purchase_outcomes` prod schema reconcile | ✅ `0052` on `main` |
 | **1** | λ backtest → 180d half-life | ✅ [`reports/10-decay-rate-report.md`](reports/10-decay-rate-report.md) |
 | **2** | `maxbuy_*` DDL, benchmark mat views, scoring module | ✅ `0053`–`0056`, `src/maxbuy/scoring/` |
-| **3** | Parse endpoint, `entry_method`, submit validation | ⬜ |
+| **3** | Parse endpoint, `entry_method`, submit validation, duplicate block | ⚠️ 3.1–3.4 on `TAV-WF-phase-3-intake`; 3.5–3.7 remain |
 | **4** | Nav, deal detail hero, MaxBuyCard shell | ⬜ |
 | **5** | `POST /maxbuy/evaluate` | ⬜ **Next** |
 | **6** | `/maxbuy` + deal detail evaluate live | ⬜ |
@@ -98,9 +98,9 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 
 ## Next actions (dev)
 
-1. **P5** — scaffold `workers/maxbuy-worker/`, `POST /maxbuy/evaluate`, main worker proxy `/app/maxbuy/*`
-2. **P4** (parallel) — Max buy nav stub, `MaxBuyCard` placeholder on deal detail
-3. **P3** (parallel) — `entry_method`, `POST /app/opportunities/parse`
+1. **P3** — finish 3.5–3.7 (`entry_method` writes, parse/submit UI, mileage badge)
+2. **P5** — scaffold `workers/maxbuy-worker/`, `POST /maxbuy/evaluate`, main worker proxy `/app/maxbuy/*`
+3. **P4** (parallel) — Max buy nav stub, `MaxBuyCard` placeholder on deal detail
 4. Product: approve mocks for #15, #16; set KPI floors for #17
 5. After outcome loads: `REFRESH MATERIALIZED VIEW` on `mv_maxbuy_*` benchmarks
 

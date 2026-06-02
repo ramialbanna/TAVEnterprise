@@ -3,9 +3,18 @@ import { submitManualOpportunity } from "../src/persistence/manualOpportunities"
 import { getOpportunityDetail } from "../src/persistence/opportunities";
 import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
 import { getActiveUserById } from "../src/persistence/users";
+import {
+  findNormalizedListingBySourceUrl,
+  recordDuplicateUrlResubmit,
+} from "../src/persistence/leadAttribution";
 
 vi.mock("../src/persistence/normalizedListings", () => ({
   upsertNormalizedListing: vi.fn(),
+}));
+
+vi.mock("../src/persistence/leadAttribution", () => ({
+  findNormalizedListingBySourceUrl: vi.fn(),
+  recordDuplicateUrlResubmit: vi.fn(),
 }));
 
 vi.mock("../src/persistence/opportunities", () => ({
@@ -58,6 +67,8 @@ function makeDb(insertResult: { id: string }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(findNormalizedListingBySourceUrl).mockResolvedValue(null);
+  vi.mocked(recordDuplicateUrlResubmit).mockResolvedValue(undefined);
   vi.mocked(upsertNormalizedListing).mockResolvedValue({
     id: "listing-1",
     isNew: true,
@@ -108,10 +119,12 @@ beforeEach(() => {
   });
 });
 
+const CLOSER_ID = "00000000-0000-4000-8000-000000000001";
+
 describe("submitManualOpportunity", () => {
   it("creates a listing + submission and returns the opportunity", async () => {
     vi.mocked(getActiveUserById).mockResolvedValue({
-      id: "user-closer",
+      id: CLOSER_ID,
       email: "closer@texasautovalue.com",
       displayName: "Closer Two",
       role: "closer",
@@ -122,7 +135,8 @@ describe("submitManualOpportunity", () => {
       submitter,
       {
         listingUrl: "https://facebook.com/marketplace/item/123",
-        assignedToUserId: "user-closer",
+        assignedToUserId: CLOSER_ID,
+        region: "dallas_tx",
         year: 2020,
         make: "Toyota",
         model: "Camry",
@@ -149,21 +163,53 @@ describe("submitManualOpportunity", () => {
     );
   });
 
-  it("warns when the listing URL already existed", async () => {
-    vi.mocked(upsertNormalizedListing).mockResolvedValue({
-      id: "listing-existing",
-      isNew: false,
-      priceChanged: false,
-      mileageChanged: false,
+  it("blocks duplicate URLs, logs attribution, and does not create a submission", async () => {
+    vi.mocked(findNormalizedListingBySourceUrl).mockResolvedValue({ id: "listing-existing" });
+
+    await expect(
+      submitManualOpportunity(makeDb({ id: "submission-2" }) as never, submitter, {
+        listingUrl: "https://facebook.com/marketplace/item/existing",
+        region: "houston_tx",
+        year: 2019,
+        make: "honda",
+        model: "civic",
+        price: 12000,
+      }),
+    ).rejects.toMatchObject({
+      code: "duplicate_listing_url",
+      details: { normalizedListingId: "listing-existing" },
     });
 
-    const result = await submitManualOpportunity(
-      makeDb({ id: "submission-2" }) as never,
-      submitter,
-      { listingUrl: "https://facebook.com/marketplace/item/existing" },
+    expect(recordDuplicateUrlResubmit).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-existing",
+      submitter.id,
+      expect.objectContaining({
+        listingUrl: "https://facebook.com/marketplace/item/existing",
+        price: 12000,
+      }),
     );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
 
-    expect(result.isDuplicateUrl).toBe(true);
-    expect(result.warnings).toEqual(["listing_already_exists"]);
+  it("rejects submissions missing required WF-1 fields", async () => {
+    await expect(
+      submitManualOpportunity(makeDb({ id: "submission-x" }) as never, submitter, {
+        listingUrl: "https://facebook.com/marketplace/item/123",
+      } as never),
+    ).rejects.toMatchObject({ code: "validation_error" });
+  });
+
+  it("adds mileage_unknown when mileage is omitted", async () => {
+    const result = await submitManualOpportunity(makeDb({ id: "submission-3" }) as never, submitter, {
+      listingUrl: "https://facebook.com/marketplace/item/no-miles",
+      region: "austin_tx",
+      year: 2021,
+      make: "ford",
+      model: "f-150",
+      price: 34000,
+    });
+
+    expect(result.warnings).toContain("mileage_unknown");
   });
 });
