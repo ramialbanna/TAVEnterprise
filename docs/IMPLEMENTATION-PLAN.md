@@ -64,8 +64,8 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | **0** | Schema reconcile | ✅ Shipped | `0052` · `main` |
 | **1** | λ decay backtest | ✅ Shipped | `scripts/maxbuy/decay-backtest/` · report · `main` |
 | **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
-| **3** | Intake parse + `entry_method` | ✅ Shipped — 3.5–3.7 on `TAV-WF-phase-3-intake` (merge pending) | `TAV-WF-phase-3-intake` |
-| **4** | Workflow UI shell + MaxBuy card placeholder | ⬜ Not started | — |
+| **3** | Intake parse + `entry_method` | ✅ Shipped on `main` | `main` |
+| **4** | Workflow UI shell + MaxBuy card placeholder | ✅ Shipped on `TAV-WF-phase-4-ui-shell` (merge pending) | `TAV-WF-phase-4-ui-shell` |
 | **5** | `maxbuy-worker` evaluate API | ⬜ **Next** (MaxBuy track) | — |
 | **6** | MaxBuy UI live | ⬜ Blocked on P4 + P5 | — |
 | **7–9** | Hand-off, async badges, UAT / retire Classic | ⬜ Not started | — |
@@ -332,18 +332,18 @@ ORDER BY sale_date;
 **Depends on:** Phase 3 optional (provenance block needs `entry_method`)  
 **Parallel with:** Phase 2 OK (UI shell does not need API)
 
-| # | Task | Files / artifacts |
-|---|------|-------------------|
-| 4.1 | Add **Max buy** to buyer nav (keep MMR Lab in ops per MB-4) | `web/lib/app-shell/nav-new.ts` |
-| 4.2 | Route stub `/maxbuy` with disabled/coming-soon card | `web/app/(app)/maxbuy/` |
-| 4.3 | Shared `MaxBuyCard` component — **shell only**, props-driven | `web/components/maxbuy/maxbuy-card.tsx` |
-| 4.4 | Deal detail: listing hero + provenance block | `opportunities/_components/opportunities-client-new.tsx` |
-| 4.5 | Workflow stepper: Found → Working → Contacted → Outcome | Same |
-| 4.6 | Embed MaxBuyCard placeholder below hero (disabled state) | Same |
-| 4.7 | Opportunities queue tabs polish (Needs action / Mine / etc.) | Query params on `/opportunities` |
-| 4.8 | Home action tiles (not a recycled table) | `web/app/(app)/dashboard/` |
+| # | Task | Files / artifacts | Status |
+|---|------|-------------------|--------|
+| 4.1 | Add **Max buy** to buyer nav (keep MMR Lab in ops per MB-4) | `web/lib/app-shell/nav-new.ts` | ✅ |
+| 4.2 | Route stub `/maxbuy` with disabled/coming-soon card | `web/app/(app)/maxbuy/` | ✅ |
+| 4.3 | Shared `MaxBuyCard` component — **shell only**, props-driven | `web/components/maxbuy/maxbuy-card.tsx` | ✅ |
+| 4.4 | Deal detail: listing hero + provenance block | `opportunity-detail-hero.tsx`, `opportunity-provenance-block.tsx` | ✅ |
+| 4.5 | Workflow stepper: Found → Working → Contacted → Outcome | `opportunity-workflow-stepper.tsx` | ✅ |
+| 4.6 | Embed MaxBuyCard placeholder below hero (disabled state) | `opportunity-detail-client-new.tsx` | ✅ |
+| 4.7 | Opportunities queue tabs polish (Needs action / Mine / etc.) | Existing `opportunities-queue-tabs.tsx` + `?view=` | ✅ (shipped Phase 1–2) |
+| 4.8 | Home action tiles (not a recycled table) | `dashboard-home-new.tsx` + Max buy tile | ✅ |
 
-**Exit criteria:** New shell navigable; deal detail layout matches workflow doc §5.4 wireframe; MaxBuyCard renders mock/disabled state.
+**Exit criteria:** New shell navigable; deal detail layout matches workflow doc §5.4 wireframe; MaxBuyCard renders mock/disabled state. **Met on branch** (New mode detail + `/maxbuy`).
 
 ---
 

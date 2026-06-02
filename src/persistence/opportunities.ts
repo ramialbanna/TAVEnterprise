@@ -51,6 +51,7 @@ export interface OpportunityRow {
   lastSeenAt: string | null;
   seenCount: number | null;
   listingUrl: string | null;
+  entryMethod: string | null;
   estimateFlags: OpportunityEstimateFlags;
 }
 
@@ -97,7 +98,7 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -312,6 +313,7 @@ function mapToOpportunityRow(
     lastSeenAt: asString(listing.last_seen_at),
     seenCount: scrapeCount,
     listingUrl: asString(listing.listing_url),
+    entryMethod: asString(listing.entry_method),
     estimateFlags,
   };
 }

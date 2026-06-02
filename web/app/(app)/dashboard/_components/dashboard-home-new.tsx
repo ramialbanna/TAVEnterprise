@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Briefcase, PlusCircle, Target } from "lucide-react";
+import { BarChart3, Briefcase, PlusCircle, Scale, Target } from "lucide-react";
 
 import { listOpportunitiesPage } from "@/lib/app-api/client";
 import { NEW_ANALYTICS_HREF } from "@/lib/app-shell/nav-new";
@@ -87,6 +87,18 @@ export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts 
               <Briefcase className="mb-1 size-5 text-primary" aria-hidden />
               <CardTitle className="text-lg">My work</CardTitle>
               <CardDescription>{mineLabel}</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/maxbuy" className="block h-full">
+          <Card className="h-full transition-colors hover:bg-accent/40">
+            <CardHeader>
+              <Scale className="mb-1 size-5 text-primary" aria-hidden />
+              <CardTitle className="text-lg">Max buy lookup</CardTitle>
+              <CardDescription>
+                VIN → recommended max buy and buy/pass verdict (coming soon).
+              </CardDescription>
             </CardHeader>
           </Card>
         </Link>

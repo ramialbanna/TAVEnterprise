@@ -6,6 +6,7 @@ import {
   Database,
   Home,
   PlusCircle,
+  Scale,
   Search,
   Settings,
   Target,
@@ -45,6 +46,12 @@ export function buyerNavItems(): NavLinkItem[] {
       label: "Submit listing",
       icon: PlusCircle,
       isActive: (pathname) => pathname.startsWith("/opportunities/submit"),
+    },
+    {
+      href: "/maxbuy",
+      label: "Max buy",
+      icon: Scale,
+      isActive: (pathname) => pathname.startsWith("/maxbuy"),
     },
     {
       href: "/my-work",
@@ -92,6 +99,7 @@ const TITLE_ENTRIES: { match: (pathname: string) => boolean; label: string }[] =
   { match: (p) => p.startsWith("/dashboard/analytics"), label: "Analytics" },
   { match: (p) => p === "/dashboard" || p.startsWith("/dashboard/"), label: "Home" },
   { match: (p) => p.startsWith("/opportunities/submit"), label: "Submit listing" },
+  { match: (p) => p.startsWith("/maxbuy"), label: "Max buy" },
   { match: (p) => p === "/my-work", label: "My work" },
   { match: (p) => p.startsWith("/opportunities"), label: "Opportunities" },
   { match: (p) => p.startsWith("/ingest"), label: "Ingest Monitor" },

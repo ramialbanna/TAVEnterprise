@@ -28,6 +28,12 @@ describe("nav-new", () => {
     expect(navTitleNew("/dashboard")).toBe("Home");
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
+    expect(navTitleNew("/maxbuy")).toBe("Max buy");
     expect(analyticsNavItem().label).toBe("Analytics");
+  });
+
+  it("buyer nav includes Max buy", () => {
+    const hrefs = buyerNavItems().map((i) => i.href);
+    expect(hrefs).toContain("/maxbuy");
   });
 });

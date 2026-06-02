@@ -252,6 +252,7 @@ export const OpportunityRowSchema = z.object({
   lastSeenAt: z.string().nullable(),
   seenCount: z.number().nullable(),
   listingUrl: z.string().nullable(),
+  entryMethod: z.enum(["manual", "scraper", "import"]).nullable().optional(),
   estimateFlags: OpportunityEstimateFlagsSchema,
 });
 export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
