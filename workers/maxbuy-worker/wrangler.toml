@@ -1,0 +1,32 @@
+name = "maxbuy-worker"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+account_id = "1a9ff831a8db512a04f8d96f90f76bfd"
+
+[vars]
+MAXBUY_EVALUATE_ENABLED = "false"
+INTEL_WORKER_URL = ""
+# Secrets (per env):
+#   wrangler secret put SUPABASE_URL
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put INTEL_WORKER_SECRET
+#   wrangler secret put MAXBUY_SERVICE_SECRET
+
+[env.staging]
+name = "maxbuy-worker-staging"
+[env.staging.vars]
+MAXBUY_EVALUATE_ENABLED = "true"
+INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev"
+[[env.staging.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-staging"
+
+[env.production]
+name = "maxbuy-worker-production"
+[env.production.vars]
+MAXBUY_EVALUATE_ENABLED = "false"
+INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
+[[env.production.services]]
+binding = "INTEL_WORKER"
+service = "tav-intelligence-worker-production"

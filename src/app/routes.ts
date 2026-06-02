@@ -19,6 +19,8 @@
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
  * POST /app/opportunities/:id/notes.
+ * POST /app/maxbuy/evaluate, POST /app/maxbuy/overrides, POST /app/maxbuy/passes,
+ * GET /app/maxbuy/recommendations/:id.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
  */
 import { z } from "zod";
@@ -63,6 +65,7 @@ import { MmrResponseEnvelopeSchema } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
+import { handleMaxbuyAppRoute, maxbuySystemStatus } from "./maxbuyProxy";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
 
@@ -262,6 +265,9 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
     if (request.method === "POST" && pathname === "/app/opportunities/manual") {
       return await handleManualOpportunitySubmit(request, env);
     }
+    if (pathname.startsWith("/app/maxbuy/")) {
+      return await handleMaxbuyAppRoute(request, env, pathname);
+    }
     return json({ ok: false, error: "not_found" }, 404);
   } catch (err) {
     log("app.error", {
@@ -340,6 +346,7 @@ async function handleSystemStatus(env: Env): Promise<Response> {
       timestamp: new Date().toISOString(),
       db,
       intelWorker,
+      maxbuy: maxbuySystemStatus(env),
       sources,
       staleSweep,
     },

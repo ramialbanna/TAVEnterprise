@@ -30,6 +30,10 @@ INTEL_WORKER_URL = ""
 APIFY_WEBHOOK_ENABLED = "false"
 # Listing URL parse (Phase 3 intake). "true" enables POST /app/opportunities/parse.
 OPPORTUNITIES_PARSE_ENABLED = "false"
+MAXBUY_EVALUATE_ENABLED = "false"
+MAXBUY_WORKER_URL = ""
+# MAXBUY_WORKER_SECRET must be set as a Cloudflare secret:
+#   wrangler secret put MAXBUY_WORKER_SECRET
 # ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET, APIFY_WEBHOOK_SECRET,
 # APIFY_TOKEN must be set as Cloudflare secrets:
 #   wrangler secret put ADMIN_API_SECRET     # ops admin API (/admin/*)
@@ -50,6 +54,8 @@ INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev
 # must be set explicitly per environment.
 APIFY_WEBHOOK_ENABLED = "true"
 OPPORTUNITIES_PARSE_ENABLED = "false"
+MAXBUY_EVALUATE_ENABLED = "true"
+MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
@@ -62,6 +68,9 @@ id = "44c7dbe6bad5478cb51878b053758805"
 [[env.staging.services]]
 binding = "INTEL_WORKER"
 service = "tav-intelligence-worker-staging"
+[[env.staging.services]]
+binding = "MAXBUY_WORKER"
+service = "maxbuy-worker-staging"
 
 [env.production]
 name = "tav-aip-production"
@@ -75,6 +84,8 @@ MANHEIM_LOOKUP_MODE = "worker"
 INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
 APIFY_WEBHOOK_ENABLED = "true"
 OPPORTUNITIES_PARSE_ENABLED = "false"
+MAXBUY_EVALUATE_ENABLED = "false"
+MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
@@ -84,3 +95,6 @@ id = "e61e291003f647a5ad0ffce778ac6631"
 [[env.production.services]]
 binding = "INTEL_WORKER"
 service = "tav-intelligence-worker-production"
+[[env.production.services]]
+binding = "MAXBUY_WORKER"
+service = "maxbuy-worker-production"

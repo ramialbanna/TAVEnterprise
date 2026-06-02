@@ -110,4 +110,25 @@ export interface Env {
    * the route returns 503. Set in wrangler.toml [vars].
    */
   OPPORTUNITIES_PARSE_ENABLED: string;
+
+  /**
+   * Master switch for POST /app/maxbuy/* evaluate API. When not exactly "true",
+   * routes return 503. Set in wrangler.toml [vars].
+   */
+  MAXBUY_EVALUATE_ENABLED: string;
+
+  /**
+   * Base URL of maxbuy-worker. Empty when only the MAXBUY_WORKER service
+   * binding is wired.
+   */
+  MAXBUY_WORKER_URL: string;
+
+  /**
+   * Shared secret for main-worker → maxbuy-worker auth.
+   * Set via: wrangler secret put MAXBUY_WORKER_SECRET
+   */
+  MAXBUY_WORKER_SECRET: string;
+
+  /** Optional Cloudflare Service Binding to maxbuy-worker. */
+  MAXBUY_WORKER?: Fetcher;
 }

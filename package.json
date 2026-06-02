@@ -8,9 +8,11 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:intelligence": "wrangler dev --config workers/tav-intelligence-worker/wrangler.toml",
+    "dev:maxbuy": "wrangler dev --config workers/maxbuy-worker/wrangler.toml",
     "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy",
     "deploy:intelligence": "wrangler deploy --config workers/tav-intelligence-worker/wrangler.toml",
+    "deploy:maxbuy": "wrangler deploy --config workers/maxbuy-worker/wrangler.toml",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"workers/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",

@@ -6,6 +6,9 @@ export const MAXBUY_INTELLIGENCE_CONTRACT_VERSION = "mmr-v1" as const;
 export const MAXBUY_DECAY_HALF_LIFE_DAYS = 180;
 export const MAXBUY_DEFAULT_TARGET_NET_GROSS = 800;
 
+/** Deployed maxbuy-worker semver — bump on breaking handler changes. */
+export const MAXBUY_WORKER_VERSION = "maxbuy-worker-v1" as const;
+
 export const MAXBUY_SAFE_PERSIST_MMR_FIELDS = [
   "ok",
   "mmr_value",

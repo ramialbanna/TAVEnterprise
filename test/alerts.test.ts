@@ -31,6 +31,9 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     APIFY_TOKEN: "",
     APIFY_WEBHOOK_ENABLED: "false",
     OPPORTUNITIES_PARSE_ENABLED: "false",
+    MAXBUY_EVALUATE_ENABLED: "false",
+    MAXBUY_WORKER_URL: "",
+    MAXBUY_WORKER_SECRET: "",
     ...overrides,
   };
 }
