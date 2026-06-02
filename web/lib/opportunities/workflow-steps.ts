@@ -127,10 +127,12 @@ export function formatClaimCountdown(
   claimExpiresAt: string | null,
   now: Date = new Date(),
 ): string | null {
-  if (!claimExpiresAt || !isClaimActive(claimExpiresAt)) return null;
+  if (!claimExpiresAt) return null;
 
   const expires = new Date(claimExpiresAt);
-  if (Number.isNaN(expires.getTime())) return null;
+  if (Number.isNaN(expires.getTime()) || expires.getTime() <= now.getTime()) {
+    return null;
+  }
 
   const msLeft = expires.getTime() - now.getTime();
   const hoursLeft = Math.max(1, Math.ceil(msLeft / (60 * 60 * 1000)));

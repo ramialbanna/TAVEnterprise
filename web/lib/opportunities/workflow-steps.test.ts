@@ -100,8 +100,8 @@ describe("getSecondaryWorkflowActions", () => {
 
 describe("formatClaimCountdown", () => {
   it("formats an active claim window", () => {
-    const now = new Date("2026-05-31T10:00:00.000Z");
-    const expires = new Date("2026-05-31T18:30:00.000Z").toISOString();
+    const now = new Date("2030-06-01T10:00:00.000Z");
+    const expires = new Date("2030-06-01T18:30:00.000Z").toISOString();
     expect(formatClaimCountdown(expires, now)).toMatch(/Your \d+h window · expires/);
   });
 });
