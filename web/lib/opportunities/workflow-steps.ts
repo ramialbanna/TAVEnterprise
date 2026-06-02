@@ -22,12 +22,15 @@ export type WorkflowTarget = Pick<
   | "status"
 >;
 
+/** Minimal fields used by {@link resolveWorkflowStep}. */
+export type WorkflowStepInput = Pick<WorkflowTarget, "status" | "assignedTo" | "claimExpiresAt">;
+
 export function isClaimActive(claimExpiresAt: string | null): boolean {
   if (!claimExpiresAt) return false;
   return new Date(claimExpiresAt).getTime() > Date.now();
 }
 
-export function resolveWorkflowStep(opportunity: WorkflowTarget): WorkflowStepId {
+export function resolveWorkflowStep(opportunity: WorkflowStepInput): WorkflowStepId {
   const status = opportunity.status ?? "new";
   if (status === "passed" || status === "purchased" || status === "bought") {
     return "outcome";

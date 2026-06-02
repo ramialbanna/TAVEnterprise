@@ -2,8 +2,7 @@
 
 import { Check } from "lucide-react";
 
-import type { OpportunityRow } from "@/lib/app-api/schemas";
-import { resolveWorkflowStep, type WorkflowStepId } from "@/lib/opportunities/workflow-steps";
+import { resolveWorkflowStep, type WorkflowStepId, type WorkflowStepInput } from "@/lib/opportunities/workflow-steps";
 import { cn } from "@/lib/utils";
 
 /** Buyer-facing step labels per workflow doc §5.4 (Found → Working → Contacted → Outcome). */
@@ -31,7 +30,7 @@ function detailStepIndex(step: DetailStepId): number {
 export function OpportunityWorkflowStepper({
   opportunity,
 }: {
-  opportunity: Pick<OpportunityRow, "status" | "assignedTo" | "claimExpiresAt">;
+  opportunity: WorkflowStepInput;
 }) {
   const internalStep = resolveWorkflowStep(opportunity);
   const current = mapToDetailStep(internalStep);
