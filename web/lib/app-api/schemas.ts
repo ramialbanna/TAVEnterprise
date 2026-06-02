@@ -37,8 +37,71 @@ export const SystemStatusSchema = z.object({
     }),
     z.object({ lastRunAt: z.null(), missingReason: z.string() }), // "never_run" | "db_error"
   ]),
+  maxbuy: z
+    .object({
+      enabled: z.boolean(),
+      binding: z.boolean(),
+      url: z.string().nullable(),
+    })
+    .optional(),
 });
 export type SystemStatus = z.infer<typeof SystemStatusSchema>;
+
+// ── POST /app/maxbuy/evaluate ──────────────────────────────────────────────────
+export const MaxbuyEvaluateOkSchema = z.object({
+  contract_version: z.string(),
+  recommendation_id: z.string().uuid(),
+  vehicle: z.object({
+    vin: z.string(),
+    year: z.number().nullable(),
+    make: z.string().nullable(),
+    model: z.string().nullable(),
+    trim: z.string().nullable(),
+    mileage: z.number(),
+    mileage_estimated: z.boolean(),
+  }),
+  mmr: z.object({
+    value: z.number().nullable(),
+    method: z.enum(["vin", "ymm"]).nullable(),
+    source: z.string().nullable(),
+    cache_age_seconds: z.number().nullable(),
+    missing_reason: z.string().nullable(),
+    observed_at: z.string().nullable(),
+  }),
+  tav_historical: z.object({
+    n_units: z.number(),
+    avg_buy: z.number().nullable(),
+    avg_sale: z.number().nullable(),
+    avg_gross: z.number().nullable(),
+    avg_recon: z.number().nullable(),
+    avg_days_to_sale: z.number().nullable(),
+    outcome_distribution: z.record(z.string(), z.number()),
+  }),
+  economics: z.object({
+    expected_sale_price: z.number(),
+    expected_transport: z.number(),
+    expected_expenses: z.number(),
+    expected_net_gross: z.number().nullable(),
+  }),
+  verdict: z.object({
+    display_state: z.enum(["deal_fit", "vehicle_fit"]),
+    verdict: z.enum(["STRONG_BUY", "BUY", "REVIEW", "PASS"]).nullable(),
+    recommended_max_buy: z.number(),
+    delta_to_ask: z.number().nullable(),
+    data_strength: z.enum(["low", "medium", "high"]),
+    reason_codes: z.array(z.string()),
+    estimated_badges: z.array(z.string()),
+    hard_gate_triggered: z.string().nullable(),
+  }),
+  versions: z.object({
+    benchmark_version: z.string(),
+    feature_view_version: z.string(),
+    policy_version: z.string(),
+    scoring_version: z.string(),
+    model_artifact_hash: z.null(),
+  }),
+});
+export type MaxbuyEvaluateOk = z.infer<typeof MaxbuyEvaluateOkSchema>;
 
 // ── GET /app/kpis ──────────────────────────────────────────────────────────────
 export const OutcomesBlockSchema = z.object({

@@ -41,6 +41,7 @@ export const systemStatusHealthy: SystemStatus = {
     },
   ],
   staleSweep: { lastRunAt: "2026-05-12T06:00:00.000Z", status: "ok", updated: 7 },
+  maxbuy: { enabled: true, binding: true, url: "https://maxbuy-worker.example.workers.dev" },
 };
 
 export const systemStatusNeverRun: SystemStatus = {

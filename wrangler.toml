@@ -84,7 +84,7 @@ MANHEIM_LOOKUP_MODE = "worker"
 INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
 APIFY_WEBHOOK_ENABLED = "true"
 OPPORTUNITIES_PARSE_ENABLED = "false"
-MAXBUY_EVALUATE_ENABLED = "false"
+MAXBUY_EVALUATE_ENABLED = "true"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"

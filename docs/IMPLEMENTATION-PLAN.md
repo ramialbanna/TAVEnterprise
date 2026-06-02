@@ -1,7 +1,7 @@
 # TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
 
 **Status:** Active execution plan  
-**Last updated:** 2026-06-01 (progress: P0–P2 shipped; **P3 in progress** — 3.1–3.4 on `TAV-WF-phase-3-intake`)  
+**Last updated:** 2026-06-02 (progress: P0–P6 shipped on `main`; **P7 next** — overrides / hand-off)  
 **Audience:** Cursor agents, solo dev, reviewers  
 **Repo prefixes:** `TAV-BB-*` (MaxBuy) · `TAV-WF-*` (workflow/UI) · combined milestones may use `TAV-MVP-*`
 
@@ -66,8 +66,8 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
 | **3** | Intake parse + `entry_method` | ✅ Shipped on `main` | `main` |
 | **4** | Workflow UI shell + MaxBuy card placeholder | ✅ Shipped on `TAV-WF-phase-4-ui-shell` (merge pending) | `TAV-WF-phase-4-ui-shell` |
-| **5** | `maxbuy-worker` evaluate API | ⬜ **Next** (MaxBuy track) | — |
-| **6** | MaxBuy UI live | ⬜ Blocked on P4 + P5 | — |
+| **5** | `maxbuy-worker` evaluate API | ✅ Shipped on `main` | `main` |
+| **6** | MaxBuy UI live | ✅ Shipped | `main` |
 | **7–9** | Hand-off, async badges, UAT / retire Classic | ⬜ Not started | — |
 | **10** | Shadow ML | ⬜ Future | — |
 

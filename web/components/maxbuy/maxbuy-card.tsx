@@ -15,6 +15,8 @@ export type MaxBuyCardProps = {
   mode: MaxBuyCardMode;
   /** Populated when mode is `ready` (Phase 6+). */
   snapshot?: MaxBuyCardSnapshot | null;
+  /** When `mode` is `disabled`, explains why evaluate is unavailable. */
+  disabledReason?: "coming_soon" | "api_off";
   variant?: "standalone" | "embedded";
   className?: string;
 };
@@ -26,14 +28,21 @@ const VERDICT_LABELS: Record<NonNullable<MaxBuyCardSnapshot["verdict"]>, string>
   pass: "Pass",
 };
 
-function DisabledShell({ variant }: { variant: "standalone" | "embedded" }) {
+function DisabledShell({
+  variant,
+  disabledReason = "coming_soon",
+}: {
+  variant: "standalone" | "embedded";
+  disabledReason?: "coming_soon" | "api_off";
+}) {
+  const apiOff = disabledReason === "api_off";
   return (
     <Card className={cn(variant === "embedded" && "border-dashed")}>
       <CardHeader className="space-y-1">
         <div className="flex items-center gap-2">
           <CardTitle className="text-lg">Max buy</CardTitle>
           <Badge variant="secondary" className="font-normal">
-            Coming soon
+            {apiOff ? "Off in this env" : "Coming soon"}
           </Badge>
         </div>
         <CardDescription>
@@ -49,8 +58,9 @@ function DisabledShell({ variant }: { variant: "standalone" | "embedded" }) {
         <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           <p className="flex items-start gap-2">
             <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-            Evaluate API is not live yet. This card will show recommended max buy, data strength,
-            and structured pass/override actions once MaxBuy ships.
+            {apiOff
+              ? "Max buy evaluate is disabled in this environment (MAXBUY_EVALUATE_ENABLED)."
+              : "Evaluate API is not live yet. This card will show recommended max buy, data strength, and structured pass/override actions once MaxBuy ships."}
           </p>
         </div>
         <Button type="button" disabled className="w-full sm:w-auto">
@@ -96,7 +106,12 @@ function ReadySnapshot({ snapshot, variant }: { snapshot: MaxBuyCardSnapshot; va
       <CardContent className="space-y-3 text-sm">
         {snapshot.mmrWholesale !== null ? (
           <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Wholesale (MMR)</span>
+            <span className="text-muted-foreground">
+              Wholesale (MMR) —{" "}
+              <Link href="/mmr-lab" className="font-medium text-primary hover:underline">
+                deep lookup
+              </Link>
+            </span>
             <span className="font-medium tabular-nums">{formatMoney(snapshot.mmrWholesale)}</span>
           </div>
         ) : null}
@@ -127,10 +142,16 @@ function ReadySnapshot({ snapshot, variant }: { snapshot: MaxBuyCardSnapshot; va
 }
 
 /** Shared MaxBuy surface for `/maxbuy` and deal detail (Phase 4 shell → Phase 6 live). */
-export function MaxBuyCard({ mode, snapshot, variant = "standalone", className }: MaxBuyCardProps) {
+export function MaxBuyCard({
+  mode,
+  snapshot,
+  disabledReason,
+  variant = "standalone",
+  className,
+}: MaxBuyCardProps) {
   const body =
     mode === "disabled" ? (
-      <DisabledShell variant={variant} />
+      <DisabledShell variant={variant} disabledReason={disabledReason} />
     ) : mode === "awaiting_vin" ? (
       <AwaitingVinShell variant={variant} />
     ) : snapshot ? (

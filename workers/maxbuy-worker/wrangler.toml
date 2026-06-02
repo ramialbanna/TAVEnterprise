@@ -25,7 +25,7 @@ service = "tav-intelligence-worker-staging"
 [env.production]
 name = "maxbuy-worker-production"
 [env.production.vars]
-MAXBUY_EVALUATE_ENABLED = "false"
+MAXBUY_EVALUATE_ENABLED = "true"
 INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.dev"
 [[env.production.services]]
 binding = "INTEL_WORKER"

@@ -17,6 +17,7 @@ import {
   MmrCatalogSchema,
   MmrVinOkSchema,
   SystemStatusSchema,
+  MaxbuyEvaluateOkSchema,
   type HistoricalSale,
   type ImportBatch,
   type IngestRunSummary,
@@ -31,6 +32,7 @@ import {
   type MmrCatalog,
   type MmrVinOk,
   type SystemStatus,
+  type MaxbuyEvaluateOk,
 } from "./schemas";
 import { codeMessage } from "./missing-reason";
 
@@ -108,6 +110,13 @@ function classifyError(code: string): ErrorKind | null {
       return "invalid";
     case "user_required":
       return "unauthorized";
+    case "maxbuy_disabled":
+    case "maxbuy_not_configured":
+    case "maxbuy_unavailable":
+      return "unavailable";
+    case "invalid_vin":
+    case "vehicle_context_missing":
+      return "invalid";
     // /web proxy (NOT Worker errors — see codeMessage)
     case "proxy_misconfigured":
     case "upstream_non_json":
@@ -184,6 +193,10 @@ function interpret<T>(status: number, json: unknown, dataSchema: z.ZodType<T>): 
 // ── per-endpoint parsers ───────────────────────────────────────────────────────
 export function parseSystemStatus(status: number, json: unknown): ApiResult<SystemStatus> {
   return interpret(status, json, SystemStatusSchema);
+}
+
+export function parseMaxbuyEvaluate(status: number, json: unknown): ApiResult<MaxbuyEvaluateOk> {
+  return interpret(status, json, MaxbuyEvaluateOkSchema);
 }
 
 export function parseKpis(status: number, json: unknown): ApiResult<Kpis> {

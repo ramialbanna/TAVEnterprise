@@ -15,7 +15,8 @@ import {
 import { canMutateWorkflow } from "./workflow-helpers";
 import { queryKeys } from "@/lib/query";
 import { formatMoney, formatNumber } from "@/lib/format";
-import { MaxBuyCard } from "@/components/maxbuy/maxbuy-card";
+import { MaxbuyLiveCard } from "@/components/maxbuy/maxbuy-live-card";
+import type { MaxbuyEvaluateFormValues } from "@/components/maxbuy/maxbuy-evaluate-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -86,13 +87,35 @@ export function OpportunityDetailClientNew({
     );
   }, [primaryWorkflow, claimMutation.isPending]);
 
-  const maxBuyMode = !initial.vin?.trim() ? ("awaiting_vin" as const) : ("disabled" as const);
+  const maxBuyInitial = useMemo((): MaxbuyEvaluateFormValues => {
+    const region =
+      initial.region === "dallas_tx"
+      || initial.region === "houston_tx"
+      || initial.region === "austin_tx"
+      || initial.region === "san_antonio_tx"
+      || initial.region === "lubbock_tx"
+      || initial.region === "oklahoma_city_ok"
+        ? initial.region
+        : "";
+    return {
+      vin: initial.vin?.trim() ?? "",
+      mileage: initial.mileage != null ? String(initial.mileage) : "",
+      askingPrice: initial.price != null ? String(Math.round(initial.price)) : "",
+      region,
+    };
+  }, [initial]);
 
   return (
     <div className="space-y-6">
       <OpportunityDetailHero opportunity={initial} primaryAction={heroPrimaryAction} />
 
-      <MaxBuyCard mode={maxBuyMode} variant="embedded" />
+      <MaxbuyLiveCard
+        variant="embedded"
+        vinReadOnly
+        initialValues={maxBuyInitial}
+        normalizedListingId={initial.normalizedListingId}
+        leadId={initial.leadId ?? undefined}
+      />
 
       <OpportunityWorkflowStepper opportunity={initial} />
 

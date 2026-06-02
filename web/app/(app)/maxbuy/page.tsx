@@ -1,7 +1,7 @@
-import { MaxBuyCard } from "@/components/maxbuy/maxbuy-card";
+import { MaxbuyLiveCard } from "@/components/maxbuy/maxbuy-live-card";
 
 /**
- * `/maxbuy` — standalone lane lookup (Phase 4 stub → Phase 6 live evaluate).
+ * `/maxbuy` — standalone lane lookup (Phase 6 live evaluate).
  */
 export default function MaxBuyPage() {
   return (
@@ -13,7 +13,11 @@ export default function MaxBuyPage() {
           this at the lane when you are not working a specific queue listing.
         </p>
       </header>
-      <MaxBuyCard mode="disabled" variant="standalone" />
+      <MaxbuyLiveCard
+        variant="standalone"
+        showRegion
+        initialValues={{ vin: "", mileage: "", askingPrice: "", region: "" }}
+      />
     </div>
   );
 }

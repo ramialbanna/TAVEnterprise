@@ -26,6 +26,7 @@ import {
   parseMmrYmm,
   parseMmrVin,
   parseSystemStatus,
+  parseMaxbuyEvaluate,
   type ApiResult,
 } from "./parse";
 import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
@@ -48,6 +49,7 @@ import type {
   MmrCatalog,
   MmrVinOk,
   SystemStatus,
+  MaxbuyEvaluateOk,
 } from "./schemas";
 
 /** Query filter for `GET /app/ingest-runs` (all optional; see `docs/03-api/app-api.md`). */
@@ -179,6 +181,25 @@ export type UpdateOpportunityStatusRequest = {
 /** Request body for POST /app/opportunities/:id/notes. */
 export type AddOpportunityNoteRequest = {
   note: string;
+};
+
+export type MaxbuyRegion =
+  | "dallas_tx"
+  | "houston_tx"
+  | "austin_tx"
+  | "san_antonio_tx"
+  | "lubbock_tx"
+  | "oklahoma_city_ok";
+
+/** Request body for `POST /app/maxbuy/evaluate` (contract v1.0.0). */
+export type MaxbuyEvaluateRequest = {
+  contract_version?: "1.0.0";
+  vin: string;
+  mileage?: number;
+  asking_price?: number;
+  region?: MaxbuyRegion;
+  normalized_listing_id?: string;
+  lead_id?: string;
 };
 
 const PROXY_PREFIX = "/api/app";
@@ -399,6 +420,17 @@ export async function addOpportunityNote(
   const r = await postJson(`opportunities/${encodeURIComponent(id)}/notes`, body);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function postMaxbuyEvaluate(
+  body: MaxbuyEvaluateRequest,
+): Promise<ApiResult<MaxbuyEvaluateOk>> {
+  const r = await postJson("maxbuy/evaluate", {
+    contract_version: "1.0.0",
+    ...body,
+  });
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMaxbuyEvaluate(r.status, r.json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {

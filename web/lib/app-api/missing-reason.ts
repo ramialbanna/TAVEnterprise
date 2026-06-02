@@ -61,6 +61,13 @@ const CODE_MESSAGES: Record<string, string> = {
   // ── parser-internal codes ────────────────────────────────────────────────────
   bad_response: "Unexpected response from the server.",
   schema_mismatch: "The server returned data in an unexpected shape.",
+
+  // ── MaxBuy evaluate ──────────────────────────────────────────────────────────
+  maxbuy_disabled: "Max buy evaluate is off in this environment.",
+  maxbuy_not_configured: "Max buy worker is not configured.",
+  maxbuy_unavailable: "Max buy service is temporarily unavailable.",
+  invalid_vin: "VIN is invalid or could not be decoded.",
+  vehicle_context_missing: "Could not resolve vehicle details for this VIN.",
 };
 
 const GENERIC = "Not available.";
