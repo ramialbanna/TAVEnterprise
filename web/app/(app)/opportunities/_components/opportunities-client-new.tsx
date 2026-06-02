@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -83,11 +83,22 @@ export function OpportunitiesClientNew({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<OpportunityRow | null>(null);
-  const [view, setView] = useState<OpportunityView>(initialView);
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [sort, setSort] = useState<OpportunitySort>("spread_desc");
   const [claimFeedbackRow, setClaimFeedbackRow] = useState<OpportunityRow | null>(null);
+
+  const viewParam = searchParams.get("view");
+  const viewKey = viewParam ?? "";
+  const view: OpportunityView =
+    viewParam === null ? initialView : parseViewParam(viewParam);
+
+  const [syncedViewKey, setSyncedViewKey] = useState(viewKey);
+  if (syncedViewKey !== viewKey) {
+    setSyncedViewKey(viewKey);
+    setOffset(0);
+    setSelected(null);
+  }
 
   const listFilter: OpportunitiesPageFilter = {
     limit,
@@ -115,13 +126,6 @@ export function OpportunitiesClientNew({
     initialData: matchesInitialFetch ? initial : undefined,
     enabled: view !== "mine" || meQuery.isSuccess,
   });
-
-  useEffect(() => {
-    const next = parseViewParam(searchParams.get("view"));
-    setView((current) => (current === next ? current : next));
-    setOffset(0);
-    setSelected(null);
-  }, [searchParams]);
 
   const summaryQueries = useQueries({
     queries: [
@@ -227,7 +231,6 @@ export function OpportunitiesClientNew({
   const { items: rows, total } = pageData;
 
   function handleViewChange(nextView: OpportunityView) {
-    setView(nextView);
     setOffset(0);
     setSelected(null);
     const params = new URLSearchParams(searchParams.toString());

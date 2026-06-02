@@ -85,7 +85,7 @@ export function OpportunityDetailClientNew({
         {primaryWorkflow.label}
       </Button>
     );
-  }, [primaryWorkflow, claimMutation.isPending]);
+  }, [primaryWorkflow, claimMutation]);
 
   const maxBuyInitial = useMemo((): MaxbuyEvaluateFormValues => {
     const region =

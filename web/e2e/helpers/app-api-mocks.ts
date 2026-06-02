@@ -6,7 +6,6 @@ import type {
   IngestRunSummary,
   IngestRunDetail,
   Kpis,
-  OpportunityDetail,
   OpportunityListPage,
   OpportunityRow,
   SystemStatus,

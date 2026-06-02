@@ -5,7 +5,6 @@ import type { OpportunityRow } from "@/lib/app-api/schemas";
 import {
   filterOpportunityRowsByView,
   matchesMine,
-  matchesNeedsAction,
   matchesWorthALook,
   shouldApplyClientViewFilter,
 } from "./view-filter";

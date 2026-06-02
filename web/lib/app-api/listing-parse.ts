@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 import { ParsedListingFieldsSchema, type ParsedListingFields } from "./schemas";
 import { codeMessage } from "./missing-reason";
 import type { ApiResult } from "./parse";
