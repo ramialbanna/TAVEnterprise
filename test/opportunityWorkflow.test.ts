@@ -87,6 +87,7 @@ const baseOpportunity = {
   lastSeenAt: "2026-05-22T00:00:00.000Z",
   seenCount: 1,
   listingUrl: "https://facebook.com/marketplace/item/1",
+  entryMethod: null,
   estimateFlags: { mileage: false, style: false, mmr: false },
   reasonCodes: [],
   valuationMissingReason: null,

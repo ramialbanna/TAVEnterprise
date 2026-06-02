@@ -16,12 +16,14 @@ describe("ManualOpportunitySubmissionSchema", () => {
   });
 
   it("rejects missing region", () => {
-    const { region: _region, ...rest } = VALID;
+    const rest = { ...VALID };
+    delete (rest as Partial<typeof VALID>).region;
     expect(ManualOpportunitySubmissionSchema.safeParse(rest).success).toBe(false);
   });
 
   it("rejects missing price", () => {
-    const { price: _price, ...rest } = VALID;
+    const rest = { ...VALID };
+    delete (rest as Partial<typeof VALID>).price;
     expect(ManualOpportunitySubmissionSchema.safeParse(rest).success).toBe(false);
   });
 });

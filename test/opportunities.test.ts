@@ -46,6 +46,7 @@ function sampleRow(over: Partial<OpportunityRow> = {}): OpportunityRow {
     lastSeenAt: "2026-05-21T10:00:00.000Z",
     seenCount: 1,
     listingUrl: null,
+    entryMethod: null,
     estimateFlags: { mileage: false, style: false, mmr: false },
     ...over,
   };

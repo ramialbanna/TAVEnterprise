@@ -7,7 +7,6 @@ import {
 } from "./clients/intelligence";
 import {
   MAXBUY_FEATURE_VIEW_VERSION,
-  MAXBUY_POLICY_VERSION,
   MAXBUY_SCORING_VERSION,
   MAXBUY_WORKER_VERSION,
 } from "./constants";

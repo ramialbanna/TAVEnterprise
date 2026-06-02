@@ -1060,6 +1060,7 @@ const OPPORTUNITY_ROW = {
   lastSeenAt: "2026-05-21T10:00:00.000Z",
   seenCount: 1,
   listingUrl: "https://example.com/listing/1",
+  entryMethod: null,
   estimateFlags: { mileage: false, style: false, mmr: false },
 };
 
