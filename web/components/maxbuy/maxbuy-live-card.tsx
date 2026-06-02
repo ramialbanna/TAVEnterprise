@@ -66,12 +66,17 @@ export function MaxbuyLiveCard({
 
   const hasVin = Boolean(formInitial.vin.trim());
 
-  if (!hasVin) {
+  /** Embedded deal detail only — standalone `/maxbuy` always shows the VIN form. */
+  if (variant === "embedded" && !hasVin) {
     return <MaxBuyCard mode="awaiting_vin" variant={variant} className={className} />;
   }
 
   if (statusQuery.isPending) {
-    return <MaxBuyCard mode="disabled" variant={variant} className={className} />;
+    return (
+      <div className={className}>
+        <p className="text-sm text-muted-foreground">Checking Max buy availability…</p>
+      </div>
+    );
   }
 
   if (!apiEnabled) {
