@@ -309,6 +309,22 @@ export const OpportunityDetailSchema = OpportunityRowSchema.extend({
 });
 export type OpportunityDetail = z.infer<typeof OpportunityDetailSchema>;
 
+/** POST /app/opportunities/parse — prefilled submit fields (Facebook v1). */
+export const ParsedListingFieldsSchema = z.object({
+  listingUrl: z.string(),
+  source: z.enum(["facebook", "craigslist", "autotrader", "cars_com", "offerup"]),
+  title: z.string().optional(),
+  year: z.number().int().optional(),
+  make: z.string().optional(),
+  model: z.string().optional(),
+  style: z.string().optional(),
+  price: z.number().int().optional(),
+  mileage: z.number().int().optional(),
+  vin: z.string().optional(),
+  warnings: z.array(z.string()),
+});
+export type ParsedListingFields = z.infer<typeof ParsedListingFieldsSchema>;
+
 export const ManualSubmissionResultSchema = z.object({
   submissionId: z.string(),
   normalizedListingId: z.string(),

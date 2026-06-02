@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { submitManualOpportunity } from "../src/persistence/manualOpportunities";
 import { getOpportunityDetail } from "../src/persistence/opportunities";
-import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
+import {
+  setNormalizedListingEntryMethod,
+  upsertNormalizedListing,
+} from "../src/persistence/normalizedListings";
 import { getActiveUserById } from "../src/persistence/users";
 import {
   findNormalizedListingBySourceUrl,
@@ -10,6 +13,7 @@ import {
 
 vi.mock("../src/persistence/normalizedListings", () => ({
   upsertNormalizedListing: vi.fn(),
+  setNormalizedListingEntryMethod: vi.fn(),
 }));
 
 vi.mock("../src/persistence/leadAttribution", () => ({
@@ -160,6 +164,11 @@ describe("submitManualOpportunity", () => {
         make: "toyota",
       }),
       null,
+    );
+    expect(setNormalizedListingEntryMethod).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      "manual",
     );
   });
 

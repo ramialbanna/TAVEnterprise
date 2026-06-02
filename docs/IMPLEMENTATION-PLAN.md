@@ -64,7 +64,7 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | **0** | Schema reconcile | ✅ Shipped | `0052` · `main` |
 | **1** | λ decay backtest | ✅ Shipped | `scripts/maxbuy/decay-backtest/` · report · `main` |
 | **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
-| **3** | Intake parse + `entry_method` | ⚠️ **In progress** — 3.1–3.4 shipped (`0057`–`0058` prod); 3.5–3.7 remain | `TAV-WF-phase-3-intake` |
+| **3** | Intake parse + `entry_method` | ✅ Shipped — 3.5–3.7 on `TAV-WF-phase-3-intake` (merge pending) | `TAV-WF-phase-3-intake` |
 | **4** | Workflow UI shell + MaxBuy card placeholder | ⬜ Not started | — |
 | **5** | `maxbuy-worker` evaluate API | ⬜ **Next** (MaxBuy track) | — |
 | **6** | MaxBuy UI live | ⬜ Blocked on P4 + P5 | — |
@@ -317,12 +317,12 @@ ORDER BY sale_date;
 | 3.2 | `POST /app/opportunities/parse` — Facebook v1 | `src/intake/`, `src/app/routes.ts`, tests | ✅ Flag off |
 | 3.3 | Tighten `POST /app/opportunities/manual` — required fields WF-1 | `manualSubmissionSchema.ts`, form validation | ✅ |
 | 3.4 | Duplicate URL block + attribution log WF-7 | `leadAttribution.ts`, `0058_lead_attribution_events.sql` | ✅ Prod |
-| 3.5 | Stamp `entry_method = manual` on submit; scraper stamps `scraper` on ingest | `handleIngest.ts`, manual handler | ⬜ |
-| 3.6 | Submit page: URL-first, parse CTA, progressive disclosure | `web/app/(app)/opportunities/submit/` | ⬜ |
-| 3.7 | “Mileage unknown” badge when absent WF-8 | Submit UI + opportunities display | ⬜ (`mileage_unknown` warning in API only) |
+| 3.5 | Stamp `entry_method = manual` on submit; scraper stamps `scraper` on ingest | `handleIngest.ts`, manual handler | ✅ |
+| 3.6 | Submit page: URL-first, parse CTA, progressive disclosure | `web/app/(app)/opportunities/submit/` | ✅ |
+| 3.7 | “Mileage unknown” badge when absent WF-8 | Submit UI + opportunities display | ✅ |
 
 **Exit criteria:** Parse works for Facebook URLs; blocked duplicate submits; required fields enforced; provenance visible in API.  
-**Met so far:** 3.2–3.4 (parse API, validation, duplicate block). **Remaining:** 3.5–3.7 for full provenance + UI.
+**Met:** 3.1–3.7 on branch; enable `OPPORTUNITIES_PARSE_ENABLED=true` in env for parse CTA in prod.
 
 ---
 

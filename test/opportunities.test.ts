@@ -118,6 +118,7 @@ describe("buildOpportunityBadges", () => {
       scrapeCount: 1,
       priceChanged: false,
       mileageChanged: false,
+      mileageUnknown: false,
       hasLead: false,
       hasMmr: true,
       isManualSubmission: false,
@@ -133,6 +134,7 @@ describe("buildOpportunityBadges", () => {
       scrapeCount: 3,
       priceChanged: true,
       mileageChanged: false,
+      mileageUnknown: false,
       hasLead: true,
       hasMmr: true,
       isManualSubmission: false,
@@ -152,6 +154,7 @@ describe("buildOpportunityBadges", () => {
       scrapeCount: 1,
       priceChanged: false,
       mileageChanged: false,
+      mileageUnknown: false,
       hasLead: false,
       hasMmr: false,
       isManualSubmission: true,
@@ -159,6 +162,21 @@ describe("buildOpportunityBadges", () => {
       candidateListingCount: null,
     });
     expect(badges).toContain("Manual submission");
+  });
+
+  it("marks mileage unknown when listing has no miles", () => {
+    const badges = buildOpportunityBadges({
+      scrapeCount: 1,
+      priceChanged: false,
+      mileageChanged: false,
+      mileageUnknown: true,
+      hasLead: false,
+      hasMmr: false,
+      isManualSubmission: true,
+      estimateFlags: { mileage: false, style: false, mmr: false },
+      candidateListingCount: null,
+    });
+    expect(badges).toContain("Mileage unknown");
   });
 });
 

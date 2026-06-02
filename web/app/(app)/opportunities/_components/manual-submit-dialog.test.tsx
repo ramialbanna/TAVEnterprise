@@ -81,6 +81,7 @@ describe("ManualSubmitDialog", () => {
       screen.getByLabelText(/listing url/i),
       "https://www.facebook.com/marketplace/item/123",
     );
+    await user.click(screen.getByRole("button", { name: /enter vehicle details manually/i }));
     await user.selectOptions(screen.getByLabelText(/region/i), "dallas_tx");
     await user.type(screen.getByLabelText(/^year$/i), "2020");
     await user.type(screen.getByLabelText(/^make$/i), "toyota");

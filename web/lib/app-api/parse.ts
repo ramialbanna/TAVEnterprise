@@ -95,6 +95,11 @@ function classifyError(code: string): ErrorKind | null {
     case "invalid_assignee":
     case "invalid_status":
     case "duplicate_listing_url":
+    case "parse_disabled":
+    case "unsupported_source":
+    case "fetch_failed":
+    case "fetch_timeout":
+    case "parse_failed":
       return "invalid";
     case "forbidden":
     case "claim_conflict":

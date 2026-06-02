@@ -8,7 +8,10 @@ import { upsertSourceRun, completeSourceRunSafe } from "../persistence/sourceRun
 import { insertRawListing } from "../persistence/rawListings";
 import { writeDeadLetter } from "../persistence/deadLetter";
 import { writeFilteredOut } from "../persistence/filteredOut";
-import { upsertNormalizedListing } from "../persistence/normalizedListings";
+import {
+  setNormalizedListingEntryMethod,
+  upsertNormalizedListing,
+} from "../persistence/normalizedListings";
 import { upsertVehicleCandidate } from "../persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
@@ -226,6 +229,14 @@ export async function ingestCore(
         await writeFilteredOut(db, env, { source, source_run_id: run_id, listing_url: listing.url, reason_code: "normalized_upsert_failed", details: { error: err instanceof Error ? err.message : String(err) }, raw_listing_id: rawId });
         rejected++;
         continue;
+      }
+
+      if (normResult.isNew) {
+        try {
+          await withRetry(() => setNormalizedListingEntryMethod(db, normResult.id, "scraper"));
+        } catch (err) {
+          logError("persistence", "ingest.entry_method_failed", err, listingCtx);
+        }
       }
 
       // D: dedupe — link to vehicle_candidate

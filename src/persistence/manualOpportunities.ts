@@ -1,7 +1,7 @@
 import type { AppUser } from "./users";
 import { getActiveUserById } from "./users";
 import type { SupabaseClient } from "./supabase";
-import { upsertNormalizedListing } from "./normalizedListings";
+import { setNormalizedListingEntryMethod, upsertNormalizedListing } from "./normalizedListings";
 import { getOpportunityDetail, type OpportunityDetail } from "./opportunities";
 import {
   initializeWorkflowAssignment,
@@ -137,6 +137,8 @@ export async function submitManualOpportunity(
     },
     null,
   );
+
+  await setNormalizedListingEntryMethod(db, upsert.id, "manual");
 
   const warnings: string[] = [];
   if (fields.mileage === undefined) warnings.push("mileage_unknown");

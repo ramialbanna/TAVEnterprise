@@ -1,6 +1,21 @@
 import type { NormalizedListingInput, NormalizedListingUpsertResult } from "../types/domain";
 import type { SupabaseClient } from "./supabase";
 
+export type NormalizedListingEntryMethod = "manual" | "scraper" | "import";
+
+/** Stamp how a listing entered the queue (Phase 3 provenance). */
+export async function setNormalizedListingEntryMethod(
+  db: SupabaseClient,
+  listingId: string,
+  entryMethod: NormalizedListingEntryMethod,
+): Promise<void> {
+  const { error } = await db
+    .from("normalized_listings")
+    .update({ entry_method: entryMethod })
+    .eq("id", listingId);
+  if (error) throw error;
+}
+
 export async function upsertNormalizedListing(
   db: SupabaseClient,
   listing: NormalizedListingInput,

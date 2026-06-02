@@ -165,6 +165,7 @@ export function buildOpportunityBadges(input: {
   scrapeCount: number;
   priceChanged: boolean;
   mileageChanged: boolean;
+  mileageUnknown: boolean;
   hasLead: boolean;
   hasMmr: boolean;
   isManualSubmission: boolean;
@@ -177,6 +178,7 @@ export function buildOpportunityBadges(input: {
   else badges.push(`Seen again #${input.scrapeCount - 1}`);
   if (input.priceChanged) badges.push("Price changed");
   if (input.mileageChanged) badges.push("Mileage changed");
+  if (input.mileageUnknown) badges.push("Mileage unknown");
   if (input.estimateFlags.mileage) badges.push("Estimated miles");
   if (input.estimateFlags.style) badges.push("Estimated style");
   if (input.estimateFlags.mmr) badges.push("Estimated MMR");
@@ -242,6 +244,7 @@ function mapToOpportunityRow(
     scrapeCount,
     priceChanged: listing.price_changed === true,
     mileageChanged: listing.mileage_changed === true,
+    mileageUnknown: listingMileage === null,
     hasLead,
     hasMmr,
     isManualSubmission,

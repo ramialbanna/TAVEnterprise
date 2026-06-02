@@ -29,6 +29,7 @@ import {
   type ApiResult,
 } from "./parse";
 import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
+import { parseParsedListingFields } from "./listing-parse";
 import { codeMessage } from "./missing-reason";
 import type {
   HistoricalSale,
@@ -39,6 +40,7 @@ import type {
   OpportunityListPage,
   OpportunityDetail,
   ManualSubmissionResult,
+  ParsedListingFields,
   AppUserSummary,
   AppUser,
   MutatableWorkflowStatus,
@@ -342,6 +344,14 @@ export async function getAppMe(): Promise<ApiResult<AppUser>> {
   const r = await getJson("me");
   if (r === FETCH_FAILED) return clientTransportError();
   return parseAppMe(r.status, r.json);
+}
+
+export async function parseListingUrl(
+  listingUrl: string,
+): Promise<ApiResult<ParsedListingFields>> {
+  const r = await postJson("opportunities/parse", { listingUrl });
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseParsedListingFields(r.status, r.json);
 }
 
 export async function submitManualOpportunity(

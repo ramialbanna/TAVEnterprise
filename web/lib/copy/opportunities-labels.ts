@@ -20,6 +20,7 @@ export const OPPORTUNITY_TYPE_LABELS = {
 export const BADGE_LABELS: Record<string, string> = {
   "Near miss": "Almost a deal",
   "Manual submission": "Submitted by team",
+  "Mileage unknown": "Mileage unknown",
 };
 
 /** Maps workflow status values to buyer-friendly labels. */

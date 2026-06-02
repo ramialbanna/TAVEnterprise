@@ -3,9 +3,16 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { listAppUsers, submitManualOpportunity, type ManualSubmissionRequest } from "@/lib/app-api/client";
+import {
+  listAppUsers,
+  parseListingUrl,
+  submitManualOpportunity,
+  type ManualSubmissionRequest,
+} from "@/lib/app-api/client";
+import type { ParsedListingFields } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -113,15 +120,50 @@ function isFormComplete(form: FormState): boolean {
   return isRequiredFieldMissing(form) === null && parseOptionalInt(form.year) !== undefined && parseOptionalInt(form.price) !== undefined;
 }
 
+function applyParsedFields(prev: FormState, parsed: ParsedListingFields): FormState {
+  const next: FormState = {
+    ...prev,
+    listingUrl: parsed.listingUrl,
+    source: parsed.source,
+  };
+  if (parsed.year !== undefined) next.year = String(parsed.year);
+  if (parsed.make) next.make = parsed.make;
+  if (parsed.model) next.model = parsed.model;
+  if (parsed.style) next.style = parsed.style;
+  if (parsed.price !== undefined) next.price = String(parsed.price);
+  if (parsed.mileage !== undefined) next.mileage = String(parsed.mileage);
+  return next;
+}
+
 export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClose?: () => void }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const usersQuery = useQuery({
     queryKey: queryKeys.appUsers,
     queryFn: listAppUsers,
     enabled: options.loadUsers,
+  });
+
+  const parseMutation = useMutation({
+    mutationFn: parseListingUrl,
+    onSuccess: (result) => {
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      setForm((prev) => applyParsedFields(prev, result.data));
+      setDetailsOpen(true);
+      if (result.data.warnings.length > 0) {
+        toast.message("Listing parsed with notes", {
+          description: result.data.warnings.join(" · "),
+        });
+      } else {
+        toast.success("Listing parsed — confirm region and submit");
+      }
+    },
   });
 
   const mutation = useMutation({
@@ -151,6 +193,7 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
       toast.success("Listing submitted");
 
       setForm(EMPTY_FORM);
+      setDetailsOpen(false);
       options.onSuccessClose?.();
 
       if (result.data.opportunity?.id) {
@@ -161,6 +204,19 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleParse() {
+    const url = form.listingUrl.trim();
+    if (!url) {
+      toast.error("Paste a listing URL first");
+      return;
+    }
+    parseMutation.mutate(url);
+  }
+
+  function openDetailsManually() {
+    setDetailsOpen(true);
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -179,16 +235,22 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
   }
 
   const users = usersQuery.data?.ok ? usersQuery.data.data : [];
-  const canSubmit = isFormComplete(form) && !mutation.isPending;
+  const canSubmit = detailsOpen && isFormComplete(form) && !mutation.isPending;
+  const mileageUnknown = !form.mileage.trim();
 
   return {
     form,
     updateField,
     handleSubmit,
+    handleParse,
+    openDetailsManually,
+    detailsOpen,
+    mileageUnknown,
     usersQuery,
     users,
     canSubmit,
     mutation,
+    parseMutation,
   };
 }
 
@@ -197,16 +259,22 @@ export function ManualSubmitFormFields({
   form,
   updateField,
   handleSubmit,
+  handleParse,
+  openDetailsManually,
+  detailsOpen,
+  mileageUnknown,
   usersQuery,
   users,
   canSubmit,
   mutation,
+  parseMutation,
   footer,
 }: ReturnType<typeof useManualSubmitForm> & {
   idPrefix?: string;
   footer: ReactNode;
 }) {
   const pid = (name: string) => (idPrefix ? `${idPrefix}-${name}` : name);
+  const parsing = parseMutation.isPending;
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
@@ -221,8 +289,38 @@ export function ManualSubmitFormFields({
           value={form.listingUrl}
           onChange={(e) => updateField("listingUrl", e.target.value)}
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={parsing || !form.listingUrl.trim()}
+            onClick={handleParse}
+          >
+            {parsing ? (
+              <>
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                Parsing…
+              </>
+            ) : (
+              "Parse listing"
+            )}
+          </Button>
+          {!detailsOpen ? (
+            <Button type="button" variant="ghost" className="text-muted-foreground" onClick={openDetailsManually}>
+              Enter vehicle details manually
+            </Button>
+          ) : null}
+        </div>
       </div>
 
+      {!detailsOpen ? (
+        <p className="text-sm text-muted-foreground">
+          Paste a Facebook Marketplace link and parse, or enter vehicle details manually before submitting.
+        </p>
+      ) : null}
+
+      {detailsOpen ? (
+        <>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor={pid("region")}>Region</Label>
@@ -316,14 +414,17 @@ export function ManualSubmitFormFields({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor={pid("mileage")}>Mileage</Label>
+          <Label htmlFor={pid("mileage")}>Mileage (optional)</Label>
           <Input
             id={pid("mileage")}
             inputMode="numeric"
-            placeholder="50000"
+            placeholder="Leave blank if unknown"
             value={form.mileage}
             onChange={(e) => updateField("mileage", e.target.value)}
           />
+          {mileageUnknown ? (
+            <p className="text-xs text-muted-foreground">Mileage unknown — queue will show a badge until miles are added.</p>
+          ) : null}
         </div>
       </div>
 
@@ -371,6 +472,8 @@ export function ManualSubmitFormFields({
           onChange={(e) => updateField("sellerNotes", e.target.value)}
         />
       </div>
+        </>
+      ) : null}
 
       {footer}
     </form>
