@@ -1,6 +1,6 @@
 /**
  * Cache + lock timing constants. Locked 2026-05-07.
- * See docs/archive/2026-05-doc-consolidation/cache-strategy.md for rationale and tuning notes.
+ * See archive/2026-05-doc-consolidation/cache-strategy.md for rationale and tuning notes.
  *
  * These are the single source of truth — both the MMR cache implementation
  * (Phase G) and the anti-stampede lock implementation (Phase G) read from

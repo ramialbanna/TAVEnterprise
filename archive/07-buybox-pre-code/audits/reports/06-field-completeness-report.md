@@ -1,4 +1,4 @@
-# Report 06 — Historical Field Completeness
+﻿# Report 06 — Historical Field Completeness
 
 **Punch item:** #6 · **Kit:** [`../06-field-completeness-audit.md`](../06-field-completeness-audit.md)
 **Date:** 2026-05-20 · **Re-audited:** 2026-05-22 · **Status:** Re-audited
@@ -157,7 +157,7 @@ feature on mileage from `purchase_outcomes` (see Report 07).
 
 Per-field completeness: **done (live, 12,904 rows).** Duplicate-pair verdicts:
 **done.** Field tags: **done** — to be reconciled into
-[`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1, which must
+[`../../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.1, which must
 account for the no-date / no-mileage / no-pipeline-link reality. F1–F3 are
 escalation-grade: they shrink MaxBuy's v1 feature set and need a charter /
-architecture review before Phase 1 (see [`STATUS.md`](../../../STATUS.md)).
+architecture review before Phase 1 (see [`STATUS.md`](../../../../docs/07-buybox/STATUS.md)).

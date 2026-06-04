@@ -1,9 +1,9 @@
-# Audit Kit 07 — Segment Support Matrix
+﻿# Audit Kit 07 — Segment Support Matrix
 
 **Punch-list item:** #7 · **Category:** Data Audit (read-only) · **Owner:** D ·
 **Closes risk:** R3 · **Status:** Kit ready — not yet executed.
-**Lands in:** [`../02-ARCHITECTURE.md`](../02-ARCHITECTURE.md) §5; routing rules
-in [`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §2 (`data_strength`).
+**Lands in:** [`../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §5; routing rules
+in [`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §2 (`data_strength`).
 
 **What this is:** A copy-paste-ready, read-only audit kit. It produces the
 segment row-count matrix and the minimum-N policy that drives `data_strength`.
@@ -66,7 +66,7 @@ against the actual mileage distribution):
 ```
 
 Note this is **coarser** than the 5,000-mile MMR cache bucket in
-[`../../03-api/intelligence-contracts.md`](../../03-api/intelligence-contracts.md)
+[`../../03-api/intelligence-contracts.md`](../../docs/03-api/intelligence-contracts.md)
 §A. Segment support needs broad bands for population; the MMR cache needs fine
 buckets for reuse. They are intentionally different — document that.
 
@@ -191,5 +191,5 @@ Base = ... ; missing dimension(s) = ... ; handling = ...
 ## 7. Definition of done
 
 Support-matrix CSV committed; minimum-N policy documented; the `data_strength`
-routing rule in [`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §2
+routing rule in [`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §2
 references the matrix. Effective-N column regenerated once Kit 10 fixes λ.

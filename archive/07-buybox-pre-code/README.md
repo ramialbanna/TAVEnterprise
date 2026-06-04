@@ -1,15 +1,15 @@
-# MaxBuy — Pre-Code Archive
+﻿# MaxBuy — Pre-Code Archive
 
 These documents supported the May 2026 pre-code phase: stakeholder alignment, read-only audits, and the Phase 0 historical backfill. **They are kept for audit trail only.**
 
 For active build work, use the docs in the parent folder:
 
-- [`../README.md`](../README.md)
-- [`../STATUS.md`](../STATUS.md)
-- [`../DATA-SUMMARY.md`](../DATA-SUMMARY.md)
-- [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
-- [`../TECHNICAL-SPEC.md`](../TECHNICAL-SPEC.md)
-- [`../WORKER-CONTRACT.md`](../WORKER-CONTRACT.md)
+- [`../README.md`](../../docs/07-buybox/README.md)
+- [`../STATUS.md`](../../docs/07-buybox/STATUS.md)
+- [`../DATA-SUMMARY.md`](../../docs/07-buybox/DATA-SUMMARY.md)
+- [`../ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md)
+- [`../TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md)
+- [`../WORKER-CONTRACT.md`](../../docs/07-buybox/WORKER-CONTRACT.md)
 
 ## What's here
 

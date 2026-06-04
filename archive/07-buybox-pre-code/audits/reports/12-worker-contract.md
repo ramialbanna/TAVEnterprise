@@ -1,4 +1,4 @@
-# Report 12 — `tav-intelligence-worker` MMR Contract (pinned)
+﻿# Report 12 — `tav-intelligence-worker` MMR Contract (pinned)
 
 **Punch item:** #12 · **Kit:** [`../12-worker-contract-pinning-plan.md`](../12-worker-contract-pinning-plan.md)
 **Contract version:** `mmr-v1` · **Pinned:** 2026-05-20 · **Status:** Executed —
@@ -105,7 +105,7 @@ The `data` body — `MmrResponseEnvelopeSchema`:
 
 ## 5. Safe-persist field list (R18)
 
-The MaxBuy decision-replay snapshot ([`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md)
+The MaxBuy decision-replay snapshot ([`../../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md)
 §1.4) stores **only** the normalized scalar set below — never the raw payload.
 
 **Safe to persist** — TAV-normalized / derived scalars, not licensed verbatim
@@ -130,7 +130,7 @@ snapshot. This is the vendor-confirmation half of punch-list item #14.
 
 `intelligence_worker_contract_version = "mmr-v1"`.
 
-Pin this literal in [`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md)
+Pin this literal in [`../../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md)
 §1.4 so every MaxBuy recommendation records the contract version that produced
 its MMR inputs. Bump to `mmr-v2` on any field add/remove/retype.
 
@@ -148,7 +148,7 @@ its MMR inputs. Bump to `mmr-v2` on any field add/remove/retype.
 
 Any change to this contract requires an ADR in `docs/01-architecture/adr/`,
 consistent with the change procedure in
-[`../../../03-api/intelligence-contracts.md`](../../../03-api/intelligence-contracts.md).
+[`../../../03-api/intelligence-contracts.md`](../../../../docs/03-api/intelligence-contracts.md).
 A change also bumps `intelligence_worker_contract_version`.
 
 ## 9. Definition of done — status

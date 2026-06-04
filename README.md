@@ -27,7 +27,8 @@ Key runtime pieces:
 - `workers/tav-intelligence-worker/` - service-bound Worker that owns Cox/Manheim credentials and valuation calls.
 - `web/` - Next.js App Router dashboard with Auth.js and same-origin `/api/app/*` proxy.
 - `supabase/` - schema and migrations.
-- `docs/` - current architecture, runbook, roadmap, ADRs, handoff, and archives.
+- `docs/` - current architecture, runbook, roadmap, ADRs, and handoff.
+- `archive/` - historical specs, audits, and superseded docs (outside `docs/` for leaner agent context).
 
 ## Active Docs
 
@@ -42,7 +43,7 @@ Key runtime pieces:
 - [docs/02-product/v2-opportunities.md](docs/02-product/v2-opportunities.md) - active v2 Opportunities product spec.
 - [docs/03-api/app-api.md](docs/03-api/app-api.md) - app API contract.
 - [docs/03-api/manheim-cox.md](docs/03-api/manheim-cox.md) - Cox/Manheim integration notes.
-- [docs/archive/2026-05-doc-consolidation/](docs/archive/2026-05-doc-consolidation/) - historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
+- [archive/README.md](archive/README.md) - historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
 
 ## Local Setup
 

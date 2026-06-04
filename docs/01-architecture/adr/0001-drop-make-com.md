@@ -4,11 +4,11 @@ Status: accepted (2026-05-09)
 
 ## Context
 
-The v0 TAV-AIP design (now archived at `docs/archive/2026-05-mvp/specs/PROJECT_SPEC.md`) routed Apify scraper output through a Make.com scenario, which then posted normalized items to the Cloudflare Worker `/normalize` endpoint with a bearer token (`NORMALIZER_SECRET`).
+The v0 TAV-AIP design (now archived at `archive/2026-05-mvp/specs/PROJECT_SPEC.md`) routed Apify scraper output through a Make.com scenario, which then posted normalized items to the Cloudflare Worker `/normalize` endpoint with a bearer token (`NORMALIZER_SECRET`).
 
 Since v1, the Worker has exposed `POST /ingest` (HMAC-SHA256 signed via `x-tav-signature`, Zod-validated, batch loop). Current operational documents - `docs/01-architecture/system-overview.md`, `docs/04-operations/runbook.md`, `docs/04-operations/handoff.md`, and `docs/05-process/followups.md` - make no reference to Make.com as an active dependency. The 2026-05-09 production cutover (`MANHEIM_LOOKUP_MODE=worker`, intel-prod Service-Binding-only) has no Make.com dependency.
 
-A small number of archived legacy docs (`PROJECT_SPEC.md`, `MANHEIM_INTEGRATION.md`, `DEAL_SCORE.md`) still describe Make.com as the integration bus. They are preserved under `docs/archive/2026-05-mvp/` as historical context only.
+A small number of archived legacy docs (`PROJECT_SPEC.md`, `MANHEIM_INTEGRATION.md`, `DEAL_SCORE.md`) still describe Make.com as the integration bus. They are preserved under `archive/2026-05-mvp/` as historical context only.
 
 ## Decision
 
@@ -56,6 +56,6 @@ Operational:
 
 - `docs/01-architecture/system-overview.md` §1, §3.2
 - `CLAUDE.md` §2 (four-concept rule)
-- `docs/archive/2026-05-mvp/specs/PROJECT_SPEC.md` (historical)
-- `docs/archive/2026-05-mvp/specs/MANHEIM_INTEGRATION.md` (historical)
-- `docs/archive/2026-05-mvp/specs/DEAL_SCORE.md` (historical)
+- `archive/2026-05-mvp/specs/PROJECT_SPEC.md` (historical)
+- `archive/2026-05-mvp/specs/MANHEIM_INTEGRATION.md` (historical)
+- `archive/2026-05-mvp/specs/DEAL_SCORE.md` (historical)

@@ -1,4 +1,4 @@
-# Report 07 — Segment Support Matrix
+﻿# Report 07 — Segment Support Matrix
 
 **Punch item:** #7 · **Kit:** [`../07-segment-support-matrix.md`](../07-segment-support-matrix.md)
 **Date:** 2026-05-20 · **Re-audited:** 2026-05-22 · **Status:** Re-audited
@@ -98,7 +98,7 @@ step (a decision, not a query): re-evaluate the base —
   key, and measure the match rate first.
 - Option C — investigate `purchase_outcomes.week_label` as the time anchor.
 
-Record the chosen base in [`../../02-ARCHITECTURE.md`](../../02-ARCHITECTURE.md)
+Record the chosen base in [`../../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md)
 §5 before Phase 1.
 
 ## 4. Minimum-N policy (proposed, year/make/model resolution)

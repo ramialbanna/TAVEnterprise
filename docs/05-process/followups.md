@@ -2,7 +2,7 @@
 
 Current open follow-ups only. The consolidated checklist lives in
 [NEXT_STEPS.md](../NEXT_STEPS.md). Historical completed items were archived at
-`docs/archive/2026-05-mvp/followups-legacy.md`.
+`archive/2026-05-mvp/followups-legacy.md`.
 
 ## Product / Data
 

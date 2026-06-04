@@ -3,7 +3,7 @@
  *
  * Single-purpose entrypoint that handlers (and the future bulk replay job)
  * call to retrieve an `MmrResponseEnvelope`. It owns the cache-then-lock
- * dance defined in `docs/archive/2026-05-doc-consolidation/manheim-integration-architecture.md §4`:
+ * dance defined in `archive/2026-05-doc-consolidation/manheim-integration-architecture.md §4`:
  *
  *   1. Resolve mileage via the shared inferred-mileage helper.
  *   2. Derive the cache key (VIN- or YMM-namespaced).
@@ -14,8 +14,8 @@
  *      - lock held by another → wait, re-read cache; throw `CacheLockError`
  *        on timeout.
  *
- * Event vocabulary (locked 2026-05-07; see docs/archive/2026-05-doc-consolidation/api-error-handling.md and
- * docs/archive/2026-05-doc-consolidation/manheim-runtime-behavior.md):
+ * Event vocabulary (locked 2026-05-07; see archive/2026-05-doc-consolidation/api-error-handling.md and
+ * archive/2026-05-doc-consolidation/manheim-runtime-behavior.md):
  *   mmr.lookup.start        — entry, before any I/O
  *   mmr.lookup.cache_hit    — any cache read returned a populated envelope
  *   mmr.lookup.cache_miss   — initial cache read returned null

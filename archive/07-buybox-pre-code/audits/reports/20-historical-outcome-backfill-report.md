@@ -1,8 +1,8 @@
-# Report 20 — Phase 0 Historical Outcome Backfill (Execution)
+﻿# Report 20 — Phase 0 Historical Outcome Backfill (Execution)
 
 **Punch-list item:** #20 · **Category:** Data backfill (Phase 0 gate) · **Owner:** D ·
 **Closes:** the [`05-PUNCH-LIST.md`](../../05-PUNCH-LIST.md) item-20 gate · **Status:** Backfill executed — staged, ready to load.
-**Lands in:** [`maxbuy.md`](maxbuy.md) (narrative) · field tags → [`../../03-TECHNICAL-SPEC.md`](../../03-TECHNICAL-SPEC.md) §1.1 · feeds Audit Kits [`../06-field-completeness-audit.md`](../06-field-completeness-audit.md), [`../07-segment-support-matrix.md`](../07-segment-support-matrix.md), [`../09-mmr-quality-residual-audit.md`](../09-mmr-quality-residual-audit.md), [`../10-decay-rate-validation-plan.md`](../10-decay-rate-validation-plan.md).
+**Lands in:** [`maxbuy.md`](maxbuy.md) (narrative) · field tags → [`../../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.1 · feeds Audit Kits [`../06-field-completeness-audit.md`](../06-field-completeness-audit.md), [`../07-segment-support-matrix.md`](../07-segment-support-matrix.md), [`../09-mmr-quality-residual-audit.md`](../09-mmr-quality-residual-audit.md), [`../10-decay-rate-validation-plan.md`](../10-decay-rate-validation-plan.md).
 
 **Date:** 2026-05-22 · **Status:** Phase 0 only · **Repo prefix:** `TAV-BB`
 

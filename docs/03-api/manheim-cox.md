@@ -206,7 +206,7 @@ Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`
 
 ## 8. Related documents
 
-- `docs/archive/2026-05-doc-consolidation/uat-staging/manheim-uat-validation-plan.md` — historical staging/UAT test matrix and pass/fail gates.
-- `docs/archive/2026-05-doc-consolidation/manheim-integration-architecture.md` — overall layered architecture (vendor-agnostic).
-- `docs/archive/2026-05-doc-consolidation/manheim-runtime-behavior.md` — runtime request flow.
+- `archive/2026-05-mvp/uat-staging/manheim-uat-validation-plan.md` — historical staging/UAT test matrix and pass/fail gates.
+- `archive/2026-05-doc-consolidation/manheim-integration-architecture.md` — overall layered architecture (vendor-agnostic).
+- `archive/2026-05-doc-consolidation/manheim-runtime-behavior.md` — runtime request flow.
 - `docs/04-operations/runbook.md` — staging deploy sequence and provisioning commands.

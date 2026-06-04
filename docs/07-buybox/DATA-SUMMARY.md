@@ -81,4 +81,4 @@ Live MMR path (separate from history): `valuation_snapshots` hit rate ~11%; 71% 
 ## Raw export (not in git)
 
 CSV rebuild lives outside the repo: `…/Data for BuyBox - IDMS Reports/BuyBox Output/buybox_master.csv`.  
-Load runbook archived at [`archive/pre-code/audits/reports/20-backfill-load-sql-package.md`](archive/pre-code/audits/reports/20-backfill-load-sql-package.md).
+Load runbook archived at [`../../archive/07-buybox-pre-code/audits/reports/20-backfill-load-sql-package.md`](../../archive/07-buybox-pre-code/audits/reports/20-backfill-load-sql-package.md).

@@ -1,8 +1,8 @@
-# Spike Plan 10 — Decay-Rate Validation
+﻿# Spike Plan 10 — Decay-Rate Validation
 
 **Punch-list item:** #10 · **Category:** Data Audit / backtest (read-only) ·
 **Owner:** D · **Closes risk:** R6 · **Status:** Plan ready — not yet executed.
-**Lands in:** [`../02-ARCHITECTURE.md`](../02-ARCHITECTURE.md) §5; chosen λ
+**Lands in:** [`../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §5; chosen λ
 committed to the benchmark view definitions.
 
 **What this is:** A read-only backtest plan. It specifies the experiment that

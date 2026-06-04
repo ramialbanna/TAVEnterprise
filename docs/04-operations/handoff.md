@@ -231,7 +231,7 @@ Branch hygiene:
 
 - Staging-strip cleanup is intentionally a separate PR. Do not mix it with docs cleanup.
 - `.dev.vars.example` documents Cox client_credentials as the default path; legacy Manheim password-grant fields remain commented for rollback.
-- Historical archive files may contain old Make.com, UAT, or staging language; treat files under `docs/archive/2026-05-doc-consolidation/` as historical.
+- Historical archive files may contain old Make.com, UAT, or staging language; treat files under `archive/2026-05-doc-consolidation/` as historical.
 - `AGENTS.md` may regenerate local claude-mem context; do not stage it as product work.
 - 11 `source_runs` rows stuck in `running` — investigate if they predate the truncated-status fix.
 - Supabase migration registry missing formal entries for repo migrations 0040–0043 (objects live; registry out of sync).
@@ -253,4 +253,4 @@ RuFlo / claude-flow autopilot caused unauthorized commits and PR merge activity 
 - `docs/06-platform/README.md` - v2/v3 buying-side platform control docs.
 - `docs/03-api/app-api.md` - app API.
 - `docs/03-api/manheim-cox.md` - Cox/Manheim notes.
-- `docs/archive/2026-05-doc-consolidation/` - historical MVP artifacts.
+- `archive/2026-05-doc-consolidation/` - historical MVP artifacts.

@@ -1,8 +1,8 @@
-# MaxBuy — Leadership Brief
+﻿# MaxBuy — Leadership Brief
 
 **Date:** 2026-05-20 · **Status:** Approved direction · **Repo prefix:** `TAV-BB` · **Working name:** MaxBuy
 **Audience:** TAV ownership, operators, implementation leads
-**Companion docs:** [`01-CHARTER.md`](01-CHARTER.md) · [`ARCHITECTURE.md`](../../ARCHITECTURE.md) · [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md)
+**Companion docs:** [`01-CHARTER.md`](01-CHARTER.md) · [`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) · [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md)
 
 ---
 
@@ -28,7 +28,7 @@ expected_net_gross    = expected_sale_price − purchase_or_ask − expected_tra
 recommended_max_buy   = expected_sale_price − target_net_gross  − expected_transport − expected_expenses
 ```
 
-The primary learning target is **sale price as a percentage of MMR**, not raw dollars — this normalizes against wholesale market movement so MaxBuy adapts when the market rises or falls. v2 ML training also evaluates a **residual-dollar target** in parallel to detect MMR bias at price extremes ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) §3).
+The primary learning target is **sale price as a percentage of MMR**, not raw dollars — this normalizes against wholesale market movement so MaxBuy adapts when the market rises or falls. v2 ML training also evaluates a **residual-dollar target** in parallel to detect MMR bias at price extremes ([`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §3).
 
 ## What TAV already has (the unfair advantage)
 
@@ -119,7 +119,7 @@ The following block code. They are detailed in [`01-CHARTER.md`](01-CHARTER.md) 
 
 ## Interfaces and architecture (one-paragraph version)
 
-MaxBuy is **standalone but not isolated**: its own deployable, reusing the TAV-AIP spine. It is a **separate Cloudflare Worker** that exposes one endpoint (`POST /maxbuy/evaluate`); it **reuses** the existing `tav-intelligence-worker` for MMR (VIN-first, YMM fallback, KV cache, contract version-pinned), **reuses Supabase** with new tables added under the `tav` schema (additive — no breaking changes), and **reuses Google-domain auth**. The only genuinely new infrastructure is an **offline scheduled Python pipeline** (cron-style; Cloud Run / Fly / Modal) that weekly ingests sale outcomes, rebuilds versioned feature/benchmark views, trains the shadow GBM, runs backtests, and produces a hashed artifact. Buyer-facing Worker code never trains. Full details in [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
+MaxBuy is **standalone but not isolated**: its own deployable, reusing the TAV-AIP spine. It is a **separate Cloudflare Worker** that exposes one endpoint (`POST /maxbuy/evaluate`); it **reuses** the existing `tav-intelligence-worker` for MMR (VIN-first, YMM fallback, KV cache, contract version-pinned), **reuses Supabase** with new tables added under the `tav` schema (additive — no breaking changes), and **reuses Google-domain auth**. The only genuinely new infrastructure is an **offline scheduled Python pipeline** (cron-style; Cloud Run / Fly / Modal) that weekly ingests sale outcomes, rebuilds versioned feature/benchmark views, trains the shadow GBM, runs backtests, and produces a hashed artifact. Buyer-facing Worker code never trains. Full details in [`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md).
 
 ## What's deferred (do not scope-creep)
 

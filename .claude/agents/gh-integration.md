@@ -34,7 +34,7 @@ You are the **gh-integration** subagent for TAV-VAIP. You own the GitHub surface
 - `gh issue list --state open --label <label>` — partition by TAV layer when summarizing.
 
 ### Comment / review
-- Post the verification report (from `docs/archive/2026-05-doc-consolidation/verification-template.md`) as a PR comment via `gh pr comment <n> --body-file <path>`.
+- Post the verification report (from `archive/2026-05-doc-consolidation/verification-template.md`) as a PR comment via `gh pr comment <n> --body-file <path>`.
 - Never approve your own work. Never dismiss another reviewer's blocker.
 
 ### Release notes

@@ -1,6 +1,6 @@
-# MaxBuy — Project Charter
+﻿# MaxBuy — Project Charter
 
-**What this is / who it's for:** The business charter for MaxBuy, the ML-driven max-buy-price recommendation engine being built inside TAV-AIP. It defines the mission, scope, non-goals, **measurable acceptance criteria** (including launch-gating adoption KPIs), and the **business decisions that must be resolved before code is written**. Audience: TAV ownership (decision owner), product/implementation lead, and the solo dev. Companion docs: [`00-LEADERSHIP-BRIEF.md`](00-LEADERSHIP-BRIEF.md) · [`ARCHITECTURE.md`](../../ARCHITECTURE.md) · [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).
+**What this is / who it's for:** The business charter for MaxBuy, the ML-driven max-buy-price recommendation engine being built inside TAV-AIP. It defines the mission, scope, non-goals, **measurable acceptance criteria** (including launch-gating adoption KPIs), and the **business decisions that must be resolved before code is written**. Audience: TAV ownership (decision owner), product/implementation lead, and the solo dev. Companion docs: [`00-LEADERSHIP-BRIEF.md`](00-LEADERSHIP-BRIEF.md) · [`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) · [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) · [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md) · [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).
 
 **Date:** 2026-05-20 · **Status:** Pre-code · **Repo prefix:** `TAV-BB`
 
@@ -22,7 +22,7 @@ It is **not** a generic valuation book. MMR stays the external market anchor; Ma
 |---|---|
 | Stop overbidding under auction time pressure | A buyer has 15–30s per lane vehicle; emotional momentum drives overpay. |
 | Make TAV's own clearing behavior the authority, not a third-party book | MMR is biased per-segment for TAV's actual portfolio; MaxBuy corrects for it. |
-| Convert lookups into auditable buyer work items (Opportunities) | Every recommendation must be reconstructable later — see [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §3 Decision Replay. |
+| Convert lookups into auditable buyer work items (Opportunities) | Every recommendation must be reconstructable later — see [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §3 Decision Replay. |
 | Improve weekly from real sale outcomes under strict governance | The model must get better without silently drifting into bad buys. |
 
 ## 3. Scope
@@ -38,17 +38,17 @@ It is **not** a generic valuation book. MMR stays the external market anchor; Ma
 ### In scope — v2 (shadow ML)
 - Offline-trained gradient-boosted model (XGBoost/LightGBM) predicting `sale_pct_mmr`, `net_gross`, P(hit target gross), `days_to_sale`.
 - **Dual training target:** train both `sale_pct_mmr` and a residual-dollar / raw-price target in parallel; compare residuals by price band, MMR source, age, mileage. This detects MMR bias at price extremes that pure %MMR normalization hides.
-- Shadow mode first; promotion only through the governance gate (see [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §4).
+- Shadow mode first; promotion only through the governance gate (see [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §4).
 
 ### Enterprise / later (explicitly deferred)
-- Per-VIN live inference service (Option C — see [`ARCHITECTURE.md`](../../ARCHITECTURE.md) §3); only if backtests prove it beats segment lookups on decision metrics.
+- Per-VIN live inference service (Option C — see [`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §3); only if backtests prove it beats segment lookups on decision metrics.
 - Holding-cost-per-day subtraction from net (owner deferred — §7).
 - TAV's own market-drift index (public Manheim Index ships first; internal index later).
 - Pass-on / counterfactual buy-decision learning (v1/v2 are explicitly **bought-unit** performance models — §6, R4).
 
 ### Non-goals
 - Not a public app, not a report, not a static rules box.
-- No static preferred-make/model/region filters. Hard gates are for legal/risk and confidence, never taste — see [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §5.
+- No static preferred-make/model/region filters. Hard gates are for legal/risk and confidence, never taste — see [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §5.
 - Does not become a fifth four-concept source-of-truth. A MaxBuy lookup is not a Raw/Normalized Listing, Vehicle Candidate, or Lead; it may *create* an Opportunity, but the snapshot stays separate and auditable.
 - Never displays licensed Manheim raw payloads; only normalized, contract-allowed MMR fields are persisted.
 
@@ -74,8 +74,8 @@ Two classes of criteria. **Resolved** criteria have a fixed pass/fail rule. **Op
 | **AC-2** | Complete recommendation packet | Every recommendation includes expected sale price, expected net gross, recommended max buy, data-strength, reason codes, and the model/benchmark version. 0 missing fields. | Per lookup |
 | **AC-3** | Max-buy formula validation | Fixed worked examples reproduce the documented max-buy math exactly (e.g. MMR 18,000 → max buy 15,530 at the doc's inputs). 100% match. | CI / pre-release |
 | **AC-4** | Historical backtest exists | Benchmark recommendations are backtested against actual sale outcomes by segment and sale week; report produced. | Pre-release + weekly |
-| **AC-5** | ML stays shadow-only until it earns promotion | No ML output reaches buyers before passing the promotion gate ([`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §4). 0 violations. | Continuous |
-| **AC-6** | Snapshot preserved on Opportunity creation | When a lookup creates an Opportunity, the full immutable snapshot persists and is replayable ([`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §3). 100%. | Per Opportunity |
+| **AC-5** | ML stays shadow-only until it earns promotion | No ML output reaches buyers before passing the promotion gate ([`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §4). 0 violations. | Continuous |
+| **AC-6** | Snapshot preserved on Opportunity creation | When a lookup creates an Opportunity, the full immutable snapshot persists and is replayable ([`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §3). 100%. | Per Opportunity |
 | **AC-7** | No secret/licensed-data leakage | No secrets, licensed valuation figures, or raw Manheim payloads are committed, logged, or pasted. 0 occurrences (CI scan + review). | Continuous |
 | **AC-8** | Decision replay completeness | A past recommendation can be reconstructed from pinned versioned inputs (MMR snapshot, benchmark/feature-view version, feature vector, policy/scoring version, model artifact hash). 100% reconstructable. | Continuous |
 
@@ -87,7 +87,7 @@ These prove MaxBuy is *used* and *trusted*, not just that it produces output. **
 |---|---|---|---|---|
 | **KPI-1** | Buyer lookup rate | Distinct active buyers performing ≥1 MaxBuy lookup / total active buyers. | Weekly | **Gates Phase 2 → Phase 3.** Owner-set floor; recommended default ≥ 90% active utilization. |
 | **KPI-2** | Lookup-to-buy conversion | Acquisitions with a prior MaxBuy lookup / total acquisitions. | Rolling 4 weeks | **Gates Phase 4.** Baseline measured month 1; floor set month 2. |
-| **KPI-3** | Override rate + reason distribution | Overrides / total verdicts shown, broken down by structured reason code ([`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §2). | Weekly | No fixed target; sustained high "Bought despite Pass" is an investigation trigger. |
+| **KPI-3** | Override rate + reason distribution | Overrides / total verdicts shown, broken down by structured reason code ([`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §2). | Weekly | No fixed target; sustained high "Bought despite Pass" is an investigation trigger. |
 | **KPI-4** | Actual-vs-predicted sale error (bought units) | MAPE of predicted vs actual sale price on acquired vehicles. | Rolling 8 sale weeks | **Gates ML promotion (DEC-2).** Master spec proposes MAPE < 4.2%; validate achievability on real backtest before committing. |
 | **KPI-5** | Gross-hit rate vs target net gross | Share of acquisitions whose realized net gross ≥ target net gross. | Rolling 8 sale weeks | Depends on DEC-1; cannot evaluate until target net gross policy exists. |
 
@@ -97,18 +97,18 @@ These prove MaxBuy is *used* and *trusted*, not just that it produces output. **
 
 (Full register in [`04-RISK-REGISTER.md`](04-RISK-REGISTER.md).)
 
-- **Survivorship / pass-on bias (R4):** v1/v2 are **bought-unit** performance models. They predict performance *conditional on TAV buying*, not whether passed cars were good buys. This is acceptable **only** because stated explicitly. TAV clears ~97%, so historical no-sale backfill is low priority; evaluated-but-not-bought logging still begins day one for future learning ([`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §1.5).
+- **Survivorship / pass-on bias (R4):** v1/v2 are **bought-unit** performance models. They predict performance *conditional on TAV buying*, not whether passed cars were good buys. This is acceptable **only** because stated explicitly. TAV clears ~97%, so historical no-sale backfill is low priority; evaluated-but-not-bought logging still begins day one for future learning ([`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.5).
 - **MMR inherited bias (R1):** MaxBuy can inherit MMR's per-segment error and disguise it as TAV edge. Mitigated by storing MMR method/source/cache-age/VIN-vs-YMM on every recommendation and monitoring residuals. v2 ML adds a residual-dollar target alongside %MMR.
 - **Goodhart on target gross:** optimizing only for target-gross hits can starve fast-turn inventory. The verdict should distinguish high-gross vs fast-turn vs inventory-fill, not collapse all value into one number.
 
 ## 7. Decisions required before implementation
 
-Every open **business** decision before code. Recommended defaults are recommendations only — the owner confirms before code. (Architecture/data spikes are tracked in [`ARCHITECTURE.md`](../../ARCHITECTURE.md); schema/gate mechanics in [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md); execution order in [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).)
+Every open **business** decision before code. Recommended defaults are recommendations only — the owner confirms before code. (Architecture/data spikes are tracked in [`ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md); schema/gate mechanics in [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md); execution order in [`05-PUNCH-LIST.md`](05-PUNCH-LIST.md).)
 
 | ID | Punch-list # | Decision | Recommended default | Owner | Status |
 |---|---|---|---|---|---|
-| **DEC-1** | 1 | **Target net gross policy:** the required net the max-buy floor subtracts. | v1 uses one company-wide default target net gross of **$800 per unit**, versioned in `tav.maxbuy_policy` ([`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §1.3). Segment/source/price-band targets are deferred until outcome data shows the need. | TAV Ownership | CONFIRMED |
-| **DEC-2** | 2 | **Promotion gate:** proof required before ML can become buyer-facing. | **Confirmed:** ML stays shadow-only until it proves, over at least **8 recent sale weeks**, that it improves max-buy decisions versus the benchmark by protecting the **$800 target net gross**, reducing overbid/loss cases, and avoiding regression in major vehicle segments. Promotion requires documented human approval. Mechanics in [`TECHNICAL-SPEC.md`](../../TECHNICAL-SPEC.md) §4. | Product Mgmt | CONFIRMED |
+| **DEC-1** | 1 | **Target net gross policy:** the required net the max-buy floor subtracts. | v1 uses one company-wide default target net gross of **$800 per unit**, versioned in `tav.maxbuy_policy` ([`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.3). Segment/source/price-band targets are deferred until outcome data shows the need. | TAV Ownership | CONFIRMED |
+| **DEC-2** | 2 | **Promotion gate:** proof required before ML can become buyer-facing. | **Confirmed:** ML stays shadow-only until it proves, over at least **8 recent sale weeks**, that it improves max-buy decisions versus the benchmark by protecting the **$800 target net gross**, reducing overbid/loss cases, and avoiding regression in major vehicle segments. Promotion requires documented human approval. Mechanics in [`TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §4. | Product Mgmt | CONFIRMED |
 | **DEC-3** | 4 | **Confidence semantics:** display "confidence" or "data strength"? Allow probability-style values? | **Confirmed:** display **data strength** only. Never show percentage-style confidence in v1. Low data strength may still return a useful result, but caps the verdict at **Review** and cannot produce Buy or Strong Buy. | Product Mgmt | CONFIRMED |
 | **DEC-4** | 5 | **Hard gates:** which conditions are absolute legal/risk exclusions vs low-confidence review routing. | **Confirmed force-PASS gates:** branded title including rebuilt/lemon/manufacturer buyback, salvage, flood, frame/structural damage, odometer rollback/discrepancy/not-actual miles, open recall/stop-sale when available, arbitration or adverse announcement flags, and source-restricted vehicles. MMR missing and weak YMM fallback remain data-quality Review routes unless ownership later promotes them to hard gates. | TAV Ownership | CONFIRMED |
 

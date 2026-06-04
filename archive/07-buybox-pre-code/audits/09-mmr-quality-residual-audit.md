@@ -1,9 +1,9 @@
-# Audit Kit 09 — MMR Quality & Residuals
+﻿# Audit Kit 09 — MMR Quality & Residuals
 
 **Punch-list item:** #9 · **Category:** Data Audit (read-only) · **Owner:** D ·
 **Closes risk:** R1 · **Status:** Kit ready — not yet executed.
-**Lands in:** [`../02-ARCHITECTURE.md`](../02-ARCHITECTURE.md) §5;
-[`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.4 (MMR fields on replay).
+**Lands in:** [`../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §5;
+[`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.4 (MMR fields on replay).
 
 **What this is:** A copy-paste-ready, read-only audit kit. It measures how good
 TAV's MMR history is and how far actual sale prices land from the day-of MMR.

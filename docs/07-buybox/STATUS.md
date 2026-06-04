@@ -67,7 +67,7 @@ Legend: ✅ Done · ⚠️ In progress · ⬜ Open · 📋 Design done, code pen
 | 19 | MarketCheck enrichment spike | D | ⚠️ Interim; live API checks pending |
 | 20 | Historical outcome backfill | D | ✅ 57,228 rows loaded 2026-05-22 |
 
-Full item definitions: [`archive/pre-code/05-PUNCH-LIST.md`](archive/pre-code/05-PUNCH-LIST.md)
+Full item definitions: [`../../archive/07-buybox-pre-code/05-PUNCH-LIST.md`](../../archive/07-buybox-pre-code/05-PUNCH-LIST.md)
 
 ---
 
@@ -118,4 +118,4 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 | 5 | ML promotion governance | ⬜ P10 |
 | 6 | Per-VIN hybrid (optional) | ⬜ Future |
 
-Full phase detail: [`archive/pre-code/00-LEADERSHIP-BRIEF.md`](archive/pre-code/00-LEADERSHIP-BRIEF.md)
+Full phase detail: [`../../archive/07-buybox-pre-code/00-LEADERSHIP-BRIEF.md`](../../archive/07-buybox-pre-code/00-LEADERSHIP-BRIEF.md)

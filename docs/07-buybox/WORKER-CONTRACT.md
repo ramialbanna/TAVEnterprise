@@ -5,7 +5,7 @@
 
 **Source files:** `src/types/intelligence.ts` · `workers/tav-intelligence-worker/src/services/mmrLookup.ts`
 
-Companion: [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §1.4 (replay pins) · Full pre-code report: [`archive/pre-code/audits/reports/12-worker-contract.md`](archive/pre-code/audits/reports/12-worker-contract.md)
+Companion: [`TECHNICAL-SPEC.md`](TECHNICAL-SPEC.md) §1.4 (replay pins) · Full pre-code report: [`../../archive/07-buybox-pre-code/audits/reports/12-worker-contract.md`](../../archive/07-buybox-pre-code/audits/reports/12-worker-contract.md)
 
 ---
 

@@ -163,7 +163,7 @@ Re-run the earlier buybox solution-evaluation weighted rubric with **v1 adoption
 
 ## 7. Architecture-layer risks
 
-Full register in [`archive/pre-code/04-RISK-REGISTER.md`](archive/pre-code/04-RISK-REGISTER.md). The architecture-class risks owned by this document:
+Full register in [`../../archive/07-buybox-pre-code/04-RISK-REGISTER.md`](../../archive/07-buybox-pre-code/04-RISK-REGISTER.md). The architecture-class risks owned by this document:
 
 | ID | Severity | Issue | Mitigation in this doc |
 |---|---|---|---|

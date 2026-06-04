@@ -1,9 +1,9 @@
-# Audit Kit 06 — Historical Field Completeness
+﻿# Audit Kit 06 — Historical Field Completeness
 
 **Punch-list item:** #6 · **Category:** Data Audit (read-only) · **Owner:** D ·
 **Closes risk:** R17 · **Status:** Kit ready — not yet executed.
-**Lands in:** [`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.1 (field
-tags) · [`../02-ARCHITECTURE.md`](../02-ARCHITECTURE.md) §5.
+**Lands in:** [`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.1 (field
+tags) · [`../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §5.
 
 **What this is:** A copy-paste-ready, read-only audit kit. It tells the dev
 exactly which queries to run and how to write the report. It creates no code,
@@ -50,7 +50,7 @@ purchase_channel, selling_channel, week_label, buyer_id, closer_id,
 cot_city, cot_state, import_batch_id, import_fingerprint, created_at
 ```
 
-Before running, open [`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.1
+Before running, open [`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.1
 and list every **proposed** `purchase_outcomes` addition. For each proposed
 field, decide if it maps to an existing column above (audit it directly) or is
 genuinely new (tag it `future-only` by definition and note the first source
@@ -215,5 +215,5 @@ schema alone and must be resolved:
 ## 7. Definition of done
 
 Per-field null-rate table committed alongside this doc; field tags in
-[`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.1 confirmed against the
+[`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.1 confirmed against the
 audit; NULL-handling decision recorded for every NULL-heavy modeled field.

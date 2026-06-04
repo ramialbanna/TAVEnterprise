@@ -1,9 +1,9 @@
-# Spike Plan 12 — `tav-intelligence-worker` Contract Pinning
+﻿# Spike Plan 12 — `tav-intelligence-worker` Contract Pinning
 
 **Punch-list item:** #12 · **Category:** Architecture Spike (no production code) ·
 **Owner:** D · **Closes risk:** R9 · **Status:** Plan ready — not yet executed.
-**Lands in:** [`../02-ARCHITECTURE.md`](../02-ARCHITECTURE.md) §4.2;
-[`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §2 (versioned API contract)
+**Lands in:** [`../02-ARCHITECTURE.md`](../../docs/07-buybox/ARCHITECTURE.md) §4.2;
+[`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §2 (versioned API contract)
 and §1.4 (`intelligence_worker_contract_version`).
 
 **What this is:** A read-only investigation plan. It produces a pinned contract
@@ -37,7 +37,7 @@ benchmark — and every decision replayed against it — is corrupted. This spik
 
 ## 3. Existing contract surface — start here
 
-[`../../03-api/intelligence-contracts.md`](../../03-api/intelligence-contracts.md)
+[`../../03-api/intelligence-contracts.md`](../../docs/03-api/intelligence-contracts.md)
 already freezes four seams: **A** `cache_key` derivation, **B** `segment_key`
 derivation, **C** user context, **D** `force_refresh` authorization. Those are
 inputs and identity — they are **not** the MMR response body.
@@ -86,7 +86,7 @@ Split every response field into:
 - **must not persist** — raw licensed vendor payload / distribution detail
   beyond what TAV is licensed to retain.
 
-The MaxBuy decision-replay snapshot ([`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md)
+The MaxBuy decision-replay snapshot ([`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md)
 §1.4) stores **only** the safe-to-persist set plus method/fallback/cache-age/
 timestamp metadata. Verify the split against vendor terms with the owner
 (this is the owner-confirmation half of punch-list item #14, retention split).
@@ -94,7 +94,7 @@ timestamp metadata. Verify the split against vendor terms with the owner
 ### 4.4 Version and pin
 
 Assign `intelligence_worker_contract_version` (e.g. `mmr-v1`). Pin the value in
-[`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.4 so every MaxBuy
+[`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.4 so every MaxBuy
 recommendation records which contract version produced its inputs.
 
 ### 4.5 Compatibility-test design
@@ -149,7 +149,7 @@ consistent with docs/03-api/intelligence-contracts.md.
 ## 7. Definition of done
 
 Contract document committed; `intelligence_worker_contract_version` value
-pinned in [`../03-TECHNICAL-SPEC.md`](../03-TECHNICAL-SPEC.md) §1.4;
+pinned in [`../03-TECHNICAL-SPEC.md`](../../docs/07-buybox/TECHNICAL-SPEC.md) §1.4;
 compatibility-test design recorded and scheduled for Phase 1 CI; safe-persist
 field list confirmed against vendor terms with the owner. No licensed payload
 appears in the committed contract document or any fixture.

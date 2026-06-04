@@ -49,10 +49,10 @@ Branches used: `TAV-MVP-phase-0-schema-reconcile`, `TAV-BB-phase-1-decay-backtes
 | Hard gates (DEC-4) | Title/salvage/flood/structural/odometer/recall/arbitration/source — force PASS |
 | Decay λ (Phase 1) | **180 days** — see decay report |
 
-Full charter and punch-list detail: [`archive/pre-code/`](archive/pre-code/)
+Full charter and punch-list detail: [`../../archive/07-buybox-pre-code/`](../../archive/07-buybox-pre-code/)
 
 ---
 
 ## Archive
 
-Pre-code audit kits, backfill runbooks, risk register, and stakeholder briefs live under [`archive/pre-code/`](archive/pre-code/). Kept for audit trail; not needed for day-to-day build work.
+Pre-code audit kits, backfill runbooks, risk register, and stakeholder briefs live under [`../../archive/07-buybox-pre-code/`](../../archive/07-buybox-pre-code/). Kept for audit trail; not needed for day-to-day build work.

@@ -2,7 +2,7 @@
 """Walk-forward decay half-life backtest for MaxBuy benchmark views.
 
 Read-only offline analysis on tav.purchase_outcomes export (CSV).
-See docs/07-buybox/archive/pre-code/audits/10-decay-rate-validation-plan.md
+See archive/07-buybox-pre-code/audits/10-decay-rate-validation-plan.md
 """
 
 from __future__ import annotations

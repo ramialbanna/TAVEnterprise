@@ -2,9 +2,9 @@
 
 This folder separates current project truth from historical context.
 
-Use the numbered folders for active development. Files under `docs/archive/` are
-preserved for history and should not be treated as current instructions unless a
-current doc links to them explicitly.
+Use the numbered folders for active development. Historical material lives in
+[`../archive/`](../archive/) (outside this folder) and should not be treated as
+current instructions unless an active doc links to it explicitly.
 
 **Start here for what to do next:** [NEXT_STEPS.md](NEXT_STEPS.md)  
 **MaxBuy + workflow/UI build plan (Cursor):** [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md)  
@@ -52,7 +52,6 @@ current doc links to them explicitly.
 - [Business Requirements](06-platform/01-business-requirements.md) — business rules tagged by milestone.
 - [Open Questions Log](06-platform/13-open-questions-log.md) — unresolved decisions that must not be guessed during implementation.
 
-## Archive
+## Archive (repo root)
 
-- [2026-05 MVP Archive](archive/2026-05-mvp/) — historical MVP plans, specs, handoffs, staging/UAT notes, and retired scripts.
-- [2026-05 Doc Consolidation Archive](archive/2026-05-doc-consolidation/) — detailed docs superseded by the current docs spine.
+- [Documentation archive](../archive/README.md) — MVP history, doc consolidation, MaxBuy pre-code audits (not indexed for Cursor context by default).
