@@ -1583,6 +1583,39 @@ describe("POST /app/opportunities/:id/notes", () => {
       "listing-1",
       closer,
       "Seller wants a callback",
+      undefined,
+    );
+  });
+
+  it("forwards maxbuy_recommendation_id in note metadata", async () => {
+    const recId = "22222222-2222-2222-2222-222222222222";
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(addOpportunityNote).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      reasonCodes: [],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: null,
+      mileage: 45000,
+      actions: [],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/notes", {
+        note: "Max buy work item",
+        maxbuy_recommendation_id: recId,
+      }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(addOpportunityNote)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      "Max buy work item",
+      { maxbuy_recommendation_id: recId },
     );
   });
 

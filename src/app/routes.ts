@@ -118,6 +118,7 @@ const UpdateOpportunityStatusSchema = z.object({
 
 const AddOpportunityNoteSchema = z.object({
   note: z.string().trim().min(1).max(2000),
+  maxbuy_recommendation_id: z.string().uuid().optional(),
 });
 
 const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|notes)$/;
@@ -1389,11 +1390,15 @@ async function handleOpportunityNotes(
   }
 
   try {
+    const metadata = parsed.data.maxbuy_recommendation_id
+      ? { maxbuy_recommendation_id: parsed.data.maxbuy_recommendation_id }
+      : undefined;
     const data = await addOpportunityNote(
       db,
       normalizedListingId,
       userOrResponse,
       parsed.data.note,
+      metadata,
     );
     log("app.opportunity_notes.ok", {
       normalizedListingId,

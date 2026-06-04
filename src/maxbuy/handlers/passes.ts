@@ -20,6 +20,10 @@ export async function handleMaxbuyPass(
   }
 
   const db = getSupabaseClient(env);
+  const passReason = parsed.data.pass_note
+    ? `${parsed.data.pass_reason} — ${parsed.data.pass_note}`.slice(0, 128)
+    : parsed.data.pass_reason;
+
   const passId = await insertPass(db, {
     vin: parsed.data.vin,
     recommendationId: parsed.data.recommendation_id,
@@ -27,7 +31,7 @@ export async function handleMaxbuyPass(
     bidPrice: parsed.data.bid_price,
     mmrValue: parsed.data.mmr_value,
     buyerUserId: userId,
-    passReason: parsed.data.pass_reason,
+    passReason,
   });
 
   return json({ ok: true, data: { pass_id: passId } });

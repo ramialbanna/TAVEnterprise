@@ -66,5 +66,7 @@ describe("mapMaxbuyEvaluateToSnapshot", () => {
     expect(snap.recommendedMaxBuy).toBe(19200);
     expect(snap.mmrWholesale).toBe(22000);
     expect(snap.askingPrice).toBe(20000);
+    expect(snap.recommendationId).toBe(sample.recommendation_id);
+    expect(snap.vin).toBe(sample.vehicle.vin);
   });
 });

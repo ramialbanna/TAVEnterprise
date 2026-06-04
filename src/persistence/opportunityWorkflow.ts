@@ -633,6 +633,7 @@ export async function addOpportunityNote(
   normalizedListingId: string,
   actor: AppUser,
   note: string,
+  metadata?: Record<string, unknown>,
 ): Promise<OpportunityDetail> {
   await assertListingExists(db, normalizedListingId);
   await assertReviewableOpportunity(db, normalizedListingId);
@@ -645,11 +646,17 @@ export async function addOpportunityNote(
     throw new OpportunityWorkflowError("validation_error", "Note cannot be empty");
   }
 
+  const actionMetadata: Record<string, unknown> = { ...(metadata ?? {}) };
+  if (metadata?.maxbuy_recommendation_id) {
+    actionMetadata.source = "maxbuy";
+  }
+
   await writeOpportunityAction(db, {
     normalizedListingId,
     actorUserId: actor.id,
     action: "note_added",
     notes: trimmed,
+    metadata: actionMetadata,
   });
 
   const opportunity = await getOpportunityDetail(db, normalizedListingId);

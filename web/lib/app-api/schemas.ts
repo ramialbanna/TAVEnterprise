@@ -103,6 +103,17 @@ export const MaxbuyEvaluateOkSchema = z.object({
 });
 export type MaxbuyEvaluateOk = z.infer<typeof MaxbuyEvaluateOkSchema>;
 
+// ── POST /app/maxbuy/overrides · passes ────────────────────────────────────────
+export const MaxbuyOverrideOkSchema = z.object({
+  override_id: z.string().uuid(),
+});
+export type MaxbuyOverrideOk = z.infer<typeof MaxbuyOverrideOkSchema>;
+
+export const MaxbuyPassOkSchema = z.object({
+  pass_id: z.string().uuid(),
+});
+export type MaxbuyPassOk = z.infer<typeof MaxbuyPassOkSchema>;
+
 // ── GET /app/kpis ──────────────────────────────────────────────────────────────
 export const OutcomesBlockSchema = z.object({
   value: z

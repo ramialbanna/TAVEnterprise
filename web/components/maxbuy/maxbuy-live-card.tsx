@@ -9,7 +9,7 @@ import { codeMessage } from "@/lib/app-api";
 import { queryKeys } from "@/lib/query";
 
 import { MaxBuyCard } from "./maxbuy-card";
-import type { MaxBuyCardSnapshot } from "./types";
+import type { MaxBuyCardActionContext, MaxBuyCardSnapshot } from "./types";
 import { mapMaxbuyEvaluateToSnapshot } from "./map-snapshot";
 import { MaxbuyEvaluateForm, type MaxbuyEvaluateFormValues } from "./maxbuy-evaluate-form";
 import { useMaxbuyEvaluate } from "./use-maxbuy-evaluate";
@@ -46,6 +46,14 @@ export function MaxbuyLiveCard({
 }: MaxbuyLiveCardProps) {
   const [snapshot, setSnapshot] = useState<MaxBuyCardSnapshot | null>(null);
   const evaluate = useMaxbuyEvaluate();
+
+  const actionContext: MaxBuyCardActionContext | null = snapshot
+    ? {
+        recommendationId: snapshot.recommendationId,
+        vin: snapshot.vin,
+        normalizedListingId,
+      }
+    : null;
 
   const statusQuery = useQuery({
     queryKey: queryKeys.systemStatus,
@@ -108,7 +116,12 @@ export function MaxbuyLiveCard({
   if (snapshot) {
     return (
       <div className={className}>
-        <MaxBuyCard mode="ready" snapshot={snapshot} variant={variant} />
+        <MaxBuyCard
+          mode="ready"
+          snapshot={snapshot}
+          variant={variant}
+          actionContext={actionContext}
+        />
         <div className="mt-4">
           <MaxbuyEvaluateForm
             initial={formInitial}

@@ -8,6 +8,8 @@ export type MaxBuyVerdict = "strong_buy" | "buy" | "review" | "pass" | null;
 export type MaxBuyDataStrength = "high" | "medium" | "low" | null;
 
 export type MaxBuyCardSnapshot = {
+  recommendationId: string;
+  vin: string;
   displayState: MaxBuyDisplayState;
   recommendedMaxBuy: number | null;
   askingPrice: number | null;
@@ -16,4 +18,11 @@ export type MaxBuyCardSnapshot = {
   verdict: MaxBuyVerdict;
   dataStrength: MaxBuyDataStrength;
   reasonCodes: string[];
+};
+
+/** Context for Phase 7 actions (overrides, passes, workflow hand-off). */
+export type MaxBuyCardActionContext = {
+  recommendationId: string;
+  vin: string;
+  normalizedListingId?: string;
 };

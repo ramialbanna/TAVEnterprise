@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import type { MaxBuyCardMode, MaxBuyCardSnapshot } from "./types";
+import { MaxbuyCardActions } from "./maxbuy-card-actions";
+import type { MaxBuyCardActionContext, MaxBuyCardMode, MaxBuyCardSnapshot } from "./types";
 
 export type MaxBuyCardProps = {
   mode: MaxBuyCardMode;
@@ -19,6 +20,8 @@ export type MaxBuyCardProps = {
   disabledReason?: "coming_soon" | "api_off";
   variant?: "standalone" | "embedded";
   className?: string;
+  /** When set with a ready snapshot, enables pass / override / work-item actions (Phase 7). */
+  actionContext?: MaxBuyCardActionContext | null;
 };
 
 const VERDICT_LABELS: Record<NonNullable<MaxBuyCardSnapshot["verdict"]>, string> = {
@@ -87,7 +90,15 @@ function AwaitingVinShell({ variant }: { variant: "standalone" | "embedded" }) {
   );
 }
 
-function ReadySnapshot({ snapshot, variant }: { snapshot: MaxBuyCardSnapshot; variant: "standalone" | "embedded" }) {
+function ReadySnapshot({
+  snapshot,
+  variant,
+  actionContext,
+}: {
+  snapshot: MaxBuyCardSnapshot;
+  variant: "standalone" | "embedded";
+  actionContext?: MaxBuyCardActionContext | null;
+}) {
   const showVerdict = snapshot.displayState === "deal_fit" && snapshot.verdict !== null;
 
   return (
@@ -128,14 +139,9 @@ function ReadySnapshot({ snapshot, variant }: { snapshot: MaxBuyCardSnapshot; va
               : `${formatMoney(Math.abs(snapshot.deltaToAsk))} over recommended max`}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button type="button" size="sm" variant="outline" disabled>
-            Pass anyway
-          </Button>
-          <Button type="button" size="sm" variant="outline" disabled>
-            Bid lower
-          </Button>
-        </div>
+        {actionContext ? (
+          <MaxbuyCardActions snapshot={snapshot} actionContext={actionContext} />
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -148,6 +154,7 @@ export function MaxBuyCard({
   disabledReason,
   variant = "standalone",
   className,
+  actionContext = null,
 }: MaxBuyCardProps) {
   const body =
     mode === "disabled" ? (
@@ -155,7 +162,7 @@ export function MaxBuyCard({
     ) : mode === "awaiting_vin" ? (
       <AwaitingVinShell variant={variant} />
     ) : snapshot ? (
-      <ReadySnapshot snapshot={snapshot} variant={variant} />
+      <ReadySnapshot snapshot={snapshot} variant={variant} actionContext={actionContext} />
     ) : (
       <DisabledShell variant={variant} />
     );

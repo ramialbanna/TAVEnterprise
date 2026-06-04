@@ -18,6 +18,8 @@ import {
   MmrVinOkSchema,
   SystemStatusSchema,
   MaxbuyEvaluateOkSchema,
+  MaxbuyOverrideOkSchema,
+  MaxbuyPassOkSchema,
   type HistoricalSale,
   type ImportBatch,
   type IngestRunSummary,
@@ -33,6 +35,8 @@ import {
   type MmrVinOk,
   type SystemStatus,
   type MaxbuyEvaluateOk,
+  type MaxbuyOverrideOk,
+  type MaxbuyPassOk,
 } from "./schemas";
 import { codeMessage } from "./missing-reason";
 
@@ -197,6 +201,14 @@ export function parseSystemStatus(status: number, json: unknown): ApiResult<Syst
 
 export function parseMaxbuyEvaluate(status: number, json: unknown): ApiResult<MaxbuyEvaluateOk> {
   return interpret(status, json, MaxbuyEvaluateOkSchema);
+}
+
+export function parseMaxbuyOverride(status: number, json: unknown): ApiResult<MaxbuyOverrideOk> {
+  return interpret(status, json, MaxbuyOverrideOkSchema);
+}
+
+export function parseMaxbuyPass(status: number, json: unknown): ApiResult<MaxbuyPassOk> {
+  return interpret(status, json, MaxbuyPassOkSchema);
 }
 
 export function parseKpis(status: number, json: unknown): ApiResult<Kpis> {

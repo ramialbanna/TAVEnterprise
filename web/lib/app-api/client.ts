@@ -27,6 +27,8 @@ import {
   parseMmrVin,
   parseSystemStatus,
   parseMaxbuyEvaluate,
+  parseMaxbuyOverride,
+  parseMaxbuyPass,
   type ApiResult,
 } from "./parse";
 import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
@@ -50,6 +52,8 @@ import type {
   MmrVinOk,
   SystemStatus,
   MaxbuyEvaluateOk,
+  MaxbuyOverrideOk,
+  MaxbuyPassOk,
 } from "./schemas";
 
 /** Query filter for `GET /app/ingest-runs` (all optional; see `docs/03-api/app-api.md`). */
@@ -181,6 +185,39 @@ export type UpdateOpportunityStatusRequest = {
 /** Request body for POST /app/opportunities/:id/notes. */
 export type AddOpportunityNoteRequest = {
   note: string;
+  /** Immutable MaxBuy snapshot to attach to this workflow action (Phase 7). */
+  maxbuy_recommendation_id?: string;
+};
+
+export type MaxbuyOverrideType =
+  | "passed_despite_buy"
+  | "bought_despite_pass"
+  | "bid_reduced"
+  | "title_condition_concern"
+  | "transport_concern"
+  | "manager_call"
+  | "inventory_need"
+  | "other";
+
+/** Request body for `POST /app/maxbuy/overrides`. */
+export type MaxbuyOverrideRequest = {
+  contract_version?: "1.0.0";
+  recommendation_id: string;
+  override_type: MaxbuyOverrideType;
+  override_note?: string;
+  acted_price?: number;
+};
+
+/** Request body for `POST /app/maxbuy/passes`. */
+export type MaxbuyPassRequest = {
+  contract_version?: "1.0.0";
+  vin: string;
+  recommendation_id?: string;
+  asking_price?: number;
+  bid_price?: number;
+  mmr_value?: number;
+  pass_reason: string;
+  pass_note?: string;
 };
 
 export type MaxbuyRegion =
@@ -431,6 +468,28 @@ export async function postMaxbuyEvaluate(
   });
   if (r === FETCH_FAILED) return clientTransportError();
   return parseMaxbuyEvaluate(r.status, r.json);
+}
+
+export async function postMaxbuyOverride(
+  body: MaxbuyOverrideRequest,
+): Promise<ApiResult<MaxbuyOverrideOk>> {
+  const r = await postJson("maxbuy/overrides", {
+    contract_version: "1.0.0",
+    ...body,
+  });
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMaxbuyOverride(r.status, r.json);
+}
+
+export async function postMaxbuyPass(
+  body: MaxbuyPassRequest,
+): Promise<ApiResult<MaxbuyPassOk>> {
+  const r = await postJson("maxbuy/passes", {
+    contract_version: "1.0.0",
+    ...body,
+  });
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseMaxbuyPass(r.status, r.json);
 }
 
 export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
