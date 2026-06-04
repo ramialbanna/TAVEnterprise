@@ -565,6 +565,20 @@ docs/07-buybox/reports/        # λ backtest report (Phase 1)
 | **OPEN-2** | `lead_attribution_events` table vs logging re-submits elsewhere | ✅ **`0058`** — `duplicate_url_resubmit` events |
 | **OPEN-3** | Prod schema reconcile — any columns beyond §4.3 list? | Owner confirms before Phase 0 apply |
 | **OPEN-4** | MB-3: FK `normalized_listing_id` on recommendations | **Yes** — nullable FK |
+| **OPEN-5** | **YMM + mileage evaluate (no VIN)** — MaxBuy must become the main evaluator for manual/new queue entries where VIN is often missing | **Required future work — not in v1/P8 scope; do not block current VIN-only ship** |
+
+### OPEN-5 — YMM-first MaxBuy (product note, 2026-06-04)
+
+**Problem:** Most new Opportunities submissions (parse URL, manual submit) will **not** have a VIN at intake. MaxBuy is intended to be the **primary** buyer evaluator, but v1 `POST /maxbuy/evaluate` and the UI require a valid 17-char VIN. P8 “async after submit” only helps when a VIN exists; otherwise buyers still see “add VIN” with no economics.
+
+**Direction (when prioritized — no MaxBuy code changes until explicitly scheduled):**
+
+- Accept **year, make, model, mileage** (and region, trim when known) as a first-class evaluate path — not only VIN decode + listing fallback.
+- Reuse existing **YMM MMR** path (`lookupMmrByYmm`) and **segment benchmarks** (already YMM-based); cap `data_strength` / verdict per charter when VIN absent.
+- Define snapshot identity, pass/override logging, and queue badges for YMM-only runs (OPEN-5 blocks relying on VIN as the only join key).
+- UI: evaluate from submit form and queue without forcing VIN first.
+
+**Until OPEN-5 ships:** keep VIN gate in UI/API; document “MaxBuy pending — add VIN” in P8 is a stopgap, not the long-term model.
 
 ---
 
@@ -622,3 +636,4 @@ PRs 4–5 can run **parallel** to PR 2–3 after PR 1 merges. PR 6 requires PR 3
 | 2026-06-01 | Mark P0–P2 complete; refresh §2 current state and progress table |
 | 2026-06-01 | Mark P3 steps 3.1–3.4 complete on `TAV-WF-phase-3-intake`; migrations `0057`–`0058` applied prod |
 | 2026-06-04 | Add §0 pre-push CI gate; P7 shipped; web-ci fix for dialog `setState-in-effect` lint |
+| 2026-06-04 | OPEN-5: YMM + mileage MaxBuy path required for VIN-less manual entries (note only; v1 unchanged) |

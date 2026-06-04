@@ -98,8 +98,9 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 
 ## Next actions (dev)
 
-1. **P7** — override/pass dialogs, create-from-recommendation
-2. **P8** — async post-submit evaluate + queue badges
+1. **P8** — async post-submit evaluate + queue badges (VIN-present path only today)
+2. **OPEN-5** (product) — **YMM + mileage evaluate without VIN** — most new queue entries lack VIN; MaxBuy must support year/make/model/miles as primary input before it can be the main evaluator. See [`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) OPEN-5; **no v1 API/UI change until scheduled.**
+3. ~~**P7**~~ — overrides / hand-off ✅ shipped 2026-06-04
 3. Enable `MAXBUY_EVALUATE_ENABLED` in target env (staging + production wrangler) and deploy both workers
 4. Product: approve mocks for #15, #16; set KPI floors for #17
 5. After outcome loads: `REFRESH MATERIALIZED VIEW` on `mv_maxbuy_*` benchmarks
