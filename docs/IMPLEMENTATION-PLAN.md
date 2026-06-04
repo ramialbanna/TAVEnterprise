@@ -1,11 +1,65 @@
 # TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
 
 **Status:** Active execution plan  
-**Last updated:** 2026-06-02 (progress: P0–P6 shipped on `main`; **P7 next** — overrides / hand-off)  
+**Last updated:** 2026-06-04 (progress: P0–P7 shipped on `main`; **P8 next** — async badges)  
 **Audience:** Cursor agents, solo dev, reviewers  
 **Repo prefixes:** `TAV-BB-*` (MaxBuy) · `TAV-WF-*` (workflow/UI) · combined milestones may use `TAV-MVP-*`
 
 > **How to use with Cursor:** Point the agent at this file (`@docs/IMPLEMENTATION-PLAN.md`) for the full picture. It embeds the decisions, constraints, file map, and phase dependencies needed to implement without re-reading every spec. Deep references live at the bottom — read those only when this doc says to.
+
+---
+
+## 0. Pre-push CI gate (required — do not skip)
+
+Every push to `main` triggers GitHub Actions. A failed run emails **web-ci** and/or **CI** — fix before starting the next feature, or you will keep breaking `main` and redeploying hotfixes.
+
+### When each workflow runs
+
+| Workflow | Triggers on push when you change… | Job |
+|----------|----------------------------------|-----|
+| **web-ci** | `web/**`, `.github/workflows/web-ci.yml` | `lint` → `build` → `typecheck` → `test` (pnpm, Node 20, `web/`) |
+| **CI** | `main` / PR (root `package.json`) | `lint` → `typecheck` → `vitest` → integration (npm, repo root) |
+
+Touching **only** `src/`, `workers/`, or `supabase/` does **not** run web-ci — but any **web** or **shared UI** work must pass web-ci before push.
+
+### Run locally before `git push` (match CI order)
+
+**Web (mandatory if `web/` changed):**
+
+```bash
+cd web
+pnpm install --frozen-lockfile   # or npm ci if you use npm locally
+pnpm lint                        # must be 0 errors (eslint; react-hooks rules are strict)
+pnpm build                       # needs placeholder env like CI — see web-ci.yml
+pnpm typecheck                   # run after build (typedRoutes needs .next/types)
+pnpm test
+```
+
+**Worker / API (mandatory if root `src/`, `test/`, `workers/` changed):**
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+```
+
+### Common web-ci failures (Phase 7+)
+
+| Failure | Fix |
+|---------|-----|
+| `react-hooks/set-state-in-effect` | Do not reset dialog form state in `useEffect` — reset in `onOpenChange` when `open` becomes true, or key the form by `open`. |
+| `typedRoutes` / missing `RouteImpl` | Run `pnpm build` in `web/` before `pnpm typecheck`. |
+| ESLint **errors** (not warnings) | `pnpm lint` must exit 0; warnings in unrelated files are OK today but prefer cleaning them. |
+
+### Agent / dev rule
+
+1. Implement the phase task.  
+2. Run the matching local commands above for every path you touched.  
+3. Only then commit and push to `main`.  
+4. If GitHub emails a failure, treat it as **blocking** — open the [Actions run](https://github.com/ramialbanna/TAVEnterprise/actions), reproduce locally, push a fix before more product work.
+
+Workflow definitions: [`.github/workflows/web-ci.yml`](../.github/workflows/web-ci.yml) · [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
 ---
 
@@ -567,3 +621,4 @@ PRs 4–5 can run **parallel** to PR 2–3 after PR 1 merges. PR 6 requires PR 3
 | 2026-06-01 | Initial unified plan — MaxBuy + workflow redesign, interlinked phases P0–P10 |
 | 2026-06-01 | Mark P0–P2 complete; refresh §2 current state and progress table |
 | 2026-06-01 | Mark P3 steps 3.1–3.4 complete on `TAV-WF-phase-3-intake`; migrations `0057`–`0058` applied prod |
+| 2026-06-04 | Add §0 pre-push CI gate; P7 shipped; web-ci fix for dialog `setState-in-effect` lint |

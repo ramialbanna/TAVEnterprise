@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { MaxbuyOverrideType } from "@/lib/app-api/client";
 import { Button } from "@/components/ui/button";
@@ -52,13 +52,14 @@ export function MaxbuyOverrideDialog({
   const [note, setNote] = useState("");
   const [actedPrice, setActedPrice] = useState("");
 
-  useEffect(() => {
-    if (open) {
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
       setOverrideType(initialType);
       setNote("");
       setActedPrice("");
     }
-  }, [open, initialType]);
+    onOpenChange(next);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +75,7 @@ export function MaxbuyOverrideDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
