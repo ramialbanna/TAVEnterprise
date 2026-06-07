@@ -72,13 +72,6 @@ export function MaxbuyLiveCard({
     return { ...initialValues, region };
   }, [initialValues]);
 
-  const hasVin = Boolean(formInitial.vin.trim());
-
-  /** Embedded deal detail only — standalone `/maxbuy` always shows the VIN form. */
-  if (variant === "embedded" && !hasVin) {
-    return <MaxBuyCard mode="awaiting_vin" variant={variant} className={className} />;
-  }
-
   if (statusQuery.isPending) {
     return (
       <div className={className}>

@@ -9,7 +9,12 @@ import type { MmrProvenance } from "../scoring/types";
 
 export type PersistRecommendationInput = {
   userId: string;
-  vin: string;
+  /** null for YMM-only evaluations (OPEN-5) */
+  vin: string | null;
+  year: number;
+  make: string;
+  model: string;
+  trim: string;
   mileage: number | null;
   mileageEstimated: boolean;
   askingPrice: number | null;
@@ -35,7 +40,11 @@ export async function persistRecommendation(
     .from("maxbuy_lookups")
     .insert({
       user_id: input.userId,
-      vin: input.vin,
+      vin: input.vin ?? null,
+      year: input.year,
+      make: input.make,
+      model: input.model,
+      trim: input.trim,
       mileage: input.mileage,
       is_estimated_miles: input.mileageEstimated,
       asking_price: input.askingPrice,
@@ -110,7 +119,11 @@ export async function insertOverride(
 export async function insertPass(
   db: SupabaseClient,
   input: {
-    vin: string;
+    /** null for YMM-only passes (OPEN-5) */
+    vin: string | null;
+    year?: number;
+    make?: string;
+    model?: string;
     recommendationId?: string;
     askingPrice?: number;
     bidPrice?: number;
@@ -122,7 +135,10 @@ export async function insertPass(
   const { data, error } = await db
     .from("maxbuy_evaluated_passes")
     .insert({
-      vin: input.vin,
+      vin: input.vin ?? null,
+      year: input.year ?? null,
+      make: input.make ?? null,
+      model: input.model ?? null,
       recommendation_id: input.recommendationId ?? null,
       asking_price: input.askingPrice ?? null,
       bid_price: input.bidPrice ?? null,

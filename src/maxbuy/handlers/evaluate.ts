@@ -21,7 +21,8 @@ export async function handleMaxbuyEvaluate(
   try {
     const result = await runEvaluate(env, userId, parsed.data);
     if (!result.ok) {
-      const status = result.error.code === "invalid_vin" ? 400 : 422;
+      const status =
+        result.error.code === "invalid_vin" || result.error.code === "ymm_required" ? 400 : 422;
       return json({ ok: false, error: result.error.code, message: result.error.message }, status);
     }
     return json({ ok: true, data: result.data });

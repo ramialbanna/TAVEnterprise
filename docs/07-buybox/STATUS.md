@@ -1,6 +1,6 @@
-# MaxBuy — Status
+﻿# MaxBuy — Status
 
-**Last updated:** 2026-06-02 · **Phase:** P0–P5 complete · **P6 shipped** (live UI + evaluate) · **P7 next** (overrides / hand-off)  
+**Last updated:** 2026-06-07 · **Phase:** P0–P9 complete · **P10 next** (Shadow ML — future)  
 **Repo prefix:** `TAV-BB`
 
 Single checklist for what's closed, what's open, and when to start building.
@@ -32,8 +32,10 @@ Single checklist for what's closed, what's open, and when to start building.
 | **3** | Parse endpoint, `entry_method`, submit validation, duplicate block | ✅ on `main` |
 | **4** | Nav, deal detail hero, MaxBuyCard shell | ✅ on `main` |
 | **5** | `POST /maxbuy/evaluate` | ✅ on `main` |
-| **6** | `/maxbuy` + deal detail evaluate live | ✅ |
-| **7–9** | Overrides, async badges, retire Classic | ⬜ |
+| **6** | `/maxbuy` + deal detail evaluate live | ✅ on `main` |
+| **7** | Overrides, passes, create-from-recommendation | ✅ on `main` |
+| **8** | Async evaluate + queue badges | ✅ on `main` |
+| **9** | UAT / retire Classic | ✅ on `main` |
 | **10** | Shadow ML | ⬜ Future |
 
 Detail: [`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) §2.3
@@ -98,12 +100,10 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 
 ## Next actions (dev)
 
-1. **P8** — async post-submit evaluate + queue badges (VIN-present path only today)
-2. **OPEN-5** (product) — **YMM + mileage evaluate without VIN** — most new queue entries lack VIN; MaxBuy must support year/make/model/miles as primary input before it can be the main evaluator. See [`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md) OPEN-5; **no v1 API/UI change until scheduled.**
-3. ~~**P7**~~ — overrides / hand-off ✅ shipped 2026-06-04
-3. Enable `MAXBUY_EVALUATE_ENABLED` in target env (staging + production wrangler) and deploy both workers
-4. Product: approve mocks for #15, #16; set KPI floors for #17
-5. After outcome loads: `REFRESH MATERIALIZED VIEW` on `mv_maxbuy_*` benchmarks
+1. **Apply migration 0059** to staging and production (`wrangler d1 execute` / Supabase dashboard)
+2. Product: approve mocks for #15, #16; set KPI floors for #17
+3. After outcome loads: `REFRESH MATERIALIZED VIEW` on `mv_maxbuy_*` benchmarks
+4. **P10** — Shadow ML pipeline (future; do not start until #15–17 resolved)
 
 ---
 
@@ -112,8 +112,8 @@ Detail: [`ARCHITECTURE.md`](ARCHITECTURE.md) §1
 | Phase | Ships | Gate |
 |---|---|---|
 | 1 | Benchmark views, schema, λ chosen | ✅ Complete (P0–P2) |
-| 2 | MVP API + snapshots + gates | ⬜ P5 |
-| 3 | Create-Opportunity from snapshot | ⬜ P7 |
+| 2 | MVP API + snapshots + gates | ✅ Complete (P5) |
+| 3 | Create-Opportunity from snapshot | ✅ Complete (P7) |
 | 4 | Shadow ML pipeline | ⬜ P10 |
 | 5 | ML promotion governance | ⬜ P10 |
 | 6 | Per-VIN hybrid (optional) | ⬜ Future |

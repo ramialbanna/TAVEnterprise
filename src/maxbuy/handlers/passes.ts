@@ -25,7 +25,10 @@ export async function handleMaxbuyPass(
     : parsed.data.pass_reason;
 
   const passId = await insertPass(db, {
-    vin: parsed.data.vin,
+    vin: parsed.data.vin ?? null,
+    year: parsed.data.year,
+    make: parsed.data.make,
+    model: parsed.data.model,
     recommendationId: parsed.data.recommendation_id,
     askingPrice: parsed.data.asking_price,
     bidPrice: parsed.data.bid_price,

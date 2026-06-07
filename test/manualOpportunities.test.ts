@@ -115,6 +115,7 @@ beforeEach(() => {
     listingUrl: "https://facebook.com/marketplace/item/123",
     entryMethod: "manual",
     estimateFlags: { mileage: false, style: false, mmr: false },
+    maxbuySummary: null,
     reasonCodes: [],
     valuationMissingReason: null,
     scoreComponents: null,

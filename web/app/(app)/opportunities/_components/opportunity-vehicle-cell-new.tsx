@@ -1,12 +1,43 @@
 import { ExternalLink } from "lucide-react";
 
-import type { OpportunityRow } from "@/lib/app-api/schemas";
+import type { MaxbuySummary, OpportunityRow } from "@/lib/app-api/schemas";
+import { Badge } from "@/components/ui/badge";
 
 import { OpportunityBadgesNew, OpportunityTypeBadgeNew } from "./opportunity-badges-new";
+
+function formatMaxBuyCompact(value: number): string {
+  if (value >= 1000) {
+    const k = value / 1000;
+    return `$${k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)}k`;
+  }
+  return `$${Math.round(value)}`;
+}
+
+function MaxBuyBadge({ summary }: { summary: MaxbuySummary }) {
+  const { verdict, recommendedMaxBuy } = summary;
+  const label =
+    verdict === "PASS"
+      ? "Pass"
+      : `${verdict === "STRONG_BUY" ? "Strong buy" : verdict === "BUY" ? "Buy" : "Review"} · ${formatMaxBuyCompact(recommendedMaxBuy)} max`;
+  const variant: "healthy" | "review" | "neutral" =
+    verdict === "STRONG_BUY" || verdict === "BUY"
+      ? "healthy"
+      : verdict === "REVIEW"
+        ? "review"
+        : "neutral";
+  return (
+    <Badge variant={variant} className="px-1 py-0 text-[10px] leading-4">
+      {label}
+    </Badge>
+  );
+}
 
 export function OpportunityVehicleCellNew({ row }: { row: OpportunityRow }) {
   const ymm = [row.year, row.make, row.model].filter(Boolean).join(" ");
   const primary = ymm || row.title || "—";
+
+  const showAddVinHint =
+    row.entryMethod === "manual" && !row.vin && !row.maxbuySummary;
 
   return (
     <div className="min-w-[10rem] space-y-1">
@@ -29,6 +60,11 @@ export function OpportunityVehicleCellNew({ row }: { row: OpportunityRow }) {
       <div className="flex flex-wrap items-center gap-1">
         <OpportunityTypeBadgeNew row={row} compact />
         <OpportunityBadgesNew badges={row.badges} compact />
+        {row.maxbuySummary ? (
+          <MaxBuyBadge summary={row.maxbuySummary} />
+        ) : showAddVinHint ? (
+          <span className="text-[10px] leading-4 text-muted-foreground">MaxBuy: add VIN</span>
+        ) : null}
       </div>
     </div>
   );

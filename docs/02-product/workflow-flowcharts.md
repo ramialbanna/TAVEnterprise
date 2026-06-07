@@ -1,4 +1,3 @@
-```mermaid
 flowchart TB
   subgraph FINDER["Finder"]
     F_SUB["Submit page: paste URL"]
@@ -72,4 +71,3 @@ flowchart TB
     REC --> JOIN
     JOIN --> REPORT
   end
-```

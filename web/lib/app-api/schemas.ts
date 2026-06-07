@@ -52,7 +52,7 @@ export const MaxbuyEvaluateOkSchema = z.object({
   contract_version: z.string(),
   recommendation_id: z.string().uuid(),
   vehicle: z.object({
-    vin: z.string(),
+    vin: z.string().nullable(),
     year: z.number().nullable(),
     make: z.string().nullable(),
     model: z.string().nullable(),
@@ -284,6 +284,15 @@ export const IngestRunDetailSchema = z.object({
 export type IngestRunDetail = z.infer<typeof IngestRunDetailSchema>;
 
 // ── GET /app/opportunities ─────────────────────────────────────────────────────
+export const MaxbuySummarySchema = z.object({
+  recommendationId: z.string(),
+  verdict: z.enum(["STRONG_BUY", "BUY", "REVIEW", "PASS"]),
+  recommendedMaxBuy: z.number(),
+  dataStrength: z.enum(["low", "medium", "high"]),
+  evaluatedAt: z.string(),
+});
+export type MaxbuySummary = z.infer<typeof MaxbuySummarySchema>;
+
 export const OpportunityEstimateFlagsSchema = z
   .object({
     mileage: z.boolean().default(false),
@@ -328,6 +337,7 @@ export const OpportunityRowSchema = z.object({
   listingUrl: z.string().nullable(),
   entryMethod: z.enum(["manual", "scraper", "import"]).nullable().optional(),
   estimateFlags: OpportunityEstimateFlagsSchema,
+  maxbuySummary: MaxbuySummarySchema.nullable().optional(),
 });
 export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
 export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;

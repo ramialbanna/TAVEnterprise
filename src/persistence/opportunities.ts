@@ -11,6 +11,15 @@ import { fetchWorkflowMap, isActiveClaim, listOpportunityActions, type Opportuni
 
 export type OpportunityType = "lead" | "near_miss" | "manual_submission";
 
+/** Compact summary of the latest MaxBuy recommendation for a listing (P8 — queue badge). */
+export interface MaxbuySummary {
+  recommendationId: string;
+  verdict: "STRONG_BUY" | "BUY" | "REVIEW" | "PASS";
+  recommendedMaxBuy: number;
+  dataStrength: "low" | "medium" | "high";
+  evaluatedAt: string;
+}
+
 export interface OpportunityEstimateFlags {
   mileage: boolean;
   style: boolean;
@@ -53,6 +62,7 @@ export interface OpportunityRow {
   listingUrl: string | null;
   entryMethod: string | null;
   estimateFlags: OpportunityEstimateFlags;
+  maxbuySummary: MaxbuySummary | null;
 }
 
 export interface OpportunityDetail extends OpportunityRow {
@@ -208,6 +218,7 @@ function mapToOpportunityRow(
   candidateListingCount: number | null,
   manual: ManualSubmissionContext | null,
   workflow: WorkflowDisplayContext | null,
+  maxbuySummary: MaxbuySummary | null,
 ): OpportunityRow | null {
   const hasLead = lead !== null;
   const hasMmr = diagnostic.mmr_value !== null;
@@ -315,6 +326,7 @@ function mapToOpportunityRow(
     listingUrl: asString(listing.listing_url),
     entryMethod: asString(listing.entry_method),
     estimateFlags,
+    maxbuySummary: maxbuySummary ?? null,
   };
 }
 
@@ -577,6 +589,36 @@ async function fetchListingsByIds(
   return (data ?? []) as ListingRow[];
 }
 
+async function fetchMaxbuySummaries(
+  db: SupabaseClient,
+  listingIds: string[],
+): Promise<Map<string, MaxbuySummary>> {
+  const out = new Map<string, MaxbuySummary>();
+  if (listingIds.length === 0) return out;
+
+  const { data, error } = await db
+    .from("maxbuy_recommendations")
+    .select("id, normalized_listing_id, verdict, recommended_max_buy, data_strength, created_at")
+    .in("normalized_listing_id", listingIds)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const listingId = row.normalized_listing_id as string;
+    if (!out.has(listingId)) {
+      out.set(listingId, {
+        recommendationId: row.id as string,
+        verdict: row.verdict as MaxbuySummary["verdict"],
+        recommendedMaxBuy: asNumber(row.recommended_max_buy) ?? 0,
+        dataStrength: row.data_strength as MaxbuySummary["dataStrength"],
+        evaluatedAt: row.created_at as string,
+      });
+    }
+  }
+  return out;
+}
+
 function assembleRows(
   listings: ListingRow[],
   valuations: ValuationRow[],
@@ -584,6 +626,7 @@ function assembleRows(
   candidateCounts: Map<string, number>,
   manualByListing: Map<string, ManualSubmissionContext>,
   workflowByListing: Map<string, WorkflowDisplayContext>,
+  maxbuySummaryByListing: Map<string, MaxbuySummary>,
 ): OpportunityRow[] {
   const diagnostics = buildListingDiagnostics(listings, valuations, leads);
   const leadByListing = new Map<string, LeadRow>();
@@ -603,6 +646,7 @@ function assembleRows(
       candidateId !== null ? (candidateCounts.get(candidateId) ?? null) : null;
     const manual = manualByListing.get(nlId) ?? null;
     const workflow = workflowByListing.get(nlId) ?? null;
+    const maxbuySummary = maxbuySummaryByListing.get(nlId) ?? null;
     const row = mapToOpportunityRow(
       listing,
       diagnostic,
@@ -610,6 +654,7 @@ function assembleRows(
       candidateListingCount,
       manual,
       workflow,
+      maxbuySummary,
     );
     if (row) rows.push(row);
   }
@@ -646,8 +691,11 @@ export async function listOpportunities(
   const allListingIds = allListings.map((l) => l.id as string);
 
   const { valuations, leads } = await loadOpportunityContext(db, allListingIds);
-  const manualByListing = await fetchManualSubmissionContext(db, allListingIds);
-  const workflowByListing = await fetchWorkflowMap(db, allListingIds);
+  const [manualByListing, workflowByListing, maxbuySummaryByListing] = await Promise.all([
+    fetchManualSubmissionContext(db, allListingIds),
+    fetchWorkflowMap(db, allListingIds),
+    fetchMaxbuySummaries(db, allListingIds),
+  ]);
 
   const candidateIds = [
     ...new Set(
@@ -665,6 +713,7 @@ export async function listOpportunities(
     candidateCounts,
     manualByListing,
     workflowByListing,
+    maxbuySummaryByListing,
   );
   const filtered = applyListFilter(rows, filter);
   const viewed = applyViewFilter(filtered, filter, workflowByListing);
@@ -686,8 +735,11 @@ export async function getOpportunityDetail(
 
   const listing = listingRow as ListingRow;
   const { valuations, leads } = await loadOpportunityContext(db, [id]);
-  const manualByListing = await fetchManualSubmissionContext(db, [id]);
-  const workflowByListing = await fetchWorkflowMap(db, [id]);
+  const [manualByListing, workflowByListing, maxbuySummaryByListing] = await Promise.all([
+    fetchManualSubmissionContext(db, [id]),
+    fetchWorkflowMap(db, [id]),
+    fetchMaxbuySummaries(db, [id]),
+  ]);
   const lead = leads[0] ?? null;
   const diagnostics = buildListingDiagnostics([listing], valuations, leads);
   const diagnostic = diagnostics[0]!;
@@ -706,6 +758,7 @@ export async function getOpportunityDetail(
     candidateListingCount,
     manualByListing.get(id) ?? null,
     workflowByListing.get(id) ?? null,
+    maxbuySummaryByListing.get(id) ?? null,
   );
   if (!row) return null;
 

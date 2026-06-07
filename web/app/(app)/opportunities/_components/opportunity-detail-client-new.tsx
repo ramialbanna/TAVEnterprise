@@ -99,6 +99,10 @@ export function OpportunityDetailClientNew({
         : "";
     return {
       vin: initial.vin?.trim() ?? "",
+      year: initial.year != null ? String(initial.year) : "",
+      make: initial.make ?? "",
+      model: initial.model ?? "",
+      trim: initial.trim ?? "",
       mileage: initial.mileage != null ? String(initial.mileage) : "",
       askingPrice: initial.price != null ? String(Math.round(initial.price)) : "",
       region,

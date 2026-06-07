@@ -208,10 +208,13 @@ export type MaxbuyOverrideRequest = {
   acted_price?: number;
 };
 
-/** Request body for `POST /app/maxbuy/passes`. */
+/** Request body for `POST /app/maxbuy/passes` (OPEN-5: vin optional; ymm accepted). */
 export type MaxbuyPassRequest = {
   contract_version?: "1.0.0";
-  vin: string;
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
   recommendation_id?: string;
   asking_price?: number;
   bid_price?: number;
@@ -228,10 +231,17 @@ export type MaxbuyRegion =
   | "lubbock_tx"
   | "oklahoma_city_ok";
 
-/** Request body for `POST /app/maxbuy/evaluate` (contract v1.0.0). */
+/**
+ * Request body for `POST /app/maxbuy/evaluate` (contract v1.0.0, OPEN-5).
+ * Either `vin` or `year`+`make`+`model` must be supplied.
+ */
 export type MaxbuyEvaluateRequest = {
   contract_version?: "1.0.0";
-  vin: string;
+  vin?: string;
+  year?: number;
+  make?: string;
+  model?: string;
+  trim?: string;
   mileage?: number;
   asking_price?: number;
   region?: MaxbuyRegion;

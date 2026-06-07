@@ -30,7 +30,7 @@ export default {
     }
 
     if (url.pathname.startsWith("/app/")) {
-      return handleApp(request, env);
+      return handleApp(request, env, ctx);
     }
 
     return new Response(JSON.stringify({ ok: false, error: "not_found" }), {

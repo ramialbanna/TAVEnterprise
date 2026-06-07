@@ -1,7 +1,7 @@
-# TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
+﻿# TAV Implementation Plan — MaxBuy + Workflow / UI Redesign
 
 **Status:** Active execution plan  
-**Last updated:** 2026-06-04 (progress: P0–P7 shipped on `main`; **P8 next** — async badges)  
+**Last updated:** 2026-06-07 (progress: P0–P9 + OPEN-5 shipped on \main\; **P10 Shadow ML** next)  
 **Audience:** Cursor agents, solo dev, reviewers  
 **Repo prefixes:** `TAV-BB-*` (MaxBuy) · `TAV-WF-*` (workflow/UI) · combined milestones may use `TAV-MVP-*`
 
@@ -94,9 +94,9 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | MMR / intelligence | `tav-intelligence-worker` live; contract `mmr-v1` pinned |
 | `/mmr-lab` | Wholesale lookup only — **not** MaxBuy evaluate |
 | Ingest buy-box rules | Live — `tav.buy_box_rules` at scrape time (**separate from MaxBuy**) |
-| New UI shell | Partial — `opportunities/_components/*-new.tsx`, Classic/New toggle still exists |
+| New UI shell | **Done** — Classic retired (Phase 9); single New-mode design system |
 
-### 2.2 MaxBuy — shipped through Phase 2
+### 2.2 MaxBuy — shipped through Phase 7
 
 | Item | State |
 |------|-------|
@@ -107,8 +107,8 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | MaxBuy DDL + views (P2) | **Done** — `0053`–`0056`; benchmark views live in prod (`bm-*-180d`) |
 | Scoring module (P2) | **Done** — `src/maxbuy/scoring/` + unit tests |
 | MMR contract CI (P2) | **Done** — `test/maxbuy.mmr-contract.test.ts` |
-| MaxBuy API / worker (P5) | **Not built** — no `maxbuy-worker`, no `/maxbuy` route |
-| MaxBuy UI (P4–P6) | **Not built** — no nav item, no `MaxBuyCard` live |
+| MaxBuy API / worker (P5) | **Done** — `workers/maxbuy-worker/`, `POST /maxbuy/evaluate`, overrides, passes on `main` |
+| MaxBuy UI (P4–P6) | **Done** — `/maxbuy` page, `MaxBuyCard` live on deal detail + standalone; overrides + passes UI on `main` |
 | Decisions DEC-1–4 | Closed — $800 target, data strength not %, stub gates, etc. |
 
 ### 2.3 Execution progress (unified phases)
@@ -119,10 +119,12 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | **1** | λ decay backtest | ✅ Shipped | `scripts/maxbuy/decay-backtest/` · report · `main` |
 | **2** | MaxBuy DDL + benchmark views + scoring | ✅ Shipped | `0053`–`0056` · `src/maxbuy/` · `main` |
 | **3** | Intake parse + `entry_method` | ✅ Shipped on `main` | `main` |
-| **4** | Workflow UI shell + MaxBuy card placeholder | ✅ Shipped on `TAV-WF-phase-4-ui-shell` (merge pending) | `TAV-WF-phase-4-ui-shell` |
+| **4** | Workflow UI shell + MaxBuy card placeholder | ✅ Shipped on `main` | `main` |
 | **5** | `maxbuy-worker` evaluate API | ✅ Shipped on `main` | `main` |
 | **6** | MaxBuy UI live | ✅ Shipped | `main` |
-| **7–9** | Hand-off, async badges, UAT / retire Classic | ⬜ Not started | — |
+| **7** | Hand-off, overrides + passes | ✅ Shipped on `main` | `main` |
+| **8** | Async evaluate + queue badges | ✅ Shipped on `main` | `main` |
+| **9** | UAT / retire Classic | ✅ Shipped on `main` | `main` |
 | **10** | Shadow ML | ⬜ Future | — |
 
 ### 2.4 Workflow redesign (planning)
@@ -134,7 +136,7 @@ Submit listing (parse URL) → Opportunities queue (triage) → Claim deal →
 | Parse-from-link | **Built** — `POST /app/opportunities/parse` (Facebook v1); `OPPORTUNITIES_PARSE_ENABLED` default off |
 | `entry_method` column | **Live in prod** — `0057`; backfill done; write path at 3.5 |
 | Manual submit WF-1 / WF-7 | **Partial** — required fields + duplicate URL block (`0058` attribution events) |
-| MaxBuy in nav | **Not built** |
+| MaxBuy in nav | **Built** — `web/lib/app-shell/nav-new.ts`; `/maxbuy` route live |
 
 ---
 
@@ -478,7 +480,7 @@ ORDER BY sale_date;
 
 ---
 
-### Phase 9 — UAT, rollout, retire Classic
+### Phase 9 — UAT, rollout, retire Classic ✅
 
 **Branch:** `TAV-WF-phase-9-uat`  
 **Depends on:** Phase 7–8 stable
@@ -491,7 +493,7 @@ ORDER BY sale_date;
 | 9.4 | Update `docs/07-buybox/STATUS.md` punch list | Status doc |
 | 9.5 | Success metrics check — evaluate median < 3s; parse > 70% | §13 workflow doc |
 
-**Exit criteria:** Single design system; MaxBuy in daily buyer nav; Classic removed.
+**Exit criteria met:** Single design system; MaxBuy in daily buyer nav; Classic removed.
 
 ---
 
@@ -565,7 +567,7 @@ docs/07-buybox/reports/        # λ backtest report (Phase 1)
 | **OPEN-2** | `lead_attribution_events` table vs logging re-submits elsewhere | ✅ **`0058`** — `duplicate_url_resubmit` events |
 | **OPEN-3** | Prod schema reconcile — any columns beyond §4.3 list? | Owner confirms before Phase 0 apply |
 | **OPEN-4** | MB-3: FK `normalized_listing_id` on recommendations | **Yes** — nullable FK |
-| **OPEN-5** | **YMM + mileage evaluate (no VIN)** — MaxBuy must become the main evaluator for manual/new queue entries where VIN is often missing | **Required future work — not in v1/P8 scope; do not block current VIN-only ship** |
+| **OPEN-5** | **YMM + mileage evaluate (no VIN)** — MaxBuy must become the main evaluator for manual/new queue entries where VIN is often missing | ✅ **Shipped** — migration 0059, YMM-first evaluate path, dual-path form; caps verdict at REVIEW |
 
 ### OPEN-5 — YMM-first MaxBuy (product note, 2026-06-04)
 
@@ -637,3 +639,5 @@ PRs 4–5 can run **parallel** to PR 2–3 after PR 1 merges. PR 6 requires PR 3
 | 2026-06-01 | Mark P3 steps 3.1–3.4 complete on `TAV-WF-phase-3-intake`; migrations `0057`–`0058` applied prod |
 | 2026-06-04 | Add §0 pre-push CI gate; P7 shipped; web-ci fix for dialog `setState-in-effect` lint |
 | 2026-06-04 | OPEN-5: YMM + mileage MaxBuy path required for VIN-less manual entries (note only; v1 unchanged) |
+| 2026-06-04 | Refresh §2.2/§2.3/§2.4: mark P5–P7 shipped; remove stale “Not built” claims; split P7–9 row; sync STATUS.md |
+| 2026-06-07 | P9 shipped — Classic UI retired (WF-5), MAXBUY_EVALUATE_ENABLED=true in prod; all phases P0–P9 complete; OPEN-5 next |

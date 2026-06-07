@@ -21,8 +21,13 @@ function dealVerdict(deltaToAsk: number): MaxbuyVerdict {
 
 export function scoreMaxBuy(input: ScoreMaxBuyInput): ScoreMaxBuyResult {
   const { mmr, askingPrice, benchmarks, targetNetGross, hardGate } = input;
+  const vinAbsent = input.vinAbsent === true;
   const reasonCodes: string[] = [];
   const estimatedBadges: string[] = input.mileageEstimated ? ["ESTIMATED_MILES"] : [];
+
+  if (vinAbsent) {
+    estimatedBadges.push("NO_VIN");
+  }
 
   const sale = expectedSalePrice(mmr.value, benchmarks.pricing);
   const transport = Math.round(benchmarks.transport.weightedTransportCost);
@@ -33,7 +38,11 @@ export function scoreMaxBuy(input: ScoreMaxBuyInput): ScoreMaxBuyResult {
   if (benchmarks.pricing.resolution !== "exact") {
     reasonCodes.push(`benchmark_${benchmarks.pricing.resolution}_fallback`);
   }
-  if (mmr.method === "ymm") {
+  if (vinAbsent) {
+    // YMM-only primary path — MMR and benchmarks are YMM-based; no VIN history
+    reasonCodes.push("ymm_primary_no_vin");
+  } else if (mmr.method === "ymm") {
+    // VIN path fell back to YMM MMR
     reasonCodes.push("ymm_fallback");
   }
   if (sale > 0 && mmr.value != null && mmr.value > 0) {
@@ -98,7 +107,8 @@ export function scoreMaxBuy(input: ScoreMaxBuyInput): ScoreMaxBuyResult {
 
   const delta = maxBuy - askingPrice;
   let verdict = dealVerdict(delta);
-  verdict = capVerdictForDataStrength(verdict, strength);
+  // VIN-absent runs cap at REVIEW regardless of data_strength (OPEN-5 charter)
+  verdict = capVerdictForDataStrength(verdict, vinAbsent ? "low" : strength);
 
   return {
     displayState: "deal_fit",

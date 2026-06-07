@@ -89,6 +89,7 @@ const baseOpportunity = {
   listingUrl: "https://facebook.com/marketplace/item/1",
   entryMethod: null,
   estimateFlags: { mileage: false, style: false, mmr: false },
+  maxbuySummary: null,
   reasonCodes: [],
   valuationMissingReason: null,
   scoreComponents: null,

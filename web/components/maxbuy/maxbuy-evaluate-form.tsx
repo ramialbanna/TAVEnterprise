@@ -18,6 +18,10 @@ const REGIONS: { value: MaxbuyRegion; label: string }[] = [
 
 export type MaxbuyEvaluateFormValues = {
   vin: string;
+  year: string;
+  make: string;
+  model: string;
+  trim: string;
   mileage: string;
   askingPrice: string;
   region: MaxbuyRegion | "";
@@ -44,21 +48,40 @@ export function buildMaxbuyEvaluateRequest(
   extras?: Pick<MaxbuyEvaluateRequest, "normalized_listing_id" | "lead_id">,
 ): { body: MaxbuyEvaluateRequest; askingPrice: number | null } | { error: string } {
   const vin = values.vin.trim().toUpperCase();
-  if (!vin) return { error: "VIN is required" };
-
   const mileage = parseOptionalInt(values.mileage);
   const askingParsed = parseOptionalInt(values.askingPrice);
   const askingPrice = askingParsed ?? null;
 
+  if (vin) {
+    // VIN path
+    const body: MaxbuyEvaluateRequest = { contract_version: "1.0.0", vin, ...extras };
+    if (mileage !== undefined) body.mileage = mileage;
+    if (askingParsed !== undefined) body.asking_price = askingParsed;
+    if (values.region) body.region = values.region;
+    return { body, askingPrice };
+  }
+
+  // YMM path (OPEN-5)
+  const year = parseOptionalInt(values.year);
+  const make = values.make.trim();
+  const model = values.model.trim();
+  const trim = values.trim.trim() || undefined;
+
+  if (!year) return { error: "Year is required when VIN is not provided" };
+  if (!make) return { error: "Make is required when VIN is not provided" };
+  if (!model) return { error: "Model is required when VIN is not provided" };
+
   const body: MaxbuyEvaluateRequest = {
     contract_version: "1.0.0",
-    vin,
+    year,
+    make,
+    model,
     ...extras,
   };
+  if (trim) body.trim = trim;
   if (mileage !== undefined) body.mileage = mileage;
   if (askingParsed !== undefined) body.asking_price = askingParsed;
   if (values.region) body.region = values.region;
-
   return { body, askingPrice };
 }
 
@@ -71,6 +94,8 @@ export function MaxbuyEvaluateForm({
 }: MaxbuyEvaluateFormProps) {
   const [values, setValues] = useState(initial);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  const showYmm = !values.vin.trim() && !vinReadOnly;
 
   return (
     <form
@@ -87,7 +112,7 @@ export function MaxbuyEvaluateForm({
       }}
     >
       <div className="space-y-2">
-        <Label htmlFor="maxbuy-vin">VIN</Label>
+        <Label htmlFor="maxbuy-vin">VIN{showYmm ? " (optional — or enter below)" : ""}</Label>
         <Input
           id="maxbuy-vin"
           name="vin"
@@ -99,6 +124,60 @@ export function MaxbuyEvaluateForm({
           spellCheck={false}
         />
       </div>
+
+      {showYmm ? (
+        <div className="rounded-md border border-dashed border-border p-3 space-y-3">
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+            Year / Make / Model
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="maxbuy-year">Year</Label>
+              <Input
+                id="maxbuy-year"
+                name="year"
+                inputMode="numeric"
+                placeholder="e.g. 2021"
+                value={values.year}
+                onChange={(e) => setValues((v) => ({ ...v, year: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="maxbuy-make">Make</Label>
+              <Input
+                id="maxbuy-make"
+                name="make"
+                placeholder="e.g. Toyota"
+                value={values.make}
+                onChange={(e) => setValues((v) => ({ ...v, make: e.target.value }))}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="maxbuy-model">Model</Label>
+              <Input
+                id="maxbuy-model"
+                name="model"
+                placeholder="e.g. Camry"
+                value={values.model}
+                onChange={(e) => setValues((v) => ({ ...v, model: e.target.value }))}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="maxbuy-trim">Trim (optional)</Label>
+            <Input
+              id="maxbuy-trim"
+              name="trim"
+              placeholder="e.g. SE"
+              value={values.trim}
+              onChange={(e) => setValues((v) => ({ ...v, trim: e.target.value }))}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">

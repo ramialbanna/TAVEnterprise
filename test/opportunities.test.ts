@@ -48,6 +48,7 @@ function sampleRow(over: Partial<OpportunityRow> = {}): OpportunityRow {
     listingUrl: null,
     entryMethod: null,
     estimateFlags: { mileage: false, style: false, mmr: false },
+    maxbuySummary: null,
     ...over,
   };
 }

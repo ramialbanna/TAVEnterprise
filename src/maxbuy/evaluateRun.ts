@@ -32,13 +32,14 @@ import { getSupabaseClient } from "../persistence/supabase";
 export type EvaluateRunError =
   | { code: "invalid_vin"; message: string }
   | { code: "vehicle_context_missing"; message: string }
+  | { code: "ymm_required"; message: string }
   | { code: "internal_error"; message: string };
 
 export type MaxbuyEvaluateResponse = {
   contract_version: typeof MAXBUY_CONTRACT_VERSION;
   recommendation_id: string;
   vehicle: {
-    vin: string;
+    vin: string | null;
     year: number | null;
     make: string | null;
     model: string | null;
@@ -90,7 +91,7 @@ export type MaxbuyEvaluateResponse = {
 
 export function buildEvaluateResponse(
   recommendationId: string,
-  vin: string,
+  vin: string | null,
   vehicle: {
     year: number | null;
     make: string | null;
@@ -165,32 +166,68 @@ export async function runEvaluate(
   userId: string,
   request: MaxbuyEvaluateRequest,
 ): Promise<{ ok: true; data: MaxbuyEvaluateResponse } | { ok: false; error: EvaluateRunError }> {
-  const vin = normalizeVin(request.vin);
-  if (!isValidVinCheckDigit(vin)) {
-    return { ok: false, error: { code: "invalid_vin", message: "VIN must be 17 characters with valid check digit" } };
-  }
+  const rawVin = request.vin?.trim();
+  const hasVin = Boolean(rawVin);
 
   const db = getSupabaseClient(env);
-  const vinModelYear = decodeVinModelYear(vin);
 
-  const vehicleCtx = await resolveVehicleContext(
-    db,
-    {
-      vin,
-      region: request.region,
-      normalizedListingId: request.normalized_listing_id,
-    },
-    vinModelYear,
-  );
+  let vin: string | null = null;
+  let vehicleCtx: Awaited<ReturnType<typeof resolveVehicleContext>> = null;
+  let vinAbsent = false;
 
-  if (!vehicleCtx) {
-    return {
-      ok: false,
-      error: {
-        code: "vehicle_context_missing",
-        message: "Unable to resolve year/make/model for VIN — provide normalized_listing_id or region with decodable VIN",
-      },
+  if (hasVin) {
+    // ── VIN path ──────────────────────────────────────────────────────────────
+    vin = normalizeVin(rawVin!);
+    if (!isValidVinCheckDigit(vin)) {
+      return { ok: false, error: { code: "invalid_vin", message: "VIN must be 17 characters with valid check digit" } };
+    }
+
+    const vinModelYear = decodeVinModelYear(vin);
+    vehicleCtx = await resolveVehicleContext(
+      db,
+      { vin, region: request.region, normalizedListingId: request.normalized_listing_id },
+      vinModelYear,
+    );
+
+    if (!vehicleCtx) {
+      return {
+        ok: false,
+        error: {
+          code: "vehicle_context_missing",
+          message: "Unable to resolve year/make/model for VIN — provide normalized_listing_id or region with decodable VIN",
+        },
+      };
+    }
+  } else {
+    // ── YMM path (OPEN-5) ─────────────────────────────────────────────────────
+    vinAbsent = true;
+
+    // year/make/model are guaranteed by the schema refinement
+    const baseCtx: NonNullable<typeof vehicleCtx> = {
+      year: request.year!,
+      make: request.make!.toLowerCase(),
+      model: request.model!.toLowerCase(),
+      trim: (request.trim ?? "base").toLowerCase(),
+      region: (request.region ?? "unknown").toLowerCase(),
+      cotCity: null,
+      cotState: null,
     };
+
+    // Optionally enrich region/cotCity/cotState from the linked normalized listing
+    if (request.normalized_listing_id) {
+      const listingCtx = await resolveVehicleContext(
+        db,
+        { normalizedListingId: request.normalized_listing_id, region: request.region },
+        null,
+      );
+      if (listingCtx) {
+        baseCtx.region = listingCtx.region !== "unknown" ? listingCtx.region : baseCtx.region;
+        baseCtx.cotCity = listingCtx.cotCity;
+        baseCtx.cotState = listingCtx.cotState;
+      }
+    }
+
+    vehicleCtx = baseCtx;
   }
 
   let mileage = request.mileage ?? null;
@@ -209,13 +246,12 @@ export async function runEvaluate(
     mileageBand: mileageBand(mileage),
   };
 
-  let mmrLookup = await lookupMmrByVin(env, {
-    vin,
-    mileage,
-    year: vehicleCtx.year,
-  });
+  // ── MMR lookup ───────────────────────────────────────────────────────────────
+  let mmrLookup = hasVin && vin
+    ? await lookupMmrByVin(env, { vin, mileage, year: vehicleCtx.year })
+    : { ok: false as const, missingReason: "vin_absent", method: null as null };
 
-  if (!mmrLookup.ok || mmrLookup.envelope.mmr_value == null) {
+  if (!hasVin || !mmrLookup.ok || (mmrLookup.ok && mmrLookup.envelope.mmr_value == null)) {
     mmrLookup = await lookupMmrByYmm(env, {
       year: vehicleCtx.year,
       make: vehicleCtx.make,
@@ -229,14 +265,15 @@ export async function runEvaluate(
     ? mmrEnvelopeToProvenance(mmrLookup.envelope, mmrLookup.method)
     : {
         value: null,
-        method: null,
+        method: null as null,
         source: null,
         cacheAgeSeconds: null,
-        missingReason: mmrLookup.ok ? null : mmrLookup.missingReason,
+        missingReason: mmrLookup.missingReason,
         observedAt: null,
       };
 
-  const hardGate = runHardGates({ vin });
+  // Title/condition gates require a VIN — not evaluated on YMM-only runs.
+  const hardGate = vin ? runHardGates({ vin }) : null;
 
   const [pricingRows, transportRows, expenseRows, policy, historical] = await Promise.all([
     fetchPricingBenchmarkRows(db, segment),
@@ -266,11 +303,16 @@ export async function runEvaluate(
     hardGate,
     cotCity: vehicleCtx.cotCity,
     cotState: vehicleCtx.cotState,
+    vinAbsent,
   });
 
   const persisted = await persistRecommendation(db, {
     userId,
     vin,
+    year: vehicleCtx.year,
+    make: vehicleCtx.make,
+    model: vehicleCtx.model,
+    trim: vehicleCtx.trim,
     mileage,
     mileageEstimated,
     askingPrice: request.asking_price ?? null,

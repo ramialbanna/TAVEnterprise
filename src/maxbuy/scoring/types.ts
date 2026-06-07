@@ -57,6 +57,8 @@ export type ScoreMaxBuyInput = {
   hardGate: string | null;
   cotCity?: string | null;
   cotState?: string | null;
+  /** True when no VIN was supplied (OPEN-5 YMM-only path). Caps verdict at REVIEW. */
+  vinAbsent?: boolean;
 };
 
 export type ScoreMaxBuyResult = {

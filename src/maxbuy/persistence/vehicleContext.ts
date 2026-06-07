@@ -76,7 +76,8 @@ export type VehicleContext = {
 export async function resolveVehicleContext(
   db: SupabaseClient,
   input: {
-    vin: string;
+    /** Optional — when absent, VIN-based DB lookups are skipped. */
+    vin?: string;
     region?: string;
     normalizedListingId?: string;
   },
@@ -102,45 +103,47 @@ export async function resolveVehicleContext(
     }
   }
 
-  const { data: listing, error: listingError } = await db
-    .from("normalized_listings")
-    .select("year, make, model, trim, region")
-    .eq("vin", input.vin)
-    .order("last_seen_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (listingError) throw listingError;
-  if (listing?.year && listing.make && listing.model) {
-    return {
-      year: Number(listing.year),
-      make: String(listing.make).toLowerCase(),
-      model: String(listing.model).toLowerCase(),
-      trim: String(listing.trim ?? "base").toLowerCase(),
-      region: String(listing.region ?? input.region ?? "unknown").toLowerCase(),
-      cotCity: null,
-      cotState: null,
-    };
-  }
+  if (input.vin) {
+    const { data: listing, error: listingError } = await db
+      .from("normalized_listings")
+      .select("year, make, model, trim, region")
+      .eq("vin", input.vin)
+      .order("last_seen_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (listingError) throw listingError;
+    if (listing?.year && listing.make && listing.model) {
+      return {
+        year: Number(listing.year),
+        make: String(listing.make).toLowerCase(),
+        model: String(listing.model).toLowerCase(),
+        trim: String(listing.trim ?? "base").toLowerCase(),
+        region: String(listing.region ?? input.region ?? "unknown").toLowerCase(),
+        cotCity: null,
+        cotState: null,
+      };
+    }
 
-  const { data: outcome, error: outcomeError } = await db
-    .from("purchase_outcomes")
-    .select("year, make, model, trim, region, cot_city, cot_state")
-    .eq("vin", input.vin)
-    .order("sale_date", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (outcomeError) throw outcomeError;
+    const { data: outcome, error: outcomeError } = await db
+      .from("purchase_outcomes")
+      .select("year, make, model, trim, region, cot_city, cot_state")
+      .eq("vin", input.vin)
+      .order("sale_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (outcomeError) throw outcomeError;
 
-  if (outcome?.year && outcome.make && outcome.model) {
-    return {
-      year: Number(outcome.year),
-      make: String(outcome.make).toLowerCase(),
-      model: String(outcome.model).toLowerCase(),
-      trim: String(outcome.trim ?? "base").toLowerCase(),
-      region: String(outcome.region ?? input.region ?? "unknown").toLowerCase(),
-      cotCity: outcome.cot_city ? String(outcome.cot_city).toLowerCase() : null,
-      cotState: outcome.cot_state ? String(outcome.cot_state).toLowerCase() : null,
-    };
+    if (outcome?.year && outcome.make && outcome.model) {
+      return {
+        year: Number(outcome.year),
+        make: String(outcome.make).toLowerCase(),
+        model: String(outcome.model).toLowerCase(),
+        trim: String(outcome.trim ?? "base").toLowerCase(),
+        region: String(outcome.region ?? input.region ?? "unknown").toLowerCase(),
+        cotCity: outcome.cot_city ? String(outcome.cot_city).toLowerCase() : null,
+        cotState: outcome.cot_state ? String(outcome.cot_state).toLowerCase() : null,
+      };
+    }
   }
 
   if (vinModelYear != null && input.region) {

@@ -9,7 +9,7 @@ import { makeQueryClient } from "@/lib/query";
 /**
  * Client-side context providers for the whole app:
  *   - next-themes: class-based light/dark (`<html class="dark">`), default light, no system follow.
- *   - InterfaceProvider: Classic vs New UI (`localStorage` key `tav.interface`), default Classic.
+ *   - InterfaceProvider: always New mode (Classic retired in Phase 9 / WF-5).
  *   - TanStack Query: one client per browser session (created in useState so it survives re-renders
  *     but is never shared across requests on the server).
  */

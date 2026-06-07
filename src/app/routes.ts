@@ -65,7 +65,8 @@ import { MmrResponseEnvelopeSchema } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
-import { handleMaxbuyAppRoute, maxbuySystemStatus } from "./maxbuyProxy";
+import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
+import { MAXBUY_CONTRACT_VERSION } from "../maxbuy/api/schemas";
 import { log, serializeError } from "../logging/logger";
 import { VERSION } from "../version";
 
@@ -153,7 +154,7 @@ function verifyAppAuth(request: Request, env: Env): boolean {
   return verifyBearer(request, env.APP_API_SECRET);
 }
 
-export async function handleApp(request: Request, env: Env): Promise<Response> {
+export async function handleApp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!isConfiguredSecret(env.APP_API_SECRET)) {
     return json({ ok: false, error: "app_auth_not_configured" }, 503);
   }
@@ -264,7 +265,7 @@ export async function handleApp(request: Request, env: Env): Promise<Response> {
       return await handleParseListingUrl(request, env);
     }
     if (request.method === "POST" && pathname === "/app/opportunities/manual") {
-      return await handleManualOpportunitySubmit(request, env);
+      return await handleManualOpportunitySubmit(request, env, ctx);
     }
     if (pathname.startsWith("/app/maxbuy/")) {
       return await handleMaxbuyAppRoute(request, env, pathname);
@@ -1118,7 +1119,7 @@ async function handleParseListingUrl(request: Request, env: Env): Promise<Respon
 /**
  * POST /app/opportunities/manual — finder submits a listing URL into the queue.
  */
-async function handleManualOpportunitySubmit(request: Request, env: Env): Promise<Response> {
+async function handleManualOpportunitySubmit(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const userOrResponse = await requireAppUser(request, env);
   if (userOrResponse instanceof Response) return userOrResponse;
 
@@ -1150,6 +1151,29 @@ async function handleManualOpportunitySubmit(request: Request, env: Env): Promis
       submitterId: userOrResponse.id,
       isDuplicateUrl: data.isDuplicateUrl,
     });
+
+    // MB-1 (OPEN-5): background evaluate after manual submit.
+    // Fires on VIN when present; falls back to YMM when year+make+model are available.
+    const opp = data.opportunity;
+    const vin = opp?.vin;
+    const hasYmm = opp?.year && opp?.make && opp?.model;
+    if ((vin || hasYmm) && maxbuySystemStatus(env).enabled) {
+      const evalBody: Record<string, unknown> = {
+        contract_version: MAXBUY_CONTRACT_VERSION,
+        mileage: opp?.mileage ?? undefined,
+        asking_price: opp?.price ?? undefined,
+        normalized_listing_id: data.normalizedListingId,
+      };
+      if (vin) {
+        evalBody.vin = vin;
+      } else {
+        evalBody.year = opp!.year;
+        evalBody.make = opp!.make;
+        evalBody.model = opp!.model;
+      }
+      ctx.waitUntil(fireMaxbuyEvaluateBackground(env, userOrResponse.id, evalBody));
+    }
+
     return json({ ok: true, data }, 201);
   } catch (err) {
     if (err instanceof ManualSubmissionValidationError) {

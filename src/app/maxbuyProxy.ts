@@ -91,3 +91,43 @@ export function maxbuySystemStatus(env: Env): {
     url: env.MAXBUY_WORKER_URL || null,
   };
 }
+
+/**
+ * Fire a MaxBuy evaluate in the background (for use with ctx.waitUntil after manual submit).
+ * Silently no-ops when the flag is off, the worker is not configured, or the request fails.
+ * Never throws — safe to pass directly to waitUntil.
+ */
+export async function fireMaxbuyEvaluateBackground(
+  env: Env,
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  if (env.MAXBUY_EVALUATE_ENABLED !== "true") return;
+
+  const hasBinding = env.MAXBUY_WORKER !== undefined;
+  const baseUrl = env.MAXBUY_WORKER_URL || (hasBinding ? MAXBUY_SERVICE_BINDING_BASE : "");
+  if (!baseUrl || !isConfiguredSecret(env.MAXBUY_WORKER_SECRET)) return;
+
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    "x-tav-service-secret": env.MAXBUY_WORKER_SECRET,
+    "x-tav-user-id": userId,
+  });
+
+  const url = `${baseUrl}/maxbuy/evaluate`;
+  const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
+
+  try {
+    const response = hasBinding
+      ? await env.MAXBUY_WORKER!.fetch(url, init)
+      : await fetch(url, init);
+
+    if (!response.ok) {
+      log("app.maxbuy_async.failed", { status: response.status, vin: body["vin"] });
+    } else {
+      log("app.maxbuy_async.ok", { vin: body["vin"], normalizedListingId: body["normalized_listing_id"] });
+    }
+  } catch (err) {
+    log("app.maxbuy_async.error", { error: serializeError(err) });
+  }
+}
