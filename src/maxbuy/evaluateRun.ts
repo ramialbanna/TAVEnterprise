@@ -22,6 +22,7 @@ import { persistRecommendation } from "./persistence/recommendations";
 import {
   fetchHistoricalSummary,
   resolveVehicleContext,
+  type VehicleContext,
 } from "./persistence/vehicleContext";
 import { estimateMileage, mileageBand, resolveBenchmarks, scoreMaxBuy } from "./scoring";
 import type { ScoreMaxBuyResult, SegmentKey } from "./scoring/types";
@@ -172,7 +173,7 @@ export async function runEvaluate(
   const db = getSupabaseClient(env);
 
   let vin: string | null = null;
-  let vehicleCtx: Awaited<ReturnType<typeof resolveVehicleContext>> = null;
+  let vehicleCtx: VehicleContext | null = null;
   let vinAbsent = false;
 
   if (hasVin) {
@@ -203,7 +204,7 @@ export async function runEvaluate(
     vinAbsent = true;
 
     // year/make/model are guaranteed by the schema refinement
-    const baseCtx: NonNullable<typeof vehicleCtx> = {
+    const baseCtx: VehicleContext = {
       year: request.year!,
       make: request.make!.toLowerCase(),
       model: request.model!.toLowerCase(),
