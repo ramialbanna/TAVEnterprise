@@ -20,7 +20,7 @@ export function mapMaxbuyEvaluateToSnapshot(
   const apiVerdict = data.verdict.verdict;
   return {
     recommendationId: data.recommendation_id,
-    vin: data.vehicle.vin,
+    vin: data.vehicle.vin ?? "",
     displayState: data.verdict.display_state,
     recommendedMaxBuy: data.verdict.recommended_max_buy,
     askingPrice,

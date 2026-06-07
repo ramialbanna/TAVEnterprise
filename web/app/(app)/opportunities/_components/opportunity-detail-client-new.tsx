@@ -102,7 +102,7 @@ export function OpportunityDetailClientNew({
       year: initial.year != null ? String(initial.year) : "",
       make: initial.make ?? "",
       model: initial.model ?? "",
-      trim: initial.trim ?? "",
+      trim: initial.style ?? "",
       mileage: initial.mileage != null ? String(initial.mileage) : "",
       askingPrice: initial.price != null ? String(Math.round(initial.price)) : "",
       region,
