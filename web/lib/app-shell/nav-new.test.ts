@@ -21,19 +21,20 @@ describe("nav-new", () => {
   it("ops nav only for admins in shell builder", () => {
     expect(isAdminRole("admin")).toBe(true);
     expect(isAdminRole("closer")).toBe(false);
-    expect(opsNavItems()).toHaveLength(4);
+    expect(opsNavItems()).toHaveLength(3);
   });
 
   it("navTitleNew uses buyer-friendly labels", () => {
     expect(navTitleNew("/dashboard")).toBe("Home");
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
-    expect(navTitleNew("/maxbuy")).toBe("Max buy");
+    expect(navTitleNew("/mmr-lab")).toBe("MMR Lab");
+    expect(navTitleNew("/maxbuy")).toBe("MMR Lab");
     expect(analyticsNavItem().label).toBe("Analytics");
   });
 
-  it("buyer nav includes Max buy", () => {
+  it("buyer nav includes MMR Lab", () => {
     const hrefs = buyerNavItems().map((i) => i.href);
-    expect(hrefs).toContain("/maxbuy");
+    expect(hrefs).toContain("/mmr-lab");
   });
 });
