@@ -2,6 +2,7 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   SearchPanel,
+  parseLaneAskPrice,
   type MmrCatalogOptions,
   type MmrSelection,
 } from "./search-panel";
@@ -30,6 +31,8 @@ function renderPanel(
     catalog: MmrCatalogOptions;
     onSelectionChange: (next: MmrSelection) => void;
     onYmmSubmit: () => void;
+    laneAskPrice: string;
+    onLaneAskPriceChange: (value: string) => void;
   }> = {},
 ) {
   const props = {
@@ -40,6 +43,8 @@ function renderPanel(
     onSelectionChange: overrides.onSelectionChange ?? vi.fn(),
     onYmmSubmit: overrides.onYmmSubmit ?? vi.fn(),
     ymmPending: false,
+    laneAskPrice: overrides.laneAskPrice ?? "",
+    onLaneAskPriceChange: overrides.onLaneAskPriceChange ?? vi.fn(),
   };
   render(<SearchPanel {...props} />);
   return props;
@@ -117,6 +122,8 @@ describe("SearchPanel — live catalog + VIN", () => {
         onSelectionChange={vi.fn()}
         onYmmSubmit={onYmmSubmit}
         ymmPending={false}
+        laneAskPrice=""
+        onLaneAskPriceChange={vi.fn()}
       />,
     );
     expect(screen.getByRole("button", { name: /value selected vehicle/i })).toBeDisabled();
@@ -136,6 +143,8 @@ describe("SearchPanel — live catalog + VIN", () => {
         onSelectionChange={vi.fn()}
         onYmmSubmit={onYmmSubmit}
         ymmPending={false}
+        laneAskPrice=""
+        onLaneAskPriceChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
@@ -160,5 +169,28 @@ describe("SearchPanel — live catalog + VIN", () => {
       expect(within(sel).getAllByRole("option")).toHaveLength(1);
     }
     expect(screen.getByText(/live catalog not connected/i)).toBeInTheDocument();
+  });
+
+  it("lane ask price is optional and forwards digits-only changes", () => {
+    const onLaneAskPriceChange = vi.fn();
+    renderPanel({ onLaneAskPriceChange });
+    expect(screen.getByLabelText(/lane ask price/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/lane ask price/i), {
+      target: { value: "$21,500" },
+    });
+    expect(onLaneAskPriceChange).toHaveBeenCalledWith("21500");
+  });
+});
+
+describe("parseLaneAskPrice", () => {
+  it("returns null for empty or invalid values", () => {
+    expect(parseLaneAskPrice("")).toBeNull();
+    expect(parseLaneAskPrice("0")).toBeNull();
+    expect(parseLaneAskPrice("abc")).toBeNull();
+  });
+
+  it("parses positive integers", () => {
+    expect(parseLaneAskPrice("21500")).toBe(21500);
+    expect(parseLaneAskPrice(" 21500 ")).toBe(21500);
   });
 });

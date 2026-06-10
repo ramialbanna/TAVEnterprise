@@ -13,11 +13,18 @@ import { ErrorState, type ApiErrorResult } from "@/components/data-state";
 import type { MmrVinOk } from "@/lib/app-api/schemas";
 import {
   SearchPanel,
+  parseLaneAskPrice,
   type MmrCatalogOptions,
   type MmrSelection,
 } from "./search-panel";
 import { ResultBand } from "./result-band";
 import { DataSections } from "./data-sections";
+import { lowerSectionStateFromView } from "./mmr-lower-section-state";
+import {
+  MaxbuyEvaluationSection,
+  type MaxbuyEvaluationState,
+} from "./maxbuy-evaluation-section";
+import { buildMockMaxbuyEvaluation } from "./maxbuy-evaluation-mock";
 
 type View =
   | { kind: "empty" }
@@ -65,9 +72,34 @@ function titleFromSelection(selection: MmrSelection): string {
 
 export function MmrLabClient() {
   const [view, setView] = useState<View>({ kind: "empty" });
+  const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>({ kind: "idle" });
   const [identity, setIdentity] = useState<Identity>(null);
   const [selection, setSelection] = useState<MmrSelection>(emptySelection);
+  const [laneAskPrice, setLaneAskPrice] = useState("");
   const [catalog, setCatalog] = useState<MmrCatalogOptions>(emptyCatalog);
+
+  useEffect(() => {
+    if (view.kind === "loading") return;
+    if (view.kind === "empty") {
+      setMaxbuyView({ kind: "idle" });
+      return;
+    }
+    if (view.kind === "error") return;
+    if (!identity) return;
+
+    const mmr = view.kind === "ok" ? view.result : null;
+    const vin = identity.kind === "vin" ? identity.vin : undefined;
+    setMaxbuyView({
+      kind: "ready",
+      display: buildMockMaxbuyEvaluation(
+        {
+          mmrValue: mmr?.mmrValue ?? null,
+          adjustedMmr: mmr?.adjustedMmr ?? null,
+        },
+        { vin, askingPrice: parseLaneAskPrice(laneAskPrice) },
+      ),
+    });
+  }, [view, identity, laneAskPrice]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +185,7 @@ export function MmrLabClient() {
   const onVinSubmit = useCallback(async (vin: string) => {
     setIdentity({ kind: "vin", vin });
     setView({ kind: "loading" });
+    setMaxbuyView({ kind: "loading" });
     const res = await postMmrVin({ vin });
     if (res.ok) {
       setView({ kind: "ok", result: res.data });
@@ -160,6 +193,10 @@ export function MmrLabClient() {
       setView({ kind: "unavailable", reason: res.error });
     } else {
       setView({ kind: "error", error: res });
+      setMaxbuyView({
+        kind: "error",
+        message: "Max buy evaluation could not run for this lookup.",
+      });
     }
   }, []);
 
@@ -172,6 +209,7 @@ export function MmrLabClient() {
     const title = titleFromSelection(selection);
     setIdentity({ kind: "vehicle", title });
     setView({ kind: "loading" });
+    setMaxbuyView({ kind: "loading" });
     const res = await postMmrYmm({
       year: Number(selection.year),
       make: selection.make,
@@ -185,6 +223,10 @@ export function MmrLabClient() {
       setView({ kind: "unavailable", reason: res.error });
     } else {
       setView({ kind: "error", error: res });
+      setMaxbuyView({
+        kind: "error",
+        message: "Max buy evaluation could not run for this lookup.",
+      });
     }
   }, [selection]);
 
@@ -215,9 +257,20 @@ export function MmrLabClient() {
   }, [selection.make, selection.model, selection.year]);
 
   const result = view.kind === "ok" ? view.result : null;
+  const lowerSections = lowerSectionStateFromView(view.kind);
+  const resultBandPhase =
+    view.kind === "loading"
+      ? "loading"
+      : view.kind === "ok"
+        ? "ready"
+        : view.kind === "unavailable"
+          ? "unavailable"
+          : "idle";
+  const defaultOdometer =
+    parseMileage(selection.mileage) ?? result?.mileageUsed ?? null;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-[96rem] space-y-4 sm:space-y-6">
       <SearchPanel
         onVinSubmit={(v) => void onVinSubmit(v)}
         vinPending={view.kind === "loading" && identity?.kind === "vin"}
@@ -226,12 +279,14 @@ export function MmrLabClient() {
         onSelectionChange={onSelectionChange}
         onYmmSubmit={() => void onYmmSubmit()}
         ymmPending={view.kind === "loading" && identity?.kind === "vehicle"}
+        laneAskPrice={laneAskPrice}
+        onLaneAskPriceChange={setLaneAskPrice}
       />
 
       {identity ? (
-        <div className="border-b-4 border-primary px-6 pb-3 text-sm text-muted-foreground">
+        <div className="border-b-4 border-primary px-4 pb-3 text-sm text-muted-foreground sm:px-6">
           {identity.kind === "vehicle" ? (
-            <div className="text-xl font-semibold uppercase tracking-tight text-primary">
+            <div className="text-lg font-semibold uppercase tracking-tight text-primary sm:text-xl">
               {identity.title}
             </div>
           ) : (
@@ -243,7 +298,7 @@ export function MmrLabClient() {
       ) : null}
 
       {view.kind === "error" ? (
-        <div className="px-6">
+        <div className="px-4 sm:px-6">
           <ErrorState
             error={view.error}
             onRetry={
@@ -257,6 +312,8 @@ export function MmrLabClient() {
         </div>
       ) : (
         <ResultBand
+          phase={resultBandPhase}
+          defaultOdometer={defaultOdometer}
           baseMmr={result?.mmrValue ?? null}
           confidence={result?.confidence ?? null}
           method={result?.method ?? null}
@@ -272,7 +329,18 @@ export function MmrLabClient() {
         />
       )}
 
-      <DataSections />
+      <MaxbuyEvaluationSection
+        state={maxbuyView}
+        onRetry={
+          identity?.kind === "vin"
+            ? () => void onVinSubmit(identity.vin)
+            : identity?.kind === "vehicle"
+              ? () => void onYmmSubmit()
+              : undefined
+        }
+      />
+
+      <DataSections state={lowerSections} />
     </div>
   );
 }

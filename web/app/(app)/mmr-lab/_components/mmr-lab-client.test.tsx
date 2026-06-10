@@ -58,6 +58,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
       screen.queryByRole("button", { name: /fill example/i }),
     ).not.toBeInTheDocument();
     expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(7);
+    expect(screen.getByText(/search to run max buy/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument(),
     );
@@ -88,6 +89,52 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(screen.getByText("$26,600")).toBeInTheDocument();
     expect(screen.getByText("$23,500 - $29,800")).toBeInTheDocument();
     expect(fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/mmr/ymm"))).toBe(true);
+    await waitFor(() => expect(screen.getByText(/max buy evaluation/i)).toBeInTheDocument());
+    expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument();
+  });
+
+  it("lane ask price switches MaxBuy to deal_fit verdict after search", async () => {
+    mockCatalog();
+    render(<MmrLabClient />);
+
+    fireEvent.change(screen.getByLabelText(/lane ask price/i), { target: { value: "21000" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2026" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "TESLA" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "TESLA" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "MODEL Y AWD" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/model/i), { target: { value: "MODEL Y AWD" } });
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "4D SUV PERFORMANCE" })).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
+    fireEvent.change(screen.getByLabelText(/mileage/i), { target: { value: "70740" } });
+    fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
+
+    await waitFor(() => expect(screen.getByText(/^Buy$/i)).toBeInTheDocument());
+    expect(screen.getByText(/under ask/i)).toBeInTheDocument();
+  });
+
+  it("updating lane ask after search refreshes MaxBuy mock", async () => {
+    mockCatalog();
+    render(<MmrLabClient />);
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2026" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "TESLA" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "TESLA" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "MODEL Y AWD" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/model/i), { target: { value: "MODEL Y AWD" } });
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "4D SUV PERFORMANCE" })).toBeInTheDocument(),
+    );
+    fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
+    fireEvent.change(screen.getByLabelText(/mileage/i), { target: { value: "70740" } });
+    fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
+
+    await waitFor(() => expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/lane ask price/i), { target: { value: "21000" } });
+    await waitFor(() => expect(screen.getByText(/^Buy$/i)).toBeInTheDocument());
   });
 
   it("catalog not connected preserves honest disabled selectors", async () => {
@@ -108,7 +155,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
       target: { value: "1FT7W2BT4KED81759" },
     });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    await waitFor(() => expect(screen.getByText("$48,600")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("$48,600").length).toBeGreaterThanOrEqual(1));
     expect(fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/mmr/vin"))).toBe(true);
   });
 

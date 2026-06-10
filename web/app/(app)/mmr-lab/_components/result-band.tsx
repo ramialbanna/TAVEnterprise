@@ -1,9 +1,28 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { UnavailableState } from "@/components/data-state";
+import { cn } from "@/lib/utils";
+
+import {
+  EMPTY_MMR_ADJUSTMENTS,
+  hasMmrAdjustments,
+  MMR_COLOR_OPTIONS,
+  MMR_GRADE_OPTIONS,
+  MMR_REGION_OPTIONS,
+  type MmrAdjustments,
+} from "./mmr-adjustments";
 import { DASH, MmrMoney, MmrRange } from "./mmr-value";
 
+export type ResultBandPhase = "idle" | "loading" | "ready" | "unavailable";
+
 type Props = {
+  phase?: ResultBandPhase;
   baseMmr: number | null;
   confidence?: "high" | "medium" | "low" | null;
   method?: string | null;
@@ -16,6 +35,8 @@ type Props = {
   retailValue?: number | null;
   retailRangeLow?: number | null;
   retailRangeHigh?: number | null;
+  /** Prefill ODO when YMM search supplied mileage (visual only until recompute). */
+  defaultOdometer?: number | null;
 };
 
 function formatNumber(value: number | null | undefined): string {
@@ -35,7 +56,190 @@ const adjSelectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
+function ResultBandSkeleton() {
+  return (
+    <div
+      className="grid min-w-0 gap-4 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]"
+      aria-busy
+      aria-label="Loading MMR valuation"
+    >
+      <div className="space-y-3 text-center">
+        <Skeleton className="mx-auto h-4 w-24" />
+        <Skeleton className="mx-auto h-10 w-36" />
+        <Skeleton className="mx-auto h-6 w-20" />
+      </div>
+      <Card className="bg-surface-sunken">
+        <CardContent className="space-y-3 p-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+      <Skeleton className="h-64 w-full rounded-lg" />
+    </div>
+  );
+}
+
+type AdjustmentsPanelProps = {
+  interactive: boolean;
+  adjustments: MmrAdjustments;
+  onChange: (next: MmrAdjustments) => void;
+  onClear: () => void;
+};
+
+function MmrAdjustmentsPanel({
+  interactive,
+  adjustments,
+  onChange,
+  onClear,
+}: AdjustmentsPanelProps) {
+  const canClear = interactive && hasMmrAdjustments(adjustments);
+
+  return (
+    <Card className="bg-surface-sunken">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            MMR Adjustments
+          </span>
+          <div className="flex items-center gap-2">
+            {interactive ? (
+              <Badge variant="secondary" className="font-normal">
+                Preview
+              </Badge>
+            ) : null}
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs font-medium uppercase"
+              disabled={!canClear}
+              onClick={onClear}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+
+        <input
+          disabled={!interactive}
+          placeholder="Enter ODO (mi)"
+          aria-label="Enter ODO (mi)"
+          inputMode="numeric"
+          value={adjustments.odometer}
+          onChange={(e) =>
+            onChange({
+              ...adjustments,
+              odometer: e.target.value.replace(/[^\d]/g, ""),
+            })
+          }
+          className={adjSelectClass}
+        />
+
+        <select
+          disabled={!interactive}
+          aria-label="Region"
+          value={adjustments.region}
+          onChange={(e) => onChange({ ...adjustments, region: e.target.value })}
+          className={adjSelectClass}
+        >
+          <option value="">Region</option>
+          {MMR_REGION_OPTIONS.map((region) => (
+            <option key={region} value={region}>
+              {region}
+            </option>
+          ))}
+        </select>
+
+        <select
+          disabled={!interactive}
+          aria-label="Grade"
+          value={adjustments.grade}
+          onChange={(e) => onChange({ ...adjustments, grade: e.target.value })}
+          className={adjSelectClass}
+        >
+          <option value="">Grade**</option>
+          {MMR_GRADE_OPTIONS.map((grade) => (
+            <option key={grade} value={grade}>
+              {grade}
+            </option>
+          ))}
+        </select>
+
+        <select
+          disabled={!interactive}
+          aria-label="Exterior Color"
+          value={adjustments.exteriorColor}
+          onChange={(e) => onChange({ ...adjustments, exteriorColor: e.target.value })}
+          className={adjSelectClass}
+        >
+          <option value="">Exterior Color</option>
+          {MMR_COLOR_OPTIONS.map((color) => (
+            <option key={color} value={color}>
+              {color}
+            </option>
+          ))}
+        </select>
+
+        <div
+          className={cn(
+            "flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm",
+            !interactive && "opacity-50",
+          )}
+        >
+          <span>Build Options?</span>
+          <div className="flex gap-1">
+            {(["NO", "YES"] as const).map((label) => {
+              const yes = label === "YES";
+              const active = adjustments.buildOptions === yes;
+              return (
+                <Button
+                  key={label}
+                  type="button"
+                  size="sm"
+                  variant={active ? "default" : "outline"}
+                  disabled={!interactive}
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onChange({ ...adjustments, buildOptions: yes })}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        <input
+          disabled={!interactive}
+          placeholder="Enter Express grade"
+          aria-label="Enter Express grade"
+          inputMode="numeric"
+          value={adjustments.expressGrade}
+          onChange={(e) =>
+            onChange({
+              ...adjustments,
+              expressGrade: e.target.value.replace(/[^\d]/g, "").slice(0, 3),
+            })
+          }
+          className={adjSelectClass}
+        />
+
+        <p className="text-xs text-muted-foreground">
+          Numbers may not add exactly due to rounding ** AutoGrade™ or Manheim Express Grade.
+          {interactive
+            ? " Adjustments are interactive for layout review — adjusted MMR recompute ships in Phase 3 (#45)."
+            : " Run a search to enable adjustment controls."}
+        </p>
+        {interactive ? (
+          <p className="text-xs text-muted-foreground">Express grade eligible from 75 to 100.</p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function ResultBand({
+  phase = "idle",
   baseMmr,
   confidence,
   method,
@@ -48,15 +252,36 @@ export function ResultBand({
   retailValue,
   retailRangeLow,
   retailRangeHigh,
+  defaultOdometer = null,
 }: Props) {
+  const [adjustments, setAdjustments] = useState<MmrAdjustments>(EMPTY_MMR_ADJUSTMENTS);
+  const interactive = phase === "ready";
+
+  useEffect(() => {
+    if (phase === "loading") {
+      setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+      return;
+    }
+    if (phase === "ready" && defaultOdometer !== null) {
+      setAdjustments((current) =>
+        current.odometer === ""
+          ? { ...current, odometer: String(defaultOdometer) }
+          : current,
+      );
+    }
+  }, [phase, defaultOdometer]);
+
+  if (phase === "loading") {
+    return <ResultBandSkeleton />;
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
-      {/* Left — Base MMR */}
-      <div className="text-center">
+    <div className="grid min-w-0 gap-4 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="min-w-0 text-center">
         <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Base MMR
         </div>
-        <div className="mt-2 text-3xl font-semibold tabular-nums text-primary">
+        <div className="mt-2 text-2xl font-semibold tabular-nums text-primary sm:text-3xl">
           {unavailableReason ? (
             <UnavailableState code={unavailableReason} size="block" />
           ) : (
@@ -78,55 +303,14 @@ export function ResultBand({
         </div>
       </div>
 
-      {/* Center — MMR Adjustments (all disabled; no recompute endpoint) */}
-      <Card className="bg-surface-sunken">
-        <CardContent className="space-y-3 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              MMR Adjustments
-            </span>
-            <span
-              aria-disabled="true"
-              className="cursor-not-allowed text-xs font-medium uppercase text-muted-foreground/60"
-            >
-              Clear
-            </span>
-          </div>
-          <input
-            disabled
-            placeholder="Enter ODO (mi)"
-            aria-label="Enter ODO (mi)"
-            className={adjSelectClass}
-          />
-          <select disabled aria-label="Region" className={adjSelectClass}>
-            <option value="">Region</option>
-          </select>
-          <select disabled aria-label="Grade" className={adjSelectClass}>
-            <option value="">Grade**</option>
-          </select>
-          <select disabled aria-label="Exterior Color" className={adjSelectClass}>
-            <option value="">Exterior Color</option>
-          </select>
-          <div className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm opacity-50">
-            <span>Build Options?</span>
-            <span className="text-muted-foreground">NO</span>
-          </div>
-          <input
-            disabled
-            placeholder="Enter Express grade"
-            aria-label="Enter Express grade"
-            className={adjSelectClass}
-          />
-          <p className="text-xs text-muted-foreground">
-            Numbers may not add exactly due to rounding ** AutoGrade™ or Manheim
-            Express Grade. Adjustments require a backend recompute endpoint (tracked
-            in #45) — disabled until then.
-          </p>
-        </CardContent>
-      </Card>
+      <MmrAdjustmentsPanel
+        interactive={interactive}
+        adjustments={adjustments}
+        onChange={setAdjustments}
+        onClear={() => setAdjustments(EMPTY_MMR_ADJUSTMENTS)}
+      />
 
-      {/* Right — navy result panel */}
-      <div className="rounded-lg bg-primary p-6 text-center text-primary-foreground">
+      <div className="min-w-0 rounded-lg bg-primary p-4 text-center text-primary-foreground sm:p-6">
         <div className="text-sm uppercase tracking-wider opacity-90">MMR Range</div>
         <div className="mt-1 text-lg font-semibold tabular-nums">
           <MmrRange low={rangeLow} high={rangeHigh} />
@@ -135,7 +319,7 @@ export function ResultBand({
           <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Adjusted MMR
           </div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">
+          <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">
             <MmrMoney value={adjustedMmr} />
           </div>
         </div>
@@ -146,9 +330,7 @@ export function ResultBand({
         <div className="mt-1 text-lg font-semibold tabular-nums">
           <MmrMoney value={retailValue} />
         </div>
-        <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
-          Typical Range
-        </div>
+        <div className="mt-4 text-sm uppercase tracking-wider opacity-90">Typical Range</div>
         <div className="mt-1 text-lg font-semibold tabular-nums">
           <MmrRange low={retailRangeLow} high={retailRangeHigh} />
         </div>
