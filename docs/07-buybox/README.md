@@ -13,6 +13,7 @@ v1 ships **explainable benchmark math** (segment lookups + max-buy formula), not
 | Doc | When to read it |
 |---|---|
 | **[`../IMPLEMENTATION-PLAN.md`](../IMPLEMENTATION-PLAN.md)** | **Unified execution plan — progress tracker §2.3** |
+| **[`MMR-LAB-MAXBUY-PAGE.md`](MMR-LAB-MAXBUY-PAGE.md)** | **Combined `/mmr-lab` + MaxBuy Cox-style page — UI-first spec** |
 | [`STATUS.md`](STATUS.md) | Punch list + what's done / what's next |
 | [`DATA-SUMMARY.md`](DATA-SUMMARY.md) | The 57k deal dataset in Supabase — coverage, segments, MMR residuals |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | System design: online Worker vs offline Python, Option A/B/C serving |
