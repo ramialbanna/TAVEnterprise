@@ -29,12 +29,13 @@ describe("nav-new", () => {
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
     expect(navTitleNew("/mmr-lab")).toBe("MMR Lab");
-    expect(navTitleNew("/maxbuy")).toBe("MMR Lab");
+    expect(navTitleNew("/maxbuy")).toBe("Max buy");
     expect(analyticsNavItem().label).toBe("Analytics");
   });
 
-  it("buyer nav includes MMR Lab", () => {
+  it("buyer nav includes MMR Lab and Max buy", () => {
     const hrefs = buyerNavItems().map((i) => i.href);
     expect(hrefs).toContain("/mmr-lab");
+    expect(hrefs).toContain("/maxbuy");
   });
 });
