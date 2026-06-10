@@ -1,0 +1,61 @@
+---
+description: Before commit/push on web/ — run lint; never setState synchronously inside useEffect (react-hooks/set-state-in-effect)
+alwaysApply: true
+---
+
+# Web CI — `react-hooks/set-state-in-effect`
+
+Pushes that touch `web/**` run **web-ci**: `lint` → `build` → `typecheck` → `test`.  
+**Lint errors block merge** — especially `react-hooks/set-state-in-effect`.
+
+## Before commit or push (mandatory when `web/` changed)
+
+```bash
+cd web
+pnpm lint        # must exit 0 — errors block CI
+pnpm typecheck   # run after build if typedRoutes fails; see IMPLEMENTATION-PLAN §0
+pnpm test        # when you changed components or tests
+```
+
+Do **not** commit or push web changes until `pnpm lint` is clean.
+
+## The anti-pattern
+
+Do **not** call `setState` synchronously inside `useEffect` to mirror other React state or props.
+
+```tsx
+// ❌ BAD — fails eslint react-hooks/set-state-in-effect
+useEffect(() => {
+  setFormState(initial);
+}, [open, data]);
+
+useEffect(() => {
+  setChildView(deriveFrom(parent));
+}, [parent, askPrice]);
+```
+
+## Approved fixes
+
+| Situation | Fix |
+|-----------|-----|
+| Display derived from props/state | `useMemo` during render — no effect |
+| Reset local UI when session opens | Reset in `onOpenChange` / handler when `open` becomes true |
+| Reset child when parent identity changes | `key={sessionId}` on child to remount |
+| Seed local state once per session | `useState(() => seed)` + `key` when session changes |
+
+```tsx
+// ✅ GOOD — derive
+const maxbuyView = useMemo(() => buildView(view, laneAskPrice), [view, laneAskPrice]);
+
+// ✅ GOOD — remount resets adjustments
+<ResultBandAdjustments key={`${phase}-${odometer}`} defaultOdometer={odometer} />
+```
+
+## Agent checklist
+
+1. After editing any `web/**/*.tsx`, scan new/changed `useEffect` bodies for `setX(` calls.
+2. Refactor to derive, key, or event-handler reset **before** staging.
+3. Run `cd web && pnpm lint` — fix all **errors** (not just warnings).
+4. Only then commit/push.
+
+More context: `docs/IMPLEMENTATION-PLAN.md` §0 (Pre-push CI gate).
