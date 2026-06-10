@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -238,6 +238,28 @@ function MmrAdjustmentsPanel({
   );
 }
 
+function ResultBandAdjustments({
+  interactive,
+  defaultOdometer,
+}: {
+  interactive: boolean;
+  defaultOdometer: number | null;
+}) {
+  const [adjustments, setAdjustments] = useState<MmrAdjustments>(() => ({
+    ...EMPTY_MMR_ADJUSTMENTS,
+    odometer: interactive && defaultOdometer !== null ? String(defaultOdometer) : "",
+  }));
+
+  return (
+    <MmrAdjustmentsPanel
+      interactive={interactive}
+      adjustments={adjustments}
+      onChange={setAdjustments}
+      onClear={() => setAdjustments(EMPTY_MMR_ADJUSTMENTS)}
+    />
+  );
+}
+
 export function ResultBand({
   phase = "idle",
   baseMmr,
@@ -254,22 +276,11 @@ export function ResultBand({
   retailRangeHigh,
   defaultOdometer = null,
 }: Props) {
-  const [adjustments, setAdjustments] = useState<MmrAdjustments>(EMPTY_MMR_ADJUSTMENTS);
   const interactive = phase === "ready";
-
-  useEffect(() => {
-    if (phase === "loading") {
-      setAdjustments(EMPTY_MMR_ADJUSTMENTS);
-      return;
-    }
-    if (phase === "ready" && defaultOdometer !== null) {
-      setAdjustments((current) =>
-        current.odometer === ""
-          ? { ...current, odometer: String(defaultOdometer) }
-          : current,
-      );
-    }
-  }, [phase, defaultOdometer]);
+  const adjustmentsKey =
+    phase === "ready"
+      ? `ready-${defaultOdometer ?? "none"}`
+      : phase;
 
   if (phase === "loading") {
     return <ResultBandSkeleton />;
@@ -303,11 +314,10 @@ export function ResultBand({
         </div>
       </div>
 
-      <MmrAdjustmentsPanel
+      <ResultBandAdjustments
+        key={adjustmentsKey}
         interactive={interactive}
-        adjustments={adjustments}
-        onChange={setAdjustments}
-        onClear={() => setAdjustments(EMPTY_MMR_ADJUSTMENTS)}
+        defaultOdometer={defaultOdometer}
       />
 
       <div className="min-w-0 rounded-lg bg-primary p-4 text-center text-primary-foreground sm:p-6">

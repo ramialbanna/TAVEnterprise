@@ -1,11 +1,13 @@
-import type { MmrVinOk } from "@/lib/app-api/schemas";
 import type { MaxBuyCardSnapshot } from "@/components/maxbuy/types";
 
 import type { MaxbuyEvaluationDisplay } from "./maxbuy-evaluation-section";
 
 const MOCK_RECOMMENDATION_ID = "00000000-0000-4000-8000-000000000001";
 
-type MmrAnchor = Pick<MmrVinOk, "mmrValue" | "adjustedMmr">;
+type MmrAnchor = {
+  mmrValue: number | null;
+  adjustedMmr?: number | null;
+};
 
 /**
  * Phase 1 mock — replaced by live `postMaxbuyEvaluate` + `mapMaxbuyEvaluateToSnapshot` in Phase 2.
