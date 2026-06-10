@@ -3,7 +3,7 @@
 **Status:** Phase 2 **complete on `main`** (2026-06-10) — Phase 3 live MMR adjustment recompute next  
 **Last updated:** 2026-06-10 (Phase 2 live MaxBuy evaluate shipped)  
 **Route:** `/mmr-lab` (canonical; buyer-accessible)  
-**Shipped commits:** `a6ad7ef` (P1.1), `44c4c48`/`e35fa02` (P1.9 partial), `04ed30e` (P1.4–P1.11 UI), `dea5957` (CI fix), `d32a466` (P2.1–P2.7 live MaxBuy)
+**Shipped commits:** `a6ad7ef` (P1.1), `44c4c48`/`e35fa02` (P1.9 partial), `04ed30e` (P1.4–P1.11 UI), `dea5957` (CI fix), `eedabbc` (P2.1–P2.7 live MaxBuy)
 **Audience:** Cursor agents, solo dev, reviewers  
 **Reference screenshots:** `docs/07-buybox/screenshots mmr cox/` (`image.png`, `image copy.png`, `image copy 2.png`)
 
