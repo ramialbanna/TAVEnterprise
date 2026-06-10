@@ -4,6 +4,7 @@ import { AlertCircle, Lock } from "lucide-react";
 
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MaxbuyCardActions } from "@/components/maxbuy/maxbuy-card-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -170,8 +171,7 @@ function IdleShell() {
   return (
     <Card className="mt-2 border-dashed bg-surface-sunken">
       <CardContent className="py-10 text-center text-sm text-muted-foreground">
-        Search to run Max buy on this vehicle. Evaluation runs in parallel with MMR once live
-        evaluate ships (Phase 2); preview uses mock data until then.
+        Search to run Max buy on this vehicle. Evaluation runs in parallel with MMR lookup.
       </CardContent>
     </Card>
   );
@@ -286,21 +286,15 @@ function ReadyShell({ display }: { display: MaxbuyEvaluationDisplay }) {
 
             <ReasonCodeList codes={snapshot.reasonCodes} />
 
-            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">
-              <Button type="button" size="sm" disabled title="Available after live evaluate" className="w-full sm:w-auto">
-                Pass
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled
-                title="Available after live evaluate"
-                className="w-full sm:w-auto"
-              >
-                Override
-              </Button>
-            </div>
+            {snapshot.recommendationId ? (
+              <MaxbuyCardActions
+                snapshot={snapshot}
+                actionContext={{
+                  recommendationId: snapshot.recommendationId,
+                  vin: snapshot.vin,
+                }}
+              />
+            ) : null}
           </div>
 
           <div className="min-w-0 space-y-4 bg-surface-sunken p-4 sm:p-6">

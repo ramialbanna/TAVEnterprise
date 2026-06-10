@@ -1,8 +1,9 @@
 # MMR Lab + MaxBuy — Combined Page Spec
 
-**Status:** Active — UI-first execution plan  
-**Last updated:** 2026-06-10  
+**Status:** Phase 2 **complete on `main`** (2026-06-10) — Phase 3 live MMR adjustment recompute next  
+**Last updated:** 2026-06-10 (Phase 2 live MaxBuy evaluate shipped)  
 **Route:** `/mmr-lab` (canonical; buyer-accessible)  
+**Shipped commits:** `a6ad7ef` (P1.1), `44c4c48`/`e35fa02` (P1.9 partial), `04ed30e` (P1.4–P1.11 UI), `dea5957` (CI fix), `d32a466` (P2.1–P2.7 live MaxBuy)
 **Audience:** Cursor agents, solo dev, reviewers  
 **Reference screenshots:** `docs/07-buybox/screenshots mmr cox/` (`image.png`, `image copy.png`, `image copy 2.png`)
 
@@ -125,46 +126,43 @@ Cox columns (keep labels for familiarity):
 
 ---
 
-## 4. Current codebase state
+## 4. Current codebase state (2026-06-10)
 
 ### What exists today
 
 | Asset | Path | Notes |
 |-------|------|-------|
-| MMR Lab page | `web/app/(app)/mmr-lab/page.tsx` | Wrapped in `NewModeOpsGuard` → **non-admins redirected to `/opportunities`** |
-| MMR client | `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | VIN + YMM search, `ResultBand`, empty `DataSections` |
-| Result band | `web/app/(app)/mmr-lab/_components/result-band.tsx` | Cox-like 3-column layout; **adjustments disabled** |
-| Data sections | `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Placeholder Similar Vehicles, Transactions, Historical |
-| Search panel | `web/app/(app)/mmr-lab/_components/search-panel.tsx` | VIN + catalog cascades + mileage |
-| Standalone MaxBuy | `web/app/(app)/maxbuy/page.tsx` | Narrow `max-w-2xl` form — **not** Cox layout |
-| MaxBuy card | `web/components/maxbuy/maxbuy-card.tsx` | Compact card — reuse **content**, not layout, in Zone C1 |
-| MaxBuy live wiring | `web/components/maxbuy/maxbuy-live-card.tsx` | Evaluate mutation + form — extract logic, not page layout |
+| MMR Lab page | `web/app/(app)/mmr-lab/page.tsx` | **Buyer-accessible** — no `NewModeOpsGuard` (P1.1 ✅) |
+| MMR client | `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Zones A–C3 orchestration; **MMR + MaxBuy parallel live evaluate** (P2 ✅) |
+| Search panel | `web/app/(app)/mmr-lab/_components/search-panel.tsx` | VIN + YMM cascade + mileage + **lane ask price** (P1.4 ✅) |
+| Result band | `web/app/(app)/mmr-lab/_components/result-band.tsx` | 3-column Cox layout; **interactive adjustment preview** + loading skeleton (P1.5 ✅) |
+| MMR adjustments | `web/app/(app)/mmr-lab/_components/mmr-adjustments.ts` | Local adjustment model + option lists (preview only until P3) |
+| MaxBuy section | `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-section.tsx` | Zone C1 — live evaluate display + pass/override actions (P2 ✅) |
+| MaxBuy request builder | `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` | Session → `POST /app/maxbuy/evaluate` body (P2.2 ✅) |
+| MaxBuy result mapper | `web/app/(app)/mmr-lab/_components/apply-maxbuy-result.ts`, `map-maxbuy-display.ts` | API → Zone C1 display via `mapMaxbuyEvaluateToSnapshot` (P2.6 ✅) |
+| MaxBuy mock | `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-mock.ts` | **Tests only** — component unit tests; runtime uses live API |
+| Transactions | `web/app/(app)/mmr-lab/_components/transactions-table.tsx` | Zone C2 — idle/loading/empty shells (P1.7 ✅) |
+| Historical/projected | `web/app/(app)/mmr-lab/_components/historical-projected.tsx` | Zone C3 — price + avg mi placeholders (P1.7 ✅) |
+| Data sections | `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Composes C2 + C3; **Similar Vehicles removed** |
+| Section state | `web/app/(app)/mmr-lab/_components/mmr-lower-section-state.ts` | Maps MMR view → C2/C3 idle/loading/empty |
+| Standalone MaxBuy | `web/app/(app)/maxbuy/page.tsx` | Still narrow `max-w-2xl` form — **not redirected** (OPEN-MLB-4) |
+| MaxBuy card | `web/components/maxbuy/maxbuy-card.tsx` | “deep lookup” → `/mmr-lab` (P1.10 ✅) |
+| Buyer nav | `web/lib/app-shell/nav-new.ts` | **MMR Lab** + **Max buy** both in sidebar (P1.9 partial) |
+| Tests | `mmr-lab-page.test.tsx`, `mmr-lab-client.test.tsx`, component tests | Buyer access + zones (P1.12 ✅) |
 | MMR API (web) | `web/lib/app-api/client.ts` | `postMmrVin`, `postMmrYmm`, catalog getters |
-| MMR API (worker) | `src/app/routes.ts` | `/app/mmr/vin`, `/app/mmr/ymm`, `/app/mmr/catalog/*` |
-| MaxBuy API | `POST /app/maxbuy/evaluate` (proxied) | `web/lib/app-api/schemas.ts` → `MaxbuyEvaluateOkSchema` |
-| Intel worker | `workers/tav-intelligence-worker/` | Cox Storefront MMR; retail partially parsed |
-| Screenshots | `docs/07-buybox/screenshots mmr cox/` | Design reference |
+| MaxBuy API | `POST /app/maxbuy/evaluate` | **Wired on `/mmr-lab`** — parallel with MMR; lane ask re-evaluates (P2 ✅) |
 
-### What blocks buyers today
+### Resolved (was blocking Phase 1)
 
-```tsx
-// web/app/(app)/mmr-lab/page.tsx
-<NewModeOpsGuard>  // ← redirects non-admin to /opportunities
-  <MmrLabClient />
-</NewModeOpsGuard>
-```
+- ~~`NewModeOpsGuard` on `/mmr-lab`~~ — removed in P1.1
+- ~~Similar Vehicles placeholder~~ — removed; Zone C1 is MaxBuy evaluation
+- ~~Adjustments all disabled~~ — interactive preview enabled after lookup (no API recompute until P3)
 
-**Phase 1 must remove** `NewModeOpsGuard` from `/mmr-lab` (MLB-2).
+### Nav (product choice pending)
 
-### Nav today
+- Buyers see **MMR Lab** → `/mmr-lab` and **Max buy** → `/maxbuy` (commit `e35fa02` kept both)
+- **Not done:** `/maxbuy` redirect to `/mmr-lab` — see OPEN-MLB-4
 
-- Buyers see **Max buy** → `/maxbuy` (`web/lib/app-shell/nav-new.ts` `buyerNavItems`)
-- Admins see **Value a vehicle** → `/mmr-lab` under “More tools” (`opsNavItems`)
-
-**Phase 1 nav change (recommended):**
-
-- Buyer nav: point **Value a vehicle** (or rename **Max buy**) → `/mmr-lab`
-- `/maxbuy`: redirect to `/mmr-lab` **or** keep as thin alias (product choice; default: redirect)
 
 ---
 
@@ -174,41 +172,50 @@ Cox columns (keep labels for familiarity):
 
 **Goal:** Cox IA on `/mmr-lab`, buyer-accessible, design-reviewable without new backend.
 
-| Task | Detail |
-|------|--------|
-| P1.1 | Remove `NewModeOpsGuard` from `mmr-lab/page.tsx` |
-| P1.2 | Widen page layout — remove `max-w-2xl` constraint; full-width dashboard like Cox |
-| P1.3 | Refactor `MmrLabClient` into zones A / B / C1 / C2 / C3 (new folder `_components/zones/` or similar) |
-| P1.4 | Zone A: add optional **Lane ask / List price** field; keep existing VIN + YMM search |
-| P1.5 | Zone B: enable **visual** adjustment controls (not wired to API yet); show loading skeleton on search |
-| P1.6 | Zone C1: new `MaxbuyEvaluationSection` — mock states: empty, loading, ready (`deal_fit` + `vehicle_fit`), error, disabled |
-| P1.7 | Zone C2/C3: upgrade `DataSections` — remove Similar Vehicles; keep Transactions + Historical shells with realistic empty/loading states |
-| P1.8 | Parallel fetch **stub**: on search, call real MMR APIs; MaxBuy section uses **mock snapshot** or defers evaluate until phase 2 (toggle `USE_MOCK_MAXBUY` in dev optional) |
-| P1.9 | Update buyer nav → `/mmr-lab`; redirect `/maxbuy` → `/mmr-lab` |
-| P1.10 | Update `maxbuy-card.tsx` link text “deep lookup” → still `/mmr-lab` |
-| P1.11 | Responsive: stack 3-column dashboard on mobile; table horizontal scroll |
-| P1.12 | Tests: page renders for non-admin session; zones visible; no redirect to opportunities |
+| Task | Detail | Status |
+|------|--------|--------|
+| P1.1 | Remove `NewModeOpsGuard` from `mmr-lab/page.tsx` | ✅ |
+| P1.2 | Widen page layout — remove `max-w-2xl` constraint; full-width dashboard like Cox | ✅ |
+| P1.3 | Refactor `MmrLabClient` into zones A / B / C1 / C2 / C3 (new folder `_components/zones/` or similar) | ⬜ Optional — zones exist as separate components; no `zones/` folder |
+| P1.4 | Zone A: add optional **Lane ask / List price** field; keep existing VIN + YMM search | ✅ |
+| P1.5 | Zone B: enable **visual** adjustment controls (not wired to API yet); show loading skeleton on search | ✅ |
+| P1.6 | Zone C1: new `MaxbuyEvaluationSection` — mock states: empty, loading, ready (`deal_fit` + `vehicle_fit`), error, disabled | ✅ (mock; `unavailable` state in component, not wired to system status) |
+| P1.7 | Zone C2/C3: upgrade `DataSections` — remove Similar Vehicles; keep Transactions + Historical shells with realistic empty/loading states | ✅ |
+| P1.8 | Parallel fetch **stub**: on search, call real MMR APIs; MaxBuy section uses **mock snapshot** or defers evaluate until phase 2 (toggle `USE_MOCK_MAXBUY` in dev optional) | ✅ |
+| P1.9 | Update buyer nav → `/mmr-lab`; redirect `/maxbuy` → `/mmr-lab` | ⚠️ Partial — MMR Lab in buyer nav; `/maxbuy` still separate (OPEN-MLB-4) |
+| P1.10 | Update `maxbuy-card.tsx` link text “deep lookup” → still `/mmr-lab` | ✅ |
+| P1.11 | Responsive: stack 3-column dashboard on mobile; table horizontal scroll | ✅ |
+| P1.12 | Tests: page renders for non-admin session; zones visible; no redirect to opportunities | ✅ |
 
 **Phase 1 exit criteria:**
 
-- Any authenticated buyer can open `/mmr-lab` without redirect
-- Layout matches §3 zones (screenshot review against Cox refs)
-- MMR search still works (VIN + YMM)
-- MaxBuy zone shows designed states (mock OK)
-- Transactions + Historical show structured placeholders
-- `pnpm lint`, `pnpm typecheck`, `pnpm test` pass in `web/`
+- [x] Any authenticated buyer can open `/mmr-lab` without redirect
+- [ ] Layout matches §3 zones (screenshot review against Cox refs) — **human review pending**
+- [x] MMR search still works (VIN + YMM)
+- [x] MaxBuy zone shows designed states (live evaluate in Phase 2)
+- [x] Transactions + Historical show structured placeholders
+- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass in `web/` (after `dea5957` CI fix)
 
 ### Phase 2 — Wire live functionality
 
-| Task | Detail |
-|------|--------|
-| P2.1 | On search: fire `postMmrVin` / `postMmrYmm` **and** `postMaxbuyEvaluate` in parallel |
-| P2.2 | Build MaxBuy request from MMR session state (VIN or YMM + mileage + region + `asking_price` from lane field) |
-| P2.3 | MMR priority: render Zone B from MMR promise first; Zone C1 updates when evaluate resolves |
-| P2.4 | Error isolation: MMR failure does not block MaxBuy zone message (and vice versa) |
-| P2.5 | YMM-only MaxBuy: no VIN required ([`maxbuy-evaluate-form.tsx`](../../web/components/maxbuy/maxbuy-evaluate-form.tsx) `buildMaxbuyEvaluateRequest` pattern) |
-| P2.6 | Reuse `mapMaxbuyEvaluateToSnapshot` + expand Zone C1 to show full economics from `MaxbuyEvaluateOkSchema` |
-| P2.7 | Pass/override actions when evaluate returns `recommendation_id` |
+| Task | Detail | Status |
+|------|--------|--------|
+| P2.1 | On search: fire `postMmrVin` / `postMmrYmm` **and** `postMaxbuyEvaluate` in parallel | ✅ |
+| P2.2 | Build MaxBuy request from MMR session state (VIN or YMM + mileage + region + `asking_price` from lane field) | ✅ |
+| P2.3 | MMR priority: render Zone B from MMR promise first; Zone C1 updates when evaluate resolves | ✅ |
+| P2.4 | Error isolation: MMR failure does not block MaxBuy zone message (and vice versa) | ✅ |
+| P2.5 | YMM-only MaxBuy: no VIN required ([`maxbuy-evaluate-form.tsx`](../../web/components/maxbuy/maxbuy-evaluate-form.tsx) `buildMaxbuyEvaluateRequest` pattern) | ✅ |
+| P2.6 | Reuse `mapMaxbuyEvaluateToSnapshot` + expand Zone C1 to show full economics from `MaxbuyEvaluateOkSchema` | ✅ |
+| P2.7 | Pass/override actions when evaluate returns `recommendation_id` | ✅ |
+
+**Phase 2 exit criteria:**
+
+- [x] Search fires MMR + MaxBuy evaluate in parallel (`Promise.allSettled`)
+- [x] Lane ask price forwarded as `asking_price`; changing ask re-runs evaluate
+- [x] YMM path works without VIN
+- [x] MMR error does not suppress MaxBuy results (and vice versa handled)
+- [x] Zone C1 shows economics, TAV historical, verdict, pass/override when `recommendation_id` present
+- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass in `web/`
 
 ### Phase 3 — MMR adjustments (live recompute)
 
@@ -221,7 +228,7 @@ Cox center panel changes adjusted MMR when ODO/region/grade/color/build options 
 | P3.3 | Wire Zone B controls → debounced recompute → update Zone B right panel |
 | P3.4 | Lane ask price in adjustments/search → updates MaxBuy `asking_price` on re-evaluate |
 
-**Note:** Today `result-band.tsx` documents adjustments as disabled pending issue #45 / recompute endpoint.
+**Note:** Adjustments are **interactive in preview** after lookup (P1.5 ✅). Live recompute → adjusted MMR right panel ships in Phase 3 (#45).
 
 ### Phase 4 — Transactions + Historical/Projected (full Cox data)
 
@@ -339,25 +346,37 @@ const [mmr, maxbuy] = await Promise.allSettled([
 
 ### Modify (phase 1)
 
-| File | Change |
-|------|--------|
-| `web/app/(app)/mmr-lab/page.tsx` | Remove ops guard; page title/description |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Orchestrate zones + parallel fetch |
-| `web/app/(app)/mmr-lab/_components/result-band.tsx` | Enable adjustment UI (visual); optional props for loading |
-| `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Remove Similar Vehicles; rename zones C2/C3 |
-| `web/app/(app)/mmr-lab/_components/search-panel.tsx` | Add lane ask price field |
-| `web/lib/app-shell/nav-new.ts` | Buyer nav → `/mmr-lab` |
-| `web/app/(app)/maxbuy/page.tsx` | Redirect to `/mmr-lab` (optional) |
+| File | Change | Status |
+|------|--------|--------|
+| `web/app/(app)/mmr-lab/page.tsx` | Remove ops guard; page title/description | ✅ |
+| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Orchestrate zones + parallel live MMR/MaxBuy fetch | ✅ |
+| `web/app/(app)/mmr-lab/_components/result-band.tsx` | Enable adjustment UI (visual); loading skeleton | ✅ |
+| `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Remove Similar Vehicles; compose C2/C3 | ✅ |
+| `web/app/(app)/mmr-lab/_components/search-panel.tsx` | Add lane ask price field | ✅ |
+| `web/lib/app-shell/nav-new.ts` | Buyer nav → `/mmr-lab` | ✅ (both MMR Lab + Max buy) |
+| `web/app/(app)/maxbuy/page.tsx` | Redirect to `/mmr-lab` (optional) | ⬜ OPEN-MLB-4 |
 
 ### Create (phase 1)
 
-| File | Purpose |
-|------|---------|
-| `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-section.tsx` | Zone C1 full layout |
-| `web/app/(app)/mmr-lab/_components/transactions-table.tsx` | Zone C2 |
-| `web/app/(app)/mmr-lab/_components/historical-projected.tsx` | Zone C3 |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-page.test.tsx` | Buyer access + zone smoke tests |
-| `web/lib/mmr-lab/session.ts` (optional) | Shared session state: identity, adjustments, asking price |
+| File | Purpose | Status |
+|------|---------|--------|
+| `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-section.tsx` | Zone C1 full layout | ✅ |
+| `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-mock.ts` | Phase 1 mock builder | ✅ |
+| `web/app/(app)/mmr-lab/_components/transactions-table.tsx` | Zone C2 | ✅ |
+| `web/app/(app)/mmr-lab/_components/historical-projected.tsx` | Zone C3 | ✅ |
+| `web/app/(app)/mmr-lab/_components/mmr-adjustments.ts` | Adjustment model + options | ✅ |
+| `web/app/(app)/mmr-lab/_components/mmr-lower-section-state.ts` | C2/C3 state from MMR view | ✅ |
+| `web/app/(app)/mmr-lab/mmr-lab-page.test.tsx` | Buyer access smoke test | ✅ |
+| `web/lib/mmr-lab/session.ts` (optional) | Shared session state | ⬜ Skipped — state lives in `mmr-lab-client` |
+
+### Create (phase 2)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` | Session → evaluate request body | ✅ |
+| `web/app/(app)/mmr-lab/_components/apply-maxbuy-result.ts` | API result → Zone C1 state | ✅ |
+| `web/app/(app)/mmr-lab/_components/map-maxbuy-display.ts` | `MaxbuyEvaluateOk` → display model | ✅ |
+| `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.test.ts` | Request builder unit tests | ✅ |
 
 ### Reuse (do not duplicate business logic)
 
@@ -393,22 +412,21 @@ const [mmr, maxbuy] = await Promise.allSettled([
 
 - `idle` — prompt “Search to run Max buy”
 - `loading` — skeleton card below MMR
-- `ready_deal_fit` — verdict + delta to ask
-- `ready_vehicle_fit` — max buy ceiling only (no asking price)
+- `ready` — `display.snapshot.displayState` is `deal_fit` (verdict + delta) or `vehicle_fit` (ceiling only)
 - `unavailable` — API off / `MAXBUY_EVALUATE_ENABLED`
 - `error` — isolated from MMR error
 
 ### Phase 1 review checklist (human)
 
 - [ ] Compare layout to Cox screenshots side-by-side
-- [ ] Buyer account opens `/mmr-lab` (no redirect)
-- [ ] VIN search populates Zone B
-- [ ] YMM search works without VIN
-- [ ] Lane ask field visible; documented where it sits
-- [ ] MaxBuy zone visually distinct from MMR (not confused with retail)
-- [ ] No Similar Vehicles section
-- [ ] Transactions table columns match Cox
-- [ ] Mobile layout acceptable
+- [x] Buyer account opens `/mmr-lab` (no redirect)
+- [x] VIN search populates Zone B
+- [x] YMM search works without VIN
+- [x] Lane ask field visible; documented where it sits
+- [x] MaxBuy zone visually distinct from MMR (not confused with retail)
+- [x] No Similar Vehicles section
+- [x] Transactions table columns match Cox
+- [ ] Mobile layout acceptable — **human review pending**
 
 ### Verification commands
 
@@ -466,13 +484,10 @@ Raw Listing → Normalized Listing → Vehicle Candidate → Lead
 ## 13. Agent prompt (copy into Cursor)
 
 ```text
-Implement Phase 1 of docs/07-buybox/MMR-LAB-MAXBUY-PAGE.md:
+Implement Phase 3 of docs/07-buybox/MMR-LAB-MAXBUY-PAGE.md:
 
-- Make /mmr-lab buyer-accessible (remove NewModeOpsGuard)
-- Rebuild page into Cox IA zones A/B/C1/C2/C3 per the spec
-- Replace Similar Vehicles with MaxBuy evaluation section (mock states OK)
-- UI first — real parallel MaxBuy wiring is Phase 2
-- TAV design system, not pixel Cox clone
-- Do not change deal detail embedded MaxBuy or opportunities workflow
-- Run web lint, typecheck, test before done
+- Add POST /app/mmr/recompute (or extend vin/ymm) with adjustment params
+- Wire Zone B adjustment controls → debounced recompute → update adjusted MMR panel
+- Lane ask changes already re-run MaxBuy (P2); ensure adjustment-driven re-eval if needed
+- Run web lint, typecheck, test before done (see .cursor/rules/web-ci-react-effects.mdc)
 ```
