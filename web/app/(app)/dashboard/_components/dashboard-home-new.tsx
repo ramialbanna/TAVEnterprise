@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Briefcase, PlusCircle, Scale, Target } from "lucide-react";
+import { BarChart3, Briefcase, PlusCircle, Search, Target } from "lucide-react";
 
 import { listOpportunitiesPage } from "@/lib/app-api/client";
 import { NEW_ANALYTICS_HREF } from "@/lib/app-shell/nav-new";
@@ -91,13 +91,13 @@ export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts 
           </Card>
         </Link>
 
-        <Link href="/maxbuy" className="block h-full">
+        <Link href="/mmr-lab" className="block h-full">
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
-              <Scale className="mb-1 size-5 text-primary" aria-hidden />
-              <CardTitle className="text-lg">Max buy lookup</CardTitle>
+              <Search className="mb-1 size-5 text-primary" aria-hidden />
+              <CardTitle className="text-lg">MMR Lab</CardTitle>
               <CardDescription>
-                VIN → recommended max buy and buy/pass verdict (coming soon).
+                Wholesale MMR lookup, Max buy evaluation, and market context at the lane.
               </CardDescription>
             </CardHeader>
           </Card>

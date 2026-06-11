@@ -270,4 +270,54 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
     await expect(page.getByText(/no MMR value was returned/i)).toBeVisible();
     await expect(page.getByText(/\$\d/)).toHaveCount(0);
   });
+
+  test("/maxbuy redirects to /mmr-lab", async ({ page }) => {
+    await mockCatalog(page);
+    await page.goto("/maxbuy");
+    await expect(page).toHaveURL(/\/mmr-lab$/);
+    await expect(page.getByRole("main").getByText(/^MMR$/).first()).toBeVisible();
+  });
+
+  test("YMM search shows live historical and projected averages when Cox returns market context", async ({
+    page,
+  }) => {
+    await mockCatalog(page);
+    await page.route("**/api/app/mmr/ymm", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          data: {
+            mmrValue: 23900,
+            confidence: "medium",
+            method: "year_make_model",
+            mileageUsed: 70740,
+            adjustedMmr: 23900,
+            historicalAverages: {
+              past30Days: { price: 18900, avgMileage: 65563 },
+              sixMonthsAgo: { price: 18250, avgMileage: 57567 },
+              lastYear: { price: 21900, avgMileage: 51440 },
+            },
+            projectedAverage: { price: 19100, avgMileage: null },
+            transactions: [],
+          },
+        }),
+      }),
+    );
+
+    await page.goto("/mmr-lab");
+    await page.getByLabel("Year", { exact: true }).selectOption("2026");
+    await page.getByLabel("Make", { exact: true }).selectOption("TESLA");
+    await page.getByLabel("Model", { exact: true }).selectOption("MODEL Y AWD");
+    await page.getByLabel("Style", { exact: true }).selectOption("4D SUV PERFORMANCE");
+    await page.getByLabel("Mileage", { exact: true }).fill("70740");
+    await page.getByRole("button", { name: /value selected vehicle/i }).click();
+
+    await expect(page.getByRole("heading", { name: /historical average/i })).toBeVisible();
+    await expect(page.getByText("$18,900")).toBeVisible();
+    await expect(page.getByText("$19,100")).toBeVisible();
+    await expect(page.getByText("65,563 mi")).toBeVisible();
+    await expect(page.getByText(/no wholesale auction comps returned/i)).toBeVisible();
+  });
 });
