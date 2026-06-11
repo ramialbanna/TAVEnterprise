@@ -4,12 +4,7 @@ import type { Env } from "../src/types/env";
 import { listImportBatches } from "../src/persistence/importBatches";
 import { listHistoricalSales } from "../src/persistence/historicalSales";
 import { getLastCronRun } from "../src/persistence/cronRuns";
-import {
-  getMmrValueFromWorker,
-  WorkerTimeoutError,
-  WorkerRateLimitError,
-  WorkerUnavailableError,
-} from "../src/valuation/workerClient";
+import { getMmrValueFromWorker } from "../src/valuation/workerClient";
 import type * as WorkerClientModule from "../src/valuation/workerClient";
 import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
 import { listOpportunities, getOpportunityDetail } from "../src/persistence/opportunities";
@@ -113,9 +108,7 @@ vi.mock("../src/persistence/cronRuns", () => ({
   recordCronRunSafe: vi.fn(),
 }));
 
-// valuation/workerClient: only getMmrValueFromWorker is replaced; the Worker*Error
-// classes stay real so `instanceof` checks in handleMmrVin work and tests can
-// construct them.
+// valuation/workerClient: only getMmrValueFromWorker is replaced for ingest paths.
 vi.mock("../src/valuation/workerClient", async (importOriginal) => {
   const actual = await importOriginal<typeof WorkerClientModule>();
   return { ...actual, getMmrValueFromWorker: vi.fn() };
