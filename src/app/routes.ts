@@ -58,6 +58,7 @@ import { classifyIntelHttpError } from "../valuation/workerClient";
 import { MmrLookupAdjustmentsSchema, MmrResponseEnvelopeSchema } from "../types/intelligence";
 import type { MmrResponseEnvelope } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
+import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
@@ -523,6 +524,7 @@ function mapIntelMmrEnvelopeToAppData(
   }
 
   const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
+  const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
   const payloadItem = firstPayloadItem(envelope.mmr_payload);
   return {
     mmrValue: envelope.mmr_value,
@@ -538,6 +540,15 @@ function mapIntelMmrEnvelopeToAppData(
     retailValue: distribution.retailAvg,
     retailRangeLow: distribution.retailRough,
     retailRangeHigh: distribution.retailClean,
+    ...(marketContext.historicalAverages !== null
+      ? { historicalAverages: marketContext.historicalAverages }
+      : {}),
+    ...(marketContext.projectedAverage !== null
+      ? { projectedAverage: marketContext.projectedAverage }
+      : {}),
+    ...(marketContext.transactions.length > 0
+      ? { transactions: marketContext.transactions }
+      : {}),
   };
 }
 

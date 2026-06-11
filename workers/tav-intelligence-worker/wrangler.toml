@@ -48,6 +48,9 @@ id      = "80195f01a65c4431af1e3835f9bea933"
 
 [env.staging.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
+# Phase 4 — Cox historical + forecast includes on MMR lookups (smoke on staging first).
+MANHEIM_INCLUDE_HISTORICAL = "true"
+MANHEIM_INCLUDE_FORECAST = "true"
 # INTEL_SERVICE_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put INTEL_SERVICE_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
 
@@ -66,6 +69,9 @@ id      = "ada5f91d77b24ff0966fb3032bb56b94"
 
 [env.production.vars]
 MANAGER_EMAIL_ALLOWLIST = ""
+# Phase 4 — enable after staging smoke validates Cox historical/forecast payloads.
+MANHEIM_INCLUDE_HISTORICAL = "true"
+MANHEIM_INCLUDE_FORECAST = "true"
 
 # ── Secrets (set before first deploy) ────────────────────────────────────────
 #

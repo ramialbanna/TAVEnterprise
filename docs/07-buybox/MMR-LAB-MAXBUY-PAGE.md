@@ -1,13 +1,13 @@
 # MMR Lab + MaxBuy — Combined Page Spec
 
-**Status:** Phase 2 **complete on `main`** (2026-06-10) — Phase 3 live MMR adjustment recompute next  
-**Last updated:** 2026-06-10 (Phase 2 live MaxBuy evaluate shipped)  
+**Status:** Phase 4 **complete on `main`** (2026-06-11) — historical/forecast wired; transactions parser ready when Cox returns rows  
+**Last updated:** 2026-06-11 (Phase 4 Cox market context on `/mmr-lab` C2/C3)  
 **Route:** `/mmr-lab` (canonical; buyer-accessible)  
-**Shipped commits:** `a6ad7ef` (P1.1), `44c4c48`/`e35fa02` (P1.9 partial), `04ed30e` (P1.4–P1.11 UI), `dea5957` (CI fix), `eedabbc` (P2.1–P2.7 live MaxBuy)
+**Shipped commits:** `a6ad7ef` (P1.1), `44c4c48`/`e35fa02` (P1.9 partial), `04ed30e` (P1.4–P1.11 UI), `dea5957` (CI fix), `eedabbc` (P2.1–P2.7 live MaxBuy), `223aa49` (P3.1–P3.3 live adjustments), `e1a511f` (deploy lint fix)
 **Audience:** Cursor agents, solo dev, reviewers  
 **Reference screenshots:** `docs/07-buybox/screenshots mmr cox/` (`image.png`, `image copy.png`, `image copy 2.png`)
 
-> **Agent entry point:** Read this file before touching `/mmr-lab`, MaxBuy standalone UI, MMR adjustments, or buyer nav for valuation tools. UI work ships first with mocks/placeholders; backend wiring is a second phase.
+> **Agent entry point:** Read this file before touching `/mmr-lab`, MaxBuy standalone UI, MMR adjustments, or buyer nav for valuation tools. Phases 1–3 are shipped on `main`; Phase 4 (Cox transactions + historical/forecast) is next.
 
 ---
 
@@ -41,7 +41,8 @@ Open /mmr-lab (any buyer role)
   → MMR dashboard loads (priority UI)
   → MaxBuy evaluate fires in parallel (same inputs)
   → MaxBuy block fills below MMR dashboard
-  → Transactions + Historical sections (shell → live)
+  → User adjusts ODO/region/grade/color/build → debounced MMR recompute updates adjusted panel (P3 ✅)
+  → Transactions + Historical sections (shell → live in Phase 4)
 ```
 
 ---
@@ -56,7 +57,7 @@ Open /mmr-lab (any buyer role)
 | **MLB-4** | **MaxBuy runs without VIN** — YMM path (OPEN-5) must work on this page |
 | **MLB-5** | **Asking price flows from MMR lookup session** — user enters lane/list price in the MMR search/adjustments context; that value is passed to MaxBuy as `asking_price` for `deal_fit` verdict (not a separate MaxBuy-only form) |
 | **MLB-6** | **Full Cox lower sections** — Transactions table + Historical/Projected averages (UI first, API phase 2) |
-| **MLB-7** | **Full live MMR adjustments** — odometer, region, grade, color, build options recompute adjusted MMR (API phase 2; UI shows interactive controls in phase 1) |
+| **MLB-7** | **Full live MMR adjustments** — odometer, region, grade, color, build options recompute adjusted MMR via Cox query params on `vin`/`ymm` (P3 ✅) |
 | **MLB-8** | **UI first** — nail layout and states with mocks/placeholders before wiring all backend |
 | **MLB-9** | **Everything else unchanged** — embedded MaxBuy on deal detail, `/maxbuy` page, Opportunities queue, ingest, nav structure beyond access/route updates |
 
@@ -90,7 +91,7 @@ Three columns (existing `ResultBand` pattern in `web/app/(app)/mmr-lab/_componen
 | Column | Cox content | TAV v1 UI | TAV v2 API |
 |--------|-------------|-----------|------------|
 | **Left** | Base MMR, avg odometer, avg condition, EV battery | Live from `POST /app/mmr/vin` or `ymm` | Same |
-| **Center** | MMR Adjustments: ODO, Region, Grade, Color, Build options, Clear | **Interactive UI in phase 1**; recompute **phase 2** | New recompute endpoint(s) |
+| **Center** | MMR Adjustments: ODO, Region, Grade, Color, Build options, Clear | **Live debounced recompute** (P3 ✅) | Optional `adjustments` on `POST /app/mmr/vin` and `ymm` |
 | **Right** | MMR range, Adjusted MMR (hero), Est. retail, Typical range | Live when retail include enabled | Enable `MANHEIM_INCLUDE_RETAIL` + parser (partially done) |
 
 ### Zone C1 — MaxBuy evaluation (replaces Cox “Similar Vehicles”)
@@ -133,10 +134,11 @@ Cox columns (keep labels for familiarity):
 | Asset | Path | Notes |
 |-------|------|-------|
 | MMR Lab page | `web/app/(app)/mmr-lab/page.tsx` | **Buyer-accessible** — no `NewModeOpsGuard` (P1.1 ✅) |
-| MMR client | `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Zones A–C3 orchestration; **MMR + MaxBuy parallel live evaluate** (P2 ✅) |
+| MMR client | `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Zones A–C3; **MMR + MaxBuy parallel evaluate** (P2 ✅); **debounced adjustment recompute** (P3 ✅) |
 | Search panel | `web/app/(app)/mmr-lab/_components/search-panel.tsx` | VIN + YMM cascade + mileage + **lane ask price** (P1.4 ✅) |
-| Result band | `web/app/(app)/mmr-lab/_components/result-band.tsx` | 3-column Cox layout; **interactive adjustment preview** + loading skeleton (P1.5 ✅) |
-| MMR adjustments | `web/app/(app)/mmr-lab/_components/mmr-adjustments.ts` | Local adjustment model + option lists (preview only until P3) |
+| Result band | `web/app/(app)/mmr-lab/_components/result-band.tsx` | 3-column Cox layout; **live adjustment controls** + `recomputing` right-panel state (P3 ✅) |
+| MMR adjustments | `web/app/(app)/mmr-lab/_components/mmr-adjustments.ts` | UI model + `mapMmrAdjustmentsToApi` → Cox params (P3 ✅) |
+| MMR recompute builder | `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.ts` | Session + adjustments → `postMmrVin` / `postMmrYmm` body (P3 ✅) |
 | MaxBuy section | `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-section.tsx` | Zone C1 — live evaluate display + pass/override actions (P2 ✅) |
 | MaxBuy request builder | `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` | Session → `POST /app/maxbuy/evaluate` body (P2.2 ✅) |
 | MaxBuy result mapper | `web/app/(app)/mmr-lab/_components/apply-maxbuy-result.ts`, `map-maxbuy-display.ts` | API → Zone C1 display via `mapMaxbuyEvaluateToSnapshot` (P2.6 ✅) |
@@ -149,14 +151,16 @@ Cox columns (keep labels for familiarity):
 | MaxBuy card | `web/components/maxbuy/maxbuy-card.tsx` | “deep lookup” → `/mmr-lab` (P1.10 ✅) |
 | Buyer nav | `web/lib/app-shell/nav-new.ts` | **MMR Lab** + **Max buy** both in sidebar (P1.9 partial) |
 | Tests | `mmr-lab-page.test.tsx`, `mmr-lab-client.test.tsx`, component tests | Buyer access + zones (P1.12 ✅) |
-| MMR API (web) | `web/lib/app-api/client.ts` | `postMmrVin`, `postMmrYmm`, catalog getters |
-| MaxBuy API | `POST /app/maxbuy/evaluate` | **Wired on `/mmr-lab`** — parallel with MMR; lane ask re-evaluates (P2 ✅) |
+| MMR API (web) | `web/lib/app-api/client.ts` | `postMmrVin`, `postMmrYmm` (+ optional `adjustments`), catalog getters |
+| MMR API (worker) | `src/app/routes.ts`, `workers/tav-intelligence-worker` | `adjustments` proxied to Cox; VIN returns full distribution fields (P3 ✅) |
+| MaxBuy API | `POST /app/maxbuy/evaluate` | **Wired on `/mmr-lab`** — parallel with MMR; lane ask re-evaluates (P2 ✅); odometer adjustment re-evaluates (P3 ✅) |
 
-### Resolved (was blocking Phase 1)
+### Resolved (was blocking earlier phases)
 
 - ~~`NewModeOpsGuard` on `/mmr-lab`~~ — removed in P1.1
 - ~~Similar Vehicles placeholder~~ — removed; Zone C1 is MaxBuy evaluation
-- ~~Adjustments all disabled~~ — interactive preview enabled after lookup (no API recompute until P3)
+- ~~Adjustments preview-only~~ — live Cox recompute on debounced change (P3 ✅)
+- ~~Separate `POST /app/mmr/recompute`~~ — shipped as optional `adjustments` on existing `vin`/`ymm` endpoints (P3 ✅)
 
 ### Nav (product choice pending)
 
@@ -178,7 +182,7 @@ Cox columns (keep labels for familiarity):
 | P1.2 | Widen page layout — remove `max-w-2xl` constraint; full-width dashboard like Cox | ✅ |
 | P1.3 | Refactor `MmrLabClient` into zones A / B / C1 / C2 / C3 (new folder `_components/zones/` or similar) | ⬜ Optional — zones exist as separate components; no `zones/` folder |
 | P1.4 | Zone A: add optional **Lane ask / List price** field; keep existing VIN + YMM search | ✅ |
-| P1.5 | Zone B: enable **visual** adjustment controls (not wired to API yet); show loading skeleton on search | ✅ |
+| P1.5 | Zone B: enable adjustment controls (visual in P1; **live recompute in P3**); loading skeleton on search | ✅ |
 | P1.6 | Zone C1: new `MaxbuyEvaluationSection` — mock states: empty, loading, ready (`deal_fit` + `vehicle_fit`), error, disabled | ✅ (mock; `unavailable` state in component, not wired to system status) |
 | P1.7 | Zone C2/C3: upgrade `DataSections` — remove Similar Vehicles; keep Transactions + Historical shells with realistic empty/loading states | ✅ |
 | P1.8 | Parallel fetch **stub**: on search, call real MMR APIs; MaxBuy section uses **mock snapshot** or defers evaluate until phase 2 (toggle `USE_MOCK_MAXBUY` in dev optional) | ✅ |
@@ -221,14 +225,26 @@ Cox columns (keep labels for familiarity):
 
 Cox center panel changes adjusted MMR when ODO/region/grade/color/build options change.
 
-| Task | Detail |
-|------|--------|
-| P3.1 | Extend intelligence worker or main worker with `POST /app/mmr/recompute` (or extend `vin`/`ymm` with adjustment params) |
-| P3.2 | Pass adjustment fields to Cox Storefront per [`manheim-cox.md`](../03-api/manheim-cox.md) |
-| P3.3 | Wire Zone B controls → debounced recompute → update Zone B right panel |
-| P3.4 | Lane ask price in adjustments/search → updates MaxBuy `asking_price` on re-evaluate |
+| Task | Detail | Status |
+|------|--------|--------|
+| P3.1 | Extend `POST /app/mmr/vin` and `POST /app/mmr/ymm` with optional `adjustments` (no separate recompute route) | ✅ |
+| P3.2 | Pass `region`, `grade`, `color`, `exclude_build`, `evbh` to Cox via `manheimHttp.appendCoxQueryParams` per [`manheim-cox.md`](../03-api/manheim-cox.md) | ✅ |
+| P3.3 | Wire Zone B controls → 400ms debounced recompute → update right panel (`recomputing` skeleton on adjusted MMR) | ✅ |
+| P3.4 | Lane ask in search panel re-runs MaxBuy (P2 ✅); **adjustment odometer** re-runs MaxBuy evaluate with updated mileage | ✅ |
 
-**Note:** Adjustments are **interactive in preview** after lookup (P1.5 ✅). Live recompute → adjusted MMR right panel ships in Phase 3 (#45).
+**Implementation notes (P3):**
+
+- Adjustment lookups **bypass KV cache** (do not overwrite base VIN/YMM entries).
+- VIN cache keys include **mileage bucket** so odometer changes fetch fresh Cox values.
+- Cox MMR **region** names (National, Southeast, …) are **not** forwarded to MaxBuy evaluate (TAV uses `dallas_tx`-style regions).
+- `POST /app/mmr/vin` now returns the same distribution fields as YMM (`adjustedMmr`, ranges, retail when enabled).
+
+**Phase 3 exit criteria:**
+
+- [x] Changing region/grade/color/build/ODO triggers debounced MMR recompute
+- [x] Adjusted MMR + range panel updates from live Cox response
+- [x] Odometer adjustment re-runs MaxBuy when mileage changes
+- [x] `npm run lint`, `npm run typecheck`, `npm test` pass in repo root + `web/`
 
 ### Phase 4 — Transactions + Historical/Projected (full Cox data)
 
@@ -236,11 +252,11 @@ See §6 for data-source strategy.
 
 | Task | Detail |
 |------|--------|
-| P4.1 | Enable `MANHEIM_INCLUDE_HISTORICAL`, `MANHEIM_INCLUDE_FORECAST` on intelligence worker (production smoke first) |
-| P4.2 | Parse `historicalAverages`, `forecast`, and transaction/sample arrays from Cox payload in intel worker + main worker app envelope |
-| P4.3 | Extend `MmrVinOkSchema` / `MmrYmmOk` web schemas with `transactions[]`, `historicalAverages`, `projectedAverage` |
-| P4.4 | Wire `DataSections` / Zone C2/C3 to live fields |
-| P4.5 | Optional MarketCheck enrichment (§6.2) — separate spike, not blocking |
+| P4.1 | Enable `MANHEIM_INCLUDE_HISTORICAL`, `MANHEIM_INCLUDE_FORECAST` on intelligence worker (production smoke first) | ✅ staging + production vars |
+| P4.2 | Parse `historicalAverages`, `forecast`, and transaction/sample arrays from Cox payload in intel worker + main worker app envelope | ✅ `manheimMarketContextParser.ts` + `mapIntelMmrEnvelopeToAppData` |
+| P4.3 | Extend `MmrVinOkSchema` / `MmrYmmOk` web schemas with `transactions[]`, `historicalAverages`, `projectedAverage` | ✅ |
+| P4.4 | Wire `DataSections` / Zone C2/C3 to live fields | ✅ |
+| P4.5 | Optional MarketCheck enrichment (§6.2) — separate spike, not blocking | ⬜ |
 
 ---
 
@@ -301,12 +317,24 @@ From Cox `include=historical,forecast` ([`manheim-cox.md`](../03-api/manheim-cox
 | `GET /app/mmr/catalog/makes?year=` | |
 | `GET /app/mmr/catalog/models?year=&make=` | |
 | `GET /app/mmr/catalog/styles?year=&make=&model=` | |
-| `POST /app/mmr/vin` | VIN valuation |
-| `POST /app/mmr/ymm` | YMM + style + mileage valuation |
+| `POST /app/mmr/vin` | VIN valuation (+ optional `adjustments` for recompute) |
+| `POST /app/mmr/ymm` | YMM + style + mileage valuation (+ optional `adjustments`) |
 
 **Web proxy:** `web/app/api/app/[...path]/route.ts` → Worker `APP_API_BASE_URL`
 
-**Response fields used in Zone B today:** `mmrValue`, `adjustedMmr`, `rangeLow`, `rangeHigh`, `retailValue`, `retailRangeLow`, `retailRangeHigh`, `avgOdometer`, `avgCondition`, `confidence`, `method`
+**Optional `adjustments` body (P3):**
+
+```typescript
+{
+  region?: string;        // e.g. "Southeast"
+  grade?: string;         // e.g. "4.0"
+  color?: string;         // e.g. "Black"
+  exclude_build?: boolean; // false when user selects Build Options YES
+  evbh?: number;          // Express grade 75–100
+}
+```
+
+**Response fields used in Zone B:** `mmrValue`, `adjustedMmr`, `rangeLow`, `rangeHigh`, `retailValue`, `retailRangeLow`, `retailRangeHigh`, `avgOdometer`, `avgCondition`, `mileageUsed`, `confidence`, `method`
 
 ### MaxBuy evaluate (existing)
 
@@ -322,7 +350,7 @@ From Cox `include=historical,forecast` ([`manheim-cox.md`](../03-api/manheim-cox
 { contract_version: "1.0.0", year, make, model, trim?, mileage, asking_price?, region? }
 ```
 
-**Parallel fetch pseudocode:**
+**Parallel fetch pseudocode (search):**
 
 ```typescript
 const [mmr, maxbuy] = await Promise.allSettled([
@@ -332,11 +360,18 @@ const [mmr, maxbuy] = await Promise.allSettled([
 // Render MMR from mmr immediately; merge maxbuy when settled
 ```
 
-### New APIs (phase 3–4 — design only)
+**Adjustment recompute pseudocode (P3 — debounced 400ms after Zone B change):**
 
-| Endpoint | Phase | Purpose |
+```typescript
+const body = buildMmrRecomputeRequest(session, adjustments); // maps UI → vin/ymm + adjustments
+const mmr = await (session.vin ? postMmrVin(body) : postMmrYmm(body));
+// Update Zone B right panel; re-run MaxBuy if adjustment odometer changed
+```
+
+### APIs still to build (phase 4+)
+
+| Endpoint / extension | Phase | Purpose |
 |----------|-------|---------|
-| `POST /app/mmr/recompute` | P3 | Adjustments → new adjusted MMR |
 | Extended MMR response | P4 | `transactions`, `historicalAverages`, `forecast` |
 | `POST /app/marketcheck/enrich` (TBD) | P4+ | Optional MarketCheck proxy |
 
@@ -349,8 +384,8 @@ const [mmr, maxbuy] = await Promise.allSettled([
 | File | Change | Status |
 |------|--------|--------|
 | `web/app/(app)/mmr-lab/page.tsx` | Remove ops guard; page title/description | ✅ |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Orchestrate zones + parallel live MMR/MaxBuy fetch | ✅ |
-| `web/app/(app)/mmr-lab/_components/result-band.tsx` | Enable adjustment UI (visual); loading skeleton | ✅ |
+| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Zones + parallel MMR/MaxBuy + debounced adjustment recompute | ✅ |
+| `web/app/(app)/mmr-lab/_components/result-band.tsx` | Live adjustment UI; `recomputing` right-panel state | ✅ |
 | `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Remove Similar Vehicles; compose C2/C3 | ✅ |
 | `web/app/(app)/mmr-lab/_components/search-panel.tsx` | Add lane ask price field | ✅ |
 | `web/lib/app-shell/nav-new.ts` | Buyer nav → `/mmr-lab` | ✅ (both MMR Lab + Max buy) |
@@ -378,6 +413,17 @@ const [mmr, maxbuy] = await Promise.allSettled([
 | `web/app/(app)/mmr-lab/_components/map-maxbuy-display.ts` | `MaxbuyEvaluateOk` → display model | ✅ |
 | `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.test.ts` | Request builder unit tests | ✅ |
 
+### Create (phase 3)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.ts` | Adjustments → `postMmrVin` / `postMmrYmm` body | ✅ |
+| `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.test.ts` | Recompute request builder tests | ✅ |
+| `src/types/intelligence.ts` (`MmrLookupAdjustmentsSchema`) | Shared adjustment contract (intel + app API) | ✅ |
+| `workers/tav-intelligence-worker/src/clients/manheimHttp.ts` | Cox `region`/`grade`/`color`/`excludeBuild` query params | ✅ |
+| `workers/tav-intelligence-worker/src/services/mmrLookup.ts` | Cache bypass + mileage-bucket VIN keys for adjustments | ✅ |
+| `src/app/routes.ts` (`fetchIntelMmrLookup`) | Unified VIN/YMM proxy + distribution mapping | ✅ |
+
 ### Reuse (do not duplicate business logic)
 
 | Module | Use |
@@ -403,8 +449,9 @@ const [mmr, maxbuy] = await Promise.allSettled([
 ### Zone B (MMR) states
 
 - `idle` — before search
-- `loading` — skeleton 3-column
-- `ok` — values populated
+- `loading` — skeleton 3-column (initial search)
+- `ready` — values populated; adjustment controls enabled
+- `recomputing` — right panel “Updating…” skeleton; controls temporarily disabled (P3 ✅)
 - `unavailable` — `missingReason` badge (graceful, no crash)
 - `error` — retry button
 
@@ -426,6 +473,7 @@ const [mmr, maxbuy] = await Promise.allSettled([
 - [x] MaxBuy zone visually distinct from MMR (not confused with retail)
 - [x] No Similar Vehicles section
 - [x] Transactions table columns match Cox
+- [x] Adjustment controls recompute adjusted MMR from Cox (P3)
 - [ ] Mobile layout acceptable — **human review pending**
 
 ### Verification commands
@@ -484,10 +532,11 @@ Raw Listing → Normalized Listing → Vehicle Candidate → Lead
 ## 13. Agent prompt (copy into Cursor)
 
 ```text
-Implement Phase 3 of docs/07-buybox/MMR-LAB-MAXBUY-PAGE.md:
+Implement Phase 4 of docs/07-buybox/MMR-LAB-MAXBUY-PAGE.md:
 
-- Add POST /app/mmr/recompute (or extend vin/ymm) with adjustment params
-- Wire Zone B adjustment controls → debounced recompute → update adjusted MMR panel
-- Lane ask changes already re-run MaxBuy (P2); ensure adjustment-driven re-eval if needed
+- Enable MANHEIM_INCLUDE_HISTORICAL and MANHEIM_INCLUDE_FORECAST on intelligence worker (smoke first)
+- Parse historicalAverages, forecast, and transaction arrays from Cox payload in intel + app envelope
+- Extend MmrVinOkSchema with transactions[], historicalAverages, projectedAverage
+- Wire DataSections / Zone C2/C3 to live fields
 - Run web lint, typecheck, test before done (see .cursor/rules/web-ci-react-effects.mdc)
 ```

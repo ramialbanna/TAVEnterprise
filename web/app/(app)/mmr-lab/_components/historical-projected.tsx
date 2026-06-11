@@ -2,11 +2,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-import { DASH } from "./mmr-value";
-import type { MmrLowerSectionState } from "./mmr-lower-section-state";
+import { DASH, MmrMoney } from "./mmr-value";
+import type { MmrLowerSectionPhase } from "./mmr-lower-section-state";
+import type {
+  MmrHistoricalAverages,
+  MmrHistoricalSlot,
+  MmrProjectedAverage,
+} from "./mmr-market-types";
 
 type Props = {
-  state: MmrLowerSectionState;
+  phase: MmrLowerSectionPhase;
+  historicalAverages?: MmrHistoricalAverages | null;
+  projectedAverage?: MmrProjectedAverage | null;
   className?: string;
 };
 
@@ -18,7 +25,19 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AvgSlot({ label, busy }: { label: string; busy?: boolean }) {
+function formatMileage(value: number | null | undefined) {
+  return Number.isFinite(value) ? `${(value as number).toLocaleString()} mi` : `Avg mi ${DASH}`;
+}
+
+function AvgSlot({
+  label,
+  slot,
+  busy,
+}: {
+  label: string;
+  slot?: MmrHistoricalSlot | MmrProjectedAverage | null;
+  busy?: boolean;
+}) {
   return (
     <div className="rounded-md border border-border bg-card px-3 py-3 text-center">
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -29,9 +48,11 @@ function AvgSlot({ label, busy }: { label: string; busy?: boolean }) {
         </div>
       ) : (
         <>
-          <div className="mt-1 text-lg font-semibold tabular-nums text-primary">{DASH}</div>
+          <div className="mt-1 text-lg font-semibold tabular-nums text-primary">
+            <MmrMoney value={slot?.price ?? null} />
+          </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            Avg mi {DASH}
+            {formatMileage(slot?.avgMileage ?? null)}
           </div>
         </>
       )}
@@ -65,25 +86,20 @@ function LoadingPanel({ title, slots }: { title: string; slots: string[] }) {
   );
 }
 
-function EmptyPanel({ title, slots }: { title: string; slots: string[] }) {
-  return (
-    <section>
-      <SectionTitle>{title}</SectionTitle>
-      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        {slots.map((label) => (
-          <AvgSlot key={label} label={label} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const HISTORICAL_SLOTS = ["Past 30 Days", "6 Months Ago", "Last Year"] as const;
-const PROJECTED_SLOTS = ["Next Month"] as const;
+const HISTORICAL_SLOTS = [
+  { label: "Past 30 Days", key: "past30Days" as const },
+  { label: "6 Months Ago", key: "sixMonthsAgo" as const },
+  { label: "Last Year", key: "lastYear" as const },
+];
 
 /** Zone C3 — Cox-style historical and projected average slots. */
-export function HistoricalProjected({ state, className }: Props) {
-  if (state === "idle") {
+export function HistoricalProjected({
+  phase,
+  historicalAverages = null,
+  projectedAverage = null,
+  className,
+}: Props) {
+  if (phase === "idle") {
     return (
       <div className={cn("grid min-w-0 gap-6 px-4 sm:grid-cols-2 sm:px-6", className)} aria-busy={false}>
         <IdlePanel title="Historical Average" />
@@ -92,25 +108,53 @@ export function HistoricalProjected({ state, className }: Props) {
     );
   }
 
-  if (state === "loading") {
+  if (phase === "loading") {
     return (
       <div className={cn("grid min-w-0 gap-6 px-4 sm:grid-cols-2 sm:px-6", className)} aria-busy>
-        <LoadingPanel title="Historical Average" slots={[...HISTORICAL_SLOTS]} />
-        <LoadingPanel title="Projected Average" slots={[...PROJECTED_SLOTS]} />
+        <LoadingPanel title="Historical Average" slots={HISTORICAL_SLOTS.map((s) => s.label)} />
+        <LoadingPanel title="Projected Average" slots={["Next Month"]} />
       </div>
     );
   }
 
+  const missingHistorical =
+    !historicalAverages ||
+    (!historicalAverages.past30Days &&
+      !historicalAverages.sixMonthsAgo &&
+      !historicalAverages.lastYear);
+  const missingProjected = !projectedAverage || projectedAverage.price === null;
+
   return (
     <div className={cn("min-w-0 space-y-4 px-4 sm:space-y-6 sm:px-6", className)}>
       <div className="grid gap-6 sm:grid-cols-2">
-        <EmptyPanel title="Historical Average" slots={[...HISTORICAL_SLOTS]} />
-        <EmptyPanel title="Projected Average" slots={[...PROJECTED_SLOTS]} />
+        <section>
+          <SectionTitle>Historical Average</SectionTitle>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {HISTORICAL_SLOTS.map(({ label, key }) => (
+              <AvgSlot
+                key={key}
+                label={label}
+                slot={historicalAverages?.[key] ?? null}
+              />
+            ))}
+          </div>
+        </section>
+        <section>
+          <SectionTitle>Projected Average</SectionTitle>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <AvgSlot label="Next Month" slot={projectedAverage} />
+          </div>
+        </section>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Cox historical and forecast averages ship in Phase 4 — price and average mileage placeholders
-        above.
-      </p>
+      {missingHistorical || missingProjected ? (
+        <p className="text-xs text-muted-foreground">
+          {missingHistorical && missingProjected
+            ? "Historical and forecast averages were not included in this Cox response. Enable MANHEIM_INCLUDE_HISTORICAL and MANHEIM_INCLUDE_FORECAST on the intelligence worker."
+            : missingHistorical
+              ? "Historical averages were not included in this Cox response."
+              : "Forecast average was not included in this Cox response."}
+        </p>
+      ) : null}
     </div>
   );
 }

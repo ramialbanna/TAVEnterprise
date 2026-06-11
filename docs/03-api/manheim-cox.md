@@ -152,8 +152,8 @@ else — including absent — leaves the flag off):
 | Env var | Token added | Notes |
 |---|---|---|
 | `MANHEIM_INCLUDE_RETAIL` | `retail` | Returns `adjustedPricing.retail.{above,average,below}`. Parser maps to `retailClean` / `retailAvg` / `retailRough` on `ValuationResult`. |
-| `MANHEIM_INCLUDE_FORECAST` | `forecast` | Returns `forecast` field on the response. Not yet read by the parser. |
-| `MANHEIM_INCLUDE_HISTORICAL` | `historical` | Returns `historicalAverages`. Not yet read by the parser. |
+| `MANHEIM_INCLUDE_FORECAST` | `forecast` | Returns `forecast` field on the response. Parsed by `src/valuation/manheimMarketContextParser.ts` → `projectedAverage` on `/app/mmr/*`. |
+| `MANHEIM_INCLUDE_HISTORICAL` | `historical` | Returns `historicalAverages`. Parsed by `manheimMarketContextParser.ts` → `historicalAverages` on `/app/mmr/*`. |
 | `MANHEIM_INCLUDE_CI` | `ci` | Returns `confidenceInterval` data on VIN lookups only. **Stripped from Search/YMMT calls** because the MMR Lookup guide documents `include=ci` as unsupported there. |
 
 **Default** when no flags are set: no `include=` query param at all (conservative —

@@ -2,8 +2,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-import { DASH } from "./mmr-value";
-import type { MmrLowerSectionState } from "./mmr-lower-section-state";
+import { DASH, MmrMoney } from "./mmr-value";
+import type { MmrLowerSectionPhase } from "./mmr-lower-section-state";
+import type { MmrTransaction } from "./mmr-market-types";
 
 export const TX_COLUMNS = [
   "Date",
@@ -19,7 +20,8 @@ export const TX_COLUMNS = [
 ] as const;
 
 type Props = {
-  state: MmrLowerSectionState;
+  phase: MmrLowerSectionPhase;
+  transactions?: MmrTransaction[];
   className?: string;
 };
 
@@ -54,7 +56,42 @@ function LoadingBody() {
   );
 }
 
-function EmptyBody() {
+function cell(value: string | number | null | undefined, numeric = false) {
+  if (value === null || value === undefined || value === "") {
+    return <span className="text-muted-foreground">{DASH}</span>;
+  }
+  if (numeric && typeof value === "number") {
+    return <span className="tabular-nums">{value.toLocaleString()}</span>;
+  }
+  return <span>{value}</span>;
+}
+
+function TransactionRows({ rows }: { rows: MmrTransaction[] }) {
+  return (
+    <tbody>
+      {rows.map((row, index) => (
+        <tr key={`${row.date ?? "row"}-${index}`} className="border-t border-border">
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.date)}</td>
+          <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+            <MmrMoney value={row.price} />
+          </td>
+          <td className="whitespace-nowrap px-3 py-2 tabular-nums">{cell(row.odometer, true)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.grade)}</td>
+          <td className="whitespace-nowrap px-3 py-2 tabular-nums">{cell(row.evbh, true)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.engineTrans)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.exteriorColor)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.type)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.region)}</td>
+          <td className="whitespace-nowrap px-3 py-2">{cell(row.auction)}</td>
+        </tr>
+      ))}
+    </tbody>
+  );
+}
+
+function ReadyBody({ transactions }: { transactions: MmrTransaction[] }) {
+  const hasRows = transactions.length > 0;
+
   return (
     <Card className="mt-2">
       <CardContent className="p-0">
@@ -72,36 +109,36 @@ function EmptyBody() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {Array.from({ length: 3 }).map((_, row) => (
-                <tr key={row} className="border-t border-border">
-                  {TX_COLUMNS.map((c) => (
-                    <td key={c} className="whitespace-nowrap px-3 py-2 tabular-nums text-muted-foreground">
-                      {DASH}
-                    </td>
-                  ))}
+            {hasRows ? (
+              <TransactionRows rows={transactions} />
+            ) : (
+              <tbody>
+                <tr className="border-t border-border">
+                  <td
+                    colSpan={TX_COLUMNS.length}
+                    className="px-3 py-6 text-center text-sm text-muted-foreground"
+                  >
+                    No wholesale auction comps returned for this lookup. Cox may omit per-sale
+                    rows even when historical averages are present.
+                  </td>
                 </tr>
-              ))}
-            </tbody>
+              </tbody>
+            )}
           </table>
         </div>
-        <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-          Cox wholesale auction comps are not wired yet — placeholders only until Phase 4
-          (`MANHEIM_INCLUDE_HISTORICAL` + transaction parse).
-        </p>
       </CardContent>
     </Card>
   );
 }
 
 /** Zone C2 — Cox-style wholesale transaction comps table. */
-export function TransactionsTable({ state, className }: Props) {
+export function TransactionsTable({ phase, transactions = [], className }: Props) {
   return (
-    <section className={cn("min-w-0 px-4 sm:px-6", className)} aria-busy={state === "loading"}>
+    <section className={cn("min-w-0 px-4 sm:px-6", className)} aria-busy={phase === "loading"}>
       <SectionTitle />
-      {state === "idle" ? <IdleBody /> : null}
-      {state === "loading" ? <LoadingBody /> : null}
-      {state === "empty" ? <EmptyBody /> : null}
+      {phase === "idle" ? <IdleBody /> : null}
+      {phase === "loading" ? <LoadingBody /> : null}
+      {phase === "ready" ? <ReadyBody transactions={transactions} /> : null}
     </section>
   );
 }

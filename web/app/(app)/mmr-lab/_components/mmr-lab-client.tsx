@@ -19,7 +19,7 @@ import {
 } from "./search-panel";
 import { ResultBand } from "./result-band";
 import { DataSections } from "./data-sections";
-import { lowerSectionStateFromView } from "./mmr-lower-section-state";
+import { lowerSectionsFromView } from "./mmr-lower-section-state";
 import {
   MaxbuyEvaluationSection,
   type MaxbuyEvaluationState,
@@ -371,7 +371,7 @@ export function MmrLabClient() {
   }, [selection.make, selection.model, selection.year]);
 
   const result = view.kind === "ok" ? view.result : null;
-  const lowerSections = lowerSectionStateFromView(view.kind);
+  const lowerSections = lowerSectionsFromView(view.kind, result);
   const resultBandPhase =
     view.kind === "loading"
       ? "loading"

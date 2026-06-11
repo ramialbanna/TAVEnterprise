@@ -186,7 +186,37 @@ export const HistoricalSaleSchema = z.object({
 export const HistoricalSaleListSchema = z.array(HistoricalSaleSchema);
 export type HistoricalSale = z.infer<typeof HistoricalSaleSchema>;
 
-// ── POST /app/mmr/vin ──────────────────────────────────────────────────────────
+// ── POST /app/mmr/vin — Phase 4 market context (Cox historical/forecast/transactions) ──
+
+export const MmrHistoricalSlotSchema = z.object({
+  price: z.number().nullable(),
+  avgMileage: z.number().nullable(),
+});
+
+export const MmrHistoricalAveragesSchema = z.object({
+  past30Days: MmrHistoricalSlotSchema.nullable(),
+  sixMonthsAgo: MmrHistoricalSlotSchema.nullable(),
+  lastYear: MmrHistoricalSlotSchema.nullable(),
+});
+
+export const MmrProjectedAverageSchema = z.object({
+  price: z.number().nullable(),
+  avgMileage: z.number().nullable(),
+});
+
+export const MmrTransactionSchema = z.object({
+  date: z.string().nullable(),
+  price: z.number().nullable(),
+  odometer: z.number().nullable(),
+  grade: z.string().nullable(),
+  evbh: z.number().nullable(),
+  engineTrans: z.string().nullable(),
+  exteriorColor: z.string().nullable(),
+  type: z.string().nullable(),
+  region: z.string().nullable(),
+  auction: z.string().nullable(),
+});
+
 export const MmrVinOkSchema = z.object({
   mmrValue: z.number(),
   confidence: z.enum(["high", "medium", "low"]),
@@ -201,6 +231,9 @@ export const MmrVinOkSchema = z.object({
   retailValue: z.number().nullable().optional(),
   retailRangeLow: z.number().nullable().optional(),
   retailRangeHigh: z.number().nullable().optional(),
+  historicalAverages: MmrHistoricalAveragesSchema.optional(),
+  projectedAverage: MmrProjectedAverageSchema.optional(),
+  transactions: z.array(MmrTransactionSchema).optional(),
 });
 export const MmrVinUnavailableSchema = z.object({
   mmrValue: z.null(),

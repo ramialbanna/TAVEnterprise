@@ -770,6 +770,52 @@ describe("POST /app/mmr/vin", () => {
     const body = (await res.json()) as { data: { missingReason: string } };
     expect(body.data.missingReason).toBe("cox_unavailable");
   });
+
+  it("surfaces historical, forecast, and transaction fields when present in Cox payload", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ...vinEnvelope,
+      mmr_payload: {
+        items: [{
+          ...(vinEnvelope.mmr_payload as { items: Record<string, unknown>[] }).items[0],
+          historicalAverages: {
+            last30Days: { odometer: 65563, price: 18900 },
+            lastSixMonths: { odometer: 57567, price: 18250 },
+            lastYear: { odometer: 51440, price: 21900 },
+          },
+          forecast: { nextMonth: { wholesale: 18900, retail: 21200 } },
+          transactions: [{
+            saleDate: "2026-04-15",
+            salePrice: 18750,
+            odometer: 64200,
+            grade: 42,
+            region: "Southeast",
+            auctionName: "Manheim Atlanta",
+          }],
+        }],
+      },
+    }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data.historicalAverages).toEqual({
+      past30Days: { price: 18900, avgMileage: 65563 },
+      sixMonthsAgo: { price: 18250, avgMileage: 57567 },
+      lastYear: { price: 21900, avgMileage: 51440 },
+    });
+    expect(body.data.projectedAverage).toEqual({ price: 18900, avgMileage: null });
+    expect(body.data.transactions).toEqual([{
+      date: "2026-04-15",
+      price: 18750,
+      odometer: 64200,
+      grade: "4.2",
+      evbh: null,
+      engineTrans: null,
+      exteriorColor: null,
+      type: null,
+      region: "Southeast",
+      auction: "Manheim Atlanta",
+    }]);
+  });
 });
 
 describe("/app/mmr live catalog + YMM valuation", () => {
