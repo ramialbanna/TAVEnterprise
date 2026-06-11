@@ -40,6 +40,33 @@ const UploaderIdentityShape = {
 
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+// ── MMR lookup adjustments (Cox query params — Phase 3 / #45) ─────────────────
+// Passed on recompute; lookups with any adjustment field skip the positive cache.
+
+export const MmrLookupAdjustmentsSchema = z.object({
+  region:        z.string().trim().min(1).max(64).optional(),
+  grade:         z.string().trim().min(1).max(16).optional(),
+  color:         z.string().trim().min(1).max(64).optional(),
+  exclude_build: z.boolean().optional(),
+  evbh:          z.number().int().min(75).max(100).optional(),
+});
+
+export type MmrLookupAdjustments = z.infer<typeof MmrLookupAdjustmentsSchema>;
+
+/** True when the caller supplied Cox adjustment params (cache bypass). */
+export function hasMmrLookupAdjustments(
+  adjustments: MmrLookupAdjustments | undefined,
+): boolean {
+  if (!adjustments) return false;
+  return (
+    adjustments.region !== undefined ||
+    adjustments.grade !== undefined ||
+    adjustments.color !== undefined ||
+    adjustments.exclude_build !== undefined ||
+    adjustments.evbh !== undefined
+  );
+}
+
 // ── 1. MMR VIN lookup request ─────────────────────────────────────────────────
 // POST /mmr/vin
 
@@ -47,6 +74,7 @@ export const MmrVinLookupRequestSchema = z.object({
   vin:           z.string().min(11).max(17),
   year:          z.number().int().min(1900).max(2100).optional(),
   mileage:       z.number().int().nonnegative().max(2_000_000).optional(),
+  adjustments:   MmrLookupAdjustmentsSchema.optional(),
   force_refresh: z.boolean().optional().default(false),
   ...RequesterIdentityShape,
 });
@@ -60,6 +88,7 @@ export const MmrYearMakeModelLookupRequestSchema = z.object({
   model:         z.string().min(1).max(128),
   trim:          z.string().max(128).optional(),
   mileage:       z.number().int().nonnegative().max(2_000_000).optional(),
+  adjustments:   MmrLookupAdjustmentsSchema.optional(),
   force_refresh: z.boolean().optional().default(false),
   ...RequesterIdentityShape,
 });

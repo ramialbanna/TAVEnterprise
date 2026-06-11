@@ -17,6 +17,7 @@ import type { Env } from "../types/env";
 import type { ContractProbeReport } from "./valuationsContractProbe";
 import { executeContractProbe } from "./valuationsContractProbe";
 import type {
+  CoxMmrQueryAdjustments,
   ManheimClient,
   ManheimCatalogResponse,
   ManheimVinResponse,
@@ -136,10 +137,14 @@ function appendCoxQueryParams(
   url: URL,
   env: Env,
   opts: {
-    odometer?: number;
-    zipCode?:  string;
-    evbh?:     number;
-    isSearch:  boolean;
+    odometer?:     number;
+    zipCode?:      string;
+    evbh?:         number;
+    region?:       string;
+    grade?:        string;
+    color?:        string;
+    excludeBuild?: boolean;
+    isSearch:      boolean;
   },
 ): void {
   if (typeof opts.odometer === "number" && Number.isFinite(opts.odometer) && opts.odometer >= 0) {
@@ -150,6 +155,18 @@ function appendCoxQueryParams(
   }
   if (typeof opts.evbh === "number" && Number.isFinite(opts.evbh) && opts.evbh >= 75 && opts.evbh <= 100) {
     url.searchParams.set("evbh", String(opts.evbh));
+  }
+  if (typeof opts.region === "string" && opts.region.trim().length > 0) {
+    url.searchParams.set("region", opts.region.trim());
+  }
+  if (typeof opts.grade === "string" && opts.grade.trim().length > 0) {
+    url.searchParams.set("grade", opts.grade.trim());
+  }
+  if (typeof opts.color === "string" && opts.color.trim().length > 0) {
+    url.searchParams.set("color", opts.color.trim());
+  }
+  if (opts.excludeBuild === true) {
+    url.searchParams.set("excludeBuild", "true");
   }
   const include = buildCoxIncludeTokens(env, opts.isSearch);
   if (include) url.searchParams.set("include", include);
@@ -225,11 +242,12 @@ export class ManheimHttpClient implements ManheimClient {
   ) {}
 
   async lookupByVin(args: {
-    vin:       string;
-    mileage:   number;
-    zipCode?:  string;
-    evbh?:     number;
-    requestId: string;
+    vin:          string;
+    mileage:      number;
+    zipCode?:     string;
+    evbh?:        number;
+    adjustments?: CoxMmrQueryAdjustments;
+    requestId:    string;
   }): Promise<ManheimVinResponse> {
     const start = Date.now();
 
@@ -237,8 +255,9 @@ export class ManheimHttpClient implements ManheimClient {
 
     return this.executeLookup<ManheimVinResponse>({
       url:        this.buildVinUrl(args.vin, args.mileage, {
-        zipCode: args.zipCode,
-        evbh:    args.evbh,
+        ...args.adjustments,
+        zipCode: args.zipCode ?? args.adjustments?.zipCode,
+        evbh:    args.evbh ?? args.adjustments?.evbh,
       }),
       token,
       requestId:  args.requestId,
@@ -248,14 +267,15 @@ export class ManheimHttpClient implements ManheimClient {
   }
 
   async lookupByYmm(args: {
-    year:      number;
-    make:      string;
-    model:     string;
-    trim?:     string;
-    mileage:   number;
-    zipCode?:  string;
-    evbh?:     number;
-    requestId: string;
+    year:         number;
+    make:         string;
+    model:        string;
+    trim?:        string;
+    mileage:      number;
+    zipCode?:     string;
+    evbh?:        number;
+    adjustments?: CoxMmrQueryAdjustments;
+    requestId:    string;
   }): Promise<ManheimYmmResponse> {
     const start = Date.now();
 
@@ -288,8 +308,12 @@ export class ManheimHttpClient implements ManheimClient {
         model:    args.model,
         trim:     args.trim,
         mileage:  args.mileage,
-        zipCode:  args.zipCode,
-        evbh:     args.evbh,
+        zipCode:  args.zipCode ?? args.adjustments?.zipCode,
+        evbh:     args.evbh ?? args.adjustments?.evbh,
+        region:       args.adjustments?.region,
+        grade:        args.adjustments?.grade,
+        color:        args.adjustments?.color,
+        excludeBuild: args.adjustments?.excludeBuild,
       }),
       token,
       requestId:  args.requestId,
@@ -395,15 +419,26 @@ export class ManheimHttpClient implements ManheimClient {
   private buildVinUrl(
     vin:     string,
     mileage: number,
-    opts:    { zipCode?: string; evbh?: number } = {},
+    opts:    {
+      zipCode?:      string;
+      evbh?:         number;
+      region?:       string;
+      grade?:        string;
+      color?:        string;
+      excludeBuild?: boolean;
+    } = {},
   ): string {
     if (this.isCoxVendor()) {
       const u = new URL(joinUrl(this.env.MANHEIM_MMR_URL, `/vin/${encodeURIComponent(vin)}`));
       appendCoxQueryParams(u, this.env, {
-        odometer: mileage,
-        zipCode:  opts.zipCode,
-        evbh:     opts.evbh,
-        isSearch: false,
+        odometer:     mileage,
+        zipCode:      opts.zipCode,
+        evbh:         opts.evbh,
+        region:       opts.region,
+        grade:        opts.grade,
+        color:        opts.color,
+        excludeBuild: opts.excludeBuild,
+        isSearch:     false,
       });
       return u.toString();
     }
@@ -435,13 +470,17 @@ export class ManheimHttpClient implements ManheimClient {
    *   legacy account (regression — see commit 5a66d6b3).
    */
   private buildYmmUrl(args: {
-    year:     number;
-    make:     string;
-    model:    string;
-    trim?:    string;
-    mileage:  number;
-    zipCode?: string;
-    evbh?:    number;
+    year:          number;
+    make:          string;
+    model:         string;
+    trim?:         string;
+    mileage:       number;
+    zipCode?:      string;
+    evbh?:         number;
+    region?:       string;
+    grade?:        string;
+    color?:        string;
+    excludeBuild?: boolean;
   }): string {
     if (this.isCoxVendor()) {
       // Caller (lookupByYmm) guarantees a non-empty trim on the Cox path.
@@ -453,10 +492,14 @@ export class ManheimHttpClient implements ManheimClient {
         `/${encodeURIComponent(trim)}`;
       const u = new URL(joinUrl(this.env.MANHEIM_MMR_URL, path));
       appendCoxQueryParams(u, this.env, {
-        odometer: args.mileage,
-        zipCode:  args.zipCode,
-        evbh:     args.evbh,
-        isSearch: true,
+        odometer:     args.mileage,
+        zipCode:      args.zipCode,
+        evbh:         args.evbh,
+        region:       args.region,
+        grade:        args.grade,
+        color:        args.color,
+        excludeBuild: args.excludeBuild,
+        isSearch:     true,
       });
       return u.toString();
     }

@@ -40,6 +40,7 @@ export async function handleMmrYearMakeModel(args: HandlerArgs): Promise<Respons
         model:   parsed.data.model,
         trim:    parsed.data.trim,
         mileage: parsed.data.mileage,
+        ...(parsed.data.adjustments !== undefined ? { adjustments: parsed.data.adjustments } : {}),
       },
       requestId:    args.requestId,
       forceRefresh: parsed.data.force_refresh,

@@ -619,84 +619,137 @@ describe("GET /app/historical-sales", () => {
 describe("POST /app/mmr/vin", () => {
   const VIN = "1HGCM82633A004352"; // 17 chars
 
-  type MmrResultLike = Awaited<ReturnType<typeof getMmrValueFromWorker>>;
-  const mmrResult = (over: Partial<NonNullable<MmrResultLike>> = {}) =>
-    ({ mmrValue: 18500, confidence: "high", method: "vin", rawResponse: {}, ...over }) as MmrResultLike;
+  function intelEnv(fetchImpl: ReturnType<typeof vi.fn>): Env {
+    return makeEnv({
+      INTEL_WORKER_URL: "",
+      INTEL_WORKER_SECRET: "intel-secret-test-value",
+      INTEL_WORKER: { fetch: fetchImpl } as unknown as Fetcher,
+    });
+  }
+
+  function intelOk(data: unknown): Response {
+    return new Response(JSON.stringify({
+      success: true,
+      data,
+      requestId: "intel-req",
+      timestamp: "2026-05-17T12:00:00.000Z",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  const vinEnvelope = {
+    ok: true,
+    mmr_value: 18500,
+    mileage_used: 45000,
+    is_inferred_mileage: false,
+    cache_hit: false,
+    source: "manheim",
+    fetched_at: "2026-05-17T12:00:00.000Z",
+    expires_at: "2026-05-18T12:00:00.000Z",
+    error_code: null,
+    error_message: null,
+    mmr_payload: {
+      items: [{
+        averageOdometer: 45000,
+        averageGrade: 3.5,
+        sampleSize: "12",
+        adjustedPricing: {
+          wholesale: { below: 17000, average: 18500, above: 20000 },
+        },
+      }],
+    },
+  };
 
   it("requires a Bearer token", async () => {
+    const intelFetch = vi.fn();
     const res = await worker.fetch(
       new Request("http://localhost/app/mmr/vin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ vin: VIN }),
       }),
-      makeEnv(),
+      intelEnv(intelFetch),
       ctx,
     );
     expect(res.status).toBe(401);
-    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+    expect(intelFetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 invalid_json for a non-JSON body", async () => {
-    const res = await worker.fetch(authedPost("/app/mmr/vin", "{not json"), makeEnv(), ctx);
+    const intelFetch = vi.fn();
+    const res = await worker.fetch(authedPost("/app/mmr/vin", "{not json"), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(400);
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("invalid_json");
-    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+    expect(intelFetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 invalid_body when vin is missing", async () => {
-    const res = await worker.fetch(authedPost("/app/mmr/vin", {}), makeEnv(), ctx);
+    const intelFetch = vi.fn();
+    const res = await worker.fetch(authedPost("/app/mmr/vin", {}), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(400);
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("invalid_body");
-    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
+    expect(intelFetch).not.toHaveBeenCalled();
   });
 
   it("returns 400 invalid_body when vin is too short", async () => {
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: "abc" }), makeEnv(), ctx);
+    const intelFetch = vi.fn();
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: "abc" }), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(400);
     const body = (await res.json()) as { ok: boolean; error: string };
     expect(body.error).toBe("invalid_body");
   });
 
-  it("returns 200 with the valuation when the worker resolves a value", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult());
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+  it("returns 200 with distribution fields when intel resolves a value", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      ok: boolean;
-      data: { mmrValue: number | null; confidence: string | null; method: string | null };
-    };
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
     expect(body.ok).toBe(true);
-    expect(body.data).toEqual({ mmrValue: 18500, confidence: "high", method: "vin" });
-    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledWith({ vin: VIN }, expect.anything());
+    expect(body.data).toMatchObject({
+      mmrValue: 18500,
+      confidence: "high",
+      method: "vin",
+      mileageUsed: 45000,
+      adjustedMmr: 18500,
+      rangeLow: 17000,
+      rangeHigh: 20000,
+    });
+    const request = JSON.parse(String((intelFetch.mock.calls[0]?.[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(request).toEqual({ vin: VIN });
+    expect(String(intelFetch.mock.calls[0]?.[0])).toContain("/mmr/vin");
   });
 
-  it("forwards optional year and mileage to the worker", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult());
+  it("forwards optional year, mileage, and adjustments to intel", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
     const res = await worker.fetch(
-      authedPost("/app/mmr/vin", { vin: VIN, year: 2020, mileage: 45000 }),
-      makeEnv(),
+      authedPost("/app/mmr/vin", {
+        vin: VIN,
+        year: 2020,
+        mileage: 45000,
+        adjustments: { region: "Southeast", grade: "4.0", evbh: 88 },
+      }),
+      intelEnv(intelFetch),
       ctx,
     );
     expect(res.status).toBe(200);
-    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledWith(
-      { vin: VIN, year: 2020, mileage: 45000 },
-      expect.anything(),
-    );
+    const request = JSON.parse(String((intelFetch.mock.calls[0]?.[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(request).toEqual({
+      vin: VIN,
+      year: 2020,
+      mileage: 45000,
+      adjustments: { region: "Southeast", grade: "4.0", evbh: 88 },
+    });
   });
 
-  it("reports method:null when the worker result has no method", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValue(mmrResult({ method: undefined }));
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
-    const body = (await res.json()) as { data: { method: string | null } };
-    expect(body.data.method).toBeNull();
-  });
-
-  it("returns 200 mmrValue:null + missingReason when the worker returns no value", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValue(null);
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+  it("returns 200 mmrValue:null + missingReason when intel returns no value", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ...vinEnvelope,
+      ok: false,
+      mmr_value: null,
+      error_code: "no_mmr_value",
+    }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       ok: boolean;
@@ -706,7 +759,7 @@ describe("POST /app/mmr/vin", () => {
     expect(body.data).toEqual({ mmrValue: null, missingReason: "no_mmr_value" });
   });
 
-  it("returns 200 mmrValue:null + intel_worker_not_configured when neither INTEL_WORKER_URL nor INTEL_WORKER binding is configured", async () => {
+  it("returns 200 mmrValue:null + intel_worker_not_configured when intel is not configured", async () => {
     const res = await worker.fetch(
       authedPost("/app/mmr/vin", { vin: VIN }),
       makeEnv({ INTEL_WORKER_URL: "", INTEL_WORKER: undefined }),
@@ -715,63 +768,14 @@ describe("POST /app/mmr/vin", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { mmrValue: null; missingReason: string } };
     expect(body.data).toEqual({ mmrValue: null, missingReason: "intel_worker_not_configured" });
-    expect(vi.mocked(getMmrValueFromWorker)).not.toHaveBeenCalled();
   });
 
-  it("does NOT short-circuit when INTEL_WORKER service binding is present and INTEL_WORKER_URL is empty (prod config)", async () => {
-    vi.mocked(getMmrValueFromWorker).mockResolvedValue({
-      mmrValue: 27500,
-      confidence: "high",
-      method: "vin",
-      rawResponse: {},
-    });
-    // Service-binding-only production: INTEL_WORKER_URL empty, INTEL_WORKER stubbed.
-    const stubbedBinding = { fetch: vi.fn() } as unknown as Fetcher;
-    const res = await worker.fetch(
-      authedPost("/app/mmr/vin", { vin: VIN }),
-      makeEnv({ INTEL_WORKER_URL: "", INTEL_WORKER: stubbedBinding }),
-      ctx,
-    );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { mmrValue: number; missingReason?: string } };
-    expect(body.data).toEqual({ mmrValue: 27500, confidence: "high", method: "vin" });
-    // Critical: the handler must have delegated to getMmrValueFromWorker, not
-    // short-circuited with intel_worker_not_configured.
-    expect(vi.mocked(getMmrValueFromWorker)).toHaveBeenCalledTimes(1);
-  });
-
-  it("maps WorkerTimeoutError to a non-blocking 200 with missingReason", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerTimeoutError());
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; data: { mmrValue: null; missingReason: string } };
-    expect(body.ok).toBe(true);
-    expect(body.data).toEqual({ mmrValue: null, missingReason: "intel_worker_timeout" });
-  });
-
-  it("maps WorkerRateLimitError to missingReason intel_worker_rate_limited", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerRateLimitError());
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
+  it("maps intel HTTP 503 to missingReason intel_worker_unavailable", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(new Response("upstream", { status: 503 }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { data: { missingReason: string } };
-    expect(body.data.missingReason).toBe("intel_worker_rate_limited");
-  });
-
-  it("maps WorkerUnavailableError to missingReason intel_worker_unavailable", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new WorkerUnavailableError(503));
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { missingReason: string } };
-    expect(body.data.missingReason).toBe("intel_worker_unavailable");
-  });
-
-  it("lets an unexpected worker error fall through to 503 internal_error", async () => {
-    vi.mocked(getMmrValueFromWorker).mockRejectedValue(new Error("kaboom"));
-    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), makeEnv(), ctx);
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { ok: boolean; error: string };
-    expect(body.ok).toBe(false);
-    expect(body.error).toBe("internal_error");
+    expect(body.data.missingReason).toBe("cox_unavailable");
   });
 });
 

@@ -1010,7 +1010,44 @@ describe("ManheimHttpClient", () => {
     expect(url.searchParams.has("zip")).toBe(false);
   });
 
-  // ── 30. Cox evbh boundary validation (75–100 inclusive) ─────────────────────
+  // ── 30. Cox adjustment query params (region, grade, color, excludeBuild) ───
+
+  it("cox vendor: adjustment params flow through on VIN lookup", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "cox-adj",
+      adjustments: {
+        region: "Southeast",
+        grade: "4.0",
+        color: "Black",
+        excludeBuild: true,
+        evbh: 90,
+      },
+    }));
+
+    const url = new URL(urlOfCall(fetchFn, 1));
+    expect(url.searchParams.get("region")).toBe("Southeast");
+    expect(url.searchParams.get("grade")).toBe("4.0");
+    expect(url.searchParams.get("color")).toBe("Black");
+    expect(url.searchParams.get("excludeBuild")).toBe("true");
+    expect(url.searchParams.get("evbh")).toBe("90");
+  });
+
+  // ── 31. Cox evbh boundary validation (75–100 inclusive) ─────────────────────
 
   it("cox vendor: evbh in range [75, 100] is sent as a query param", async () => {
     const { kv } = makeFakeKv();

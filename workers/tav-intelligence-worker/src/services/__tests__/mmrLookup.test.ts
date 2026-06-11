@@ -133,7 +133,7 @@ describe("performMmrLookup", () => {
     expect(deps.client.lookupByVin).toHaveBeenCalledTimes(1);
     expect(deps.cache.set).toHaveBeenCalledTimes(1);
     expect(deps.lock.release).toHaveBeenCalledWith(
-      "vin:1HGCM82633A123456",
+      "vin:1HGCM82633A123456:45000",
       "req-2",
     );
   });
@@ -278,7 +278,7 @@ describe("performMmrLookup", () => {
     ).rejects.toBe(upstream);
 
     expect(deps.lock.release).toHaveBeenCalledWith(
-      "vin:1HGCM82633A123456",
+      "vin:1HGCM82633A123456:45000",
       "req-9",
     );
     expect(deps.cache.set).not.toHaveBeenCalled();
@@ -346,7 +346,7 @@ describe("performMmrLookup", () => {
     expect(completion?.route).toBe("vin");
     expect(completion?.cacheHit).toBe(false);
     expect(completion?.lockAttempted).toBe(true);
-    expect(completion?.cacheKey).toBe("vin:1HGCM82633A123456");
+    expect(completion?.cacheKey).toBe("vin:1HGCM82633A123456:45000");
     expect(completion?.inferredMileage).toBe(false);
     expect(completion?.retryCount).toBe(2);
     expect(typeof completion?.latencyMs).toBe("number");
@@ -374,7 +374,7 @@ describe("performMmrLookup", () => {
 
     await performMmrLookup({ input: VIN_INPUT, requestId: "vin-req" }, deps);
     const vinKey = deps.cache.get.mock.calls[0]?.[0];
-    expect(vinKey).toBe("vin:1HGCM82633A123456");
+    expect(vinKey).toBe("vin:1HGCM82633A123456:45000");
 
     deps.cache.get.mockResolvedValue(null);
     await performMmrLookup({ input: YMM_INPUT, requestId: "ymm-req" }, deps);

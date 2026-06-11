@@ -1,48 +1,108 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { EMPTY_MMR_ADJUSTMENTS } from "./mmr-adjustments";
 import { ResultBand } from "./result-band";
+
+const noop = () => {};
 
 describe("ResultBand — honest, no fabrication", () => {
   it("idle: Base MMR and every right-panel value render --", () => {
-    render(<ResultBand baseMmr={null} />);
+    render(
+      <ResultBand
+        baseMmr={null}
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(7);
   });
 
   it("VIN value populates ONLY Base MMR; other zones stay --", () => {
-    render(<ResultBand phase="ready" baseMmr={48600} confidence="high" method="vin" />);
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={48600}
+        confidence="high"
+        method="vin"
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.getByText("$48,600")).toBeInTheDocument();
     expect(screen.getByText(/high/i)).toBeInTheDocument();
     expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(6);
   });
 
   it("loading shows skeleton instead of values", () => {
-    render(<ResultBand phase="loading" baseMmr={48600} />);
+    render(
+      <ResultBand
+        phase="loading"
+        baseMmr={48600}
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.getByLabelText(/loading mmr valuation/i)).toBeInTheDocument();
     expect(screen.queryByText("$48,600")).not.toBeInTheDocument();
   });
 
   it("adjustments are disabled before lookup and enabled after ready", () => {
-    const { rerender } = render(<ResultBand phase="idle" baseMmr={null} />);
+    const { rerender } = render(
+      <ResultBand
+        phase="idle"
+        baseMmr={null}
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.getByLabelText(/enter odo/i)).toBeDisabled();
     expect(screen.getByLabelText(/region/i)).toBeDisabled();
 
-    rerender(<ResultBand phase="ready" baseMmr={48600} />);
+    rerender(
+      <ResultBand
+        phase="ready"
+        baseMmr={48600}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, odometer: "70740" }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.getByLabelText(/enter odo/i)).toBeEnabled();
     expect(screen.getByLabelText(/region/i)).toBeEnabled();
-    expect(screen.getByText(/preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/recompute adjusted mmr from cox/i)).toBeInTheDocument();
   });
 
-  it("clear resets interactive adjustment fields", () => {
-    render(<ResultBand phase="ready" baseMmr={48600} defaultOdometer={70740} />);
-    expect(screen.getByLabelText(/enter odo/i)).toHaveValue("70740");
-    fireEvent.change(screen.getByLabelText(/region/i), { target: { value: "Southeast" } });
+  it("clear resets interactive adjustment fields via callback", () => {
+    const onClear = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={48600}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, odometer: "70740", region: "Southeast" }}
+        onAdjustmentsChange={onChange}
+        onAdjustmentsClear={onClear}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
-    expect(screen.getByLabelText(/enter odo/i)).toHaveValue("");
-    expect(screen.getByLabelText(/region/i)).toHaveValue("");
+    expect(onClear).toHaveBeenCalled();
   });
 
   it("renders an honest unavailable message for a missingReason (not an error UI)", () => {
-    render(<ResultBand phase="unavailable" baseMmr={null} unavailableReason="no_mmr_value" />);
+    render(
+      <ResultBand
+        phase="unavailable"
+        baseMmr={null}
+        unavailableReason="no_mmr_value"
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
     expect(screen.queryByText(/\$\d/)).not.toBeInTheDocument();
   });
 });

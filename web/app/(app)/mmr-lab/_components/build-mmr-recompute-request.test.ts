@@ -1,0 +1,41 @@
+import { describe, expect, it } from "vitest";
+
+import { buildMmrRecomputeRequest } from "./build-mmr-recompute-request";
+import { EMPTY_MMR_ADJUSTMENTS } from "./mmr-adjustments";
+
+describe("buildMmrRecomputeRequest", () => {
+  it("builds VIN request with mileage and adjustments", () => {
+    const body = buildMmrRecomputeRequest(
+      { kind: "vin", vin: "1HGCM82633A004352" },
+      { ...EMPTY_MMR_ADJUSTMENTS, odometer: "52000", region: "West", grade: "3.5" },
+    );
+    expect(body).toEqual({
+      vin: "1HGCM82633A004352",
+      mileage: 52000,
+      adjustments: { region: "West", grade: "3.5" },
+    });
+  });
+
+  it("builds YMM request using adjustment odometer over selection mileage", () => {
+    const body = buildMmrRecomputeRequest(
+      {
+        kind: "ymm",
+        selection: {
+          year: "2026",
+          make: "TESLA",
+          model: "MODEL Y AWD",
+          style: "4D SUV PERFORMANCE",
+          mileage: "70740",
+        },
+      },
+      { ...EMPTY_MMR_ADJUSTMENTS, odometer: "65000" },
+    );
+    expect(body).toEqual({
+      year: 2026,
+      make: "TESLA",
+      model: "MODEL Y AWD",
+      style: "4D SUV PERFORMANCE",
+      mileage: 65000,
+    });
+  });
+});

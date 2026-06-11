@@ -42,6 +42,7 @@ export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
         vin:     parsed.data.vin,
         ...(parsed.data.year !== undefined ? { year: parsed.data.year } : {}),
         ...(parsed.data.mileage !== undefined ? { mileage: parsed.data.mileage } : {}),
+        ...(parsed.data.adjustments !== undefined ? { adjustments: parsed.data.adjustments } : {}),
       },
       requestId:    args.requestId,
       forceRefresh: parsed.data.force_refresh,

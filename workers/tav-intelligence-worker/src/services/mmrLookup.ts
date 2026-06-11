@@ -30,8 +30,10 @@
  * activityRepo) as best-effort writes — they never block the response.
  */
 
+import type { MmrLookupAdjustments } from "../../../../src/types/intelligence";
+import { hasMmrLookupAdjustments } from "../../../../src/types/intelligence";
 import type { MmrResponseEnvelope } from "../validate";
-import type { ManheimClient } from "../clients/manheim";
+import type { CoxMmrQueryAdjustments, ManheimClient } from "../clients/manheim";
 import type { MmrCache } from "../cache/mmrCache";
 import type { CacheLock } from "../cache/lock";
 import type { UserContext } from "../auth/userContext";
@@ -61,17 +63,31 @@ export type MmrLookupInput =
        * has to be inferred (only fires when `mileage` is also absent). Do NOT fabricate
        * a year just to satisfy the type; pass through what the caller supplied.
        */
-      year?:   number;
-      mileage?: number;
+      year?:         number;
+      mileage?:      number;
+      adjustments?:  MmrLookupAdjustments;
     }
   | {
-      kind:    "ymm";
-      year:    number;
-      make:    string;
-      model:   string;
-      trim?:   string;
-      mileage?: number;
+      kind:         "ymm";
+      year:         number;
+      make:         string;
+      model:        string;
+      trim?:        string;
+      mileage?:     number;
+      adjustments?: MmrLookupAdjustments;
     };
+
+function toCoxAdjustments(adjustments?: MmrLookupAdjustments): CoxMmrQueryAdjustments | undefined {
+  if (!hasMmrLookupAdjustments(adjustments)) return undefined;
+  const adj = adjustments!;
+  return {
+    ...(adj.region !== undefined ? { region: adj.region } : {}),
+    ...(adj.grade !== undefined ? { grade: adj.grade } : {}),
+    ...(adj.color !== undefined ? { color: adj.color } : {}),
+    ...(adj.exclude_build !== undefined ? { excludeBuild: adj.exclude_build } : {}),
+    ...(adj.evbh !== undefined ? { evbh: adj.evbh } : {}),
+  };
+}
 
 export interface MmrLookupArgs {
   input:         MmrLookupInput;
@@ -125,8 +141,11 @@ export async function performMmrLookup(
 ): Promise<MmrResponseEnvelope> {
   const start       = Date.now();
   const requestId   = args.requestId;
-  const forceRefresh = args.forceRefresh === true;
+  const adjustments = args.input.adjustments;
+  const skipCache   = hasMmrLookupAdjustments(adjustments);
+  const forceRefresh = args.forceRefresh === true || skipCache;
   const userCtx     = args.userContext ?? NULL_USER_CONTEXT;
+  const coxAdj      = toCoxAdjustments(adjustments);
 
   // 1. Resolve mileage (single source of truth — same as main worker).
   // VIN-path year is optional (VIN carries the canonical YMM); only the inference
@@ -147,7 +166,7 @@ export async function performMmrLookup(
   // 2. Derive cache key.
   const cacheKey =
     args.input.kind === "vin"
-      ? deriveVinCacheKey(args.input.vin)
+      ? deriveVinCacheKey(args.input.vin, mileageData.value)
       : deriveYmmCacheKey({
           year:    args.input.year,
           make:    args.input.make,
@@ -234,17 +253,19 @@ export async function performMmrLookup(
         const result =
           args.input.kind === "vin"
             ? await deps.client.lookupByVin({
-                vin:       args.input.vin,
-                mileage:   mileageData.value,
+                vin:          args.input.vin,
+                mileage:      mileageData.value,
                 requestId,
+                ...(coxAdj !== undefined ? { adjustments: coxAdj } : {}),
               })
             : await deps.client.lookupByYmm({
-                year:      args.input.year,
-                make:      args.input.make,
-                model:     args.input.model,
+                year:         args.input.year,
+                make:         args.input.make,
+                model:        args.input.model,
                 ...(args.input.trim !== undefined ? { trim: args.input.trim } : {}),
-                mileage:   mileageData.value,
+                mileage:      mileageData.value,
                 requestId,
+                ...(coxAdj !== undefined ? { adjustments: coxAdj } : {}),
               });
 
         const ttl =
@@ -267,15 +288,17 @@ export async function performMmrLookup(
           error_message:       null,
         };
 
-        // Best-effort KV write — never block the response on a cache failure.
-        try {
-          await deps.cache.set(cacheKey, envelope, ttl, requestId);
-        } catch (err) {
-          log("mmr.lookup.cache_set_failed", {
-            requestId,
-            cacheKey,
-            error_message: err instanceof Error ? err.message : String(err),
-          });
+        // Adjustment lookups skip cache — do not overwrite the base VIN/YMM entry.
+        if (!skipCache) {
+          try {
+            await deps.cache.set(cacheKey, envelope, ttl, requestId);
+          } catch (err) {
+            log("mmr.lookup.cache_set_failed", {
+              requestId,
+              cacheKey,
+              error_message: err instanceof Error ? err.message : String(err),
+            });
+          }
         }
 
         const latencyMs = Date.now() - start;
@@ -294,7 +317,7 @@ export async function performMmrLookup(
         await writePersistenceRecords(deps, {
           requestId, input: args.input, userCtx, envelope,
           cacheHit: false, forceRefresh, retryCount: result.retryCount,
-          latencyMs, outcome: "miss", writeCacheMirror: true, cacheKey,
+          latencyMs, outcome: "miss", writeCacheMirror: !skipCache, cacheKey,
         });
 
         return envelope;

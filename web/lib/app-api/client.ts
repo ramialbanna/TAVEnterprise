@@ -136,11 +136,21 @@ export type HistoricalSalesFilter = {
   since?: string;
 };
 
+/** Cox MMR adjustment params (P3 — POST /app/mmr/vin|ymm). */
+export type MmrAdjustmentsRequest = {
+  region?: string;
+  grade?: string;
+  color?: string;
+  exclude_build?: boolean;
+  evbh?: number;
+};
+
 /** Request body for `POST /app/mmr/vin`. */
 export type MmrVinRequest = {
   vin: string;
   year?: number;
   mileage?: number;
+  adjustments?: MmrAdjustmentsRequest;
 };
 
 export type MmrYmmRequest = {
@@ -149,6 +159,7 @@ export type MmrYmmRequest = {
   model: string;
   style: string;
   mileage: number;
+  adjustments?: MmrAdjustmentsRequest;
 };
 
 /** Request body for `POST /app/opportunities/manual` (WF-1 required fields). */

@@ -17,6 +17,10 @@ describe("deriveVinCacheKey", () => {
   it("preserves already-uppercase VINs", () => {
     expect(deriveVinCacheKey("1HGCM82633A123456")).toBe("vin:1HGCM82633A123456");
   });
+
+  it("appends mileage bucket when mileage is supplied", () => {
+    expect(deriveVinCacheKey("1HGCM82633A123456", 47_250)).toBe("vin:1HGCM82633A123456:45000");
+  });
 });
 
 describe("deriveYmmCacheKey", () => {

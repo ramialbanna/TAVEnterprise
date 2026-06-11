@@ -54,14 +54,9 @@ import {
 } from "../persistence/opportunityWorkflow";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
-import {
-  classifyIntelHttpError,
-  getMmrValueFromWorker,
-  WorkerTimeoutError,
-  WorkerRateLimitError,
-  WorkerUnavailableError,
-} from "../valuation/workerClient";
-import { MmrResponseEnvelopeSchema } from "../types/intelligence";
+import { classifyIntelHttpError } from "../valuation/workerClient";
+import { MmrLookupAdjustmentsSchema, MmrResponseEnvelopeSchema } from "../types/intelligence";
+import type { MmrResponseEnvelope } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
@@ -83,6 +78,7 @@ const AppMmrVinRequestSchema = z.object({
   vin: z.string().trim().min(11).max(17),
   year: z.number().int().min(1900).max(2100).optional(),
   mileage: z.number().int().nonnegative().max(2_000_000).optional(),
+  adjustments: MmrLookupAdjustmentsSchema.optional(),
 });
 const AppMmrYmmRequestSchema = z.object({
   year: z.number().int().min(1900).max(2100),
@@ -90,6 +86,7 @@ const AppMmrYmmRequestSchema = z.object({
   model: z.string().trim().min(1).max(128),
   style: z.string().trim().min(1).max(128),
   mileage: z.number().int().nonnegative().max(2_000_000),
+  adjustments: MmrLookupAdjustmentsSchema.optional(),
 });
 const IntelCatalogEnvelopeSchema = z.object({
   success: z.literal(true),
@@ -516,16 +513,91 @@ async function handleHistoricalSales(env: Env, url: URL): Promise<Response> {
   }
 }
 
+function mapIntelMmrEnvelopeToAppData(
+  envelope: MmrResponseEnvelope,
+  method: "vin" | "year_make_model",
+  confidence: "high" | "medium",
+): Record<string, unknown> {
+  if (!envelope.ok || envelope.mmr_value === null) {
+    return { mmrValue: null, missingReason: envelope.error_code ?? "no_mmr_value" };
+  }
+
+  const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
+  const payloadItem = firstPayloadItem(envelope.mmr_payload);
+  return {
+    mmrValue: envelope.mmr_value,
+    confidence,
+    method,
+    mileageUsed: envelope.mileage_used,
+    avgOdometer: readNumericField(payloadItem, "averageOdometer"),
+    avgCondition: readNumericField(payloadItem, "averageGrade"),
+    sampleCount: distribution.sampleCount,
+    rangeLow: distribution.wholesaleRough,
+    rangeHigh: distribution.wholesaleClean,
+    adjustedMmr: distribution.wholesaleAvg ?? envelope.mmr_value,
+    retailValue: distribution.retailAvg,
+    retailRangeLow: distribution.retailRough,
+    retailRangeHigh: distribution.retailClean,
+  };
+}
+
+async function fetchIntelMmrLookup(
+  env: Env,
+  intelPath: string,
+  body: Record<string, unknown>,
+  logLabel: "mmr_vin" | "mmr_ymm",
+  method: "vin" | "year_make_model",
+  confidence: "high" | "medium",
+): Promise<Response> {
+  if (!env.INTEL_WORKER_URL && env.INTEL_WORKER === undefined) {
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
+  }
+
+  let res: Response | null;
+  try {
+    res = await fetchIntelWorker(env, intelPath, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    log(`app.${logLabel}.worker_fetch_failed`, { error: serializeError(err) });
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_unavailable" } });
+  }
+
+  if (res === null) {
+    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
+  }
+
+  const responseText = await res.text();
+  const responseJson = parseJsonText(responseText);
+  if (!res.ok) {
+    const missingReason = classifyIntelHttpError(res.status, responseText);
+    log(`app.${logLabel}.worker_error`, {
+      status: res.status,
+      missingReason,
+      body_keys: Object.keys(body).sort(),
+    });
+    return json({ ok: true, data: { mmrValue: null, missingReason } });
+  }
+
+  const wrapped = IntelMmrEnvelopeSchema.safeParse(responseJson);
+  if (!wrapped.success) {
+    log(`app.${logLabel}.worker_envelope_invalid`, {
+      issues: wrapped.error.issues.slice(0, 5),
+    });
+    return json({ ok: true, data: { mmrValue: null, missingReason: "envelope_invalid" } });
+  }
+
+  return json({
+    ok: true,
+    data: mapIntelMmrEnvelopeToAppData(wrapped.data.data, method, confidence),
+  });
+}
+
 /**
  * POST /app/mmr/vin — on-demand MMR valuation by VIN, proxied to
- * tav-intelligence-worker via valuation/workerClient.getMmrValueFromWorker
- * (which already picks Service-Binding vs public-fetch transport).
- *
- * Body: { vin: string (11–17 chars), year?: number, mileage?: number }.
- * Malformed JSON or body → 400. Otherwise always 200 — an unavailable /
- * rate-limited / timed-out / unconfigured intelligence worker, or a worker
- * response with no value, is reported non-blockingly as
- * `{ ok: true, data: { mmrValue: null, missingReason: "<code>" } }`.
+ * tav-intelligence-worker. Optional `adjustments` recompute adjusted MMR (P3).
  */
 async function handleMmrVin(request: Request, env: Env): Promise<Response> {
   let raw: unknown;
@@ -539,48 +611,14 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
   if (!parsed.success) {
     return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
   }
-  const { vin, year, mileage } = parsed.data;
 
-  // The intelligence worker can be reached over a public URL (`INTEL_WORKER_URL`) or a
-  // Cloudflare Service Binding (`INTEL_WORKER`). Production runs binding-only with no
-  // public URL (`workers_dev = false`); guarding on the URL alone misclassified that
-  // configuration as "not configured". Treat as configured if either path is present.
-  if (!env.INTEL_WORKER_URL && env.INTEL_WORKER === undefined) {
-    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
-  }
+  const { vin, year, mileage, adjustments } = parsed.data;
+  const body: Record<string, unknown> = { vin };
+  if (year !== undefined) body.year = year;
+  if (mileage !== undefined) body.mileage = mileage;
+  if (adjustments !== undefined) body.adjustments = adjustments;
 
-  try {
-    const result = await getMmrValueFromWorker(
-      {
-        vin,
-        ...(year !== undefined && { year }),
-        ...(mileage !== undefined && { mileage }),
-      },
-      env,
-    );
-
-    if (result === null) {
-      // negative cache, insufficient params, or unparseable envelope — non-blocking
-      return json({ ok: true, data: { mmrValue: null, missingReason: "no_mmr_value" } });
-    }
-
-    return json({
-      ok: true,
-      data: {
-        mmrValue: result.mmrValue,
-        confidence: result.confidence,
-        method: result.method ?? null,
-      },
-    });
-  } catch (err) {
-    let missingReason: string;
-    if (err instanceof WorkerTimeoutError) missingReason = "intel_worker_timeout";
-    else if (err instanceof WorkerRateLimitError) missingReason = "intel_worker_rate_limited";
-    else if (err instanceof WorkerUnavailableError) missingReason = "intel_worker_unavailable";
-    else throw err; // unexpected — let handleApp's catch surface it as 503 internal_error
-    log("app.mmr_vin.worker_error", { missingReason, error: serializeError(err) });
-    return json({ ok: true, data: { mmrValue: null, missingReason } });
-  }
+  return fetchIntelMmrLookup(env, "/mmr/vin", body, "mmr_vin", "vin", "high");
 }
 
 type AppCatalogData = z.infer<typeof IntelCatalogEnvelopeSchema>["data"];
@@ -682,76 +720,18 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
   }
 
-  const { year, make, model, style, mileage } = parsed.data;
-  const body = { year, make, model, trim: style, mileage };
+  const { year, make, model, style, mileage, adjustments } = parsed.data;
+  const body: Record<string, unknown> = { year, make, model, trim: style, mileage };
+  if (adjustments !== undefined) body.adjustments = adjustments;
 
-  let res: Response | null;
-  try {
-    res = await fetchIntelWorker(env, "/mmr/year-make-model", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    log("app.mmr_ymm.worker_fetch_failed", { error: serializeError(err) });
-    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_unavailable" } });
-  }
-
-  if (res === null) {
-    return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
-  }
-
-  const responseText = await res.text();
-  const responseJson = parseJsonText(responseText);
-  if (!res.ok) {
-    const missingReason = classifyIntelHttpError(res.status, responseText);
-    log("app.mmr_ymm.worker_error", {
-      status: res.status,
-      missingReason,
-      body_keys: Object.keys(body).sort(),
-    });
-    return json({ ok: true, data: { mmrValue: null, missingReason } });
-  }
-
-  const wrapped = IntelMmrEnvelopeSchema.safeParse(responseJson);
-  if (!wrapped.success) {
-    log("app.mmr_ymm.worker_envelope_invalid", {
-      issues: wrapped.error.issues.slice(0, 5),
-    });
-    return json({ ok: true, data: { mmrValue: null, missingReason: "envelope_invalid" } });
-  }
-
-  const envelope = wrapped.data.data;
-  if (!envelope.ok || envelope.mmr_value === null) {
-    return json({
-      ok: true,
-      data: {
-        mmrValue: null,
-        missingReason: envelope.error_code ?? "no_mmr_value",
-      },
-    });
-  }
-
-  const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
-  const payloadItem = firstPayloadItem(envelope.mmr_payload);
-  return json({
-    ok: true,
-    data: {
-      mmrValue: envelope.mmr_value,
-      confidence: "medium",
-      method: "year_make_model",
-      mileageUsed: envelope.mileage_used,
-      avgOdometer: readNumericField(payloadItem, "averageOdometer"),
-      avgCondition: readNumericField(payloadItem, "averageGrade"),
-      sampleCount: distribution.sampleCount,
-      rangeLow: distribution.wholesaleRough,
-      rangeHigh: distribution.wholesaleClean,
-      adjustedMmr: distribution.wholesaleAvg ?? envelope.mmr_value,
-      retailValue: distribution.retailAvg,
-      retailRangeLow: distribution.retailRough,
-      retailRangeHigh: distribution.retailClean,
-    },
-  });
+  return fetchIntelMmrLookup(
+    env,
+    "/mmr/year-make-model",
+    body,
+    "mmr_ymm",
+    "year_make_model",
+    "medium",
+  );
 }
 
 async function readResponseJson(res: Response): Promise<unknown> {

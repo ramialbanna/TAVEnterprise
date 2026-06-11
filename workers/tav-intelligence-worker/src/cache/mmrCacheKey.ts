@@ -20,9 +20,14 @@ export interface YmmCacheKeyArgs {
   mileage: number;
 }
 
-/** Build the VIN-namespaced cache key. */
-export function deriveVinCacheKey(vin: string): string {
-  return `vin:${vin.trim().toUpperCase()}`;
+/** Build the VIN-namespaced cache key. Mileage is bucketed when supplied so
+ *  odometer adjustments do not reuse a stale wholesale value. */
+export function deriveVinCacheKey(vin: string, mileage?: number): string {
+  const normalized = vin.trim().toUpperCase();
+  if (typeof mileage === "number" && Number.isFinite(mileage) && mileage >= 0) {
+    return `vin:${normalized}:${mileageBucket(mileage)}`;
+  }
+  return `vin:${normalized}`;
 }
 
 /** Build the YMM-namespaced cache key. */

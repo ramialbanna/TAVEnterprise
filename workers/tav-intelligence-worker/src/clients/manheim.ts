@@ -38,19 +38,31 @@ export interface ManheimCatalogResponse {
   retryCount: number;
 }
 
+/** Optional Cox MMR query params for adjustment recompute (#45). */
+export type CoxMmrQueryAdjustments = {
+  region?:       string;
+  grade?:        string;
+  color?:        string;
+  excludeBuild?: boolean;
+  evbh?:         number;
+  zipCode?:      string;
+};
+
 export interface ManheimClient {
   lookupByVin(args: {
-    vin:       string;
-    mileage:   number;
-    requestId: string;
+    vin:          string;
+    mileage:      number;
+    requestId:    string;
+    adjustments?: CoxMmrQueryAdjustments;
   }): Promise<ManheimVinResponse>;
 
   lookupByYmm(args: {
-    year:      number;
-    make:      string;
-    model:     string;
-    trim?:     string;
-    mileage:   number;
-    requestId: string;
+    year:         number;
+    make:         string;
+    model:        string;
+    trim?:        string;
+    mileage:      number;
+    requestId:    string;
+    adjustments?: CoxMmrQueryAdjustments;
   }): Promise<ManheimYmmResponse>;
 }

@@ -29,6 +29,12 @@ import {
   buildMmrLabMaxbuyRequest,
   type MmrLabLookupSession,
 } from "./build-mmr-lab-maxbuy-request";
+import { buildMmrRecomputeRequest } from "./build-mmr-recompute-request";
+import {
+  EMPTY_MMR_ADJUSTMENTS,
+  parseAdjustmentOdometer,
+  type MmrAdjustments,
+} from "./mmr-adjustments";
 
 type View =
   | { kind: "empty" }
@@ -95,12 +101,19 @@ export function MmrLabClient() {
   const [identity, setIdentity] = useState<Identity>(null);
   const [selection, setSelection] = useState<MmrSelection>(emptySelection);
   const [laneAskPrice, setLaneAskPrice] = useState("");
+  const [adjustments, setAdjustments] = useState<MmrAdjustments>(EMPTY_MMR_ADJUSTMENTS);
+  const [mmrRecomputing, setMmrRecomputing] = useState(false);
   const [catalog, setCatalog] = useState<MmrCatalogOptions>(emptyCatalog);
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
+  const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const reEvaluateMaxbuy = useCallback((session: MmrLabLookupSession, askPrice: string) => {
-    const built = buildMmrLabMaxbuyRequest(session, askPrice);
+  const reEvaluateMaxbuy = useCallback((
+    session: MmrLabLookupSession,
+    askPrice: string,
+    adj?: MmrAdjustments,
+  ) => {
+    const built = buildMmrLabMaxbuyRequest(session, askPrice, adj);
     if ("error" in built) {
       setMaxbuyView({ kind: "error", message: built.error });
       return;
@@ -116,10 +129,62 @@ export function MmrLabClient() {
     (value: string) => {
       setLaneAskPrice(value);
       const session = lookupSessionRef.current;
-      if (session) reEvaluateMaxbuy(session, value);
+      if (session) reEvaluateMaxbuy(session, value, adjustments);
     },
-    [reEvaluateMaxbuy],
+    [reEvaluateMaxbuy, adjustments],
   );
+
+  const seedAdjustments = useCallback((mileage: number | null) => {
+    setAdjustments({
+      ...EMPTY_MMR_ADJUSTMENTS,
+      odometer: mileage !== null ? String(mileage) : "",
+    });
+  }, []);
+
+  const runMmrRecompute = useCallback(
+    async (session: MmrLabLookupSession, adj: MmrAdjustments) => {
+      const request = buildMmrRecomputeRequest(session, adj);
+      setMmrRecomputing(true);
+      try {
+        const mmrRes =
+          session.kind === "vin"
+            ? await postMmrVin(request as Extract<typeof request, { vin: string }>)
+            : await postMmrYmm(request as Extract<typeof request, { year: number }>);
+        if (mmrRes.ok) setView({ kind: "ok", result: mmrRes.data });
+        else if (mmrRes.kind === "unavailable") setView({ kind: "unavailable", reason: mmrRes.error });
+        else setView({ kind: "error", error: mmrRes });
+      } finally {
+        setMmrRecomputing(false);
+      }
+
+      if (parseAdjustmentOdometer(adj.odometer) !== null) {
+        reEvaluateMaxbuy(session, laneAskPrice, adj);
+      }
+    },
+    [laneAskPrice, reEvaluateMaxbuy],
+  );
+
+  const handleAdjustmentsChange = useCallback(
+    (next: MmrAdjustments) => {
+      setAdjustments(next);
+      const session = lookupSessionRef.current;
+      if (!session) return;
+
+      if (recomputeTimerRef.current) clearTimeout(recomputeTimerRef.current);
+      recomputeTimerRef.current = setTimeout(() => {
+        void runMmrRecompute(session, next);
+      }, 400);
+    },
+    [runMmrRecompute],
+  );
+
+  const handleAdjustmentsClear = useCallback(() => {
+    setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+    const session = lookupSessionRef.current;
+    if (!session) return;
+    if (recomputeTimerRef.current) clearTimeout(recomputeTimerRef.current);
+    void runMmrRecompute(session, EMPTY_MMR_ADJUSTMENTS);
+  }, [runMmrRecompute]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +283,7 @@ export function MmrLabClient() {
       }
 
       lookupSessionRef.current = session;
+      setAdjustments(EMPTY_MMR_ADJUSTMENTS);
 
       setView({ kind: "loading" });
       setMaxbuyView({ kind: "loading" });
@@ -229,8 +295,13 @@ export function MmrLabClient() {
 
       if (mmrSettled.status === "fulfilled") {
         const res = mmrSettled.value;
-        if (res.ok) setView({ kind: "ok", result: res.data });
-        else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
+        if (res.ok) {
+          setView({ kind: "ok", result: res.data });
+          const mileageUsed =
+            res.data.mileageUsed ??
+            (session.kind === "ymm" ? parseMileage(session.selection.mileage) : null);
+          seedAdjustments(mileageUsed);
+        } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
       } else {
         setView({ kind: "error", error: mmrTransportError() });
@@ -242,7 +313,7 @@ export function MmrLabClient() {
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
-    [laneAskPrice],
+    [laneAskPrice, seedAdjustments],
   );
 
   const onVinSubmit = useCallback(
@@ -304,14 +375,13 @@ export function MmrLabClient() {
   const resultBandPhase =
     view.kind === "loading"
       ? "loading"
-      : view.kind === "ok"
-        ? "ready"
-        : view.kind === "unavailable"
-          ? "unavailable"
-          : "idle";
-  const defaultOdometer =
-    parseMileage(selection.mileage) ?? result?.mileageUsed ?? null;
-
+      : mmrRecomputing
+        ? "recomputing"
+        : view.kind === "ok"
+          ? "ready"
+          : view.kind === "unavailable"
+            ? "unavailable"
+            : "idle";
   const retryLookup =
     identity?.kind === "vin"
       ? () => void onVinSubmit(identity.vin)
@@ -354,7 +424,9 @@ export function MmrLabClient() {
       ) : (
         <ResultBand
           phase={resultBandPhase}
-          defaultOdometer={defaultOdometer}
+          adjustments={adjustments}
+          onAdjustmentsChange={handleAdjustmentsChange}
+          onAdjustmentsClear={handleAdjustmentsClear}
           baseMmr={result?.mmrValue ?? null}
           confidence={result?.confidence ?? null}
           method={result?.method ?? null}

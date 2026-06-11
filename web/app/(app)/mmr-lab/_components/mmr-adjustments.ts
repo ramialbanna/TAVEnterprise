@@ -1,4 +1,4 @@
-/** Local MMR adjustment fields — UI preview until Phase 3 recompute (#45). */
+/** MMR adjustment fields for Zone B — mapped to Cox query params on recompute (P3). */
 export type MmrAdjustments = {
   odometer: string;
   region: string;
@@ -50,4 +50,39 @@ export function hasMmrAdjustments(adjustments: MmrAdjustments): boolean {
     adjustments.buildOptions ||
     adjustments.expressGrade !== ""
   );
+}
+
+/** API body shape for `adjustments` on POST /app/mmr/vin|ymm (P3). */
+export type MmrAdjustmentsApi = {
+  region?: string;
+  grade?: string;
+  color?: string;
+  exclude_build?: boolean;
+  evbh?: number;
+};
+
+function parseExpressGrade(raw: string): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 75 && n <= 100 ? n : null;
+}
+
+/** Map Zone B UI fields to Cox adjustment query params. */
+export function mapMmrAdjustmentsToApi(
+  adjustments: MmrAdjustments,
+): MmrAdjustmentsApi | undefined {
+  const api: MmrAdjustmentsApi = {};
+  if (adjustments.region) api.region = adjustments.region;
+  if (adjustments.grade) api.grade = adjustments.grade;
+  if (adjustments.exteriorColor) api.color = adjustments.exteriorColor;
+  if (adjustments.buildOptions) api.exclude_build = false;
+  const evbh = parseExpressGrade(adjustments.expressGrade);
+  if (evbh !== null) api.evbh = evbh;
+  return Object.keys(api).length > 0 ? api : undefined;
+}
+
+export function parseAdjustmentOdometer(raw: string): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n <= 2_000_000 ? n : null;
 }

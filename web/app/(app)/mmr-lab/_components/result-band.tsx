@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +8,6 @@ import { UnavailableState } from "@/components/data-state";
 import { cn } from "@/lib/utils";
 
 import {
-  EMPTY_MMR_ADJUSTMENTS,
   hasMmrAdjustments,
   MMR_COLOR_OPTIONS,
   MMR_GRADE_OPTIONS,
@@ -19,10 +16,13 @@ import {
 } from "./mmr-adjustments";
 import { DASH, MmrMoney, MmrRange } from "./mmr-value";
 
-export type ResultBandPhase = "idle" | "loading" | "ready" | "unavailable";
+export type ResultBandPhase = "idle" | "loading" | "ready" | "recomputing" | "unavailable";
 
 type Props = {
   phase?: ResultBandPhase;
+  adjustments: MmrAdjustments;
+  onAdjustmentsChange: (next: MmrAdjustments) => void;
+  onAdjustmentsClear: () => void;
   baseMmr: number | null;
   confidence?: "high" | "medium" | "low" | null;
   method?: string | null;
@@ -35,8 +35,6 @@ type Props = {
   retailValue?: number | null;
   retailRangeLow?: number | null;
   retailRangeHigh?: number | null;
-  /** Prefill ODO when YMM search supplied mileage (visual only until recompute). */
-  defaultOdometer?: number | null;
 };
 
 function formatNumber(value: number | null | undefined): string {
@@ -103,11 +101,6 @@ function MmrAdjustmentsPanel({
             MMR Adjustments
           </span>
           <div className="flex items-center gap-2">
-            {interactive ? (
-              <Badge variant="secondary" className="font-normal">
-                Preview
-              </Badge>
-            ) : null}
             <Button
               type="button"
               variant="link"
@@ -227,7 +220,7 @@ function MmrAdjustmentsPanel({
         <p className="text-xs text-muted-foreground">
           Numbers may not add exactly due to rounding ** AutoGrade™ or Manheim Express Grade.
           {interactive
-            ? " Adjustments are interactive for layout review — adjusted MMR recompute ships in Phase 3 (#45)."
+            ? " Changes recompute adjusted MMR from Cox."
             : " Run a search to enable adjustment controls."}
         </p>
         {interactive ? (
@@ -238,30 +231,11 @@ function MmrAdjustmentsPanel({
   );
 }
 
-function ResultBandAdjustments({
-  interactive,
-  defaultOdometer,
-}: {
-  interactive: boolean;
-  defaultOdometer: number | null;
-}) {
-  const [adjustments, setAdjustments] = useState<MmrAdjustments>(() => ({
-    ...EMPTY_MMR_ADJUSTMENTS,
-    odometer: interactive && defaultOdometer !== null ? String(defaultOdometer) : "",
-  }));
-
-  return (
-    <MmrAdjustmentsPanel
-      interactive={interactive}
-      adjustments={adjustments}
-      onChange={setAdjustments}
-      onClear={() => setAdjustments(EMPTY_MMR_ADJUSTMENTS)}
-    />
-  );
-}
-
 export function ResultBand({
   phase = "idle",
+  adjustments,
+  onAdjustmentsChange,
+  onAdjustmentsClear,
   baseMmr,
   confidence,
   method,
@@ -274,13 +248,9 @@ export function ResultBand({
   retailValue,
   retailRangeLow,
   retailRangeHigh,
-  defaultOdometer = null,
 }: Props) {
-  const interactive = phase === "ready";
-  const adjustmentsKey =
-    phase === "ready"
-      ? `ready-${defaultOdometer ?? "none"}`
-      : phase;
+  const interactive = phase === "ready" || phase === "recomputing";
+  const panelBusy = phase === "recomputing";
 
   if (phase === "loading") {
     return <ResultBandSkeleton />;
@@ -314,13 +284,20 @@ export function ResultBand({
         </div>
       </div>
 
-      <ResultBandAdjustments
-        key={adjustmentsKey}
-        interactive={interactive}
-        defaultOdometer={defaultOdometer}
+      <MmrAdjustmentsPanel
+        interactive={interactive && !panelBusy}
+        adjustments={adjustments}
+        onChange={onAdjustmentsChange}
+        onClear={onAdjustmentsClear}
       />
 
-      <div className="min-w-0 rounded-lg bg-primary p-4 text-center text-primary-foreground sm:p-6">
+      <div
+        className={cn(
+          "min-w-0 rounded-lg bg-primary p-4 text-center text-primary-foreground sm:p-6",
+          panelBusy && "opacity-80",
+        )}
+        aria-busy={panelBusy}
+      >
         <div className="text-sm uppercase tracking-wider opacity-90">MMR Range</div>
         <div className="mt-1 text-lg font-semibold tabular-nums">
           <MmrRange low={rangeLow} high={rangeHigh} />
@@ -328,9 +305,16 @@ export function ResultBand({
         <div className="mt-4 rounded-md bg-background/95 p-4 text-foreground">
           <div className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
             Adjusted MMR
+            {panelBusy ? (
+              <span className="ml-2 text-xs font-normal normal-case">Updating…</span>
+            ) : null}
           </div>
           <div className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">
-            <MmrMoney value={adjustedMmr} />
+            {panelBusy ? (
+              <Skeleton className="mx-auto h-8 w-32" />
+            ) : (
+              <MmrMoney value={adjustedMmr} />
+            )}
           </div>
         </div>
         <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
