@@ -27,6 +27,10 @@ const connectedCatalog: MmrCatalogOptions = {
 
 function renderPanel(
   overrides: Partial<{
+    vin: string;
+    onVinChange: (value: string) => void;
+    vinReadOnly: boolean;
+    onVinReset: () => void;
     selection: MmrSelection;
     catalog: MmrCatalogOptions;
     onSelectionChange: (next: MmrSelection) => void;
@@ -36,6 +40,10 @@ function renderPanel(
   }> = {},
 ) {
   const props = {
+    vin: overrides.vin ?? "",
+    onVinChange: overrides.onVinChange ?? vi.fn(),
+    vinReadOnly: overrides.vinReadOnly ?? false,
+    onVinReset: overrides.onVinReset,
     onVinSubmit: vi.fn(),
     vinPending: false,
     selection: overrides.selection ?? emptySelection,
@@ -52,14 +60,50 @@ function renderPanel(
 
 describe("SearchPanel — live catalog + VIN", () => {
   it("VIN submit fires only for an 11-17 char VIN", () => {
-    const props = renderPanel();
-    const vin = screen.getByPlaceholderText(/enter vin/i);
-    fireEvent.change(vin, { target: { value: "SHORT" } });
+    const onVinSubmit = vi.fn();
+    const { rerender } = render(
+      <SearchPanel
+        vin="SHORT"
+        onVinChange={vi.fn()}
+        onVinSubmit={onVinSubmit}
+        vinPending={false}
+        selection={emptySelection}
+        catalog={connectedCatalog}
+        onSelectionChange={vi.fn()}
+        onYmmSubmit={vi.fn()}
+        ymmPending={false}
+        laneAskPrice=""
+        onLaneAskPriceChange={vi.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(props.onVinSubmit).not.toHaveBeenCalled();
-    fireEvent.change(vin, { target: { value: "1FT7W2BT4KED81759" } });
+    expect(onVinSubmit).not.toHaveBeenCalled();
+
+    rerender(
+      <SearchPanel
+        vin="1FT7W2BT4KED81759"
+        onVinChange={vi.fn()}
+        onVinSubmit={onVinSubmit}
+        vinPending={false}
+        selection={emptySelection}
+        catalog={connectedCatalog}
+        onSelectionChange={vi.fn()}
+        onYmmSubmit={vi.fn()}
+        ymmPending={false}
+        laneAskPrice=""
+        onLaneAskPriceChange={vi.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
-    expect(props.onVinSubmit).toHaveBeenCalledWith("1FT7W2BT4KED81759");
+    expect(onVinSubmit).toHaveBeenCalledWith("1FT7W2BT4KED81759");
+  });
+
+  it("read-only VIN shows Change VIN and calls onVinReset", () => {
+    const onVinReset = vi.fn();
+    renderPanel({ vin: "1FT7W2BT4KED81759", vinReadOnly: true, onVinReset });
+    expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: /change vin/i }));
+    expect(onVinReset).toHaveBeenCalledTimes(1);
   });
 
   it("renders catalog options from props, not local constants", () => {
@@ -115,6 +159,8 @@ describe("SearchPanel — live catalog + VIN", () => {
     const onYmmSubmit = vi.fn();
     const { rerender } = render(
       <SearchPanel
+        vin=""
+        onVinChange={vi.fn()}
         onVinSubmit={vi.fn()}
         vinPending={false}
         selection={{ ...emptySelection, year: "2026", make: "TESLA", model: "MODEL Y AWD" }}
@@ -130,6 +176,8 @@ describe("SearchPanel — live catalog + VIN", () => {
 
     rerender(
       <SearchPanel
+        vin=""
+        onVinChange={vi.fn()}
         onVinSubmit={vi.fn()}
         vinPending={false}
         selection={{

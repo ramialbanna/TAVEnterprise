@@ -109,7 +109,16 @@ function mockCatalog(fetchSpy = vi.spyOn(globalThis, "fetch")) {
       });
     }
     if (url.includes("/api/app/mmr/vin") && init?.method === "POST") {
-      return ok({ mmrValue: 48600, confidence: "high", method: "vin" });
+      return ok({
+        mmrValue: 48600,
+        confidence: "high",
+        method: "vin",
+        year: 2026,
+        make: "TESLA",
+        model: "MODEL Y AWD",
+        trim: "4D SUV PERFORMANCE",
+        mileageUsed: 70740,
+      });
     }
     if (url.includes("/api/app/maxbuy/evaluate") && init?.method === "POST") {
       const body = JSON.parse(String(init.body)) as { asking_price?: number };
@@ -250,6 +259,29 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     for (const label of [/year/i, /make/i, /model/i, /style/i]) {
       expect(screen.getByLabelText(label)).toBeDisabled();
     }
+  });
+
+  it("VIN path autofills YMM dropdowns and locks VIN for YMM re-lookup", async () => {
+    const fetchSpy = mockCatalog();
+    renderClient();
+    fireEvent.change(screen.getByPlaceholderText(/enter vin/i), {
+      target: { value: "1FT7W2BT4KED81759" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /search/i }));
+
+    await waitFor(() => expect(screen.getAllByText("$48,600").length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(screen.getByLabelText(/year/i)).toHaveValue("2026"));
+    expect(screen.getByLabelText(/make/i)).toHaveValue("TESLA");
+    expect(screen.getByLabelText(/model/i)).toHaveValue("MODEL Y AWD");
+    expect(screen.getByLabelText(/style/i)).toHaveValue("4D SUV PERFORMANCE");
+    expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740");
+    expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: /change vin/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.filter((call) => String(call[0]).includes("/api/app/mmr/ymm")).length).toBeGreaterThan(0),
+    );
   });
 
   it("VIN path still calls /api/app/mmr/vin and populates Base MMR", async () => {

@@ -59,6 +59,7 @@ import { MmrLookupAdjustmentsSchema, MmrResponseEnvelopeSchema } from "../types/
 import type { MmrResponseEnvelope } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
+import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
@@ -525,12 +526,17 @@ function mapIntelMmrEnvelopeToAppData(
 
   const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
   const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
+  const vehicleIdentity = extractManheimVehicleIdentity(envelope.mmr_payload ?? {});
   const payloadItem = firstPayloadItem(envelope.mmr_payload);
   return {
     mmrValue: envelope.mmr_value,
     confidence,
     method,
     mileageUsed: envelope.mileage_used,
+    ...(vehicleIdentity.year !== null ? { year: vehicleIdentity.year } : {}),
+    ...(vehicleIdentity.make !== null ? { make: vehicleIdentity.make } : {}),
+    ...(vehicleIdentity.model !== null ? { model: vehicleIdentity.model } : {}),
+    ...(vehicleIdentity.trim !== null ? { trim: vehicleIdentity.trim } : {}),
     avgOdometer: readNumericField(payloadItem, "averageOdometer"),
     avgCondition: readNumericField(payloadItem, "averageGrade"),
     sampleCount: distribution.sampleCount,

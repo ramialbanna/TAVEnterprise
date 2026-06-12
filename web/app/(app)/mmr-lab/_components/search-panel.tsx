@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -23,6 +22,10 @@ export type MmrCatalogOptions = {
 };
 
 type Props = {
+  vin: string;
+  onVinChange: (value: string) => void;
+  vinReadOnly?: boolean;
+  onVinReset?: () => void;
   onVinSubmit: (vin: string) => void;
   vinPending: boolean;
   selection: MmrSelection;
@@ -32,6 +35,7 @@ type Props = {
   ymmPending: boolean;
   laneAskPrice: string;
   onLaneAskPriceChange: (value: string) => void;
+  styleMatchNotice?: string | null;
 };
 
 const VIN_MIN = 11;
@@ -64,6 +68,10 @@ export function parseLaneAskPrice(raw: string): number | null {
 }
 
 export function SearchPanel({
+  vin,
+  onVinChange,
+  vinReadOnly = false,
+  onVinReset,
   onVinSubmit,
   vinPending,
   selection,
@@ -73,10 +81,10 @@ export function SearchPanel({
   ymmPending,
   laneAskPrice,
   onLaneAskPriceChange,
+  styleMatchNotice = null,
 }: Props) {
-  const [vin, setVin] = useState("");
-
   function submitVin() {
+    if (vinReadOnly) return;
     const v = vin.trim();
     if (v.length >= VIN_MIN && v.length <= VIN_MAX) onVinSubmit(v);
   }
@@ -105,17 +113,20 @@ export function SearchPanel({
             <Input
               placeholder="Enter VIN"
               value={vin}
-              onChange={(e) => setVin(e.target.value)}
+              readOnly={vinReadOnly}
+              onChange={(e) => {
+                if (!vinReadOnly) onVinChange(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submitVin();
               }}
               className="pr-8"
             />
-            {vin.length > 0 && (
+            {vin.length > 0 && !vinReadOnly && (
               <button
                 type="button"
                 aria-label="Clear VIN"
-                onClick={() => setVin("")}
+                onClick={() => onVinChange("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
               >
                 ×
@@ -124,13 +135,14 @@ export function SearchPanel({
           </div>
           <Button
             type="button"
-            aria-label="Search VIN"
+            aria-label={vinReadOnly ? "Change VIN" : "Search VIN"}
             aria-busy={vinPending}
             disabled={vinPending}
-            onClick={submitVin}
+            onClick={vinReadOnly ? onVinReset : submitVin}
+            variant={vinReadOnly ? "outline" : "default"}
             className="w-full shrink-0 sm:w-auto"
           >
-            {vinPending ? "…" : "Search"}
+            {vinPending ? "…" : vinReadOnly ? "Change VIN" : "Search"}
           </Button>
         </div>
 
@@ -269,6 +281,12 @@ export function SearchPanel({
             {ymmPending ? "…" : "Value"}
           </Button>
         </div>
+
+        {styleMatchNotice ? (
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-200" role="status">
+            {styleMatchNotice}
+          </p>
+        ) : null}
 
         <p className="text-xs text-muted-foreground">
           {catalog.catalogState === "connected"

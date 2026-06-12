@@ -642,6 +642,12 @@ describe("POST /app/mmr/vin", () => {
     error_message: null,
     mmr_payload: {
       items: [{
+        description: {
+          year: 2020,
+          make: "Toyota",
+          model: "Camry",
+          trim: "SE",
+        },
         averageOdometer: 45000,
         averageGrade: 3.5,
         sampleSize: "12",
@@ -704,6 +710,10 @@ describe("POST /app/mmr/vin", () => {
       confidence: "high",
       method: "vin",
       mileageUsed: 45000,
+      year: 2020,
+      make: "Toyota",
+      model: "Camry",
+      trim: "SE",
       adjustedMmr: 18500,
       rangeLow: 17000,
       rangeHigh: 20000,

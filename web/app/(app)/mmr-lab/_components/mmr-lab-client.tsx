@@ -31,6 +31,10 @@ import {
 } from "./build-mmr-lab-maxbuy-request";
 import { buildMmrRecomputeRequest } from "./build-mmr-recompute-request";
 import {
+  hydrateVinAutofill,
+  styleMatchNotice,
+} from "./hydrate-vin-autofill";
+import {
   EMPTY_MMR_ADJUSTMENTS,
   parseAdjustmentOdometer,
   type MmrAdjustments,
@@ -99,6 +103,9 @@ export function MmrLabClient() {
   const [view, setView] = useState<View>({ kind: "empty" });
   const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>({ kind: "idle" });
   const [identity, setIdentity] = useState<Identity>(null);
+  const [vinInput, setVinInput] = useState("");
+  const [vinLocked, setVinLocked] = useState(false);
+  const [styleNotice, setStyleNotice] = useState<string | null>(null);
   const [selection, setSelection] = useState<MmrSelection>(emptySelection);
   const [laneAskPrice, setLaneAskPrice] = useState("");
   const [adjustments, setAdjustments] = useState<MmrAdjustments>(EMPTY_MMR_ADJUSTMENTS);
@@ -267,6 +274,32 @@ export function MmrLabClient() {
     };
   }, [selection.year, selection.make, selection.model]);
 
+  const applyVinAutofill = useCallback(
+    async (result: MmrVinOk, mileage: string) => {
+      let years = catalog.years;
+      if (years.length === 0) {
+        const yearsRes = await getMmrCatalogYears();
+        if (!yearsRes.ok) return;
+        years = yearsRes.data.items;
+      }
+
+      const autofill = await hydrateVinAutofill(result, years, mileage);
+      if (!autofill) return;
+
+      setSelection(autofill.selection);
+      setCatalog((current) => ({
+        ...current,
+        years: autofill.catalog.years.length > 0 ? autofill.catalog.years : current.years,
+        makes: autofill.catalog.makes,
+        models: autofill.catalog.models,
+        styles: autofill.catalog.styles,
+        loading: null,
+      }));
+      setStyleNotice(styleMatchNotice(autofill.styleMatch, autofill.coxTrim));
+    },
+    [catalog.years],
+  );
+
   const runParallelLookup = useCallback(
     async (
       session: MmrLabLookupSession,
@@ -301,6 +334,13 @@ export function MmrLabClient() {
             res.data.mileageUsed ??
             (session.kind === "ymm" ? parseMileage(session.selection.mileage) : null);
           seedAdjustments(mileageUsed);
+          if (session.kind === "vin") {
+            setVinLocked(true);
+            void applyVinAutofill(
+              res.data,
+              mileageUsed !== null ? String(mileageUsed) : "",
+            );
+          }
         } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
       } else {
@@ -313,16 +353,37 @@ export function MmrLabClient() {
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
-    [laneAskPrice, seedAdjustments],
+    [laneAskPrice, seedAdjustments, applyVinAutofill],
   );
 
   const onVinSubmit = useCallback(
     async (vin: string) => {
       setIdentity({ kind: "vin", vin });
+      setVinInput(vin);
+      setStyleNotice(null);
       await runParallelLookup({ kind: "vin", vin }, postMmrVin({ vin }));
     },
     [runParallelLookup],
   );
+
+  const onVinReset = useCallback(() => {
+    setVinLocked(false);
+    setVinInput("");
+    setStyleNotice(null);
+    setSelection(emptySelection);
+    setIdentity(null);
+    setView({ kind: "empty" });
+    setMaxbuyView({ kind: "idle" });
+    setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+    lookupSessionRef.current = null;
+    setCatalog((current) => ({
+      ...current,
+      makes: [],
+      models: [],
+      styles: [],
+      loading: null,
+    }));
+  }, []);
 
   const onYmmSubmit = useCallback(async () => {
     const mileage = parseMileage(selection.mileage);
@@ -346,6 +407,7 @@ export function MmrLabClient() {
 
   const onSelectionChange = useCallback((next: MmrSelection) => {
     if (next.year !== selection.year) {
+      setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         makes: [],
@@ -354,6 +416,7 @@ export function MmrLabClient() {
         loading: next.year ? "makes" : null,
       }));
     } else if (next.make !== selection.make) {
+      setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         models: [],
@@ -361,14 +424,17 @@ export function MmrLabClient() {
         loading: next.make ? "models" : null,
       }));
     } else if (next.model !== selection.model) {
+      setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         styles: [],
         loading: next.model ? "styles" : null,
       }));
+    } else if (next.style !== selection.style) {
+      setStyleNotice(null);
     }
     setSelection(next);
-  }, [selection.make, selection.model, selection.year]);
+  }, [selection.make, selection.model, selection.style, selection.year]);
 
   const result = view.kind === "ok" ? view.result : null;
   const lowerSections = lowerSectionsFromView(view.kind, result);
@@ -392,6 +458,10 @@ export function MmrLabClient() {
   return (
     <div className="mx-auto w-full max-w-[96rem] space-y-4 sm:space-y-6">
       <SearchPanel
+        vin={vinInput}
+        onVinChange={setVinInput}
+        vinReadOnly={vinLocked}
+        onVinReset={vinLocked ? onVinReset : undefined}
         onVinSubmit={(v) => void onVinSubmit(v)}
         vinPending={view.kind === "loading" && identity?.kind === "vin"}
         selection={selection}
@@ -401,6 +471,7 @@ export function MmrLabClient() {
         ymmPending={view.kind === "loading" && identity?.kind === "vehicle"}
         laneAskPrice={laneAskPrice}
         onLaneAskPriceChange={handleLaneAskPriceChange}
+        styleMatchNotice={styleNotice}
       />
 
       {identity ? (
