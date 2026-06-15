@@ -12,14 +12,14 @@ const filled: MmrSelection = {
 };
 
 describe("applyYmmCascadeChange", () => {
-  it("year change clears downstream YMM and keeps mileage", () => {
+  it("year change preserves make/model/style and keeps mileage", () => {
     expect(
       applyYmmCascadeChange(filled, { ...filled, year: "2023" }),
     ).toEqual({
       year: "2023",
-      make: "",
-      model: "",
-      style: "",
+      make: "FORD",
+      model: "EXPLORER 2WD 4C",
+      style: "4D SUV XLT",
       mileage: "8000",
     });
   });

@@ -117,6 +117,9 @@ export function MmrLabClient() {
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always-current selection ref — used in async callbacks to avoid stale closures.
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   const reEvaluateMaxbuy = useCallback((
     session: MmrLabLookupSession,
@@ -228,13 +231,20 @@ export function MmrLabClient() {
     let cancelled = false;
     void getMmrCatalogMakes(selection.year).then((res) => {
       if (cancelled) return;
+      const makes = res.ok ? res.data.items : [];
       setCatalog((current) => ({
         ...current,
-        makes: res.ok ? res.data.items : [],
+        makes,
         catalogState: res.ok ? res.data.catalogState : "not_connected",
         reason: res.ok ? res.data.reason : res.error,
         loading: null,
       }));
+      // If the preserved make is not offered for the new year, clear it and downstream.
+      const currentMake = selectionRef.current.make;
+      if (currentMake && !makes.includes(currentMake)) {
+        setSelection((s) => ({ ...s, make: "", model: "", style: "" }));
+        setCatalog((c) => ({ ...c, models: [], styles: [] }));
+      }
     });
     return () => {
       cancelled = true;
@@ -246,13 +256,20 @@ export function MmrLabClient() {
     let cancelled = false;
     void getMmrCatalogModels(selection.year, selection.make).then((res) => {
       if (cancelled) return;
+      const models = res.ok ? res.data.items : [];
       setCatalog((current) => ({
         ...current,
-        models: res.ok ? res.data.items : [],
+        models,
         catalogState: res.ok ? res.data.catalogState : "not_connected",
         reason: res.ok ? res.data.reason : res.error,
         loading: null,
       }));
+      // If the preserved model is not offered for the new year+make, clear it and downstream.
+      const currentModel = selectionRef.current.model;
+      if (currentModel && !models.includes(currentModel)) {
+        setSelection((s) => ({ ...s, model: "", style: "" }));
+        setCatalog((c) => ({ ...c, styles: [] }));
+      }
     });
     return () => {
       cancelled = true;
@@ -413,11 +430,11 @@ export function MmrLabClient() {
 
     if (merged.year !== selection.year) {
       setStyleNotice(null);
+      // Keep existing catalog arrays visible while re-fetching for the new year.
+      // The makes/models useEffect callbacks will clear invalid downstream selections
+      // once the new catalog data arrives.
       setCatalog((current) => ({
         ...current,
-        makes: [],
-        models: [],
-        styles: [],
         loading: merged.year ? "makes" : null,
       }));
     } else if (merged.make !== selection.make) {

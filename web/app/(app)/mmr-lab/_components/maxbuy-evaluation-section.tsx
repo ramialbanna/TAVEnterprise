@@ -87,11 +87,18 @@ function ExplanationMathLine({
   math: NonNullable<ReturnType<typeof buildMaxbuyExplanation>["math"]>;
 }) {
   return (
-    <p className="text-sm text-muted-foreground">
-      <span className="font-medium text-foreground">Math: </span>
-      {formatMoney(math.expectedSale)} expected sale − {formatMoney(math.transport)} transport −{" "}
-      {formatMoney(math.expenses)} reconditioning − {formatMoney(math.targetNet)} target profit ={" "}
-      <span className="font-semibold text-foreground">{formatMoney(math.maxBuy)}</span> max buy.
+    <p className="text-sm text-foreground">
+      <span className="font-medium">Math: </span>
+      <span className="tabular-nums">{formatMoney(math.expectedSale)}</span>
+      <span className="text-muted-foreground"> expected sale − </span>
+      <span className="tabular-nums">{formatMoney(math.transport)}</span>
+      <span className="text-muted-foreground"> transport − </span>
+      <span className="tabular-nums">{formatMoney(math.expenses)}</span>
+      <span className="text-muted-foreground"> reconditioning − </span>
+      <span className="tabular-nums">{formatMoney(math.targetNet)}</span>
+      <span className="text-muted-foreground"> target profit = </span>
+      <span className="font-semibold tabular-nums">{formatMoney(math.maxBuy)}</span>
+      <span className="text-muted-foreground"> max buy.</span>
     </p>
   );
 }
@@ -111,7 +118,7 @@ function MaxbuyExplanationBlock({ display }: { display: MaxbuyEvaluationDisplay 
       {explanation.math ? <ExplanationMathLine math={explanation.math} /> : null}
       {explanation.cautionLine ? (
         <p
-          className="flex items-start gap-2 text-sm font-medium text-amber-800 dark:text-amber-200"
+          className="flex items-start gap-2 rounded-md bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900 dark:bg-amber-950/60 dark:text-amber-200"
           role="status"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -181,7 +188,10 @@ function TavHistoricalSnippet({
         </div>
         <div>
           <dt className="text-muted-foreground">Avg gross</dt>
-          <dd className="font-medium tabular-nums">
+          <dd className={cn(
+            "font-medium tabular-nums",
+            historical.avgGross !== null && historical.avgGross < 0 && "text-destructive",
+          )}>
             {historical.avgGross !== null ? formatMoney(historical.avgGross) : "—"}
           </dd>
         </div>

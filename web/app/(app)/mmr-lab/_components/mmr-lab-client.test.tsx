@@ -280,17 +280,14 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
     expect(screen.getByRole("button", { name: /change vin/i })).toBeInTheDocument();
 
+    // After year change, make/model/style are preserved (not blanked).
+    // The catalog re-fetches for the new year; since the mock returns TESLA for any year
+    // the preserved values remain valid and the dropdowns stay populated.
     fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2025" } });
     await waitFor(() => expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740"));
-    expect(screen.getByLabelText(/make/i)).toHaveValue("");
-    expect(screen.getByLabelText(/model/i)).toHaveValue("");
-    expect(screen.getByLabelText(/style/i)).toHaveValue("");
-
-    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "TESLA" } });
-    await waitFor(() => expect(screen.getByLabelText(/model/i)).toBeEnabled());
-    fireEvent.change(screen.getByLabelText(/model/i), { target: { value: "MODEL Y AWD" } });
-    await waitFor(() => expect(screen.getByLabelText(/style/i)).toBeEnabled());
-    fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
+    await waitFor(() => expect(screen.getByLabelText(/make/i)).toHaveValue("TESLA"));
+    await waitFor(() => expect(screen.getByLabelText(/model/i)).toHaveValue("MODEL Y AWD"));
+    await waitFor(() => expect(screen.getByLabelText(/style/i)).toHaveValue("4D SUV PERFORMANCE"));
 
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
     await waitFor(() =>

@@ -11,11 +11,10 @@ export function applyYmmCascadeChange(
   const mileage = next.mileage !== "" ? next.mileage : prev.mileage;
 
   if (next.year !== prev.year) {
+    // Preserve make/model/style — catalog useEffects will re-fetch for the new year
+    // and invalidate downstream fields if they no longer exist in the new catalog.
     return {
-      year: next.year,
-      make: "",
-      model: "",
-      style: "",
+      ...next,
       mileage,
     };
   }
