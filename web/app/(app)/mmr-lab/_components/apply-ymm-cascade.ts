@@ -2,7 +2,7 @@ import type { MmrSelection } from "./search-panel";
 
 /**
  * Apply dependent-dropdown rules when a Y/M/M/S field changes.
- * Clears only downstream fields; mileage is independent of the Y/M/M/S cascade.
+ * Clears only downstream fields; mileage is not part of the search panel.
  */
 export function applyYmmCascadeChange(
   prev: MmrSelection,

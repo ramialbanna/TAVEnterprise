@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   getMmrCatalogMakes,
   getMmrCatalogModels,
@@ -60,7 +60,6 @@ const emptySelection: MmrSelection = {
   make: "",
   model: "",
   style: "",
-  mileage: "",
 };
 
 const emptyCatalog: MmrCatalogOptions = {
@@ -77,11 +76,6 @@ const MAXBUY_FETCH_FAILED: MaxbuyEvaluationState = {
   kind: "error",
   message: "Max buy evaluation could not run for this lookup.",
 };
-
-function parseMileage(raw: string): number | null {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0 && n <= 2_000_000 ? n : null;
-}
 
 function titleFromSelection(selection: MmrSelection): string {
   return [
@@ -119,7 +113,9 @@ export function MmrLabClient() {
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Always-current selection ref — used in async callbacks to avoid stale closures.
   const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  useLayoutEffect(() => {
+    selectionRef.current = selection;
+  });
 
   const reEvaluateMaxbuy = useCallback((
     session: MmrLabLookupSession,
@@ -146,13 +142,6 @@ export function MmrLabClient() {
     },
     [reEvaluateMaxbuy, adjustments],
   );
-
-  const seedAdjustments = useCallback((mileage: number | null) => {
-    setAdjustments({
-      ...EMPTY_MMR_ADJUSTMENTS,
-      odometer: mileage !== null ? String(mileage) : "",
-    });
-  }, []);
 
   const runMmrRecompute = useCallback(
     async (session: MmrLabLookupSession, adj: MmrAdjustments) => {
@@ -295,7 +284,7 @@ export function MmrLabClient() {
   }, [selection.year, selection.make, selection.model]);
 
   const applyVinAutofill = useCallback(
-    async (result: MmrVinOk, mileage: string) => {
+    async (result: MmrVinOk) => {
       let years = catalog.years;
       if (years.length === 0) {
         const yearsRes = await getMmrCatalogYears();
@@ -303,7 +292,7 @@ export function MmrLabClient() {
         years = yearsRes.data.items;
       }
 
-      const autofill = await hydrateVinAutofill(result, years, mileage);
+      const autofill = await hydrateVinAutofill(result, years);
       if (!autofill) return;
 
       setSelection(autofill.selection);
@@ -350,16 +339,9 @@ export function MmrLabClient() {
         const res = mmrSettled.value;
         if (res.ok) {
           setView({ kind: "ok", result: res.data });
-          const mileageUsed =
-            res.data.mileageUsed ??
-            (session.kind === "ymm" ? parseMileage(session.selection.mileage) : null);
-          seedAdjustments(mileageUsed);
           if (session.kind === "vin") {
             setVinLocked(true);
-            void applyVinAutofill(
-              res.data,
-              mileageUsed !== null ? String(mileageUsed) : "",
-            );
+            void applyVinAutofill(res.data);
           }
         } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
@@ -373,7 +355,7 @@ export function MmrLabClient() {
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
-    [laneAskPrice, seedAdjustments, applyVinAutofill],
+    [laneAskPrice, applyVinAutofill],
   );
 
   const onVinSubmit = useCallback(
@@ -406,8 +388,7 @@ export function MmrLabClient() {
   }, []);
 
   const onYmmSubmit = useCallback(async () => {
-    const mileage = parseMileage(selection.mileage);
-    if (!selection.year || !selection.make || !selection.model || !selection.style || mileage === null) {
+    if (!selection.year || !selection.make || !selection.model || !selection.style) {
       return;
     }
 
@@ -420,7 +401,6 @@ export function MmrLabClient() {
         make: selection.make,
         model: selection.model,
         style: selection.style,
-        mileage,
       }),
     );
   }, [runParallelLookup, selection]);

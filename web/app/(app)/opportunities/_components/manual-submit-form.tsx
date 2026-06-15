@@ -265,11 +265,9 @@ export function ManualSubmitFormFields({
   mileageUnknown,
   usersQuery,
   users,
-  canSubmit,
-  mutation,
   parseMutation,
   footer,
-}: ReturnType<typeof useManualSubmitForm> & {
+}: Omit<ReturnType<typeof useManualSubmitForm>, "canSubmit" | "mutation"> & {
   idPrefix?: string;
   footer: ReactNode;
 }) {

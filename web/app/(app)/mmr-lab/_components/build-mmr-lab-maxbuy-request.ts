@@ -5,17 +5,12 @@ import type { MmrSelection } from "./search-panel";
 import { parseAdjustmentOdometer, type MmrAdjustments } from "./mmr-adjustments";
 
 export type MmrLabLookupSession =
-  | { kind: "vin"; vin: string; mileage?: string }
+  | { kind: "vin"; vin: string }
   | { kind: "ymm"; selection: MmrSelection };
 
-function effectiveMileageString(
-  session: MmrLabLookupSession,
-  adjustments?: MmrAdjustments,
-): string {
+function effectiveMileageString(adjustments?: MmrAdjustments): string {
   const fromAdj = adjustments ? parseAdjustmentOdometer(adjustments.odometer) : null;
-  if (fromAdj !== null) return String(fromAdj);
-  if (session.kind === "vin") return session.mileage ?? "";
-  return session.selection.mileage;
+  return fromAdj !== null ? String(fromAdj) : "";
 }
 
 /** Build `POST /app/maxbuy/evaluate` body from MMR Lab search session (P2.2). */
@@ -24,7 +19,7 @@ export function buildMmrLabMaxbuyRequest(
   laneAskPrice: string,
   adjustments?: MmrAdjustments,
 ): { body: MaxbuyEvaluateRequest; askingPrice: number | null } | { error: string } {
-  const mileage = effectiveMileageString(session, adjustments);
+  const mileage = effectiveMileageString(adjustments);
 
   if (session.kind === "vin") {
     return buildMaxbuyEvaluateRequest({

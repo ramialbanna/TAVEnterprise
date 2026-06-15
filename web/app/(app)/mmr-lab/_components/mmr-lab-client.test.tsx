@@ -147,7 +147,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain("/api/app/mmr/catalog/years");
   });
 
-  it("catalog cascade + mileage posts YMM and MaxBuy evaluate in parallel", async () => {
+  it("catalog cascade posts YMM and MaxBuy evaluate in parallel", async () => {
     const fetchSpy = mockCatalog();
     renderClient();
 
@@ -161,7 +161,6 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
       expect(screen.getByRole("option", { name: "4D SUV PERFORMANCE" })).toBeInTheDocument(),
     );
     fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
-    fireEvent.change(screen.getByLabelText(/mileage/i), { target: { value: "70740" } });
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
 
     await waitFor(() => expect(screen.getAllByText("$23,900").length).toBeGreaterThanOrEqual(1));
@@ -193,7 +192,6 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
       expect(screen.getByRole("option", { name: "4D SUV PERFORMANCE" })).toBeInTheDocument(),
     );
     fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
-    fireEvent.change(screen.getByLabelText(/mileage/i), { target: { value: "70740" } });
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
 
     await waitFor(() => expect(screen.getByText(/^Buy$/i)).toBeInTheDocument());
@@ -214,7 +212,6 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
       expect(screen.getByRole("option", { name: "4D SUV PERFORMANCE" })).toBeInTheDocument(),
     );
     fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
-    fireEvent.change(screen.getByLabelText(/mileage/i), { target: { value: "70740" } });
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
 
     await waitFor(() => expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument());
@@ -276,7 +273,8 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(screen.getByLabelText(/make/i)).toHaveValue("TESLA");
     expect(screen.getByLabelText(/model/i)).toHaveValue("MODEL Y AWD");
     expect(screen.getByLabelText(/style/i)).toHaveValue("4D SUV PERFORMANCE");
-    expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740");
+    expect(screen.queryByLabelText(/mileage/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/enter odo \(mi\)/i)).toHaveValue("");
     expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
     expect(screen.getByRole("button", { name: /change vin/i })).toBeInTheDocument();
 
@@ -284,7 +282,6 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     // The catalog re-fetches for the new year; since the mock returns TESLA for any year
     // the preserved values remain valid and the dropdowns stay populated.
     fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2025" } });
-    await waitFor(() => expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740"));
     await waitFor(() => expect(screen.getByLabelText(/make/i)).toHaveValue("TESLA"));
     await waitFor(() => expect(screen.getByLabelText(/model/i)).toHaveValue("MODEL Y AWD"));
     await waitFor(() => expect(screen.getByLabelText(/style/i)).toHaveValue("4D SUV PERFORMANCE"));

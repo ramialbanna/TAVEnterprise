@@ -8,7 +8,6 @@ export type MmrSelection = {
   make: string;
   model: string;
   style: string;
-  mileage: string;
 };
 
 export type MmrCatalogOptions = {
@@ -45,11 +44,6 @@ const selectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
-function numericMileage(raw: string): number | null {
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0 && n <= 2_000_000 ? n : null;
-}
-
 /** Parses optional lane/list price for MaxBuy `asking_price` (MLB-5). */
 export function parseLaneAskPrice(raw: string): number | null {
   const trimmed = raw.trim();
@@ -81,14 +75,12 @@ export function SearchPanel({
     if (v.length >= VIN_MIN && v.length <= VIN_MAX) onVinSubmit(v);
   }
 
-  const mileage = numericMileage(selection.mileage);
   const canSubmitYmm =
     catalog.catalogState === "connected" &&
     selection.year !== "" &&
     selection.make !== "" &&
     selection.model !== "" &&
     selection.style !== "" &&
-    mileage !== null &&
     !ymmPending;
 
   return (
@@ -153,7 +145,7 @@ export function SearchPanel({
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_1.6fr_1.8fr_1fr_auto]">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1.4fr_1.6fr_1.8fr_auto]">
           <select
             aria-label="Year"
             className={selectClass}
@@ -246,19 +238,6 @@ export function SearchPanel({
             ))}
           </select>
 
-          <Input
-            aria-label="Mileage"
-            inputMode="numeric"
-            placeholder="Miles"
-            value={selection.mileage}
-            onChange={(e) =>
-              onSelectionChange({
-                ...selection,
-                mileage: e.target.value.replace(/[^\d]/g, ""),
-              })
-            }
-          />
-
           <Button
             type="button"
             aria-label="Value selected vehicle"
@@ -279,7 +258,7 @@ export function SearchPanel({
 
         <p className="text-xs text-muted-foreground">
           {catalog.catalogState === "connected"
-            ? "Live Manheim/Cox catalog connected. Y/M/M/S valuation requires style and miles."
+            ? "Live Manheim/Cox catalog connected. Y/M/M/S valuation requires a style selection."
             : `Live catalog not connected${
                 catalog.reason ? ` — ${catalog.reason}` : ""
               }. Use VIN while metadata is unavailable.`}

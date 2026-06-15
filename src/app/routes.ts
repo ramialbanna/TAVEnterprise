@@ -87,7 +87,7 @@ const AppMmrYmmRequestSchema = z.object({
   make: z.string().trim().min(1).max(64),
   model: z.string().trim().min(1).max(128),
   style: z.string().trim().min(1).max(128),
-  mileage: z.number().int().nonnegative().max(2_000_000),
+  mileage: z.number().int().nonnegative().max(2_000_000).optional(),
   adjustments: MmrLookupAdjustmentsSchema.optional(),
 });
 const IntelCatalogEnvelopeSchema = z.object({
@@ -738,7 +738,8 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
   }
 
   const { year, make, model, style, mileage, adjustments } = parsed.data;
-  const body: Record<string, unknown> = { year, make, model, trim: style, mileage };
+  const body: Record<string, unknown> = { year, make, model, trim: style };
+  if (mileage !== undefined) body.mileage = mileage;
   if (adjustments !== undefined) body.adjustments = adjustments;
 
   return fetchIntelMmrLookup(

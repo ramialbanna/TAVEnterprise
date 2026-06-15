@@ -78,7 +78,7 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/mmr-lab-empty.png`, fullPage: true });
   });
 
-  test("Y/M/M/S + mileage path values the selected vehicle via /api/app/mmr/ymm", async ({
+  test("Y/M/M/S path values the selected vehicle via /api/app/mmr/ymm", async ({
     page,
   }) => {
     await mockCatalog(page);
@@ -132,7 +132,6 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
       "4D SUV PERFORMANCE",
     ]);
     await page.getByLabel("Style", { exact: true }).selectOption("4D SUV PERFORMANCE");
-    await page.getByLabel("Mileage", { exact: true }).fill("70740");
     await page.getByRole("button", { name: /value selected vehicle/i }).click();
 
     await expect(page.getByText("2026 TESLA MODEL Y AWD 4D SUV PERFORMANCE")).toBeVisible();
@@ -146,7 +145,6 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
       make: "TESLA",
       model: "MODEL Y AWD",
       style: "4D SUV PERFORMANCE",
-      mileage: 70740,
     });
     expect(vendorCalls).toEqual([]);
 
@@ -264,7 +262,6 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
       "4D SUV PERFORMANCE",
     ]);
     await page.getByLabel("Style", { exact: true }).selectOption("4D SUV PERFORMANCE");
-    await page.getByLabel("Mileage", { exact: true }).fill("70740");
     await page.getByRole("button", { name: /value selected vehicle/i }).click();
 
     await expect(page.getByText(/no MMR value was returned/i)).toBeVisible();
@@ -311,7 +308,6 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
     await page.getByLabel("Make", { exact: true }).selectOption("TESLA");
     await page.getByLabel("Model", { exact: true }).selectOption("MODEL Y AWD");
     await page.getByLabel("Style", { exact: true }).selectOption("4D SUV PERFORMANCE");
-    await page.getByLabel("Mileage", { exact: true }).fill("70740");
     await page.getByRole("button", { name: /value selected vehicle/i }).click();
 
     await expect(page.getByRole("heading", { name: /historical average/i })).toBeVisible();

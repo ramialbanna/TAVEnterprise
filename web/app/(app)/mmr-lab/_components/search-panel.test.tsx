@@ -12,7 +12,6 @@ const emptySelection: MmrSelection = {
   make: "",
   model: "",
   style: "",
-  mileage: "",
 };
 
 const connectedCatalog: MmrCatalogOptions = {
@@ -117,6 +116,11 @@ describe("SearchPanel — live catalog + VIN", () => {
     expect(screen.getByLabelText(/make/i)).toBeDisabled();
   });
 
+  it("does not render a Miles input in the search panel", () => {
+    renderPanel();
+    expect(screen.queryByLabelText(/mileage/i)).not.toBeInTheDocument();
+  });
+
   it("enables the cascade as upstream selections exist", () => {
     renderPanel({
       selection: {
@@ -124,7 +128,6 @@ describe("SearchPanel — live catalog + VIN", () => {
         make: "TESLA",
         model: "MODEL Y AWD",
         style: "",
-        mileage: "",
       },
     });
     expect(screen.getByLabelText(/year/i)).toBeEnabled();
@@ -141,7 +144,6 @@ describe("SearchPanel — live catalog + VIN", () => {
         make: "TESLA",
         model: "MODEL Y AWD",
         style: "4D SUV PERFORMANCE",
-        mileage: "70740",
       },
       onSelectionChange,
     });
@@ -151,7 +153,6 @@ describe("SearchPanel — live catalog + VIN", () => {
       make: "",
       model: "MODEL Y AWD",
       style: "4D SUV PERFORMANCE",
-      mileage: "70740",
     });
     fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2025" } });
     expect(onSelectionChange).toHaveBeenLastCalledWith({
@@ -159,11 +160,10 @@ describe("SearchPanel — live catalog + VIN", () => {
       make: "TESLA",
       model: "MODEL Y AWD",
       style: "4D SUV PERFORMANCE",
-      mileage: "70740",
     });
   });
 
-  it("YMM valuation requires style and mileage", () => {
+  it("YMM valuation requires style only", () => {
     const onYmmSubmit = vi.fn();
     const { rerender } = render(
       <SearchPanel
@@ -193,7 +193,6 @@ describe("SearchPanel — live catalog + VIN", () => {
           make: "TESLA",
           model: "MODEL Y AWD",
           style: "4D SUV PERFORMANCE",
-          mileage: "70740",
         }}
         catalog={connectedCatalog}
         onSelectionChange={vi.fn()}

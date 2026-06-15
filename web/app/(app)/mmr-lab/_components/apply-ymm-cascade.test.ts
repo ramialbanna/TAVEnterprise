@@ -8,11 +8,10 @@ const filled: MmrSelection = {
   make: "FORD",
   model: "EXPLORER 2WD 4C",
   style: "4D SUV XLT",
-  mileage: "8000",
 };
 
 describe("applyYmmCascadeChange", () => {
-  it("year change preserves make/model/style and keeps mileage", () => {
+  it("year change preserves make/model/style", () => {
     expect(
       applyYmmCascadeChange(filled, { ...filled, year: "2023" }),
     ).toEqual({
@@ -20,11 +19,10 @@ describe("applyYmmCascadeChange", () => {
       make: "FORD",
       model: "EXPLORER 2WD 4C",
       style: "4D SUV XLT",
-      mileage: "8000",
     });
   });
 
-  it("make change clears model and style and keeps mileage", () => {
+  it("make change clears model and style", () => {
     expect(
       applyYmmCascadeChange(filled, { ...filled, make: "CHEVROLET" }),
     ).toEqual({
@@ -42,34 +40,6 @@ describe("applyYmmCascadeChange", () => {
       ...filled,
       model: "TAHOE 2WD",
       style: "",
-    });
-  });
-
-  it("mileage edit is kept when provided", () => {
-    expect(
-      applyYmmCascadeChange(filled, { ...filled, mileage: "12000" }),
-    ).toEqual({
-      ...filled,
-      mileage: "12000",
-    });
-  });
-
-  it("user can clear mileage to empty", () => {
-    expect(
-      applyYmmCascadeChange(filled, { ...filled, mileage: "" }),
-    ).toEqual({
-      ...filled,
-      mileage: "",
-    });
-  });
-
-  it("year change does not restore mileage when field was cleared", () => {
-    const cleared = { ...filled, mileage: "" };
-    expect(
-      applyYmmCascadeChange(cleared, { ...cleared, year: "2023" }),
-    ).toEqual({
-      ...cleared,
-      year: "2023",
     });
   });
 });

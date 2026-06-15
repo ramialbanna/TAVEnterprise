@@ -15,7 +15,7 @@ describe("buildMmrLabMaxbuyRequest", () => {
     expect(built.askingPrice).toBe(21000);
   });
 
-  it("builds YMM path with style as trim and mileage", () => {
+  it("builds YMM path with style as trim and no mileage unless adjusted", () => {
     const built = buildMmrLabMaxbuyRequest(
       {
         kind: "ymm",
@@ -24,7 +24,6 @@ describe("buildMmrLabMaxbuyRequest", () => {
           make: "TESLA",
           model: "MODEL Y AWD",
           style: "4D SUV PERFORMANCE",
-          mileage: "70740",
         },
       },
       "",
@@ -37,9 +36,9 @@ describe("buildMmrLabMaxbuyRequest", () => {
       make: "TESLA",
       model: "MODEL Y AWD",
       trim: "4D SUV PERFORMANCE",
-      mileage: 70740,
     });
     expect(built.body.vin).toBeUndefined();
+    expect(built.body.mileage).toBeUndefined();
     expect(built.askingPrice).toBeNull();
   });
 });

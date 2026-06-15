@@ -16,7 +16,7 @@ describe("buildMmrRecomputeRequest", () => {
     });
   });
 
-  it("builds YMM request using adjustment odometer over selection mileage", () => {
+  it("builds YMM request using adjustment odometer when set", () => {
     const body = buildMmrRecomputeRequest(
       {
         kind: "ymm",
@@ -25,7 +25,6 @@ describe("buildMmrRecomputeRequest", () => {
           make: "TESLA",
           model: "MODEL Y AWD",
           style: "4D SUV PERFORMANCE",
-          mileage: "70740",
         },
       },
       { ...EMPTY_MMR_ADJUSTMENTS, odometer: "65000" },
@@ -36,6 +35,27 @@ describe("buildMmrRecomputeRequest", () => {
       model: "MODEL Y AWD",
       style: "4D SUV PERFORMANCE",
       mileage: 65000,
+    });
+  });
+
+  it("builds YMM request without mileage when odometer is empty", () => {
+    const body = buildMmrRecomputeRequest(
+      {
+        kind: "ymm",
+        selection: {
+          year: "2026",
+          make: "TESLA",
+          model: "MODEL Y AWD",
+          style: "4D SUV PERFORMANCE",
+        },
+      },
+      EMPTY_MMR_ADJUSTMENTS,
+    );
+    expect(body).toEqual({
+      year: 2026,
+      make: "TESLA",
+      model: "MODEL Y AWD",
+      style: "4D SUV PERFORMANCE",
     });
   });
 });

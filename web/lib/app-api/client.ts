@@ -158,7 +158,7 @@ export type MmrYmmRequest = {
   make: string;
   model: string;
   style: string;
-  mileage: number;
+  mileage?: number;
   adjustments?: MmrAdjustmentsRequest;
 };
 

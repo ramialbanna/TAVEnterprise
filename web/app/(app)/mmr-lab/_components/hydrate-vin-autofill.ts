@@ -35,7 +35,6 @@ function pickCatalogOption(options: string[], raw: string | null): string | null
 export async function hydrateVinAutofill(
   result: MmrVinOk,
   catalogYears: string[],
-  mileage: string,
 ): Promise<VinAutofillResult | null> {
   const { year, make, model, trim } = result;
   if (year === null || year === undefined || !make || !model) return null;
@@ -69,7 +68,6 @@ export async function hydrateVinAutofill(
       make: makeResolved,
       model: modelResolved,
       style: styleResolved?.style ?? "",
-      mileage,
     },
     catalog: {
       years: catalogYears,
