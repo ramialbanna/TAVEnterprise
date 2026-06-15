@@ -90,6 +90,29 @@ export type MaxbuyEvaluateResponse = {
   };
 };
 
+/** Build vehicle context from YMM fields on a VIN-path evaluate request (MMR Lab fallback). */
+export function vehicleContextFromRequestFields(
+  request: Pick<MaxbuyEvaluateRequest, "year" | "make" | "model" | "trim" | "region">,
+): VehicleContext | null {
+  if (
+    request.year === undefined ||
+    request.make === undefined ||
+    request.model === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    year: request.year,
+    make: request.make.toLowerCase(),
+    model: request.model.toLowerCase(),
+    trim: (request.trim ?? "base").toLowerCase(),
+    region: (request.region ?? "unknown").toLowerCase(),
+    cotCity: null,
+    cotState: null,
+  };
+}
+
 export function buildEvaluateResponse(
   recommendationId: string,
   vin: string | null,
@@ -191,13 +214,17 @@ export async function runEvaluate(
     );
 
     if (!vehicleCtx) {
-      return {
-        ok: false,
-        error: {
-          code: "vehicle_context_missing",
-          message: "Unable to resolve year/make/model for VIN — provide normalized_listing_id or region with decodable VIN",
-        },
-      };
+      vehicleCtx = vehicleContextFromRequestFields(request);
+      if (!vehicleCtx) {
+        return {
+          ok: false,
+          error: {
+            code: "vehicle_context_missing",
+            message:
+              "Unable to resolve year/make/model for VIN — provide year/make/model from MMR or normalized_listing_id",
+          },
+        };
+      }
     }
   } else {
     // ── YMM path (OPEN-5) ─────────────────────────────────────────────────────

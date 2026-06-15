@@ -219,8 +219,8 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     await waitFor(() => expect(screen.getByText(/^Buy$/i)).toBeInTheDocument());
   });
 
-  it("MMR failure does not block MaxBuy zone from showing results", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("MMR failure on VIN path skips MaxBuy evaluation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/app/mmr/catalog/years")) {
         return ok({ items: ["2026"], catalogState: "connected", cached: false, reason: null });
@@ -244,9 +244,11 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
 
     await waitFor(() =>
-      expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1),
+      expect(screen.getByText(/max buy evaluation could not run/i)).toBeInTheDocument(),
     );
-    expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument();
+    expect(
+      fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/maxbuy/evaluate")),
+    ).toBe(false);
   });
 
   it("catalog not connected preserves honest disabled selectors", async () => {
@@ -292,22 +294,73 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     );
   });
 
-  it("VIN path still calls /api/app/mmr/vin and populates Base MMR", async () => {
-    const fetchSpy = mockCatalog();
+  it("VIN path runs MaxBuy after MMR with Cox YMM fields", async () => {
+    const callOrder: string[] = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/app/mmr/catalog/years")) {
+        return ok({ items: ["2026", "2025"], catalogState: "connected", cached: false, reason: null });
+      }
+      if (url.includes("/api/app/mmr/catalog/makes")) {
+        return ok({ items: ["TESLA"], catalogState: "connected", cached: false, reason: null });
+      }
+      if (url.includes("/api/app/mmr/catalog/models")) {
+        return ok({ items: ["MODEL Y AWD"], catalogState: "connected", cached: false, reason: null });
+      }
+      if (url.includes("/api/app/mmr/catalog/styles")) {
+        return ok({ items: ["4D SUV PERFORMANCE"], catalogState: "connected", cached: false, reason: null });
+      }
+      if (url.includes("/api/app/mmr/vin") && init?.method === "POST") {
+        callOrder.push("mmr");
+        return ok({
+          mmrValue: 48600,
+          confidence: "high",
+          method: "vin",
+          year: 2026,
+          make: "TESLA",
+          model: "MODEL Y AWD",
+          trim: "4D SUV PERFORMANCE",
+          mileageUsed: null,
+        });
+      }
+      if (url.includes("/api/app/maxbuy/evaluate") && init?.method === "POST") {
+        callOrder.push("maxbuy");
+        const body = JSON.parse(String(init?.body)) as {
+          vin?: string;
+          year?: number;
+          make?: string;
+          model?: string;
+          trim?: string;
+        };
+        expect(body).toMatchObject({
+          vin: "1FT7W2BT4KED81759",
+          year: 2026,
+          make: "TESLA",
+          model: "MODEL Y AWD",
+          trim: "4D SUV PERFORMANCE",
+        });
+        return ok(maxbuyEvaluatePayload());
+      }
+      return ok({});
+    });
+
     renderClient();
     fireEvent.change(screen.getByPlaceholderText(/enter vin/i), {
       target: { value: "1FT7W2BT4KED81759" },
     });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
+
     await waitFor(() => expect(screen.getAllByText("$48,600").length).toBeGreaterThanOrEqual(1));
+    await waitFor(() => expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument());
+    expect(callOrder).toEqual(["mmr", "maxbuy"]);
     expect(fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/mmr/vin"))).toBe(true);
     expect(
       fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/maxbuy/evaluate")),
     ).toBe(true);
   });
 
-  it("VIN unavailable (mmrValue:null) → honest state, no fabricated money", async () => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+  it("VIN unavailable skips MaxBuy evaluation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/app/mmr/catalog/years")) {
         return ok({ items: ["2026"], catalogState: "connected", cached: false, reason: null });
@@ -327,7 +380,10 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
     await waitFor(() => expect(screen.getByText(/no MMR value was returned/i)).toBeInTheDocument());
     await waitFor(() =>
-      expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1),
+      expect(screen.getByText(/max buy evaluation could not run/i)).toBeInTheDocument(),
     );
+    expect(
+      fetchSpy.mock.calls.some((call) => String(call[0]).includes("/api/app/maxbuy/evaluate")),
+    ).toBe(false);
   });
 });

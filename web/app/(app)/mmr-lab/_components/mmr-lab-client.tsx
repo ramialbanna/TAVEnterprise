@@ -27,6 +27,7 @@ import {
 import { applyMaxbuyResult } from "./apply-maxbuy-result";
 import {
   buildMmrLabMaxbuyRequest,
+  mmrVinSessionFromResult,
   type MmrLabLookupSession,
 } from "./build-mmr-lab-maxbuy-request";
 import { buildMmrRecomputeRequest } from "./build-mmr-recompute-request";
@@ -314,6 +315,53 @@ export function MmrLabClient() {
       session: MmrLabLookupSession,
       mmrPromise: ReturnType<typeof postMmrVin>,
     ) => {
+      lookupSessionRef.current = session;
+      setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+      setView({ kind: "loading" });
+      setMaxbuyView({ kind: "loading" });
+
+      if (session.kind === "vin") {
+        let mmrRes;
+        try {
+          mmrRes = await mmrPromise;
+        } catch {
+          setView({ kind: "error", error: mmrTransportError() });
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+          return;
+        }
+
+        if (!mmrRes.ok) {
+          if (mmrRes.kind === "unavailable") {
+            setView({ kind: "unavailable", reason: mmrRes.error });
+          } else {
+            setView({ kind: "error", error: mmrRes });
+          }
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+          return;
+        }
+
+        setView({ kind: "ok", result: mmrRes.data });
+        setVinLocked(true);
+        void applyVinAutofill(mmrRes.data);
+
+        const maxbuySession = mmrVinSessionFromResult(session.vin, mmrRes.data);
+        lookupSessionRef.current = maxbuySession;
+
+        const built = buildMmrLabMaxbuyRequest(maxbuySession, laneAskPrice);
+        if ("error" in built) {
+          setMaxbuyView({ kind: "error", message: built.error });
+          return;
+        }
+
+        try {
+          const maxbuyRes = await postMaxbuyEvaluate(built.body);
+          setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
+        } catch {
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+        }
+        return;
+      }
+
       const built = buildMmrLabMaxbuyRequest(session, laneAskPrice);
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });
@@ -324,12 +372,6 @@ export function MmrLabClient() {
         return;
       }
 
-      lookupSessionRef.current = session;
-      setAdjustments(EMPTY_MMR_ADJUSTMENTS);
-
-      setView({ kind: "loading" });
-      setMaxbuyView({ kind: "loading" });
-
       const [mmrSettled, maxbuySettled] = await Promise.allSettled([
         mmrPromise,
         postMaxbuyEvaluate(built.body),
@@ -339,10 +381,6 @@ export function MmrLabClient() {
         const res = mmrSettled.value;
         if (res.ok) {
           setView({ kind: "ok", result: res.data });
-          if (session.kind === "vin") {
-            setVinLocked(true);
-            void applyVinAutofill(res.data);
-          }
         } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
       } else {

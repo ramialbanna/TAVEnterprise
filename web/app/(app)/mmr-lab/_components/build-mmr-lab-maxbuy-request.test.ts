@@ -15,6 +15,30 @@ describe("buildMmrLabMaxbuyRequest", () => {
     expect(built.askingPrice).toBe(21000);
   });
 
+  it("builds VIN path with Cox YMM fallback fields when present", () => {
+    const built = buildMmrLabMaxbuyRequest(
+      {
+        kind: "vin",
+        vin: "1FT7W2BT4KED81759",
+        year: 2026,
+        make: "TESLA",
+        model: "MODEL Y AWD",
+        trim: "4D SUV PERFORMANCE",
+      },
+      "",
+    );
+    expect("error" in built).toBe(false);
+    if ("error" in built) return;
+    expect(built.body).toMatchObject({
+      contract_version: "1.0.0",
+      vin: "1FT7W2BT4KED81759",
+      year: 2026,
+      make: "TESLA",
+      model: "MODEL Y AWD",
+      trim: "4D SUV PERFORMANCE",
+    });
+  });
+
   it("builds YMM path with style as trim and no mileage unless adjusted", () => {
     const built = buildMmrLabMaxbuyRequest(
       {
