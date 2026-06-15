@@ -53,4 +53,23 @@ describe("applyYmmCascadeChange", () => {
       mileage: "12000",
     });
   });
+
+  it("user can clear mileage to empty", () => {
+    expect(
+      applyYmmCascadeChange(filled, { ...filled, mileage: "" }),
+    ).toEqual({
+      ...filled,
+      mileage: "",
+    });
+  });
+
+  it("year change does not restore mileage when field was cleared", () => {
+    const cleared = { ...filled, mileage: "" };
+    expect(
+      applyYmmCascadeChange(cleared, { ...cleared, year: "2023" }),
+    ).toEqual({
+      ...cleared,
+      year: "2023",
+    });
+  });
 });

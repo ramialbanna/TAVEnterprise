@@ -41,7 +41,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|----------|--------|
 | **12** | VIN MMR — remove mileage inference, call Cox with VIN only | High | [x] |
 | **13** | MaxBuy — resolve VIN via YMM fallback when VIN not in TAV DB | High | [ ] |
-| **14** | Mileage field cascade bug — can't clear the Miles input | High | [ ] |
+| **14** | Mileage field cascade bug — can't clear the Miles input | High | [x] |
 | **15** | Retail value — enable Cox retail data (env var + entitlement check) | Medium | [ ] |
 | **1** | Manheim Transactions — fix Cox API to return sold comps | High | [ ] |
 | **2** | Year dropdown — pin recent years at top | Medium | [ ] |
@@ -423,10 +423,10 @@ Mileage is already carried through in `next` (the caller always spreads the full
 
 ### Exit criteria
 
-- [ ] User can clear the Miles field to empty at any time
-- [ ] Changing the Year dropdown does not wipe the mileage the user already typed
-- [ ] Changing the Year dropdown does not restore a stale mileage if the field was manually cleared
-- [ ] `applyYmmCascadeChange` unit tests updated to cover the empty-mileage case
+- [x] User can clear the Miles field to empty at any time
+- [x] Changing the Year dropdown does not wipe the mileage the user already typed
+- [x] Changing the Year dropdown does not restore a stale mileage if the field was manually cleared
+- [x] `applyYmmCascadeChange` unit tests updated to cover the empty-mileage case
 
 ---
 
@@ -472,3 +472,4 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 | **MMR Lab Item 3** — MaxBuy plain-language explanation (DEC-MLB-4, DEC-MLB-5) | This doc §3 (2026-06-12) |
 | **MMR Lab Item 4** — YMM dependent dropdown cascade (DEC-MLB-7 through DEC-MLB-10) | This doc §4 (2026-06-15); year-change now preserves make/model/style and re-validates against new catalog |
 | **MMR Lab Item 12** — VIN-only Cox lookup (no inferred odometer) | This doc §12 (2026-06-15) |
+| **MMR Lab Item 14** — Miles input cascade clear fix | This doc §14 (2026-06-15) |
