@@ -45,14 +45,6 @@ const selectClass =
   "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
-const emptySelection: MmrSelection = {
-  year: "",
-  make: "",
-  model: "",
-  style: "",
-  mileage: "",
-};
-
 function numericMileage(raw: string): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 && n <= 2_000_000 ? n : null;
@@ -169,7 +161,7 @@ export function SearchPanel({
             disabled={catalog.catalogState !== "connected" || catalog.loading === "years"}
             onChange={(e) =>
               onSelectionChange({
-                ...emptySelection,
+                ...selection,
                 year: e.target.value,
               })
             }
@@ -195,8 +187,6 @@ export function SearchPanel({
               onSelectionChange({
                 ...selection,
                 make: e.target.value,
-                model: "",
-                style: "",
               })
             }
           >
@@ -221,7 +211,6 @@ export function SearchPanel({
               onSelectionChange({
                 ...selection,
                 model: e.target.value,
-                style: "",
               })
             }
           >

@@ -1,6 +1,6 @@
 # Next Steps — MMR Lab
 
-**Last updated:** 2026-06-13 (MaxBuy plain-language explanation shipped) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-15 (YMM dependent dropdown cascade) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
 > Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed UX rollout: [`02-product/ux-rollout-shipped.md`](02-product/ux-rollout-shipped.md).
@@ -41,6 +41,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **1** | VIN search autofills Year/Make/Model; user can switch to YMM lookup | [x] |
 | **2** | Manheim Transactions (Cox sold comps — same as Manheim MMR tool) | [ ] |
 | **3** | MaxBuy plain-language explanation (why this number) | [x] |
+| **4** | YMM dependent dropdown cascade (preserve mileage; reload catalog) | [x] |
 
 ---
 
@@ -193,6 +194,28 @@ Pricing reference: [MarketCheck APIs](https://www.marketcheck.com/apis/)
 **Still open:**
 
 - Final caution wording and whether deal-fit vs vehicle-fit changes the narrative template
+
+---
+
+## 4 — YMM dependent dropdown cascade
+
+**Goal:** After VIN autofill (or manual picks), changing **Year**, **Make**, or **Model** should behave like Cox/Manheim dependent dropdowns — reload the next catalog level and clear only **downstream** fields, not the whole row.
+
+**Problem (2026-06-15):** Changing **Year** reset make, model, style, **and mileage** because `search-panel.tsx` spread `emptySelection` on year change. Buyers lost mileage and had to re-enter everything after tweaking one field post-VIN.
+
+**Locked (2026-06-15):**
+
+- **DEC-MLB-7** — Changing **Year** clears **Make, Model, Style** only; **mileage**, **VIN** (read-only), and **lane ask** stay put.
+- **DEC-MLB-8** — Changing **Make** clears **Model, Style** only; year and mileage stay.
+- **DEC-MLB-9** — Changing **Model** clears **Style** only; year, make, and mileage stay.
+- **DEC-MLB-10** — Catalog fetches (makes → models → styles) still run via existing `useEffect` hooks in `mmr-lab-client.tsx`; user clicks **Value** to run YMM lookup (no auto-submit on dropdown change).
+
+**Exit criteria:**
+
+- [x] Year change preserves mileage; only downstream YMM fields clear
+- [x] Make / model changes preserve mileage and upstream selections
+- [x] VIN-locked flow unchanged (Change VIN still full reset)
+- [x] Tests cover year change with mileage retained
 
 ---
 

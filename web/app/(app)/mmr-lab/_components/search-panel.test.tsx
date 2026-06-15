@@ -133,7 +133,7 @@ describe("SearchPanel — live catalog + VIN", () => {
     expect(screen.getByLabelText(/style/i)).toBeEnabled();
   });
 
-  it("selection changes clear downstream values before the parent callback", () => {
+  it("forwards field edits to the parent without applying cascade locally", () => {
     const onSelectionChange = vi.fn();
     renderPanel({
       selection: {
@@ -149,8 +149,16 @@ describe("SearchPanel — live catalog + VIN", () => {
     expect(onSelectionChange).toHaveBeenCalledWith({
       year: "2026",
       make: "",
-      model: "",
-      style: "",
+      model: "MODEL Y AWD",
+      style: "4D SUV PERFORMANCE",
+      mileage: "70740",
+    });
+    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2025" } });
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      year: "2025",
+      make: "TESLA",
+      model: "MODEL Y AWD",
+      style: "4D SUV PERFORMANCE",
       mileage: "70740",
     });
   });

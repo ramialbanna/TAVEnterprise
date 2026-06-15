@@ -31,6 +31,9 @@ import {
 } from "./build-mmr-lab-maxbuy-request";
 import { buildMmrRecomputeRequest } from "./build-mmr-recompute-request";
 import {
+  applyYmmCascadeChange,
+} from "./apply-ymm-cascade";
+import {
   hydrateVinAutofill,
   styleMatchNotice,
 } from "./hydrate-vin-autofill";
@@ -406,35 +409,37 @@ export function MmrLabClient() {
   }, [runParallelLookup, selection]);
 
   const onSelectionChange = useCallback((next: MmrSelection) => {
-    if (next.year !== selection.year) {
+    const merged = applyYmmCascadeChange(selection, next);
+
+    if (merged.year !== selection.year) {
       setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         makes: [],
         models: [],
         styles: [],
-        loading: next.year ? "makes" : null,
+        loading: merged.year ? "makes" : null,
       }));
-    } else if (next.make !== selection.make) {
+    } else if (merged.make !== selection.make) {
       setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         models: [],
         styles: [],
-        loading: next.make ? "models" : null,
+        loading: merged.make ? "models" : null,
       }));
-    } else if (next.model !== selection.model) {
+    } else if (merged.model !== selection.model) {
       setStyleNotice(null);
       setCatalog((current) => ({
         ...current,
         styles: [],
-        loading: next.model ? "styles" : null,
+        loading: merged.model ? "styles" : null,
       }));
-    } else if (next.style !== selection.style) {
+    } else if (merged.style !== selection.style) {
       setStyleNotice(null);
     }
-    setSelection(next);
-  }, [selection.make, selection.model, selection.style, selection.year]);
+    setSelection(merged);
+  }, [selection]);
 
   const result = view.kind === "ok" ? view.result : null;
   const lowerSections = lowerSectionsFromView(view.kind, result);

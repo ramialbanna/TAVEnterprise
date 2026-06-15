@@ -81,7 +81,7 @@ function mockCatalog(fetchSpy = vi.spyOn(globalThis, "fetch")) {
   fetchSpy.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes("/api/app/mmr/catalog/years")) {
-      return ok({ items: ["2026"], catalogState: "connected", cached: false, reason: null });
+      return ok({ items: ["2026", "2025"], catalogState: "connected", cached: false, reason: null });
     }
     if (url.includes("/api/app/mmr/catalog/makes")) {
       return ok({ items: ["TESLA"], catalogState: "connected", cached: false, reason: null });
@@ -279,6 +279,18 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740");
     expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
     expect(screen.getByRole("button", { name: /change vin/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/year/i), { target: { value: "2025" } });
+    await waitFor(() => expect(screen.getByLabelText(/mileage/i)).toHaveValue("70740"));
+    expect(screen.getByLabelText(/make/i)).toHaveValue("");
+    expect(screen.getByLabelText(/model/i)).toHaveValue("");
+    expect(screen.getByLabelText(/style/i)).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText(/make/i), { target: { value: "TESLA" } });
+    await waitFor(() => expect(screen.getByLabelText(/model/i)).toBeEnabled());
+    fireEvent.change(screen.getByLabelText(/model/i), { target: { value: "MODEL Y AWD" } });
+    await waitFor(() => expect(screen.getByLabelText(/style/i)).toBeEnabled());
+    fireEvent.change(screen.getByLabelText(/style/i), { target: { value: "4D SUV PERFORMANCE" } });
 
     fireEvent.click(screen.getByRole("button", { name: /value selected vehicle/i }));
     await waitFor(() =>
