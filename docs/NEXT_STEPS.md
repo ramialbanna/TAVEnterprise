@@ -1,6 +1,6 @@
 # Next Steps — MMR Lab
 
-**Last updated:** 2026-06-12 (MarketCheck account + trim match locked) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-13 (MaxBuy plain-language explanation shipped) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
 > Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed UX rollout: [`02-product/ux-rollout-shipped.md`](02-product/ux-rollout-shipped.md).
@@ -40,7 +40,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|--------|
 | **1** | VIN search autofills Year/Make/Model; user can switch to YMM lookup | [x] |
 | **2** | Manheim Transactions (Cox sold comps — same as Manheim MMR tool) | [ ] |
-| **3** | MaxBuy plain-language explanation (why this number) | [ ] ready to implement |
+| **3** | MaxBuy plain-language explanation (why this number) | [x] |
 
 ---
 
@@ -83,12 +83,18 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 ### Immediate UI change
 
-- [ ] Rename section title and empty-state copy in `transactions-table.tsx` to **Manheim Transactions**
-- [ ] Empty state should say wholesale **auction sale** comps (Manheim/Cox), not generic “transactions”
+- [x] Rename section title and empty-state copy in `transactions-table.tsx` to **Manheim Transactions**
+- [x] Empty state should say wholesale **auction sale** comps (Manheim/Cox), not generic “transactions”
 
 ### Why Manheim Transactions are empty
 
 Phase 4 wired Cox `include=historical,forecast` and a transaction parser (`manheimMarketContextParser.ts`). The UI is ready; **Cox may not return transaction rows** for this account/VIN sample. Confirm with a production intel-worker smoke before blaming the frontend.
+
+**Smoke (2026-06-12, staging intel worker, VIN `1FT7W2BT4KED81759`, `force_refresh`):**
+
+- Cox returned `historicalAverages` + `forecast` on all payload items (6 trim variants).
+- **No** `transactions` / `auctionTransactions` / `auctionSales` (or other mapped keys) on any item.
+- **Diagnosis:** API absent — not a parser or frontend bug. Re-run: `wrangler dev --remote --env staging --config workers/tav-intelligence-worker/wrangler.toml --port 8789` then `node scripts/mmr-transactions-smoke.mjs http://127.0.0.1:8789`.
 
 ### MarketCheck — what it offers (2026-06 research)
 
@@ -144,8 +150,8 @@ Pricing reference: [MarketCheck APIs](https://www.marketcheck.com/apis/)
 
 **Exit criteria:**
 
-- [ ] Section renamed to Manheim Transactions
-- [ ] Cox transaction gap documented (API empty vs parser bug)
+- [x] Section renamed to Manheim Transactions
+- [x] Cox transaction gap documented (API empty vs parser bug) — see [`03-api/manheim-cox.md`](03-api/manheim-cox.md) §5
 - [ ] Manheim Transactions table shows rows for a VIN that has comps in native Manheim MMR UI
 
 ---
@@ -179,10 +185,10 @@ Pricing reference: [MarketCheck APIs](https://www.marketcheck.com/apis/)
 
 **Exit criteria:**
 
-- [ ] Copy map or template function turns evaluate response → narrative + math lines
-- [ ] Low data strength appends caution line
-- [ ] Shown on `/mmr-lab` MaxBuy block (and optionally deal-detail card)
-- [ ] Raw `reasonCodes` moved behind “Details” or ops-only — not primary UX
+- [x] Copy map or template function turns evaluate response → narrative + math lines
+- [x] Low data strength appends caution line
+- [x] Shown on `/mmr-lab` MaxBuy block (and optionally deal-detail card)
+- [x] Raw `reasonCodes` moved behind “Details” or ops-only — not primary UX
 
 **Still open:**
 

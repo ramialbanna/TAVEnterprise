@@ -50,10 +50,10 @@ describe("DataSections — Zones C2/C3", () => {
 
   it("idle shows search prompts", () => {
     render(<DataSections state={{ phase: "idle" }} />);
-    expect(screen.getByRole("heading", { name: /transactions/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /manheim transactions/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /historical average/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /projected average/i })).toBeInTheDocument();
-    expect(screen.getByText(/search to load wholesale auction transaction comps/i)).toBeInTheDocument();
+    expect(screen.getByText(/search to load manheim wholesale auction sale comps/i)).toBeInTheDocument();
   });
 
   it("ready shows live historical values when present", () => {
@@ -107,14 +107,14 @@ describe("DataSections — Zones C2/C3", () => {
         }}
       />,
     );
-    expect(screen.getByText(/no wholesale auction comps returned/i)).toBeInTheDocument();
+    expect(screen.getByText(/no manheim wholesale auction sale comps returned/i)).toBeInTheDocument();
   });
 });
 
 describe("TransactionsTable", () => {
   it("loading marks section busy", () => {
     render(<TransactionsTable phase="loading" />);
-    const section = screen.getByText(/transactions/i).closest("section");
+    const section = screen.getByText(/manheim transactions/i).closest("section");
     expect(section).toHaveAttribute("aria-busy", "true");
   });
 });

@@ -164,6 +164,42 @@ Cox MMR Valuations guide. `ci` is documented as unsupported on Search/YMMT and i
 stripped from the include list there. Validate any newly enabled include flag
 through a minimal production smoke before exposing its fields in the UI.
 
+### Auction transaction rows (Manheim Transactions / Zone C2)
+
+Per-sale wholesale auction comps appear on the Cox MMR payload when Cox returns them
+(typically under `transactions`, `auctionTransactions`, or similar array keys on the
+valuation item). There is **no separate `include=` token** for transactions in the
+Cox MMR Valuations guide — rows may ride along with `historical` or depend on account
+entitlements.
+
+**TAV wiring (2026-06):**
+
+| Layer | Behavior |
+|---|---|
+| Intel worker | Requests `include=historical,forecast` when `MANHEIM_INCLUDE_*` flags are on (`wrangler.toml` staging/prod). |
+| Parser | `src/valuation/manheimMarketContextParser.ts` maps known transaction array keys → `MmrTransaction[]`. |
+| App API | `mapIntelMmrEnvelopeToAppData` in `src/app/routes.ts` forwards `transactions` when non-empty. |
+| UI | `/mmr-lab` Zone C2 **Manheim Transactions** table renders rows or an honest empty state. |
+
+**Empty table diagnosis:** If historical/forecast populate but `transactions` is `[]`,
+compare the raw Cox payload for the same VIN in the native Manheim MMR UI:
+
+1. **API absent** — Cox omits transaction arrays for this account/VIN (common on
+   Valuations API; not a frontend bug). Document and track with Cox support.
+2. **Parser gap** — Cox returns rows under an unmapped key. Capture a redacted payload
+   sample and extend `TRANSACTION_ARRAY_KEYS` / `mapTransactionRow` in the parser.
+3. **Dropped in transit** — Rare; confirm `mmr_payload` on the intel worker response
+   still contains the array before blaming the web client.
+
+Do **not** substitute MarketCheck or retail listing data for Manheim sold comps
+(DEC-MLB-3).
+
+**Staging smoke (2026-06-12):** VIN lookup with `include=historical,forecast`
+returned `historicalAverages` + `forecast` on every payload item but **zero**
+transaction-array keys (`transactions`, `auctionTransactions`, etc.). Treat empty
+Manheim Transactions table as Cox API/account entitlement until Cox confirms a
+separate include or endpoint for per-sale rows.
+
 ---
 
 ## 6. Logging hygiene (hard rules)

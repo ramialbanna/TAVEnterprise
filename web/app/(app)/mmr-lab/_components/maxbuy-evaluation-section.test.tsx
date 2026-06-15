@@ -32,7 +32,7 @@ describe("MaxbuyEvaluationSection — Zone C1 states", () => {
     renderSection({ kind: "ready", display });
     expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument();
     expect(screen.queryByText(/^Buy$/i)).not.toBeInTheDocument();
-    expect(screen.getByText("$21,749")).toBeInTheDocument();
+    expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/tav segment history/i)).toBeInTheDocument();
     expect(screen.getByText(/economics/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /pass anyway/i })).toBeInTheDocument();
@@ -47,6 +47,24 @@ describe("MaxbuyEvaluationSection — Zone C1 states", () => {
     renderSection({ kind: "ready", display });
     expect(screen.getByText(/^Buy$/i)).toBeInTheDocument();
     expect(screen.getByText(/under ask/i)).toBeInTheDocument();
+    expect(screen.getByText(/similar TAV outcomes/i)).toBeInTheDocument();
+    expect(screen.getByText(/Math:/i)).toBeInTheDocument();
+    expect(screen.getByText(/target profit/i)).toBeInTheDocument();
+    expect(screen.getByText("Details")).toBeInTheDocument();
+  });
+
+  it("ready low data strength shows caution line", () => {
+    const display = buildMockMaxbuyEvaluation({ mmrValue: 23_900, adjustedMmr: 23_900 });
+    display.snapshot.dataStrength = "low";
+    renderSection({ kind: "ready", display });
+    expect(screen.getByText(/limited segment data/i)).toBeInTheDocument();
+  });
+
+  it("reason codes are behind Details, not primary badge chips", () => {
+    const display = buildMockMaxbuyEvaluation({ mmrValue: 23_900, adjustedMmr: 23_900 });
+    const { container } = renderSection({ kind: "ready", display });
+    expect(screen.getByText("Details")).toBeInTheDocument();
+    expect(container.querySelector("ul.flex.flex-wrap")).toBeNull();
   });
 
   it("unavailable explains api off", () => {

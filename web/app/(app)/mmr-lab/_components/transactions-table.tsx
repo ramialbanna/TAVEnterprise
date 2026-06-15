@@ -28,7 +28,7 @@ type Props = {
 function SectionTitle() {
   return (
     <h2 className="text-sm font-semibold uppercase tracking-wider text-primary">
-      Transactions
+      Manheim Transactions
     </h2>
   );
 }
@@ -37,7 +37,8 @@ function IdleBody() {
   return (
     <Card className="mt-2 border-dashed bg-surface-sunken">
       <CardContent className="py-8 text-center text-sm text-muted-foreground">
-        Search to load wholesale auction transaction comps for this vehicle.
+        Search to load Manheim wholesale auction sale comps for this vehicle — the same
+        sold auction rows as the Cox MMR tool, not retail listings.
       </CardContent>
     </Card>
   );
@@ -96,7 +97,7 @@ function ReadyBody({ transactions }: { transactions: MmrTransaction[] }) {
     <Card className="mt-2">
       <CardContent className="p-0">
         <p className="px-4 py-2 text-xs text-muted-foreground sm:hidden">
-          Swipe horizontally to see all transaction columns.
+          Swipe horizontally to see all Manheim transaction columns.
         </p>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <table className="min-w-[56rem] w-full text-sm">
@@ -118,8 +119,8 @@ function ReadyBody({ transactions }: { transactions: MmrTransaction[] }) {
                     colSpan={TX_COLUMNS.length}
                     className="px-3 py-6 text-center text-sm text-muted-foreground"
                   >
-                    No wholesale auction comps returned for this lookup. Cox may omit per-sale
-                    rows even when historical averages are present.
+                    No Manheim wholesale auction sale comps returned for this lookup. Cox may
+                    omit per-sale rows even when historical averages are present.
                   </td>
                 </tr>
               </tbody>
@@ -131,7 +132,7 @@ function ReadyBody({ transactions }: { transactions: MmrTransaction[] }) {
   );
 }
 
-/** Zone C2 — Cox-style wholesale transaction comps table. */
+/** Zone C2 — Manheim wholesale auction sale comps (Cox MMR tool parity). */
 export function TransactionsTable({ phase, transactions = [], className }: Props) {
   return (
     <section className={cn("min-w-0 px-4 sm:px-6", className)} aria-busy={phase === "loading"}>

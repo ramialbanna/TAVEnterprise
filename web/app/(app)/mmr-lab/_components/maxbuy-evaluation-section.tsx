@@ -2,6 +2,10 @@
 
 import { AlertCircle, Lock } from "lucide-react";
 
+import {
+  buildMaxbuyExplanation,
+  labelMaxbuyReasonCode,
+} from "@/components/maxbuy/build-explanation";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MaxbuyCardActions } from "@/components/maxbuy/maxbuy-card-actions";
@@ -56,18 +60,65 @@ function SectionTitle() {
   );
 }
 
-function ReasonCodeList({ codes }: { codes: string[] }) {
+function ReasonCodeDetails({ codes }: { codes: string[] }) {
   if (codes.length === 0) return null;
   return (
-    <ul className="flex flex-wrap gap-1.5">
-      {codes.map((code) => (
-        <li key={code}>
-          <Badge variant="neutral" className="font-normal">
-            {code.replaceAll("_", " ")}
-          </Badge>
-        </li>
-      ))}
-    </ul>
+    <details className="group rounded-lg border border-border bg-muted/20">
+      <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-2">
+          Details
+          <span className="text-xs font-normal text-muted-foreground group-open:hidden">
+            — scoring signals
+          </span>
+        </span>
+      </summary>
+      <ul className="space-y-1.5 border-t border-border px-3 py-2 text-sm text-muted-foreground">
+        {codes.map((code) => (
+          <li key={code}>{labelMaxbuyReasonCode(code)}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function ExplanationMathLine({
+  math,
+}: {
+  math: NonNullable<ReturnType<typeof buildMaxbuyExplanation>["math"]>;
+}) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      <span className="font-medium text-foreground">Math: </span>
+      {formatMoney(math.expectedSale)} expected sale − {formatMoney(math.transport)} transport −{" "}
+      {formatMoney(math.expenses)} reconditioning − {formatMoney(math.targetNet)} target profit ={" "}
+      <span className="font-semibold text-foreground">{formatMoney(math.maxBuy)}</span> max buy.
+    </p>
+  );
+}
+
+function MaxbuyExplanationBlock({ display }: { display: MaxbuyEvaluationDisplay }) {
+  const explanation = buildMaxbuyExplanation(display);
+
+  if (!explanation.narrative && !explanation.math && !explanation.cautionLine) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-surface-sunken px-4 py-3">
+      {explanation.narrative ? (
+        <p className="text-sm text-foreground">{explanation.narrative}</p>
+      ) : null}
+      {explanation.math ? <ExplanationMathLine math={explanation.math} /> : null}
+      {explanation.cautionLine ? (
+        <p
+          className="flex items-start gap-2 text-sm font-medium text-amber-800 dark:text-amber-200"
+          role="status"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          {explanation.cautionLine}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -284,7 +335,9 @@ function ReadyShell({ display }: { display: MaxbuyEvaluationDisplay }) {
               ) : null}
             </div>
 
-            <ReasonCodeList codes={snapshot.reasonCodes} />
+            <MaxbuyExplanationBlock display={display} />
+
+            <ReasonCodeDetails codes={snapshot.reasonCodes} />
 
             {snapshot.recommendationId ? (
               <MaxbuyCardActions
