@@ -23,6 +23,7 @@ import type {
   ManheimVinResponse,
   ManheimYmmResponse,
 } from "./manheim";
+import { extractMmrAdjustedValue } from "../../../../src/valuation/manheimResponseParser";
 import {
   CacheLockError,
   ManheimAuthError,
@@ -183,46 +184,10 @@ function errorCategory(err: unknown): string {
 }
 
 /**
- * Extract the wholesale mileage-adjusted MMR value from Manheim's response.
- * Field names vary by endpoint and API version — the priority order mirrors
- * `src/valuation/mmr.ts` and is the result of empirical testing against the
- * production Manheim account.
+ * Extract adjusted wholesale MMR from the Cox best-match item (see manheimResponseParser).
  */
 function extractMmrValue(data: unknown): number | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-
-  const candidate = Array.isArray(d.items) ? d.items[0] : d;
-  if (!candidate || typeof candidate !== "object") return null;
-
-  const t = candidate as Record<string, unknown>;
-
-  if (t.adjustedPricing && typeof t.adjustedPricing === "object") {
-    const ap = t.adjustedPricing as Record<string, unknown>;
-    if (ap.wholesale && typeof ap.wholesale === "object") {
-      const w = ap.wholesale as Record<string, unknown>;
-      if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
-    }
-  }
-
-  for (const key of [
-    "adjustedWholesaleAverage",
-    "wholesaleMileageAdjusted",
-    "wholesaleAverage",
-    "mmrValue",
-    "average",
-    "value",
-  ]) {
-    const v = t[key];
-    if (typeof v === "number" && v > 0) return Math.round(v);
-  }
-
-  if (t.wholesale && typeof t.wholesale === "object") {
-    const w = t.wholesale as Record<string, unknown>;
-    if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
-  }
-
-  return null;
+  return extractMmrAdjustedValue(data);
 }
 
 function parseRetryAfterMs(headerValue: string | null): number | null {

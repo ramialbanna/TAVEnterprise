@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractManheimDistribution } from "../manheimResponseParser";
+import { extractManheimDistribution, extractMmrAdjustedValue } from "../manheimResponseParser";
 
 // ── Fixtures drawn from real staging KV payloads (2026-05-07) ─────────────────
 
@@ -41,6 +41,32 @@ describe("extractManheimDistribution — full VIN payload", () => {
 
   it("extracts wholesaleRough from adjustedPricing.wholesale.below", () => {
     expect(extractManheimDistribution(VIN_PAYLOAD).wholesaleRough).toBe(1775);
+  });
+
+  it("extracts base wholesale tiers from top-level wholesale object", () => {
+    const dist = extractManheimDistribution(VIN_PAYLOAD);
+    expect(dist.wholesaleBaseAvg).toBe(800);
+    expect(dist.wholesaleBaseClean).toBe(1125);
+    expect(dist.wholesaleBaseRough).toBe(500);
+  });
+
+  it("prefers bestMatch item over items[0]", () => {
+    const payload = {
+      items: [
+        {
+          adjustedPricing: { wholesale: { average: 34900, above: 37500, below: 32300 } },
+          wholesale: { average: 34000, above: 36000, below: 32000 },
+        },
+        {
+          bestMatch: true,
+          adjustedPricing: { wholesale: { average: 25100, above: 27800, below: 22500 } },
+          wholesale: { average: 25000, above: 27600, below: 22300 },
+        },
+      ],
+    };
+    const dist = extractManheimDistribution(payload);
+    expect(dist.wholesaleAvg).toBe(25100);
+    expect(dist.wholesaleBaseAvg).toBe(25000);
   });
 
   it("parses sampleCount from sampleSize string", () => {
@@ -219,5 +245,17 @@ describe("extractManheimDistribution — null / empty input", () => {
   it("returns all null for a string input", () => {
     const dist = extractManheimDistribution("not-a-payload");
     expect(dist.wholesaleAvg).toBeNull();
+  });
+});
+
+describe("extractMmrAdjustedValue", () => {
+  it("reads adjusted wholesale from bestMatch item", () => {
+    const payload = {
+      items: [
+        { adjustedPricing: { wholesale: { average: 34900 } } },
+        { bestMatch: true, adjustedPricing: { wholesale: { average: 25100 } } },
+      ],
+    };
+    expect(extractMmrAdjustedValue(payload)).toBe(25100);
   });
 });

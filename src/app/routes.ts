@@ -60,6 +60,7 @@ import type { MmrResponseEnvelope } from "../types/intelligence";
 import { extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
+import { selectMmrPayloadItem } from "../valuation/manheimPayloadItem";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
@@ -527,9 +528,14 @@ function mapIntelMmrEnvelopeToAppData(
   const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
   const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
   const vehicleIdentity = extractManheimVehicleIdentity(envelope.mmr_payload ?? {});
-  const payloadItem = firstPayloadItem(envelope.mmr_payload);
+  const payloadItem = selectMmrPayloadItem(envelope.mmr_payload);
+  const baseMmr =
+    distribution.wholesaleBaseAvg ??
+    distribution.wholesaleAvg ??
+    envelope.mmr_value;
+  const adjustedMmr = distribution.wholesaleAvg ?? envelope.mmr_value;
   return {
-    mmrValue: envelope.mmr_value,
+    mmrValue: baseMmr,
     confidence,
     method,
     mileageUsed: envelope.mileage_used,
@@ -542,7 +548,7 @@ function mapIntelMmrEnvelopeToAppData(
     sampleCount: distribution.sampleCount,
     rangeLow: distribution.wholesaleRough,
     rangeHigh: distribution.wholesaleClean,
-    adjustedMmr: distribution.wholesaleAvg ?? envelope.mmr_value,
+    adjustedMmr,
     retailValue: distribution.retailAvg,
     retailRangeLow: distribution.retailRough,
     retailRangeHigh: distribution.retailClean,
@@ -766,15 +772,6 @@ function parseJsonText(text: string): unknown {
   } catch {
     return null;
   }
-}
-
-function firstPayloadItem(payload: unknown): Record<string, unknown> | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  const candidate = Array.isArray(record.items) && record.items.length > 0 ? record.items[0] : record;
-  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
-    ? candidate as Record<string, unknown>
-    : null;
 }
 
 function readNumericField(record: Record<string, unknown> | null, key: string): number | null {

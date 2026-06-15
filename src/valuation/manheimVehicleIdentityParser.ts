@@ -1,9 +1,12 @@
 /**
  * Extract Year / Make / Model / Trim from Cox/Manheim MMR payload items.
  *
- * Legacy Manheim uses `description.{year,make,model,trim}` on items[0].
+ * Legacy Manheim uses `description.{year,make,model,trim}` on the selected item.
  * Cox Storefront may mirror that shape or expose flat fields on the item.
+ * VIN lookups: prefer the item flagged `bestMatch: true`.
  */
+
+import { selectMmrPayloadItem } from "./manheimPayloadItem";
 
 export interface ManheimVehicleIdentity {
   year: number | null;
@@ -20,7 +23,7 @@ const EMPTY: ManheimVehicleIdentity = {
 };
 
 export function extractManheimVehicleIdentity(payload: unknown): ManheimVehicleIdentity {
-  const item = firstPayloadItem(payload);
+  const item = selectMmrPayloadItem(payload);
   if (item === null) return EMPTY;
 
   const description =
@@ -46,15 +49,6 @@ export function extractManheimVehicleIdentity(payload: unknown): ManheimVehicleI
   }
 
   return { year, make, model, trim };
-}
-
-function firstPayloadItem(payload: unknown): Record<string, unknown> | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  const candidate = Array.isArray(record.items) && record.items.length > 0 ? record.items[0] : record;
-  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
-    ? (candidate as Record<string, unknown>)
-    : null;
 }
 
 function readString(value: unknown): string | null {

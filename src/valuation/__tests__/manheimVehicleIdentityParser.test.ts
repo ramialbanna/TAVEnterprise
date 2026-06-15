@@ -39,6 +39,16 @@ describe("extractManheimVehicleIdentity", () => {
     });
   });
 
+  it("prefers bestMatch item for vehicle identity", () => {
+    const payload = {
+      items: [
+        { description: { year: 2021, make: "FORD", model: "F150 4WD V6", trim: "CREW CAB 3.5L TREMOR" } },
+        { bestMatch: true, description: { year: 2021, make: "FORD", model: "F150 4WD V6", trim: "CREW CAB 3.5L XLT" } },
+      ],
+    };
+    expect(extractManheimVehicleIdentity(payload).trim).toBe("CREW CAB 3.5L XLT");
+  });
+
   it("returns nulls when payload has no identity fields", () => {
     expect(extractManheimVehicleIdentity({ items: [{ sampleSize: "6" }] })).toEqual({
       year: null,

@@ -11,6 +11,7 @@
 import type { Env } from "../types/env";
 import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } from "../types/domain";
 import type { MmrMileageMethod } from "../scoring/mmrMileage";
+import { extractMmrAdjustedValue } from "./manheimResponseParser";
 import { log } from "../logging/logger";
 
 export interface MmrResult {
@@ -95,39 +96,9 @@ async function getManheimToken(env: Env, kv: KVNamespace): Promise<string> {
   return data.access_token;
 }
 
-// Extracts the wholesale mileage-adjusted MMR value from Manheim API responses.
-// Field names vary by endpoint and API version — checked in priority order.
+// Extracts the adjusted wholesale MMR value from the Cox best-match item.
 function extractMmrValue(data: unknown): number | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-
-  const candidate = Array.isArray(d.items) ? d.items[0] : d;
-  if (!candidate || typeof candidate !== "object") return null;
-
-  const t = candidate as Record<string, unknown>;
-
-  // Preferred: mileage+build adjusted wholesale (VIN endpoint response shape)
-  if (t.adjustedPricing && typeof t.adjustedPricing === "object") {
-    const ap = t.adjustedPricing as Record<string, unknown>;
-    if (ap.wholesale && typeof ap.wholesale === "object") {
-      const w = ap.wholesale as Record<string, unknown>;
-      if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
-    }
-  }
-
-  // Flat numeric fields (some search responses)
-  for (const key of ["adjustedWholesaleAverage", "wholesaleMileageAdjusted", "wholesaleAverage", "mmrValue", "average", "value"]) {
-    const v = t[key];
-    if (typeof v === "number" && v > 0) return Math.round(v);
-  }
-
-  // Base wholesale object fallback (unadjusted — used when no mileage was passed)
-  if (t.wholesale && typeof t.wholesale === "object") {
-    const w = t.wholesale as Record<string, unknown>;
-    if (typeof w.average === "number" && w.average > 0) return Math.round(w.average);
-  }
-
-  return null;
+  return extractMmrAdjustedValue(data);
 }
 
 async function getMmrByVin(

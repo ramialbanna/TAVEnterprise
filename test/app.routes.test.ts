@@ -723,6 +723,28 @@ describe("POST /app/mmr/vin", () => {
     expect(String(intelFetch.mock.calls[0]?.[0])).toContain("/mmr/vin");
   });
 
+  it("maps base wholesale to mmrValue when Cox returns separate base and adjusted tiers", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ...vinEnvelope,
+      mmr_value: 25100,
+      mmr_payload: {
+        items: [{
+          description: { year: 2021, make: "FORD", model: "F150 4WD V6", trim: "CREW CAB 3.5L XLT" },
+          bestMatch: true,
+          wholesale: { below: 22300, average: 25000, above: 27600 },
+          adjustedPricing: { wholesale: { below: 22500, average: 25100, above: 27800 } },
+        }],
+      },
+    }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      mmrValue: 25000,
+      adjustedMmr: 25100,
+      trim: "CREW CAB 3.5L XLT",
+    });
+  });
+
   it("forwards optional year, mileage, and adjustments to intel", async () => {
     const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
     const res = await worker.fetch(

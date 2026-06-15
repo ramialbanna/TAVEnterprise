@@ -6,6 +6,8 @@
  * often omits per-sale arrays — callers treat an empty `transactions` list as valid.
  */
 
+import { selectMmrPayloadItem } from "./manheimPayloadItem";
+
 export interface MmrHistoricalSlot {
   price: number | null;
   avgMileage: number | null;
@@ -64,7 +66,7 @@ const TRANSACTION_ARRAY_KEYS = [
 ] as const;
 
 export function extractManheimMarketContext(payload: unknown): ManheimMarketContext {
-  const item = firstPayloadItem(payload);
+  const item = selectMmrPayloadItem(payload);
   if (!item) return EMPTY_CONTEXT;
 
   const historicalAverages = parseHistoricalAverages(item.historicalAverages);
@@ -76,16 +78,6 @@ export function extractManheimMarketContext(payload: unknown): ManheimMarketCont
   }
 
   return { historicalAverages, projectedAverage, transactions };
-}
-
-function firstPayloadItem(payload: unknown): Record<string, unknown> | null {
-  if (!payload || typeof payload !== "object") return null;
-  const root = payload as Record<string, unknown>;
-  const candidate =
-    Array.isArray(root.items) && root.items.length > 0 ? root.items[0] : root;
-  return candidate && typeof candidate === "object" && !Array.isArray(candidate)
-    ? (candidate as Record<string, unknown>)
-    : null;
 }
 
 function parseHistoricalAverages(raw: unknown): MmrHistoricalAverages | null {
