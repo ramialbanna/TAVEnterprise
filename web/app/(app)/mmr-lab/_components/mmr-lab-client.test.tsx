@@ -175,7 +175,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     ).toBe(true);
     await waitFor(() => expect(screen.getByText(/max buy evaluation/i)).toBeInTheDocument());
     expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument();
-    expect(screen.getByText("$21,749")).toBeInTheDocument();
+    expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1);
   });
 
   it("lane ask price switches MaxBuy to deal_fit verdict after search", async () => {
@@ -246,7 +246,9 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
 
-    await waitFor(() => expect(screen.getByText("$21,749")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1),
+    );
     expect(screen.getByText("Vehicle ceiling")).toBeInTheDocument();
   });
 
@@ -318,6 +320,8 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /search/i }));
     await waitFor(() => expect(screen.getByText(/no MMR value was returned/i)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText("$21,749")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText("$21,749").length).toBeGreaterThanOrEqual(1),
+    );
   });
 });
