@@ -51,7 +51,8 @@ export type CoxMmrQueryAdjustments = {
 export interface ManheimClient {
   lookupByVin(args: {
     vin:          string;
-    mileage:      number;
+    /** When omitted, Cox uses the vehicle's own odometer data (VIN-only lookup). */
+    mileage?:     number;
     requestId:    string;
     adjustments?: CoxMmrQueryAdjustments;
   }): Promise<ManheimVinResponse>;

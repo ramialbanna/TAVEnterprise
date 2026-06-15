@@ -99,7 +99,7 @@ export const MmrYearMakeModelLookupRequestSchema = z.object({
 export const MmrResponseEnvelopeSchema = z.object({
   ok:                  z.boolean(),
   mmr_value:           z.number().nullable(),       // null = no result (negative cache)
-  mileage_used:        z.number().int().nonnegative(),
+  mileage_used:        z.number().int().nonnegative().nullable(),
   is_inferred_mileage: z.boolean(),
   cache_hit:           z.boolean(),
   source:              MmrQuerySourceSchema,

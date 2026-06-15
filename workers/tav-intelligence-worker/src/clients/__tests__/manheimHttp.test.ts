@@ -722,6 +722,27 @@ describe("ManheimHttpClient", () => {
     expect(url).not.toContain("include=");
   });
 
+  it("cox vendor: VIN URL omits odometer when mileage is not supplied", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const env: Env = {
+      ...ENV,
+      MANHEIM_API_VENDOR: "cox",
+      MANHEIM_GRANT_TYPE: "client_credentials",
+      MANHEIM_SCOPE:      "wholesale-valuations.vehicle.mmr-ext.get",
+      MANHEIM_MMR_URL:    "https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr",
+    };
+    const client = new ManheimHttpClient(env, kv, fetchFn);
+    await flush(client.lookupByVin({ vin: "1HGCM82633A123456", requestId: "cox-vin-no-odo" }));
+
+    const url = urlOfCall(fetchFn, 1);
+    expect(url).toBe("https://sandbox.api.coxautoinc.com/wholesale-valuations/vehicle/mmr/vin/1HGCM82633A123456");
+    expect(url).not.toContain("odometer=");
+  });
+
   // ── 22. Cox vendor: YMMT URL = ${MMR_URL}/search/{year}/{make}/{model}/{body}
 
   it("cox vendor: YMMT URL is ${MMR_URL}/search/{year}/{make}/{model}/{bodyname}", async () => {

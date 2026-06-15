@@ -32,9 +32,8 @@ export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
   }
 
   // VIN is the canonical identity for year/make/model on the Cox MMR side; we do NOT
-  // fabricate a current-year fallback here. `performMmrLookup` accepts an optional
-  // `year` on the VIN branch and only consults the clock locally if mileage inference
-  // has to run (which only fires when `mileage` is also absent).
+  // fabricate a current-year fallback here. When `mileage` is omitted, Cox receives
+  // a VIN-only lookup with no odometer param.
   const envelope = await performMmrLookup(
     {
       input: {

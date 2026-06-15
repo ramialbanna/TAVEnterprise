@@ -190,26 +190,46 @@ describe("performMmrLookup", () => {
     expect(deps.client.lookupByVin).not.toHaveBeenCalled();
   });
 
-  it("inferred mileage propagates: missing mileage → client called with inferred value, envelope flagged", async () => {
+  it("VIN without mileage: no odometer sent to client, mileage_used is null", async () => {
     const deps = makeDeps();
     deps.cache.get.mockResolvedValue(null);
     deps.lock.acquire.mockResolvedValue(true);
     deps.client.lookupByVin.mockResolvedValue(vinLiveResult);
 
-    // 2020 model; "now" = 2026-06-15 → ~6.5 years → ~97,500 miles.
+    const result = await performMmrLookup(
+      { input: { kind: "vin", vin: "1HGCM82633A123456" }, requestId: "req-6" },
+      deps,
+    );
+
+    expect(result.is_inferred_mileage).toBe(false);
+    expect(result.mileage_used).toBeNull();
+    const callArg = deps.client.lookupByVin.mock.calls[0]?.[0] as { mileage?: number };
+    expect(callArg.mileage).toBeUndefined();
+    expect(deps.lock.release).toHaveBeenCalledWith(
+      "vin:1HGCM82633A123456",
+      "req-6",
+    );
+  });
+
+  it("YMM inferred mileage propagates: missing mileage → client called with inferred value", async () => {
+    const deps = makeDeps();
+    deps.cache.get.mockResolvedValue(null);
+    deps.lock.acquire.mockResolvedValue(true);
+    deps.client.lookupByYmm.mockResolvedValue(ymmLiveResult);
+
     const fixedNow = new Date("2026-06-15T12:00:00.000Z");
 
     const result = await performMmrLookup(
       {
-        input: { kind: "vin", vin: "1HGCM82633A123456", year: 2020 },
-        requestId: "req-6",
+        input: { kind: "ymm", year: 2020, make: "Toyota", model: "Camry", trim: "SE" },
+        requestId: "req-6b",
         now: () => fixedNow,
       },
       deps,
     );
 
     expect(result.is_inferred_mileage).toBe(true);
-    const callArg = deps.client.lookupByVin.mock.calls[0]?.[0] as { mileage: number };
+    const callArg = deps.client.lookupByYmm.mock.calls[0]?.[0] as { mileage: number };
     expect(callArg.mileage).toBeGreaterThan(0);
     expect(result.mileage_used).toBe(callArg.mileage);
   });

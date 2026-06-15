@@ -58,10 +58,8 @@ export type MmrLookupInput =
       vin:     string;
       /**
        * Optional. The VIN itself is the canonical identity for year/make/model on the
-       * Cox MMR side — `lookupByVin` does NOT forward year to Cox. The field is kept
-       * for audit-log granularity and as an input to `getMmrMileageData` when mileage
-       * has to be inferred (only fires when `mileage` is also absent). Do NOT fabricate
-       * a year just to satisfy the type; pass through what the caller supplied.
+       * Cox MMR side — `lookupByVin` does NOT forward year to Cox. When absent, no
+       * odometer is sent to Cox (Manheim uses the vehicle's own mileage data).
        */
       year?:         number;
       mileage?:      number;
@@ -120,6 +118,46 @@ const NULL_USER_CONTEXT: UserContext = {
   userId: null, email: null, name: null, roles: [],
 };
 
+/** Resolved mileage for cache keys, Cox calls, and the response envelope. */
+interface LookupMileage {
+  /** Stored in `mileage_used`; null when no odometer was supplied or inferred. */
+  envelopeValue: number | null;
+  isInferred:    boolean;
+  /** Passed to Manheim; undefined omits the odometer query param on VIN lookups. */
+  clientValue:   number | undefined;
+  /** Included in the cache key when defined. */
+  cacheValue:    number | undefined;
+}
+
+function resolveLookupMileage(input: MmrLookupInput, now: Date): LookupMileage {
+  if (input.kind === "vin") {
+    if (input.mileage === undefined) {
+      return {
+        envelopeValue: null,
+        isInferred:    false,
+        clientValue:   undefined,
+        cacheValue:    undefined,
+      };
+    }
+    const inferenceYear = input.year ?? now.getFullYear();
+    const data = getMmrMileageData(inferenceYear, input.mileage, now);
+    return {
+      envelopeValue: data.value,
+      isInferred:    data.isInferred,
+      clientValue:   data.value,
+      cacheValue:    data.value,
+    };
+  }
+
+  const data = getMmrMileageData(input.year, input.mileage ?? null, now);
+  return {
+    envelopeValue: data.value,
+    isInferred:    data.isInferred,
+    clientValue:   data.value,
+    cacheValue:    data.value,
+  };
+}
+
 /**
  * Run a cached, single-flight Manheim MMR lookup.
  *
@@ -147,32 +185,21 @@ export async function performMmrLookup(
   const userCtx     = args.userContext ?? NULL_USER_CONTEXT;
   const coxAdj      = toCoxAdjustments(adjustments);
 
-  // 1. Resolve mileage (single source of truth — same as main worker).
-  // VIN-path year is optional (VIN carries the canonical YMM); only the inference
-  // branch in getMmrMileageData needs a year, and it only fires when mileage is
-  // absent. Fall back to the clock-derived current year locally so we don't pollute
-  // the audit log or Cox payload with a fabricated value.
+  // 1. Resolve mileage — VIN path skips inference when caller did not supply mileage;
+  // YMM path always resolves (infers when absent) because Cox requires odometer.
   const nowDate = args.now?.() ?? new Date();
-  const inferenceYear =
-    args.input.kind === "ymm"
-      ? args.input.year
-      : args.input.year ?? nowDate.getFullYear();
-  const mileageData = getMmrMileageData(
-    inferenceYear,
-    args.input.mileage ?? null,
-    nowDate,
-  );
+  const lookupMileage = resolveLookupMileage(args.input, nowDate);
 
   // 2. Derive cache key.
   const cacheKey =
     args.input.kind === "vin"
-      ? deriveVinCacheKey(args.input.vin, mileageData.value)
+      ? deriveVinCacheKey(args.input.vin, lookupMileage.cacheValue)
       : deriveYmmCacheKey({
           year:    args.input.year,
           make:    args.input.make,
           model:   args.input.model,
           trim:    args.input.trim ?? null,
-          mileage: mileageData.value,
+          mileage: lookupMileage.cacheValue!,
         });
 
   log("mmr.lookup.start", {
@@ -180,7 +207,7 @@ export async function performMmrLookup(
     route:           args.input.kind,
     cacheKey,
     forceRefresh,
-    inferredMileage: mileageData.isInferred,
+    inferredMileage: lookupMileage.isInferred,
   });
 
   try {
@@ -196,7 +223,7 @@ export async function performMmrLookup(
           cacheHit:        true,
           lockAttempted:   false,
           cacheKey,
-          inferredMileage: mileageData.isInferred,
+          inferredMileage: lookupMileage.isInferred,
           retryCount:      0,
           latencyMs,
           kpi: true,
@@ -230,7 +257,7 @@ export async function performMmrLookup(
               cacheHit:        true,
               lockAttempted:   true,
               cacheKey,
-              inferredMileage: mileageData.isInferred,
+              inferredMileage: lookupMileage.isInferred,
               retryCount:      0,
               latencyMs,
               kpi: true,
@@ -254,7 +281,9 @@ export async function performMmrLookup(
           args.input.kind === "vin"
             ? await deps.client.lookupByVin({
                 vin:          args.input.vin,
-                mileage:      mileageData.value,
+                ...(lookupMileage.clientValue !== undefined
+                  ? { mileage: lookupMileage.clientValue }
+                  : {}),
                 requestId,
                 ...(coxAdj !== undefined ? { adjustments: coxAdj } : {}),
               })
@@ -263,7 +292,7 @@ export async function performMmrLookup(
                 make:         args.input.make,
                 model:        args.input.model,
                 ...(args.input.trim !== undefined ? { trim: args.input.trim } : {}),
-                mileage:      mileageData.value,
+                mileage:      lookupMileage.clientValue!,
                 requestId,
                 ...(coxAdj !== undefined ? { adjustments: coxAdj } : {}),
               });
@@ -277,8 +306,8 @@ export async function performMmrLookup(
         const envelope: MmrResponseEnvelope = {
           ok:                  result.mmr_value !== null,
           mmr_value:           result.mmr_value,
-          mileage_used:        mileageData.value,
-          is_inferred_mileage: mileageData.isInferred,
+          mileage_used:        lookupMileage.envelopeValue,
+          is_inferred_mileage: lookupMileage.isInferred,
           cache_hit:           false,
           source:              "manheim",
           fetched_at:          result.fetched_at,
@@ -308,7 +337,7 @@ export async function performMmrLookup(
           cacheHit:        false,
           lockAttempted:   true,
           cacheKey,
-          inferredMileage: mileageData.isInferred,
+          inferredMileage: lookupMileage.isInferred,
           retryCount:      result.retryCount,
           latencyMs,
           kpi: true,
@@ -342,7 +371,7 @@ export async function performMmrLookup(
         cacheHit:        true,
         lockAttempted:   true,
         cacheKey,
-        inferredMileage: mileageData.isInferred,
+        inferredMileage: lookupMileage.isInferred,
         retryCount:      0,
         latencyMs,
         kpi: true,
@@ -371,7 +400,7 @@ export async function performMmrLookup(
       requestId,
       route:           args.input.kind,
       cacheKey,
-      inferredMileage: mileageData.isInferred,
+      inferredMileage: lookupMileage.isInferred,
       error_code:      errorCode,
       error_message:   errorMessage,
       latencyMs,

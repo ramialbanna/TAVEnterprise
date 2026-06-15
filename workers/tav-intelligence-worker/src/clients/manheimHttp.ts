@@ -243,7 +243,7 @@ export class ManheimHttpClient implements ManheimClient {
 
   async lookupByVin(args: {
     vin:          string;
-    mileage:      number;
+    mileage?:     number;
     zipCode?:     string;
     evbh?:        number;
     adjustments?: CoxMmrQueryAdjustments;
@@ -418,7 +418,7 @@ export class ManheimHttpClient implements ManheimClient {
    */
   private buildVinUrl(
     vin:     string,
-    mileage: number,
+    mileage: number | undefined,
     opts:    {
       zipCode?:      string;
       evbh?:         number;
@@ -446,7 +446,9 @@ export class ManheimHttpClient implements ManheimClient {
       `/valuations/vin/${encodeURIComponent(vin)}`,
       this.env.MANHEIM_MMR_URL,
     );
-    u.searchParams.set("odometer", String(mileage));
+    if (typeof mileage === "number" && Number.isFinite(mileage) && mileage >= 0) {
+      u.searchParams.set("odometer", String(mileage));
+    }
     return u.toString();
   }
 
