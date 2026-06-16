@@ -67,6 +67,22 @@ function parseExpressGrade(raw: string): number | null {
   return Number.isInteger(n) && n >= 75 && n <= 100 ? n : null;
 }
 
+/** Map Cox build-options fields from a completed MMR lookup into Zone B adjustments. */
+export function seedMmrAdjustmentsFromResult(
+  result: {
+    buildOptionsIncluded?: boolean;
+    mileageUsed?: number | null;
+  },
+): MmrAdjustments {
+  const mileageUsed = result.mileageUsed;
+  return {
+    ...EMPTY_MMR_ADJUSTMENTS,
+    buildOptions: result.buildOptionsIncluded === true,
+    odometer:
+      mileageUsed != null && mileageUsed > 0 ? String(mileageUsed) : "",
+  };
+}
+
 /** Map Zone B UI fields to Cox adjustment query params. */
 export function mapMmrAdjustmentsToApi(
   adjustments: MmrAdjustments,
@@ -75,7 +91,16 @@ export function mapMmrAdjustmentsToApi(
   if (adjustments.region) api.region = adjustments.region;
   if (adjustments.grade) api.grade = adjustments.grade;
   if (adjustments.exteriorColor) api.color = adjustments.exteriorColor;
-  if (adjustments.buildOptions) api.exclude_build = false;
+  if (adjustments.buildOptions) {
+    api.exclude_build = false;
+  } else if (
+    adjustments.region ||
+    adjustments.grade ||
+    adjustments.exteriorColor ||
+    adjustments.expressGrade
+  ) {
+    api.exclude_build = true;
+  }
   const evbh = parseExpressGrade(adjustments.expressGrade);
   if (evbh !== null) api.evbh = evbh;
   return Object.keys(api).length > 0 ? api : undefined;

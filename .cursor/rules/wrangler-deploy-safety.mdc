@@ -1,0 +1,65 @@
+---
+description: Wrangler deploy safety — never drop Cloudflare secrets; verify before and after every deploy
+globs: "**/wrangler.toml,**/wrangler.jsonc,**/.github/workflows/*deploy*,workers/**"
+alwaysApply: true
+---
+
+# Wrangler deploy safety (secrets)
+
+`wrangler deploy` uploads **code only** — it does **not** delete bound secrets. If secrets seem gone after a deploy, the usual causes are: wrong worker/env, first deploy to a new script name, or a destructive secret command — not the deploy itself.
+
+## Forbidden (never run unless user explicitly asks in the same turn)
+
+- `wrangler secret delete`
+- `wrangler secret bulk` (overwrites the full secret set for that worker/env)
+- `wrangler delete`
+- Putting secret **values** in `wrangler.toml`, `.dev.vars`, CI, or source
+- Deploying without `--env` when the target is staging or production
+- Deploying the wrong config (e.g. root `wrangler.toml` when user meant intel worker)
+
+## Required secret names (inventory targets)
+
+**`tav-aip` (`wrangler.toml`)** — `APP_API_SECRET`, `ADMIN_API_SECRET`, `INTEL_WORKER_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, plus others per `docs/04-operations/runbook.md`.
+
+**`tav-intelligence-worker` (`workers/tav-intelligence-worker/wrangler.toml`)** — `INTEL_SERVICE_SECRET`, `MANHEIM_API_VENDOR`, `MANHEIM_GRANT_TYPE`, `MANHEIM_CLIENT_ID`, `MANHEIM_CLIENT_SECRET`, `MANHEIM_SCOPE`, `MANHEIM_TOKEN_URL`, `MANHEIM_MMR_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+`INTEL_WORKER_SECRET` on the main worker must match `INTEL_SERVICE_SECRET` on the intel worker (same value; different binding names).
+
+## Before every deploy
+
+1. State the **exact** command (worker name, `--config`, `--env`).
+2. Run `wrangler secret list` for that worker/env — **names only**, never print values.
+3. Save the name list mentally; confirm required Manheim + service-auth names are present for that worker.
+4. If any required name is missing **before** deploy, **stop** and tell the user — do not deploy and hope; do not `secret put` without explicit permission (see `cloudflare-worker-secrets.mdc`).
+
+## Deploy commands (this repo)
+
+```bash
+# Main worker
+npx wrangler deploy --env staging
+npx wrangler deploy --env production
+
+# Intelligence worker (separate script — GitHub Actions does NOT deploy this)
+npx wrangler deploy --config workers/tav-intelligence-worker/wrangler.toml --env staging
+npx wrangler deploy --config workers/tav-intelligence-worker/wrangler.toml --env production
+
+# Maxbuy worker
+npx wrangler deploy --config workers/maxbuy-worker/wrangler.toml --env staging
+npx wrangler deploy --config workers/maxbuy-worker/wrangler.toml --env production
+```
+
+GitHub `deploy-staging.yml` only deploys **`tav-aip-staging`**. Pushing to `main` does **not** update production workers or the intel/maxbuy workers.
+
+## After every deploy
+
+1. Run `wrangler secret list` again on the **same** worker/env.
+2. Compare to the pre-deploy list — every name must still be present.
+3. If any name disappeared: **stop**, report the diff, do **not** re-enter secrets unless the user explicitly approves.
+4. Run `/health` on the deployed worker; for MMR changes, smoke a VIN on the **same** env you deployed.
+
+## When the user reports "secrets gone after deploy"
+
+1. Reassure: deploy alone does not wipe secrets.
+2. `wrangler secret list --env <env> [--config …]` and diff vs runbook required names.
+3. Check wrong env (staging secrets ≠ production), wrong worker script, or live Cox failing on **cache miss** (looks like outage, not secret deletion).
+4. Offer copying missing names from the **paired** env only with explicit user approval — never guess values.

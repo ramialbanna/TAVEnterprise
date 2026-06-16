@@ -15,10 +15,16 @@ export function buildMmrRecomputeRequest(
   const apiAdjustments = mapMmrAdjustmentsToApi(adjustments);
   const odo = parseAdjustmentOdometer(adjustments.odometer);
 
+  const resolvedAdjustments =
+    apiAdjustments ??
+    (session.kind === "vin" && !adjustments.buildOptions && odo === null
+      ? { exclude_build: true as const }
+      : undefined);
+
   if (session.kind === "vin") {
     const body: MmrVinRequest = { vin: session.vin };
     if (odo !== null) body.mileage = odo;
-    if (apiAdjustments) body.adjustments = apiAdjustments;
+    if (resolvedAdjustments) body.adjustments = resolvedAdjustments;
     return body;
   }
 
@@ -29,6 +35,6 @@ export function buildMmrRecomputeRequest(
     style: session.selection.style,
   };
   if (odo !== null) body.mileage = odo;
-  if (apiAdjustments) body.adjustments = apiAdjustments;
+  if (resolvedAdjustments) body.adjustments = resolvedAdjustments;
   return body;
 }

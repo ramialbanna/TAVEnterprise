@@ -57,7 +57,7 @@ import { REGION_KEYS } from "../types/domain";
 import { classifyIntelHttpError } from "../valuation/workerClient";
 import { MmrLookupAdjustmentsSchema, MmrResponseEnvelopeSchema } from "../types/intelligence";
 import type { MmrResponseEnvelope } from "../types/intelligence";
-import { extractManheimDistribution } from "../valuation/manheimResponseParser";
+import { extractManheimBuildOptions, extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
 import { selectMmrPayloadItem } from "../valuation/manheimPayloadItem";
@@ -526,6 +526,7 @@ function mapIntelMmrEnvelopeToAppData(
   }
 
   const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
+  const buildOptions = extractManheimBuildOptions(envelope.mmr_payload ?? {});
   const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
   const vehicleIdentity = extractManheimVehicleIdentity(envelope.mmr_payload ?? {});
   const payloadItem = selectMmrPayloadItem(envelope.mmr_payload);
@@ -549,6 +550,8 @@ function mapIntelMmrEnvelopeToAppData(
     rangeLow: distribution.wholesaleRough,
     rangeHigh: distribution.wholesaleClean,
     adjustedMmr,
+    buildOptionsIncluded: buildOptions.included,
+    buildOptionsAdjustment: buildOptions.adjustment,
     retailValue: distribution.retailAvg,
     retailRangeLow: distribution.retailRough,
     retailRangeHigh: distribution.retailClean,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_MMR_ADJUSTMENTS,
+  seedMmrAdjustmentsFromResult,
   hasMmrAdjustments,
   mapMmrAdjustmentsToApi,
 } from "./mmr-adjustments";
@@ -38,6 +39,31 @@ describe("mapMmrAdjustmentsToApi", () => {
       color: "Black",
       exclude_build: false,
       evbh: 88,
+    });
+  });
+
+  it("excludes build options when NO is selected alongside other adjustments", () => {
+    expect(
+      mapMmrAdjustmentsToApi({
+        ...EMPTY_MMR_ADJUSTMENTS,
+        region: "West",
+        buildOptions: false,
+      }),
+    ).toEqual({
+      region: "West",
+      exclude_build: true,
+    });
+  });
+
+  it("seeds build options from Cox MMR response fields", () => {
+    expect(
+      seedMmrAdjustmentsFromResult({
+        buildOptionsIncluded: true,
+        mileageUsed: null,
+      }),
+    ).toEqual({
+      ...EMPTY_MMR_ADJUSTMENTS,
+      buildOptions: true,
     });
   });
 });

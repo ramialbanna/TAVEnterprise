@@ -732,7 +732,10 @@ describe("POST /app/mmr/vin", () => {
           description: { year: 2021, make: "FORD", model: "F150 4WD V6", trim: "CREW CAB 3.5L XLT" },
           bestMatch: true,
           wholesale: { below: 22300, average: 25000, above: 27600 },
-          adjustedPricing: { wholesale: { below: 22500, average: 25100, above: 27800 } },
+          adjustedPricing: {
+            wholesale: { below: 22500, average: 25100, above: 27800 },
+            adjustedBy: { buildOptions: 100 },
+          },
         }],
       },
     }));
@@ -742,6 +745,8 @@ describe("POST /app/mmr/vin", () => {
       mmrValue: 25000,
       adjustedMmr: 25100,
       trim: "CREW CAB 3.5L XLT",
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: 100,
     });
   });
 

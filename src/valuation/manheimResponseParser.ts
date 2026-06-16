@@ -153,3 +153,60 @@ export function extractMmrAdjustedValue(payload: unknown): number | null {
 
   return null;
 }
+
+/** Cox build-options adjustment from `adjustedBy.buildOptions` on the selected item. */
+export interface ManheimBuildOptions {
+  /** True when Cox reports a non-zero build-options dollar adjustment. */
+  included: boolean;
+  /** Rounded dollar delta (e.g. 200). Null when absent or zero. */
+  adjustment: number | null;
+}
+
+function readBuildOptionsAdjustment(raw: unknown): number | null {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  const rounded = Math.round(raw);
+  return rounded !== 0 ? rounded : null;
+}
+
+function readAdjustedByBuildOptions(obj: Record<string, unknown>): number | null {
+  return (
+    readBuildOptionsAdjustment(obj.buildOptions) ??
+    readBuildOptionsAdjustment(obj.BuildOptions)
+  );
+}
+
+/**
+ * Extract build-options state from Cox `bestMatch` item.
+ * Falls back to base-vs-adjusted wholesale delta when `adjustedBy` is absent.
+ */
+export function extractManheimBuildOptions(payload: unknown): ManheimBuildOptions {
+  const none: ManheimBuildOptions = { included: false, adjustment: null };
+  if (!payload || typeof payload !== "object") return none;
+
+  const t = selectMmrPayloadItem(payload);
+  if (t === null) return none;
+
+  let adjustment: number | null = null;
+
+  if (t.adjustedBy && typeof t.adjustedBy === "object") {
+    adjustment = readAdjustedByBuildOptions(t.adjustedBy as Record<string, unknown>);
+  }
+
+  if (adjustment === null && t.adjustedPricing && typeof t.adjustedPricing === "object") {
+    const ap = t.adjustedPricing as Record<string, unknown>;
+    if (ap.adjustedBy && typeof ap.adjustedBy === "object") {
+      adjustment = readAdjustedByBuildOptions(ap.adjustedBy as Record<string, unknown>);
+    }
+  }
+
+  if (adjustment === null) {
+    const dist = extractManheimDistribution(payload);
+    if (dist.wholesaleBaseAvg !== null && dist.wholesaleAvg !== null) {
+      const delta = dist.wholesaleAvg - dist.wholesaleBaseAvg;
+      if (delta > 0) adjustment = delta;
+    }
+  }
+
+  if (adjustment === null) return none;
+  return { included: true, adjustment };
+}

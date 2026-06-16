@@ -41,6 +41,7 @@ import {
 import {
   EMPTY_MMR_ADJUSTMENTS,
   parseAdjustmentOdometer,
+  seedMmrAdjustmentsFromResult,
   type MmrAdjustments,
 } from "./mmr-adjustments";
 
@@ -182,12 +183,16 @@ export function MmrLabClient() {
   );
 
   const handleAdjustmentsClear = useCallback(() => {
-    setAdjustments(EMPTY_MMR_ADJUSTMENTS);
     const session = lookupSessionRef.current;
     if (!session) return;
+    const resetAdj =
+      view.kind === "ok"
+        ? seedMmrAdjustmentsFromResult(view.result)
+        : EMPTY_MMR_ADJUSTMENTS;
+    setAdjustments(resetAdj);
     if (recomputeTimerRef.current) clearTimeout(recomputeTimerRef.current);
-    void runMmrRecompute(session, EMPTY_MMR_ADJUSTMENTS);
-  }, [runMmrRecompute]);
+    void runMmrRecompute(session, resetAdj);
+  }, [runMmrRecompute, view]);
 
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +346,7 @@ export function MmrLabClient() {
         }
 
         setView({ kind: "ok", result: mmrRes.data });
+        setAdjustments(seedMmrAdjustmentsFromResult(mmrRes.data));
         setVinLocked(true);
         void applyVinAutofill(mmrRes.data);
 
@@ -381,6 +387,7 @@ export function MmrLabClient() {
         const res = mmrSettled.value;
         if (res.ok) {
           setView({ kind: "ok", result: res.data });
+          setAdjustments(seedMmrAdjustmentsFromResult(res.data));
         } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
       } else {

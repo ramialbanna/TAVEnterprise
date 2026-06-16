@@ -12,7 +12,18 @@ describe("buildMmrRecomputeRequest", () => {
     expect(body).toEqual({
       vin: "1HGCM82633A004352",
       mileage: 52000,
-      adjustments: { region: "West", grade: "3.5" },
+      adjustments: { region: "West", grade: "3.5", exclude_build: true },
+    });
+  });
+
+  it("sends exclude_build when toggling build options to NO only", () => {
+    const body = buildMmrRecomputeRequest(
+      { kind: "vin", vin: "1FMSK7DH1NGB37986" },
+      { ...EMPTY_MMR_ADJUSTMENTS, buildOptions: false },
+    );
+    expect(body).toEqual({
+      vin: "1FMSK7DH1NGB37986",
+      adjustments: { exclude_build: true },
     });
   });
 

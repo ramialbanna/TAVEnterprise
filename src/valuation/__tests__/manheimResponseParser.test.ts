@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractManheimDistribution, extractMmrAdjustedValue } from "../manheimResponseParser";
+import {
+  extractManheimBuildOptions,
+  extractManheimDistribution,
+  extractMmrAdjustedValue,
+} from "../manheimResponseParser";
 
 // ── Fixtures drawn from real staging KV payloads (2026-05-07) ─────────────────
 
@@ -257,5 +261,58 @@ describe("extractMmrAdjustedValue", () => {
       ],
     };
     expect(extractMmrAdjustedValue(payload)).toBe(25100);
+  });
+});
+
+describe("extractManheimBuildOptions", () => {
+  it("reads adjustedBy.buildOptions from bestMatch item", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          wholesale: { average: 20200, above: 21900, below: 18200 },
+          adjustedPricing: {
+            wholesale: { average: 20400, above: 21900, below: 18950 },
+            adjustedBy: { buildOptions: 200 },
+          },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: true,
+      adjustment: 200,
+    });
+  });
+
+  it("infers build options from base vs adjusted wholesale delta", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          wholesale: { average: 20200 },
+          adjustedPricing: { wholesale: { average: 20400 } },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: true,
+      adjustment: 200,
+    });
+  });
+
+  it("returns not included when no adjustment is present", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          wholesale: { average: 20200 },
+          adjustedPricing: { wholesale: { average: 20200 } },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: false,
+      adjustment: null,
+    });
   });
 });
