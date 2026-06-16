@@ -162,22 +162,91 @@ export interface ManheimBuildOptions {
   adjustment: number | null;
 }
 
-function readBuildOptionsAdjustment(raw: unknown): number | null {
+function readBuildOptionsDollars(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
   const rounded = Math.round(raw);
   return rounded !== 0 ? rounded : null;
 }
 
-function readAdjustedByBuildOptions(obj: Record<string, unknown>): number | null {
+function readBuildOptionsIncludedFlag(raw: unknown): boolean | null {
+  if (raw === true) return true;
+  if (raw === false) return false;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw !== 0;
+  return null;
+}
+
+function pickAdjustedBy(item: Record<string, unknown>): Record<string, unknown> | null {
+  if (item.adjustedBy && typeof item.adjustedBy === "object") {
+    return item.adjustedBy as Record<string, unknown>;
+  }
+  if (item.adjustedPricing && typeof item.adjustedPricing === "object") {
+    const ap = item.adjustedPricing as Record<string, unknown>;
+    if (ap.adjustedBy && typeof ap.adjustedBy === "object") {
+      return ap.adjustedBy as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+function readAdjustedByBuildOptionsDollars(obj: Record<string, unknown>): number | null {
   return (
-    readBuildOptionsAdjustment(obj.buildOptions) ??
-    readBuildOptionsAdjustment(obj.BuildOptions)
+    readBuildOptionsDollars(obj.buildOptions) ??
+    readBuildOptionsDollars(obj.BuildOptions)
   );
+}
+
+function readAdjustedByBuildOptionsIncluded(obj: Record<string, unknown>): boolean | null {
+  const raw = obj.buildOptions ?? obj.BuildOptions;
+  if (raw === undefined) return null;
+  return readBuildOptionsIncludedFlag(raw);
+}
+
+function hasOdometerAdjustment(adjustedBy: Record<string, unknown>): boolean {
+  return adjustedBy.Odometer !== undefined || adjustedBy.odometer !== undefined;
+}
+
+/** True when Cox odometer input matches the vehicle's average odometer (zero net mileage adj). */
+function odometerMatchesAverage(
+  item: Record<string, unknown>,
+  adjustedBy: Record<string, unknown>,
+): boolean {
+  const raw = adjustedBy.Odometer ?? adjustedBy.odometer;
+  const avg = item.averageOdometer;
+  if (raw == null || avg == null) return false;
+  const odo = typeof raw === "number" ? raw : Number(String(raw).replace(/[^\d]/g, ""));
+  if (!Number.isFinite(odo)) return false;
+  return Math.round(odo) === Math.round(Number(avg));
+}
+
+function wholesaleBuildOptionsDelta(payload: unknown): number | null {
+  const dist = extractManheimDistribution(payload);
+  if (dist.wholesaleBaseAvg === null || dist.wholesaleAvg === null) return null;
+  const delta = dist.wholesaleAvg - dist.wholesaleBaseAvg;
+  return delta > 0 ? delta : null;
+}
+
+function buildOptionsFromBooleanTrue(
+  item: Record<string, unknown>,
+  payload: unknown,
+  adjustedBy: Record<string, unknown> | null,
+): ManheimBuildOptions {
+  const delta = wholesaleBuildOptionsDelta(payload);
+  if (delta === null) return { included: true, adjustment: null };
+  if (
+    adjustedBy &&
+    hasOdometerAdjustment(adjustedBy) &&
+    !odometerMatchesAverage(item, adjustedBy)
+  ) {
+    // Mileage and build both apply — wholesale delta is not build-only.
+    return { included: true, adjustment: null };
+  }
+  return { included: true, adjustment: delta };
 }
 
 /**
  * Extract build-options state from Cox `bestMatch` item.
- * Falls back to base-vs-adjusted wholesale delta when `adjustedBy` is absent.
+ * Cox may send `adjustedBy.buildOptions` as a dollar amount or as boolean `true`.
+ * Falls back to base-vs-adjusted wholesale delta when the flag is absent.
  */
 export function extractManheimBuildOptions(payload: unknown): ManheimBuildOptions {
   const none: ManheimBuildOptions = { included: false, adjustment: null };
@@ -186,27 +255,20 @@ export function extractManheimBuildOptions(payload: unknown): ManheimBuildOption
   const t = selectMmrPayloadItem(payload);
   if (t === null) return none;
 
-  let adjustment: number | null = null;
+  const adjustedBy = pickAdjustedBy(t);
+  const includedFlag = adjustedBy ? readAdjustedByBuildOptionsIncluded(adjustedBy) : null;
+  const numericAdj = adjustedBy ? readAdjustedByBuildOptionsDollars(adjustedBy) : null;
 
-  if (t.adjustedBy && typeof t.adjustedBy === "object") {
-    adjustment = readAdjustedByBuildOptions(t.adjustedBy as Record<string, unknown>);
+  if (includedFlag === false) return none;
+
+  if (numericAdj !== null) return { included: true, adjustment: numericAdj };
+
+  if (includedFlag === true) {
+    return buildOptionsFromBooleanTrue(t, payload, adjustedBy);
   }
 
-  if (adjustment === null && t.adjustedPricing && typeof t.adjustedPricing === "object") {
-    const ap = t.adjustedPricing as Record<string, unknown>;
-    if (ap.adjustedBy && typeof ap.adjustedBy === "object") {
-      adjustment = readAdjustedByBuildOptions(ap.adjustedBy as Record<string, unknown>);
-    }
-  }
+  const delta = wholesaleBuildOptionsDelta(payload);
+  if (delta !== null) return { included: true, adjustment: delta };
 
-  if (adjustment === null) {
-    const dist = extractManheimDistribution(payload);
-    if (dist.wholesaleBaseAvg !== null && dist.wholesaleAvg !== null) {
-      const delta = dist.wholesaleAvg - dist.wholesaleBaseAvg;
-      if (delta > 0) adjustment = delta;
-    }
-  }
-
-  if (adjustment === null) return none;
-  return { included: true, adjustment };
+  return none;
 }

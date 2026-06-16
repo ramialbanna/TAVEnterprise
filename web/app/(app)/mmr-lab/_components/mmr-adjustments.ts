@@ -71,13 +71,17 @@ function parseExpressGrade(raw: string): number | null {
 export function seedMmrAdjustmentsFromResult(
   result: {
     buildOptionsIncluded?: boolean;
+    buildOptionsAdjustment?: number | null;
     mileageUsed?: number | null;
   },
 ): MmrAdjustments {
   const mileageUsed = result.mileageUsed;
+  const buildOptions =
+    result.buildOptionsIncluded === true ||
+    (result.buildOptionsAdjustment != null && result.buildOptionsAdjustment > 0);
   return {
     ...EMPTY_MMR_ADJUSTMENTS,
-    buildOptions: result.buildOptionsIncluded === true,
+    buildOptions,
     odometer:
       mileageUsed != null && mileageUsed > 0 ? String(mileageUsed) : "",
   };

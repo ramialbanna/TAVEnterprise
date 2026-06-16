@@ -750,6 +750,33 @@ describe("POST /app/mmr/vin", () => {
     });
   });
 
+  it("maps Cox boolean buildOptions true to included with dollar delta at average odometer", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ...vinEnvelope,
+      mmr_value: 20400,
+      mmr_payload: {
+        items: [{
+          description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { below: 18000, average: 20200, above: 22500 },
+          adjustedPricing: {
+            wholesale: { below: 25200, average: 20400, above: 29700 },
+            adjustedBy: { Odometer: "66981", buildOptions: true },
+          },
+        }],
+      },
+    }));
+    const res = await worker.fetch(authedPost("/app/mmr/vin", { vin: VIN }), intelEnv(intelFetch), ctx);
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      mmrValue: 20200,
+      adjustedMmr: 20400,
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: 200,
+    });
+  });
+
   it("forwards optional year, mileage, and adjustments to intel", async () => {
     const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
     const res = await worker.fetch(

@@ -315,4 +315,63 @@ describe("extractManheimBuildOptions", () => {
       adjustment: null,
     });
   });
+
+  it("reads Cox boolean buildOptions true at average odometer (live VIN shape)", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 20200, above: 22500, below: 18000 },
+          adjustedPricing: {
+            wholesale: { average: 20400, above: 29700, below: 25200 },
+            adjustedBy: { Odometer: "66981", buildOptions: true },
+          },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: true,
+      adjustment: 200,
+    });
+  });
+
+  it("marks build options included without dollar amount when mileage differs from average", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 20200 },
+          adjustedPricing: {
+            wholesale: { average: 27500 },
+            adjustedBy: { Odometer: "8000", buildOptions: true },
+          },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: true,
+      adjustment: null,
+    });
+  });
+
+  it("returns not included when Cox sends buildOptions false", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          wholesale: { average: 20200 },
+          adjustedPricing: {
+            wholesale: { average: 20200 },
+            adjustedBy: { Odometer: "66981", buildOptions: false },
+          },
+        },
+      ],
+    };
+    expect(extractManheimBuildOptions(payload)).toEqual({
+      included: false,
+      adjustment: null,
+    });
+  });
 });

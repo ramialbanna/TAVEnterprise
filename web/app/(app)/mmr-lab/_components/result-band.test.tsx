@@ -92,6 +92,36 @@ describe("ResultBand — honest, no fabrication", () => {
     expect(onClear).toHaveBeenCalled();
   });
 
+  it("shows build options dollar delta when YES is selected and Cox reports adjustment", () => {
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={20200}
+        adjustedMmr={20400}
+        buildOptionsAdjustment={200}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, buildOptions: true }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.getByText("+$200")).toBeInTheDocument();
+  });
+
+  it("hides build options delta when NO is selected", () => {
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={20200}
+        adjustedMmr={20200}
+        buildOptionsAdjustment={200}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, buildOptions: false }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.queryByText("+$200")).not.toBeInTheDocument();
+  });
+
   it("renders an honest unavailable message for a missingReason (not an error UI)", () => {
     render(
       <ResultBand

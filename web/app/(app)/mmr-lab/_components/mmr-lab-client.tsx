@@ -554,6 +554,7 @@ export function MmrLabClient() {
           rangeLow={result?.rangeLow ?? null}
           rangeHigh={result?.rangeHigh ?? null}
           adjustedMmr={result?.adjustedMmr ?? null}
+          buildOptionsAdjustment={result?.buildOptionsAdjustment ?? null}
           retailValue={result?.retailValue ?? null}
           retailRangeLow={result?.retailRangeLow ?? null}
           retailRangeHigh={result?.retailRangeHigh ?? null}

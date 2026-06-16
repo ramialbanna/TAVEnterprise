@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,6 +33,7 @@ type Props = {
   rangeLow?: number | null;
   rangeHigh?: number | null;
   adjustedMmr?: number | null;
+  buildOptionsAdjustment?: number | null;
   retailValue?: number | null;
   retailRangeLow?: number | null;
   retailRangeHigh?: number | null;
@@ -81,16 +83,27 @@ function ResultBandSkeleton() {
 type AdjustmentsPanelProps = {
   interactive: boolean;
   adjustments: MmrAdjustments;
+  buildOptionsAdjustment: number | null;
   onChange: (next: MmrAdjustments) => void;
   onClear: () => void;
 };
 
+function formatBuildOptionsDelta(value: number): string {
+  const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${prefix}$${Math.abs(value).toLocaleString()}`;
+}
+
 function MmrAdjustmentsPanel({
   interactive,
   adjustments,
+  buildOptionsAdjustment,
   onChange,
   onClear,
 }: AdjustmentsPanelProps) {
+  const showBuildOptionsDelta =
+    adjustments.buildOptions &&
+    buildOptionsAdjustment != null &&
+    buildOptionsAdjustment !== 0;
   const canClear = interactive && hasMmrAdjustments(adjustments);
 
   return (
@@ -176,29 +189,40 @@ function MmrAdjustmentsPanel({
 
         <div
           className={cn(
-            "flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm",
+            "flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm",
             !interactive && "opacity-50",
           )}
         >
           <span>Build Options?</span>
-          <div className="flex gap-1">
-            {(["NO", "YES"] as const).map((label) => {
-              const yes = label === "YES";
-              const active = adjustments.buildOptions === yes;
-              return (
-                <Button
-                  key={label}
-                  type="button"
-                  size="sm"
-                  variant={active ? "default" : "outline"}
-                  disabled={!interactive}
-                  className="h-7 px-2 text-xs"
-                  onClick={() => onChange({ ...adjustments, buildOptions: yes })}
-                >
-                  {label}
-                </Button>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            {showBuildOptionsDelta ? (
+              <span
+                className="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums text-emerald-600"
+                aria-label={`Build options adjustment ${formatBuildOptionsDelta(buildOptionsAdjustment)}`}
+              >
+                <ArrowUp className="size-3.5" aria-hidden />
+                {formatBuildOptionsDelta(buildOptionsAdjustment)}
+              </span>
+            ) : null}
+            <div className="flex gap-1">
+              {(["NO", "YES"] as const).map((label) => {
+                const yes = label === "YES";
+                const active = adjustments.buildOptions === yes;
+                return (
+                  <Button
+                    key={label}
+                    type="button"
+                    size="sm"
+                    variant={active ? "default" : "outline"}
+                    disabled={!interactive}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onChange({ ...adjustments, buildOptions: yes })}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -245,6 +269,7 @@ export function ResultBand({
   rangeLow,
   rangeHigh,
   adjustedMmr,
+  buildOptionsAdjustment = null,
   retailValue,
   retailRangeLow,
   retailRangeHigh,
@@ -287,6 +312,7 @@ export function ResultBand({
       <MmrAdjustmentsPanel
         interactive={interactive && !panelBusy}
         adjustments={adjustments}
+        buildOptionsAdjustment={buildOptionsAdjustment}
         onChange={onAdjustmentsChange}
         onClear={onAdjustmentsClear}
       />

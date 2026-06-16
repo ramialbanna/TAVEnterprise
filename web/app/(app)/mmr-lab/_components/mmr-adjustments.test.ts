@@ -66,4 +66,16 @@ describe("mapMmrAdjustmentsToApi", () => {
       buildOptions: true,
     });
   });
+
+  it("seeds build options YES from a positive adjustment amount", () => {
+    expect(
+      seedMmrAdjustmentsFromResult({
+        buildOptionsAdjustment: 200,
+        mileageUsed: null,
+      }),
+    ).toEqual({
+      ...EMPTY_MMR_ADJUSTMENTS,
+      buildOptions: true,
+    });
+  });
 });
