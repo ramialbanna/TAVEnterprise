@@ -16,6 +16,18 @@ describe("buildMmrRecomputeRequest", () => {
     });
   });
 
+  it("builds VIN request with build options YES and odometer", () => {
+    const body = buildMmrRecomputeRequest(
+      { kind: "vin", vin: "1FMSK7DH1NGB37986" },
+      { ...EMPTY_MMR_ADJUSTMENTS, odometer: "40000", buildOptions: true },
+    );
+    expect(body).toEqual({
+      vin: "1FMSK7DH1NGB37986",
+      mileage: 40000,
+      adjustments: { exclude_build: false },
+    });
+  });
+
   it("sends exclude_build when toggling build options to NO only", () => {
     const body = buildMmrRecomputeRequest(
       { kind: "vin", vin: "1FMSK7DH1NGB37986" },

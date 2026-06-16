@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  extractManheimAdjustmentBreakdown,
   extractManheimBuildOptions,
   extractManheimDistribution,
   extractMmrAdjustedValue,
@@ -372,6 +373,29 @@ describe("extractManheimBuildOptions", () => {
     expect(extractManheimBuildOptions(payload)).toEqual({
       included: false,
       adjustment: null,
+    });
+  });
+});
+
+describe("extractManheimAdjustmentBreakdown", () => {
+  it("splits odometer and build when build dollars are known", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 20200 },
+          adjustedPricing: {
+            wholesale: { average: 23800 },
+            adjustedBy: { Odometer: "40000", buildOptions: 200 },
+          },
+        },
+      ],
+    };
+    expect(extractManheimAdjustmentBreakdown(payload, 40000)).toEqual({
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: 200,
+      odometerAdjustment: 3400,
     });
   });
 });

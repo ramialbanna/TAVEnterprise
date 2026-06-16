@@ -754,6 +754,7 @@ describe("POST /app/mmr/vin", () => {
     const intelFetch = vi.fn().mockResolvedValue(intelOk({
       ...vinEnvelope,
       mmr_value: 20400,
+      mileage_used: 66981,
       mmr_payload: {
         items: [{
           description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
@@ -774,6 +775,40 @@ describe("POST /app/mmr/vin", () => {
       adjustedMmr: 20400,
       buildOptionsIncluded: true,
       buildOptionsAdjustment: 200,
+      odometerAdjustment: null,
+    });
+  });
+
+  it("maps odometer and build splits when mileage differs from average", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ...vinEnvelope,
+      mmr_value: 23800,
+      mileage_used: 40000,
+      mmr_payload: {
+        items: [{
+          description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { below: 18000, average: 20200, above: 22500 },
+          adjustedPricing: {
+            wholesale: { below: 21500, average: 23800, above: 26000 },
+            adjustedBy: { Odometer: "40000", buildOptions: true },
+          },
+        }],
+      },
+    }));
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", { vin: VIN, mileage: 40000 }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      mmrValue: 20200,
+      adjustedMmr: 23800,
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: null,
+      odometerAdjustment: null,
     });
   });
 

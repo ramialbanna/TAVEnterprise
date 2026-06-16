@@ -98,6 +98,7 @@ export function mapMmrAdjustmentsToApi(
   if (adjustments.buildOptions) {
     api.exclude_build = false;
   } else if (
+    adjustments.odometer !== "" ||
     adjustments.region ||
     adjustments.grade ||
     adjustments.exteriorColor ||

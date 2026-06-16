@@ -55,6 +55,30 @@ describe("mapMmrAdjustmentsToApi", () => {
     });
   });
 
+  it("excludes build options when NO is selected alongside odometer", () => {
+    expect(
+      mapMmrAdjustmentsToApi({
+        ...EMPTY_MMR_ADJUSTMENTS,
+        odometer: "40000",
+        buildOptions: false,
+      }),
+    ).toEqual({
+      exclude_build: true,
+    });
+  });
+
+  it("includes build options when YES is selected alongside odometer", () => {
+    expect(
+      mapMmrAdjustmentsToApi({
+        ...EMPTY_MMR_ADJUSTMENTS,
+        odometer: "40000",
+        buildOptions: true,
+      }),
+    ).toEqual({
+      exclude_build: false,
+    });
+  });
+
   it("seeds build options from Cox MMR response fields", () => {
     expect(
       seedMmrAdjustmentsFromResult({

@@ -57,7 +57,7 @@ import { REGION_KEYS } from "../types/domain";
 import { classifyIntelHttpError } from "../valuation/workerClient";
 import { MmrLookupAdjustmentsSchema, MmrResponseEnvelopeSchema } from "../types/intelligence";
 import type { MmrResponseEnvelope } from "../types/intelligence";
-import { extractManheimBuildOptions, extractManheimDistribution } from "../valuation/manheimResponseParser";
+import { extractManheimAdjustmentBreakdown, extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
 import { selectMmrPayloadItem } from "../valuation/manheimPayloadItem";
@@ -526,7 +526,10 @@ function mapIntelMmrEnvelopeToAppData(
   }
 
   const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
-  const buildOptions = extractManheimBuildOptions(envelope.mmr_payload ?? {});
+  const adjustmentBreakdown = extractManheimAdjustmentBreakdown(
+    envelope.mmr_payload ?? {},
+    envelope.mileage_used,
+  );
   const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
   const vehicleIdentity = extractManheimVehicleIdentity(envelope.mmr_payload ?? {});
   const payloadItem = selectMmrPayloadItem(envelope.mmr_payload);
@@ -550,8 +553,9 @@ function mapIntelMmrEnvelopeToAppData(
     rangeLow: distribution.wholesaleRough,
     rangeHigh: distribution.wholesaleClean,
     adjustedMmr,
-    buildOptionsIncluded: buildOptions.included,
-    buildOptionsAdjustment: buildOptions.adjustment,
+    buildOptionsIncluded: adjustmentBreakdown.buildOptionsIncluded,
+    buildOptionsAdjustment: adjustmentBreakdown.buildOptionsAdjustment,
+    odometerAdjustment: adjustmentBreakdown.odometerAdjustment,
     retailValue: distribution.retailAvg,
     retailRangeLow: distribution.retailRough,
     retailRangeHigh: distribution.retailClean,

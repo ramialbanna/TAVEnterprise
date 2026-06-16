@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +33,7 @@ type Props = {
   rangeLow?: number | null;
   rangeHigh?: number | null;
   adjustedMmr?: number | null;
+  odometerAdjustment?: number | null;
   buildOptionsAdjustment?: number | null;
   retailValue?: number | null;
   retailRangeLow?: number | null;
@@ -83,23 +84,58 @@ function ResultBandSkeleton() {
 type AdjustmentsPanelProps = {
   interactive: boolean;
   adjustments: MmrAdjustments;
+  odometerAdjustment: number | null;
   buildOptionsAdjustment: number | null;
   onChange: (next: MmrAdjustments) => void;
   onClear: () => void;
 };
 
-function formatBuildOptionsDelta(value: number): string {
+function formatAdjustmentDelta(value: number): string {
   const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
   return `${prefix}$${Math.abs(value).toLocaleString()}`;
+}
+
+function AdjustmentDelta({
+  value,
+  label,
+}: {
+  value: number;
+  label: string;
+}) {
+  const positive = value > 0;
+  const negative = value < 0;
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-0.5 text-xs font-semibold tabular-nums",
+        positive && "text-emerald-600",
+        negative && "text-red-600",
+        !positive && !negative && "text-muted-foreground",
+      )}
+      aria-label={`${label} ${formatAdjustmentDelta(value)}`}
+    >
+      {positive ? (
+        <ArrowUp className="size-3.5" aria-hidden />
+      ) : negative ? (
+        <ArrowDown className="size-3.5" aria-hidden />
+      ) : null}
+      {formatAdjustmentDelta(value)}
+    </span>
+  );
 }
 
 function MmrAdjustmentsPanel({
   interactive,
   adjustments,
+  odometerAdjustment,
   buildOptionsAdjustment,
   onChange,
   onClear,
 }: AdjustmentsPanelProps) {
+  const showOdometerDelta =
+    adjustments.odometer !== "" &&
+    odometerAdjustment != null &&
+    odometerAdjustment !== 0;
   const showBuildOptionsDelta =
     adjustments.buildOptions &&
     buildOptionsAdjustment != null &&
@@ -127,20 +163,25 @@ function MmrAdjustmentsPanel({
           </div>
         </div>
 
-        <input
-          disabled={!interactive}
-          placeholder="Enter ODO (mi)"
-          aria-label="Enter ODO (mi)"
-          inputMode="numeric"
-          value={adjustments.odometer}
-          onChange={(e) =>
-            onChange({
-              ...adjustments,
-              odometer: e.target.value.replace(/[^\d]/g, ""),
-            })
-          }
-          className={adjSelectClass}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            disabled={!interactive}
+            placeholder="Enter ODO (mi)"
+            aria-label="Enter ODO (mi)"
+            inputMode="numeric"
+            value={adjustments.odometer}
+            onChange={(e) =>
+              onChange({
+                ...adjustments,
+                odometer: e.target.value.replace(/[^\d]/g, ""),
+              })
+            }
+            className={cn(adjSelectClass, "min-w-0 flex-1")}
+          />
+          {showOdometerDelta ? (
+            <AdjustmentDelta value={odometerAdjustment} label="Odometer adjustment" />
+          ) : null}
+        </div>
 
         <select
           disabled={!interactive}
@@ -196,13 +237,7 @@ function MmrAdjustmentsPanel({
           <span>Build Options?</span>
           <div className="flex items-center gap-2">
             {showBuildOptionsDelta ? (
-              <span
-                className="inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums text-emerald-600"
-                aria-label={`Build options adjustment ${formatBuildOptionsDelta(buildOptionsAdjustment)}`}
-              >
-                <ArrowUp className="size-3.5" aria-hidden />
-                {formatBuildOptionsDelta(buildOptionsAdjustment)}
-              </span>
+              <AdjustmentDelta value={buildOptionsAdjustment} label="Build options adjustment" />
             ) : null}
             <div className="flex gap-1">
               {(["NO", "YES"] as const).map((label) => {
@@ -269,6 +304,7 @@ export function ResultBand({
   rangeLow,
   rangeHigh,
   adjustedMmr,
+  odometerAdjustment = null,
   buildOptionsAdjustment = null,
   retailValue,
   retailRangeLow,
@@ -312,6 +348,7 @@ export function ResultBand({
       <MmrAdjustmentsPanel
         interactive={interactive && !panelBusy}
         adjustments={adjustments}
+        odometerAdjustment={odometerAdjustment}
         buildOptionsAdjustment={buildOptionsAdjustment}
         onChange={onAdjustmentsChange}
         onClear={onAdjustmentsClear}

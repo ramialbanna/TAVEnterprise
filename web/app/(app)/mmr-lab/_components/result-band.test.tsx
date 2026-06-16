@@ -107,6 +107,23 @@ describe("ResultBand — honest, no fabrication", () => {
     expect(screen.getByText("+$200")).toBeInTheDocument();
   });
 
+  it("shows odometer dollar delta beside the mileage input", () => {
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={20200}
+        adjustedMmr={23800}
+        odometerAdjustment={3400}
+        buildOptionsAdjustment={200}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, odometer: "40000", buildOptions: true }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.getByText("+$3,400")).toBeInTheDocument();
+    expect(screen.getByText("+$200")).toBeInTheDocument();
+  });
+
   it("hides build options delta when NO is selected", () => {
     render(
       <ResultBand

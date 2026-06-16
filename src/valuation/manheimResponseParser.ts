@@ -243,6 +243,105 @@ function buildOptionsFromBooleanTrue(
   return { included: true, adjustment: delta };
 }
 
+/** Per-field Cox MMR adjustment dollars for the adjustments panel. */
+export interface ManheimAdjustmentBreakdown {
+  buildOptionsIncluded: boolean;
+  buildOptionsAdjustment: number | null;
+  odometerAdjustment: number | null;
+}
+
+function readAdjustedByFieldDollars(
+  obj: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    const val = obj[key];
+    if (typeof val === "number" && Number.isFinite(val)) {
+      const rounded = Math.round(val);
+      if (rounded !== 0) return rounded;
+    }
+  }
+  return null;
+}
+
+function mileageFromAdjustedBy(adjustedBy: Record<string, unknown> | null): number | null {
+  if (!adjustedBy) return null;
+  const raw = adjustedBy.Odometer ?? adjustedBy.odometer;
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.round(raw);
+  if (typeof raw === "string") {
+    const n = Number(raw.replace(/[^\d]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * Split Cox adjusted wholesale into odometer and build-option dollar deltas when possible.
+ * Cox often sends mileage as a string in `adjustedBy.Odometer` — dollar splits are derived.
+ */
+export function extractManheimAdjustmentBreakdown(
+  payload: unknown,
+  mileageUsed?: number | null,
+): ManheimAdjustmentBreakdown {
+  const build = extractManheimBuildOptions(payload);
+  const item = selectMmrPayloadItem(payload);
+  const dist = extractManheimDistribution(payload);
+  const adjustedBy = item ? pickAdjustedBy(item) : null;
+
+  const base = dist.wholesaleBaseAvg;
+  const adjusted = dist.wholesaleAvg;
+  const total =
+    base != null && adjusted != null ? Math.round(adjusted - base) : null;
+
+  const avgOdo =
+    item?.averageOdometer != null ? Math.round(Number(item.averageOdometer)) : null;
+  const mileage =
+    mileageUsed != null && mileageUsed > 0
+      ? Math.round(mileageUsed)
+      : mileageFromAdjustedBy(adjustedBy);
+  const atAvg = mileage != null && avgOdo != null && mileage === avgOdo;
+
+  const odometerDollar = adjustedBy
+    ? readAdjustedByFieldDollars(adjustedBy, ["Odometer", "odometer"])
+    : null;
+
+  let buildAdj = build.adjustment;
+  let odometerAdj = odometerDollar;
+
+  if (build.included && buildAdj == null && atAvg && total != null && total !== 0) {
+    buildAdj = total;
+  }
+
+  if (
+    odometerAdj == null &&
+    build.included &&
+    buildAdj != null &&
+    total != null &&
+    mileage != null &&
+    !atAvg
+  ) {
+    odometerAdj = total - buildAdj;
+  }
+
+  if (odometerAdj === 0) odometerAdj = null;
+
+  if (
+    odometerAdj == null &&
+    !build.included &&
+    total != null &&
+    mileage != null &&
+    !atAvg
+  ) {
+    odometerAdj = total;
+  }
+
+  return {
+    buildOptionsIncluded: build.included,
+    buildOptionsAdjustment: buildAdj,
+    odometerAdjustment: atAvg ? null : odometerAdj,
+  };
+}
+
 /**
  * Extract build-options state from Cox `bestMatch` item.
  * Cox may send `adjustedBy.buildOptions` as a dollar amount or as boolean `true`.

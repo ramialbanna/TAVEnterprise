@@ -234,6 +234,7 @@ export const MmrVinOkSchema = z.object({
   adjustedMmr: z.number().nullable().optional(),
   buildOptionsIncluded: z.boolean().optional(),
   buildOptionsAdjustment: z.number().nullable().optional(),
+  odometerAdjustment: z.number().nullable().optional(),
   retailValue: z.number().nullable().optional(),
   retailRangeLow: z.number().nullable().optional(),
   retailRangeHigh: z.number().nullable().optional(),

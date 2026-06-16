@@ -44,6 +44,11 @@ import {
   seedMmrAdjustmentsFromResult,
   type MmrAdjustments,
 } from "./mmr-adjustments";
+import {
+  buildMmrAdjustmentBaseline,
+  deriveMmrAdjustmentDeltas,
+  type MmrAdjustmentBaseline,
+} from "./mmr-adjustment-display";
 
 type View =
   | { kind: "empty" }
@@ -98,6 +103,26 @@ function mmrTransportError(): ApiErrorResult {
   };
 }
 
+function syncAdjustmentsFromMmrResult(
+  prev: MmrAdjustments,
+  result: MmrVinOk,
+): MmrAdjustments {
+  const seeded = seedMmrAdjustmentsFromResult(result);
+  return {
+    ...prev,
+    buildOptions:
+      result.buildOptionsIncluded === true
+        ? true
+        : result.buildOptionsIncluded === false
+          ? false
+          : seeded.buildOptions,
+    odometer:
+      prev.odometer !== ""
+        ? prev.odometer
+        : seeded.odometer,
+  };
+}
+
 export function MmrLabClient() {
   const [view, setView] = useState<View>({ kind: "empty" });
   const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>({ kind: "idle" });
@@ -113,6 +138,7 @@ export function MmrLabClient() {
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const adjustmentBaselineRef = useRef<MmrAdjustmentBaseline | null>(null);
   // Always-current selection ref — used in async callbacks to avoid stale closures.
   const selectionRef = useRef(selection);
   useLayoutEffect(() => {
@@ -145,6 +171,13 @@ export function MmrLabClient() {
     [reEvaluateMaxbuy, adjustments],
   );
 
+  const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
+    const baseline = buildMmrAdjustmentBaseline(data);
+    if (baseline) adjustmentBaselineRef.current = baseline;
+    setView({ kind: "ok", result: data });
+    setAdjustments((prev) => syncAdjustmentsFromMmrResult({ ...prev, ...prevAdj }, data));
+  }, []);
+
   const runMmrRecompute = useCallback(
     async (session: MmrLabLookupSession, adj: MmrAdjustments) => {
       const request = buildMmrRecomputeRequest(session, adj);
@@ -154,7 +187,7 @@ export function MmrLabClient() {
           session.kind === "vin"
             ? await postMmrVin(request as Extract<typeof request, { vin: string }>)
             : await postMmrYmm(request as Extract<typeof request, { year: number }>);
-        if (mmrRes.ok) setView({ kind: "ok", result: mmrRes.data });
+        if (mmrRes.ok) applyMmrResult(mmrRes.data, adj);
         else if (mmrRes.kind === "unavailable") setView({ kind: "unavailable", reason: mmrRes.error });
         else setView({ kind: "error", error: mmrRes });
       } finally {
@@ -165,7 +198,7 @@ export function MmrLabClient() {
         reEvaluateMaxbuy(session, laneAskPrice, adj);
       }
     },
-    [laneAskPrice, reEvaluateMaxbuy],
+    [applyMmrResult, laneAskPrice, reEvaluateMaxbuy],
   );
 
   const handleAdjustmentsChange = useCallback(
@@ -321,6 +354,7 @@ export function MmrLabClient() {
       mmrPromise: ReturnType<typeof postMmrVin>,
     ) => {
       lookupSessionRef.current = session;
+      adjustmentBaselineRef.current = null;
       setAdjustments(EMPTY_MMR_ADJUSTMENTS);
       setView({ kind: "loading" });
       setMaxbuyView({ kind: "loading" });
@@ -345,8 +379,7 @@ export function MmrLabClient() {
           return;
         }
 
-        setView({ kind: "ok", result: mmrRes.data });
-        setAdjustments(seedMmrAdjustmentsFromResult(mmrRes.data));
+        applyMmrResult(mmrRes.data, EMPTY_MMR_ADJUSTMENTS);
         setVinLocked(true);
         void applyVinAutofill(mmrRes.data);
 
@@ -385,10 +418,7 @@ export function MmrLabClient() {
 
       if (mmrSettled.status === "fulfilled") {
         const res = mmrSettled.value;
-        if (res.ok) {
-          setView({ kind: "ok", result: res.data });
-          setAdjustments(seedMmrAdjustmentsFromResult(res.data));
-        } else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
+        if (res.ok) applyMmrResult(res.data, EMPTY_MMR_ADJUSTMENTS); else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
         else setView({ kind: "error", error: res });
       } else {
         setView({ kind: "error", error: mmrTransportError() });
@@ -400,7 +430,7 @@ export function MmrLabClient() {
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
-    [laneAskPrice, applyVinAutofill],
+    [applyMmrResult, laneAskPrice, applyVinAutofill],
   );
 
   const onVinSubmit = useCallback(
@@ -484,6 +514,17 @@ export function MmrLabClient() {
   }, [selection]);
 
   const result = view.kind === "ok" ? view.result : null;
+  const adjustmentDeltas = result
+    ? deriveMmrAdjustmentDeltas({
+        baseMmr: result.mmrValue,
+        adjustedMmr: result.adjustedMmr ?? null,
+        buildOptionsIncluded: result.buildOptionsIncluded,
+        buildOptionsAdjustment: result.buildOptionsAdjustment ?? null,
+        odometerAdjustment: result.odometerAdjustment ?? null,
+        adjustments,
+        baseline: adjustmentBaselineRef.current,
+      })
+    : { odometerAdjustment: null, buildOptionsAdjustment: null };
   const lowerSections = lowerSectionsFromView(view.kind, result);
   const resultBandPhase =
     view.kind === "loading"
@@ -554,7 +595,8 @@ export function MmrLabClient() {
           rangeLow={result?.rangeLow ?? null}
           rangeHigh={result?.rangeHigh ?? null}
           adjustedMmr={result?.adjustedMmr ?? null}
-          buildOptionsAdjustment={result?.buildOptionsAdjustment ?? null}
+          odometerAdjustment={adjustmentDeltas.odometerAdjustment}
+          buildOptionsAdjustment={adjustmentDeltas.buildOptionsAdjustment}
           retailValue={result?.retailValue ?? null}
           retailRangeLow={result?.retailRangeLow ?? null}
           retailRangeHigh={result?.retailRangeHigh ?? null}
