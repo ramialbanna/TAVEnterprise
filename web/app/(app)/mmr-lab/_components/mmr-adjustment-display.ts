@@ -105,7 +105,9 @@ export function applyAttributeMarginalDelta(
 
   const delta = nonZeroDelta(nextAdjustedMmr - priorAdjustedMmr);
   const field = changedFields[0];
-  return { ...prev, [field]: delta };
+  if (field === "grade") return { ...prev, grade: delta };
+  if (field === "color") return { ...prev, color: delta };
+  return { ...prev, region: delta };
 }
 
 /** Derive per-field dollar deltas for the adjustments panel (Manheim-style). */
