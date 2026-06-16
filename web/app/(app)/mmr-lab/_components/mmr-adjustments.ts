@@ -5,6 +5,8 @@ export type MmrAdjustments = {
   grade: string;
   exteriorColor: string;
   buildOptions: boolean;
+  /** True when the user explicitly chose Build Options NO. */
+  buildOptionsUserExcluded: boolean;
   expressGrade: string;
 };
 
@@ -14,6 +16,7 @@ export const EMPTY_MMR_ADJUSTMENTS: MmrAdjustments = {
   grade: "",
   exteriorColor: "",
   buildOptions: false,
+  buildOptionsUserExcluded: false,
   expressGrade: "",
 };
 
@@ -67,21 +70,54 @@ function parseExpressGrade(raw: string): number | null {
   return Number.isInteger(n) && n >= 75 && n <= 100 ? n : null;
 }
 
+/** Infer build-options YES from MMR values when the API omits buildOptionsIncluded. */
+export function inferBuildOptionsIncluded(result: {
+  mmrValue?: number;
+  adjustedMmr?: number | null;
+  buildOptionsIncluded?: boolean;
+  buildOptionsAdjustment?: number | null;
+  mileageUsed?: number | null;
+  avgOdometer?: number | null;
+  odometerAdjustment?: number | null;
+}): boolean {
+  if (result.buildOptionsIncluded === true) return true;
+  if (result.buildOptionsIncluded === false) return false;
+  if (result.buildOptionsAdjustment != null && result.buildOptionsAdjustment > 0) return true;
+
+  const base = result.mmrValue;
+  const adjusted = result.adjustedMmr;
+  if (base == null || adjusted == null || adjusted <= base) return false;
+
+  const mileage = result.mileageUsed;
+  const avgOdo = result.avgOdometer;
+  const atAvg =
+    mileage == null ||
+    mileage <= 0 ||
+    (avgOdo != null && Math.round(mileage) === Math.round(avgOdo));
+  if (!atAvg) return false;
+
+  const odoAdj = result.odometerAdjustment ?? 0;
+  return adjusted - base - odoAdj > 0;
+}
+
 /** Map Cox build-options fields from a completed MMR lookup into Zone B adjustments. */
 export function seedMmrAdjustmentsFromResult(
   result: {
+    mmrValue?: number;
+    adjustedMmr?: number | null;
+    avgOdometer?: number | null;
     buildOptionsIncluded?: boolean;
     buildOptionsAdjustment?: number | null;
     mileageUsed?: number | null;
+    odometerAdjustment?: number | null;
   },
 ): MmrAdjustments {
   const mileageUsed = result.mileageUsed;
-  const buildOptions =
-    result.buildOptionsIncluded === true ||
-    (result.buildOptionsAdjustment != null && result.buildOptionsAdjustment > 0);
+  const buildOptions = inferBuildOptionsIncluded(result);
   return {
     ...EMPTY_MMR_ADJUSTMENTS,
     buildOptions,
+    buildOptionsUserExcluded: false,
     odometer:
       mileageUsed != null && mileageUsed > 0 ? String(mileageUsed) : "",
   };
@@ -98,7 +134,7 @@ export function mapMmrAdjustmentsToApi(
   if (adjustments.buildOptions) {
     api.exclude_build = false;
   } else if (
-    adjustments.odometer !== "" ||
+    adjustments.buildOptionsUserExcluded ||
     adjustments.region ||
     adjustments.grade ||
     adjustments.exteriorColor ||

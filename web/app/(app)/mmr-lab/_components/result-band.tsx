@@ -251,7 +251,13 @@ function MmrAdjustmentsPanel({
                     variant={active ? "default" : "outline"}
                     disabled={!interactive}
                     className="h-7 px-2 text-xs"
-                    onClick={() => onChange({ ...adjustments, buildOptions: yes })}
+                    onClick={() =>
+                    onChange({
+                      ...adjustments,
+                      buildOptions: yes,
+                      buildOptionsUserExcluded: !yes,
+                    })
+                  }
                   >
                     {label}
                   </Button>

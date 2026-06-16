@@ -17,7 +17,9 @@ export function buildMmrRecomputeRequest(
 
   const resolvedAdjustments =
     apiAdjustments ??
-    (session.kind === "vin" && !adjustments.buildOptions && odo === null
+    (session.kind === "vin" &&
+    adjustments.buildOptionsUserExcluded &&
+    odo === null
       ? { exclude_build: true as const }
       : undefined);
 

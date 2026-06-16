@@ -23,6 +23,22 @@ describe("buildMmrAdjustmentBaseline", () => {
       buildOptionsAdjustment: 200,
     });
   });
+
+  it("captures baseline from base vs adjusted when API omits buildOptionsIncluded", () => {
+    expect(
+      buildMmrAdjustmentBaseline({
+        mmrValue: 20200,
+        adjustedMmr: 20400,
+        avgOdometer: 66981,
+        mileageUsed: null,
+        buildOptionsAdjustment: null,
+        odometerAdjustment: null,
+      }),
+    ).toEqual({
+      adjustedAtAvgOdometer: 20400,
+      buildOptionsAdjustment: 200,
+    });
+  });
 });
 
 describe("deriveMmrAdjustmentDeltas", () => {

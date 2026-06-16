@@ -28,10 +28,10 @@ describe("buildMmrRecomputeRequest", () => {
     });
   });
 
-  it("sends exclude_build when toggling build options to NO only", () => {
+  it("sends exclude_build when user explicitly toggles build options to NO only", () => {
     const body = buildMmrRecomputeRequest(
       { kind: "vin", vin: "1FMSK7DH1NGB37986" },
-      { ...EMPTY_MMR_ADJUSTMENTS, buildOptions: false },
+      { ...EMPTY_MMR_ADJUSTMENTS, buildOptions: false, buildOptionsUserExcluded: true },
     );
     expect(body).toEqual({
       vin: "1FMSK7DH1NGB37986",

@@ -1,6 +1,7 @@
 import type { MmrVinOk } from "@/lib/app-api/schemas";
 
 import {
+  inferBuildOptionsIncluded,
   parseAdjustmentOdometer,
   type MmrAdjustments,
 } from "./mmr-adjustments";
@@ -35,7 +36,7 @@ export function buildMmrAdjustmentBaseline(
     | "odometerAdjustment"
   >,
 ): MmrAdjustmentBaseline | null {
-  if (result.adjustedMmr == null || result.buildOptionsIncluded !== true) return null;
+  if (result.adjustedMmr == null || !inferBuildOptionsIncluded(result)) return null;
 
   const buildAdj = nonZeroDelta(
     result.buildOptionsAdjustment ??

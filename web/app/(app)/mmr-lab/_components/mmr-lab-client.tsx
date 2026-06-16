@@ -40,6 +40,7 @@ import {
 } from "./hydrate-vin-autofill";
 import {
   EMPTY_MMR_ADJUSTMENTS,
+  inferBuildOptionsIncluded,
   parseAdjustmentOdometer,
   seedMmrAdjustmentsFromResult,
   type MmrAdjustments,
@@ -108,14 +109,21 @@ function syncAdjustmentsFromMmrResult(
   result: MmrVinOk,
 ): MmrAdjustments {
   const seeded = seedMmrAdjustmentsFromResult(result);
+  const inferred = inferBuildOptionsIncluded(result);
+  const buildOn =
+    result.buildOptionsIncluded === true ||
+    (result.buildOptionsIncluded !== false && inferred) ||
+    seeded.buildOptions;
+
   return {
     ...prev,
-    buildOptions:
-      result.buildOptionsIncluded === true
+    buildOptions: buildOn,
+    buildOptionsUserExcluded:
+      result.buildOptionsIncluded === false
         ? true
-        : result.buildOptionsIncluded === false
+        : buildOn
           ? false
-          : seeded.buildOptions,
+          : prev.buildOptionsUserExcluded,
     odometer:
       prev.odometer !== ""
         ? prev.odometer
@@ -138,7 +146,7 @@ export function MmrLabClient() {
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const adjustmentBaselineRef = useRef<MmrAdjustmentBaseline | null>(null);
+  const [adjustmentBaseline, setAdjustmentBaseline] = useState<MmrAdjustmentBaseline | null>(null);
   // Always-current selection ref — used in async callbacks to avoid stale closures.
   const selectionRef = useRef(selection);
   useLayoutEffect(() => {
@@ -173,7 +181,7 @@ export function MmrLabClient() {
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
     const baseline = buildMmrAdjustmentBaseline(data);
-    if (baseline) adjustmentBaselineRef.current = baseline;
+    if (baseline) setAdjustmentBaseline(baseline);
     setView({ kind: "ok", result: data });
     setAdjustments((prev) => syncAdjustmentsFromMmrResult({ ...prev, ...prevAdj }, data));
   }, []);
@@ -354,7 +362,7 @@ export function MmrLabClient() {
       mmrPromise: ReturnType<typeof postMmrVin>,
     ) => {
       lookupSessionRef.current = session;
-      adjustmentBaselineRef.current = null;
+      setAdjustmentBaseline(null);
       setAdjustments(EMPTY_MMR_ADJUSTMENTS);
       setView({ kind: "loading" });
       setMaxbuyView({ kind: "loading" });
@@ -522,7 +530,7 @@ export function MmrLabClient() {
         buildOptionsAdjustment: result.buildOptionsAdjustment ?? null,
         odometerAdjustment: result.odometerAdjustment ?? null,
         adjustments,
-        baseline: adjustmentBaselineRef.current,
+        baseline: adjustmentBaseline,
       })
     : { odometerAdjustment: null, buildOptionsAdjustment: null };
   const lowerSections = lowerSectionsFromView(view.kind, result);

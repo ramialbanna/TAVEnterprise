@@ -55,16 +55,27 @@ describe("mapMmrAdjustmentsToApi", () => {
     });
   });
 
-  it("excludes build options when NO is selected alongside odometer", () => {
+  it("excludes build options when user explicitly chose NO alongside odometer", () => {
+    expect(
+      mapMmrAdjustmentsToApi({
+        ...EMPTY_MMR_ADJUSTMENTS,
+        odometer: "40000",
+        buildOptions: false,
+        buildOptionsUserExcluded: true,
+      }),
+    ).toEqual({
+      exclude_build: true,
+    });
+  });
+
+  it("does not exclude build when odometer is set but user has not chosen NO", () => {
     expect(
       mapMmrAdjustmentsToApi({
         ...EMPTY_MMR_ADJUSTMENTS,
         odometer: "40000",
         buildOptions: false,
       }),
-    ).toEqual({
-      exclude_build: true,
-    });
+    ).toBeUndefined();
   });
 
   it("includes build options when YES is selected alongside odometer", () => {
@@ -88,18 +99,21 @@ describe("mapMmrAdjustmentsToApi", () => {
     ).toEqual({
       ...EMPTY_MMR_ADJUSTMENTS,
       buildOptions: true,
+      buildOptionsUserExcluded: false,
     });
   });
 
-  it("seeds build options YES from a positive adjustment amount", () => {
+  it("seeds build options YES from base vs adjusted when API omits buildOptionsIncluded", () => {
     expect(
       seedMmrAdjustmentsFromResult({
-        buildOptionsAdjustment: 200,
+        mmrValue: 20200,
+        adjustedMmr: 20400,
         mileageUsed: null,
       }),
     ).toEqual({
       ...EMPTY_MMR_ADJUSTMENTS,
       buildOptions: true,
+      buildOptionsUserExcluded: false,
     });
   });
 });
