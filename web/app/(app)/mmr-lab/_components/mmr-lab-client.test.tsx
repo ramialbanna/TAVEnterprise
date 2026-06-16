@@ -117,7 +117,9 @@ function mockCatalog(fetchSpy = vi.spyOn(globalThis, "fetch")) {
         make: "TESLA",
         model: "MODEL Y AWD",
         trim: "4D SUV PERFORMANCE",
-        mileageUsed: 70740,
+        mileageUsed: null,
+        buildOptionsIncluded: true,
+        buildOptionsAdjustment: 200,
       });
     }
     if (url.includes("/api/app/maxbuy/evaluate") && init?.method === "POST") {
@@ -277,6 +279,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(screen.getByLabelText(/style/i)).toHaveValue("4D SUV PERFORMANCE");
     expect(screen.queryByLabelText(/mileage/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/enter odo \(mi\)/i)).toHaveValue("");
+    expect(screen.getByRole("button", { name: "YES" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/enter vin/i)).toHaveAttribute("readonly");
     expect(screen.getByRole("button", { name: /change vin/i })).toBeInTheDocument();
 
