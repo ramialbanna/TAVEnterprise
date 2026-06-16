@@ -145,10 +145,14 @@ export function MmrLabClient() {
     EMPTY_MMR_ATTRIBUTE_MARGINALS,
   );
   const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
-  // Always-current selection ref — used in async callbacks to avoid stale closures.
+  // Always-current refs — used in async callbacks to avoid stale closures.
   const selectionRef = useRef(selection);
+  const laneAskPriceRef = useRef(laneAskPrice);
+  const adjustmentsRef = useRef(adjustments);
   useLayoutEffect(() => {
     selectionRef.current = selection;
+    laneAskPriceRef.current = laneAskPrice;
+    adjustmentsRef.current = adjustments;
   });
 
   const reEvaluateMaxbuy = useCallback((
@@ -366,8 +370,23 @@ export function MmrLabClient() {
         loading: null,
       }));
       setStyleNotice(styleMatchNotice(autofill.styleMatch, autofill.coxTrim));
+
+      // If the VIN session was sent to MaxBuy without make/model (Manheim payload
+      // didn't include them), retry MaxBuy now that the catalog has resolved them.
+      const session = lookupSessionRef.current;
+      if (session?.kind === "vin" && !session.make) {
+        const enriched: MmrLabLookupSession = {
+          ...session,
+          year: Number(autofill.selection.year),
+          make: autofill.selection.make,
+          model: autofill.selection.model,
+          ...(autofill.selection.style ? { trim: autofill.selection.style } : {}),
+        };
+        lookupSessionRef.current = enriched;
+        reEvaluateMaxbuy(enriched, laneAskPriceRef.current, adjustmentsRef.current);
+      }
     },
-    [catalog.years],
+    [catalog.years, reEvaluateMaxbuy],
   );
 
   const runParallelLookup = useCallback(
@@ -579,6 +598,30 @@ export function MmrLabClient() {
         ? () => void onYmmSubmit()
         : undefined;
 
+  // MaxBuy-specific retry: re-evaluates using the current session enriched with
+  // catalog YMM when the session was originally missing make/model (e.g. the
+  // Manheim payload didn't include vehicle identity fields for this VIN).
+  const onMaxbuyRetry = useCallback(() => {
+    const session = lookupSessionRef.current;
+    if (!session) {
+      retryLookup?.();
+      return;
+    }
+    const sel = selectionRef.current;
+    const enriched: MmrLabLookupSession =
+      session.kind === "vin" && !session.make && sel.year && sel.make && sel.model
+        ? {
+            ...session,
+            year: Number(sel.year),
+            make: sel.make,
+            model: sel.model,
+            ...(sel.style ? { trim: sel.style } : {}),
+          }
+        : session;
+    lookupSessionRef.current = enriched;
+    reEvaluateMaxbuy(enriched, laneAskPriceRef.current, adjustmentsRef.current);
+  }, [reEvaluateMaxbuy, retryLookup]);
+
   return (
     <div className="mx-auto w-full max-w-[96rem] space-y-4 sm:space-y-6">
       <SearchPanel
@@ -642,7 +685,7 @@ export function MmrLabClient() {
         />
       )}
 
-      <MaxbuyEvaluationSection state={maxbuyView} onRetry={retryLookup} />
+      <MaxbuyEvaluationSection state={maxbuyView} onRetry={onMaxbuyRetry} />
 
       <DataSections state={lowerSections} />
     </div>
