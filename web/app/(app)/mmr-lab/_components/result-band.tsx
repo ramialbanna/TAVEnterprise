@@ -35,6 +35,9 @@ type Props = {
   adjustedMmr?: number | null;
   odometerAdjustment?: number | null;
   buildOptionsAdjustment?: number | null;
+  gradeAdjustment?: number | null;
+  colorAdjustment?: number | null;
+  regionAdjustment?: number | null;
   retailValue?: number | null;
   retailRangeLow?: number | null;
   retailRangeHigh?: number | null;
@@ -86,6 +89,9 @@ type AdjustmentsPanelProps = {
   adjustments: MmrAdjustments;
   odometerAdjustment: number | null;
   buildOptionsAdjustment: number | null;
+  gradeAdjustment: number | null;
+  colorAdjustment: number | null;
+  regionAdjustment: number | null;
   onChange: (next: MmrAdjustments) => void;
   onClear: () => void;
 };
@@ -129,6 +135,9 @@ function MmrAdjustmentsPanel({
   adjustments,
   odometerAdjustment,
   buildOptionsAdjustment,
+  gradeAdjustment,
+  colorAdjustment,
+  regionAdjustment,
   onChange,
   onClear,
 }: AdjustmentsPanelProps) {
@@ -140,6 +149,19 @@ function MmrAdjustmentsPanel({
     adjustments.buildOptions &&
     buildOptionsAdjustment != null &&
     buildOptionsAdjustment !== 0;
+  const showGradeDelta =
+    adjustments.grade !== "" &&
+    gradeAdjustment != null &&
+    gradeAdjustment !== 0;
+  const showColorDelta =
+    adjustments.exteriorColor !== "" &&
+    colorAdjustment != null &&
+    colorAdjustment !== 0;
+  const showRegionDelta =
+    adjustments.region !== "" &&
+    adjustments.region !== "National" &&
+    regionAdjustment != null &&
+    regionAdjustment !== 0;
   const canClear = interactive && hasMmrAdjustments(adjustments);
 
   return (
@@ -183,50 +205,65 @@ function MmrAdjustmentsPanel({
           ) : null}
         </div>
 
-        <select
-          disabled={!interactive}
-          aria-label="Region"
-          value={adjustments.region}
-          onChange={(e) => onChange({ ...adjustments, region: e.target.value })}
-          className={adjSelectClass}
-        >
-          <option value="">Region</option>
-          {MMR_REGION_OPTIONS.map((region) => (
-            <option key={region} value={region}>
-              {region}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            disabled={!interactive}
+            aria-label="Region"
+            value={adjustments.region}
+            onChange={(e) => onChange({ ...adjustments, region: e.target.value })}
+            className={cn(adjSelectClass, "min-w-0 flex-1")}
+          >
+            <option value="">Region</option>
+            {MMR_REGION_OPTIONS.map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </select>
+          {showRegionDelta ? (
+            <AdjustmentDelta value={regionAdjustment} label="Region adjustment" />
+          ) : null}
+        </div>
 
-        <select
-          disabled={!interactive}
-          aria-label="Grade"
-          value={adjustments.grade}
-          onChange={(e) => onChange({ ...adjustments, grade: e.target.value })}
-          className={adjSelectClass}
-        >
-          <option value="">Grade**</option>
-          {MMR_GRADE_OPTIONS.map((grade) => (
-            <option key={grade} value={grade}>
-              {grade}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            disabled={!interactive}
+            aria-label="Grade"
+            value={adjustments.grade}
+            onChange={(e) => onChange({ ...adjustments, grade: e.target.value })}
+            className={cn(adjSelectClass, "min-w-0 flex-1")}
+          >
+            <option value="">Grade**</option>
+            {MMR_GRADE_OPTIONS.map((grade) => (
+              <option key={grade} value={grade}>
+                {grade}
+              </option>
+            ))}
+          </select>
+          {showGradeDelta ? (
+            <AdjustmentDelta value={gradeAdjustment} label="Grade adjustment" />
+          ) : null}
+        </div>
 
-        <select
-          disabled={!interactive}
-          aria-label="Exterior Color"
-          value={adjustments.exteriorColor}
-          onChange={(e) => onChange({ ...adjustments, exteriorColor: e.target.value })}
-          className={adjSelectClass}
-        >
-          <option value="">Exterior Color</option>
-          {MMR_COLOR_OPTIONS.map((color) => (
-            <option key={color} value={color}>
-              {color}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            disabled={!interactive}
+            aria-label="Exterior Color"
+            value={adjustments.exteriorColor}
+            onChange={(e) => onChange({ ...adjustments, exteriorColor: e.target.value })}
+            className={cn(adjSelectClass, "min-w-0 flex-1")}
+          >
+            <option value="">Exterior Color</option>
+            {MMR_COLOR_OPTIONS.map((color) => (
+              <option key={color} value={color}>
+                {color}
+              </option>
+            ))}
+          </select>
+          {showColorDelta ? (
+            <AdjustmentDelta value={colorAdjustment} label="Color adjustment" />
+          ) : null}
+        </div>
 
         <div
           className={cn(
@@ -312,6 +349,9 @@ export function ResultBand({
   adjustedMmr,
   odometerAdjustment = null,
   buildOptionsAdjustment = null,
+  gradeAdjustment = null,
+  colorAdjustment = null,
+  regionAdjustment = null,
   retailValue,
   retailRangeLow,
   retailRangeHigh,
@@ -352,10 +392,13 @@ export function ResultBand({
       </div>
 
       <MmrAdjustmentsPanel
-        interactive={interactive && !panelBusy}
+        interactive={interactive}
         adjustments={adjustments}
         odometerAdjustment={odometerAdjustment}
         buildOptionsAdjustment={buildOptionsAdjustment}
+        gradeAdjustment={gradeAdjustment}
+        colorAdjustment={colorAdjustment}
+        regionAdjustment={regionAdjustment}
         onChange={onAdjustmentsChange}
         onClear={onAdjustmentsClear}
       />

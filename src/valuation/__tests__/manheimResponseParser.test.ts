@@ -396,6 +396,57 @@ describe("extractManheimAdjustmentBreakdown", () => {
       buildOptionsIncluded: true,
       buildOptionsAdjustment: 200,
       odometerAdjustment: 3400,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
+  it("derives grade adjustment when grade is the only attribute residual", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 20200 },
+          adjustedPricing: {
+            wholesale: { average: 20320 },
+            adjustedBy: { Odometer: "66981", Grade: "40" },
+          },
+        },
+      ],
+    };
+    expect(extractManheimAdjustmentBreakdown(payload, 66981)).toEqual({
+      buildOptionsIncluded: false,
+      buildOptionsAdjustment: null,
+      odometerAdjustment: null,
+      gradeAdjustment: 120,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
+  it("reads numeric color adjustment from adjustedBy when Cox sends dollars", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 20200 },
+          adjustedPricing: {
+            wholesale: { average: 20040 },
+            adjustedBy: {
+              Odometer: "66981",
+              Color: -160,
+              buildOptions: 200,
+            },
+          },
+        },
+      ],
+    };
+    expect(extractManheimAdjustmentBreakdown(payload, 66981)).toMatchObject({
+      colorAdjustment: -160,
+      buildOptionsAdjustment: 200,
     });
   });
 });

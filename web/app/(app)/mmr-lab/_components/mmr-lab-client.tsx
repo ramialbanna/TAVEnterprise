@@ -40,15 +40,19 @@ import {
 } from "./hydrate-vin-autofill";
 import {
   EMPTY_MMR_ADJUSTMENTS,
-  inferBuildOptionsIncluded,
   parseAdjustmentOdometer,
+  resolveBuildOptionsState,
   seedMmrAdjustmentsFromResult,
   type MmrAdjustments,
 } from "./mmr-adjustments";
 import {
+  applyAttributeMarginalDelta,
   buildMmrAdjustmentBaseline,
   deriveMmrAdjustmentDeltas,
+  detectAttributeMarginalChanges,
+  EMPTY_MMR_ATTRIBUTE_MARGINALS,
   type MmrAdjustmentBaseline,
+  type MmrAttributeMarginals,
 } from "./mmr-adjustment-display";
 
 type View =
@@ -109,21 +113,11 @@ function syncAdjustmentsFromMmrResult(
   result: MmrVinOk,
 ): MmrAdjustments {
   const seeded = seedMmrAdjustmentsFromResult(result);
-  const inferred = inferBuildOptionsIncluded(result);
-  const buildOn =
-    result.buildOptionsIncluded === true ||
-    (result.buildOptionsIncluded !== false && inferred) ||
-    seeded.buildOptions;
+  const buildState = resolveBuildOptionsState(prev, result);
 
   return {
     ...prev,
-    buildOptions: buildOn,
-    buildOptionsUserExcluded:
-      result.buildOptionsIncluded === false
-        ? true
-        : buildOn
-          ? false
-          : prev.buildOptionsUserExcluded,
+    ...buildState,
     odometer:
       prev.odometer !== ""
         ? prev.odometer
@@ -147,6 +141,10 @@ export function MmrLabClient() {
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [adjustmentBaseline, setAdjustmentBaseline] = useState<MmrAdjustmentBaseline | null>(null);
+  const [attributeMarginals, setAttributeMarginals] = useState<MmrAttributeMarginals>(
+    EMPTY_MMR_ATTRIBUTE_MARGINALS,
+  );
+  const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
   // Always-current selection ref — used in async callbacks to avoid stale closures.
   const selectionRef = useRef(selection);
   useLayoutEffect(() => {
@@ -180,9 +178,22 @@ export function MmrLabClient() {
   );
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
+    setView((currentView) => {
+      if (currentView.kind === "ok") {
+        setAttributeMarginals((prev) =>
+          applyAttributeMarginalDelta(
+            prev,
+            pendingMarginalChangesRef.current,
+            currentView.result.adjustedMmr ?? null,
+            data.adjustedMmr ?? null,
+          ),
+        );
+      }
+      return { kind: "ok", result: data };
+    });
+    pendingMarginalChangesRef.current = [];
     const baseline = buildMmrAdjustmentBaseline(data);
     if (baseline) setAdjustmentBaseline(baseline);
-    setView({ kind: "ok", result: data });
     setAdjustments((prev) => syncAdjustmentsFromMmrResult({ ...prev, ...prevAdj }, data));
   }, []);
 
@@ -211,6 +222,7 @@ export function MmrLabClient() {
 
   const handleAdjustmentsChange = useCallback(
     (next: MmrAdjustments) => {
+      pendingMarginalChangesRef.current = detectAttributeMarginalChanges(adjustments, next);
       setAdjustments(next);
       const session = lookupSessionRef.current;
       if (!session) return;
@@ -220,7 +232,7 @@ export function MmrLabClient() {
         void runMmrRecompute(session, next);
       }, 400);
     },
-    [runMmrRecompute],
+    [adjustments, runMmrRecompute],
   );
 
   const handleAdjustmentsClear = useCallback(() => {
@@ -230,6 +242,8 @@ export function MmrLabClient() {
       view.kind === "ok"
         ? seedMmrAdjustmentsFromResult(view.result)
         : EMPTY_MMR_ADJUSTMENTS;
+    pendingMarginalChangesRef.current = [];
+    setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
     setAdjustments(resetAdj);
     if (recomputeTimerRef.current) clearTimeout(recomputeTimerRef.current);
     void runMmrRecompute(session, resetAdj);
@@ -364,6 +378,8 @@ export function MmrLabClient() {
       lookupSessionRef.current = session;
       setAdjustmentBaseline(null);
       setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+    setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
+    pendingMarginalChangesRef.current = [];
       setView({ kind: "loading" });
       setMaxbuyView({ kind: "loading" });
 
@@ -460,6 +476,8 @@ export function MmrLabClient() {
     setView({ kind: "empty" });
     setMaxbuyView({ kind: "idle" });
     setAdjustments(EMPTY_MMR_ADJUSTMENTS);
+    setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
+    pendingMarginalChangesRef.current = [];
     lookupSessionRef.current = null;
     setCatalog((current) => ({
       ...current,
@@ -529,10 +547,20 @@ export function MmrLabClient() {
         buildOptionsIncluded: result.buildOptionsIncluded,
         buildOptionsAdjustment: result.buildOptionsAdjustment ?? null,
         odometerAdjustment: result.odometerAdjustment ?? null,
+        gradeAdjustment: result.gradeAdjustment ?? null,
+        colorAdjustment: result.colorAdjustment ?? null,
+        regionAdjustment: result.regionAdjustment ?? null,
         adjustments,
         baseline: adjustmentBaseline,
+        attributeMarginals,
       })
-    : { odometerAdjustment: null, buildOptionsAdjustment: null };
+    : {
+        odometerAdjustment: null,
+        buildOptionsAdjustment: null,
+        gradeAdjustment: null,
+        colorAdjustment: null,
+        regionAdjustment: null,
+      };
   const lowerSections = lowerSectionsFromView(view.kind, result);
   const resultBandPhase =
     view.kind === "loading"
@@ -605,6 +633,9 @@ export function MmrLabClient() {
           adjustedMmr={result?.adjustedMmr ?? null}
           odometerAdjustment={adjustmentDeltas.odometerAdjustment}
           buildOptionsAdjustment={adjustmentDeltas.buildOptionsAdjustment}
+          gradeAdjustment={adjustmentDeltas.gradeAdjustment}
+          colorAdjustment={adjustmentDeltas.colorAdjustment}
+          regionAdjustment={adjustmentDeltas.regionAdjustment}
           retailValue={result?.retailValue ?? null}
           retailRangeLow={result?.retailRangeLow ?? null}
           retailRangeHigh={result?.retailRangeHigh ?? null}

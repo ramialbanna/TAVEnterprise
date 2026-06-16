@@ -12,9 +12,25 @@ export type MmrAdjustmentBaseline = {
   buildOptionsAdjustment: number;
 };
 
+/** Marginal dollar deltas captured when the user changes one attribute at a time. */
+export type MmrAttributeMarginals = {
+  grade: number | null;
+  color: number | null;
+  region: number | null;
+};
+
+export const EMPTY_MMR_ATTRIBUTE_MARGINALS: MmrAttributeMarginals = {
+  grade: null,
+  color: null,
+  region: null,
+};
+
 export type MmrAdjustmentDeltas = {
   odometerAdjustment: number | null;
   buildOptionsAdjustment: number | null;
+  gradeAdjustment: number | null;
+  colorAdjustment: number | null;
+  regionAdjustment: number | null;
 };
 
 function nonZeroDelta(value: number | null | undefined): number | null {
@@ -60,6 +76,38 @@ export function buildMmrAdjustmentBaseline(
   };
 }
 
+/** Which grade/color/region fields changed between adjustment states. */
+export function detectAttributeMarginalChanges(
+  prev: MmrAdjustments,
+  next: MmrAdjustments,
+): (keyof MmrAttributeMarginals)[] {
+  const changed: (keyof MmrAttributeMarginals)[] = [];
+  if (prev.grade !== next.grade) changed.push("grade");
+  if (prev.exteriorColor !== next.exteriorColor) changed.push("color");
+  if (prev.region !== next.region) changed.push("region");
+  return changed;
+}
+
+/** Update marginals when a single attribute change produced a new adjusted MMR. */
+export function applyAttributeMarginalDelta(
+  prev: MmrAttributeMarginals,
+  changedFields: (keyof MmrAttributeMarginals)[],
+  priorAdjustedMmr: number | null,
+  nextAdjustedMmr: number | null,
+): MmrAttributeMarginals {
+  if (
+    changedFields.length !== 1 ||
+    priorAdjustedMmr == null ||
+    nextAdjustedMmr == null
+  ) {
+    return prev;
+  }
+
+  const delta = nonZeroDelta(nextAdjustedMmr - priorAdjustedMmr);
+  const field = changedFields[0];
+  return { ...prev, [field]: delta };
+}
+
 /** Derive per-field dollar deltas for the adjustments panel (Manheim-style). */
 export function deriveMmrAdjustmentDeltas(params: {
   baseMmr: number | null;
@@ -67,16 +115,24 @@ export function deriveMmrAdjustmentDeltas(params: {
   buildOptionsIncluded?: boolean;
   buildOptionsAdjustment?: number | null;
   odometerAdjustment?: number | null;
+  gradeAdjustment?: number | null;
+  colorAdjustment?: number | null;
+  regionAdjustment?: number | null;
   adjustments: MmrAdjustments;
   baseline: MmrAdjustmentBaseline | null;
+  attributeMarginals?: MmrAttributeMarginals;
 }): MmrAdjustmentDeltas {
   const {
     baseMmr,
     adjustedMmr,
     buildOptionsAdjustment,
     odometerAdjustment,
+    gradeAdjustment,
+    colorAdjustment,
+    regionAdjustment,
     adjustments,
     baseline,
+    attributeMarginals = EMPTY_MMR_ATTRIBUTE_MARGINALS,
   } = params;
 
   const odo = parseAdjustmentOdometer(adjustments.odometer);
@@ -129,8 +185,22 @@ export function deriveMmrAdjustmentDeltas(params: {
     buildAdj = nonZeroDelta(adjustedMmr - baseMmr - odoAdj);
   }
 
+  const gradeAdj = adjustments.grade
+    ? nonZeroDelta(gradeAdjustment ?? attributeMarginals.grade)
+    : null;
+  const colorAdj = adjustments.exteriorColor
+    ? nonZeroDelta(colorAdjustment ?? attributeMarginals.color)
+    : null;
+  const regionAdj =
+    adjustments.region && adjustments.region !== "National"
+      ? nonZeroDelta(regionAdjustment ?? attributeMarginals.region)
+      : null;
+
   return {
     odometerAdjustment: odo != null ? odoAdj : null,
     buildOptionsAdjustment: buildOn ? buildAdj : null,
+    gradeAdjustment: gradeAdj,
+    colorAdjustment: colorAdj,
+    regionAdjustment: regionAdj,
   };
 }

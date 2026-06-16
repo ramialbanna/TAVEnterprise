@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { EMPTY_MMR_ADJUSTMENTS } from "./mmr-adjustments";
 import {
+  applyAttributeMarginalDelta,
   buildMmrAdjustmentBaseline,
   deriveMmrAdjustmentDeltas,
+  detectAttributeMarginalChanges,
+  EMPTY_MMR_ATTRIBUTE_MARGINALS,
 } from "./mmr-adjustment-display";
 
 describe("buildMmrAdjustmentBaseline", () => {
@@ -41,6 +44,47 @@ describe("buildMmrAdjustmentBaseline", () => {
   });
 });
 
+describe("detectAttributeMarginalChanges", () => {
+  it("detects grade, color, and region changes", () => {
+    expect(
+      detectAttributeMarginalChanges(EMPTY_MMR_ADJUSTMENTS, {
+        ...EMPTY_MMR_ADJUSTMENTS,
+        grade: "4.0",
+        exteriorColor: "Black",
+        region: "West",
+      }),
+    ).toEqual(["grade", "color", "region"]);
+  });
+});
+
+describe("applyAttributeMarginalDelta", () => {
+  it("stores delta when exactly one attribute changed", () => {
+    expect(
+      applyAttributeMarginalDelta(
+        EMPTY_MMR_ATTRIBUTE_MARGINALS,
+        ["grade"],
+        23600,
+        23720,
+      ),
+    ).toEqual({
+      grade: 120,
+      color: null,
+      region: null,
+    });
+  });
+
+  it("ignores delta when multiple attributes changed at once", () => {
+    expect(
+      applyAttributeMarginalDelta(
+        EMPTY_MMR_ATTRIBUTE_MARGINALS,
+        ["grade", "color"],
+        23600,
+        23700,
+      ),
+    ).toEqual(EMPTY_MMR_ATTRIBUTE_MARGINALS);
+  });
+});
+
 describe("deriveMmrAdjustmentDeltas", () => {
   const baseline = {
     adjustedAtAvgOdometer: 20400,
@@ -61,6 +105,59 @@ describe("deriveMmrAdjustmentDeltas", () => {
     ).toEqual({
       odometerAdjustment: 3400,
       buildOptionsAdjustment: 200,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
+  it("prefers API grade and color adjustments when present", () => {
+    expect(
+      deriveMmrAdjustmentDeltas({
+        baseMmr: 20200,
+        adjustedMmr: 23700,
+        buildOptionsAdjustment: 200,
+        odometerAdjustment: 3340,
+        gradeAdjustment: 120,
+        colorAdjustment: -160,
+        adjustments: {
+          ...EMPTY_MMR_ADJUSTMENTS,
+          odometer: "40000",
+          grade: "4.0",
+          exteriorColor: "Black",
+          buildOptions: true,
+        },
+        baseline,
+      }),
+    ).toEqual({
+      odometerAdjustment: 3340,
+      buildOptionsAdjustment: 200,
+      gradeAdjustment: 120,
+      colorAdjustment: -160,
+      regionAdjustment: null,
+    });
+  });
+
+  it("uses stored marginals when API omits grade and color dollars", () => {
+    expect(
+      deriveMmrAdjustmentDeltas({
+        baseMmr: 20200,
+        adjustedMmr: 23700,
+        buildOptionsAdjustment: 200,
+        odometerAdjustment: 3340,
+        adjustments: {
+          ...EMPTY_MMR_ADJUSTMENTS,
+          odometer: "40000",
+          grade: "4.0",
+          exteriorColor: "Black",
+          buildOptions: true,
+        },
+        baseline,
+        attributeMarginals: { grade: 120, color: -160, region: null },
+      }),
+    ).toMatchObject({
+      gradeAdjustment: 120,
+      colorAdjustment: -160,
     });
   });
 
@@ -78,6 +175,9 @@ describe("deriveMmrAdjustmentDeltas", () => {
     ).toEqual({
       odometerAdjustment: 3400,
       buildOptionsAdjustment: null,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
     });
   });
 });

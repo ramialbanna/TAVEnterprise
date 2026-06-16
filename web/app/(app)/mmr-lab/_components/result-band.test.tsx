@@ -76,6 +76,22 @@ describe("ResultBand — honest, no fabrication", () => {
     expect(screen.getByText(/recompute adjusted mmr from cox/i)).toBeInTheDocument();
   });
 
+  it("adjustments stay enabled while recomputing", () => {
+    render(
+      <ResultBand
+        phase="recomputing"
+        baseMmr={48600}
+        adjustedMmr={48600}
+        adjustments={{ ...EMPTY_MMR_ADJUSTMENTS, odometer: "70740" }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.getByLabelText(/enter odo/i)).toBeEnabled();
+    expect(screen.getByRole("button", { name: "YES" })).toBeEnabled();
+    expect(screen.getByText(/updating/i)).toBeInTheDocument();
+  });
+
   it("clear resets interactive adjustment fields via callback", () => {
     const onClear = vi.fn();
     const onChange = vi.fn();
@@ -122,6 +138,31 @@ describe("ResultBand — honest, no fabrication", () => {
     );
     expect(screen.getByText("+$3,400")).toBeInTheDocument();
     expect(screen.getByText("+$200")).toBeInTheDocument();
+  });
+
+  it("shows grade and color dollar deltas beside the selects", () => {
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={20200}
+        adjustedMmr={23700}
+        odometerAdjustment={3340}
+        buildOptionsAdjustment={200}
+        gradeAdjustment={120}
+        colorAdjustment={-160}
+        adjustments={{
+          ...EMPTY_MMR_ADJUSTMENTS,
+          odometer: "40000",
+          grade: "4.0",
+          exteriorColor: "Black",
+          buildOptions: true,
+        }}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.getByText("+$120")).toBeInTheDocument();
+    expect(screen.getByText("-$160")).toBeInTheDocument();
   });
 
   it("hides build options delta when NO is selected", () => {

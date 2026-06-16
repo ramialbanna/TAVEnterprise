@@ -12,7 +12,7 @@ describe("buildMmrRecomputeRequest", () => {
     expect(body).toEqual({
       vin: "1HGCM82633A004352",
       mileage: 52000,
-      adjustments: { region: "West", grade: "3.5", exclude_build: true },
+      adjustments: { region: "West", grade: "3.5" },
     });
   });
 

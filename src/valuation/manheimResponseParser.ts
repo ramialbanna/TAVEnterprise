@@ -248,6 +248,9 @@ export interface ManheimAdjustmentBreakdown {
   buildOptionsIncluded: boolean;
   buildOptionsAdjustment: number | null;
   odometerAdjustment: number | null;
+  gradeAdjustment: number | null;
+  colorAdjustment: number | null;
+  regionAdjustment: number | null;
 }
 
 function readAdjustedByFieldDollars(
@@ -262,6 +265,56 @@ function readAdjustedByFieldDollars(
     }
   }
   return null;
+}
+
+function adjustedByHasGrade(adjustedBy: Record<string, unknown>): boolean {
+  return adjustedBy.Grade !== undefined || adjustedBy.grade !== undefined;
+}
+
+function adjustedByHasColor(adjustedBy: Record<string, unknown>): boolean {
+  return adjustedBy.Color !== undefined || adjustedBy.color !== undefined;
+}
+
+function adjustedByHasRegion(adjustedBy: Record<string, unknown>): boolean {
+  const raw = adjustedBy.Region ?? adjustedBy.region;
+  if (raw == null) return false;
+  const label = String(raw).trim().toUpperCase();
+  return label !== "" && label !== "NA" && label !== "NATIONAL";
+}
+
+/** Assign leftover wholesale delta when exactly one grade/color/region attr is active. */
+function attributeSingleFieldResidual(
+  residual: number | null,
+  hasGrade: boolean,
+  hasColor: boolean,
+  hasRegion: boolean,
+  gradeAdj: number | null,
+  colorAdj: number | null,
+  regionAdj: number | null,
+): Pick<
+  ManheimAdjustmentBreakdown,
+  "gradeAdjustment" | "colorAdjustment" | "regionAdjustment"
+> {
+  const pending = [
+    hasGrade && gradeAdj == null ? "grade" as const : null,
+    hasColor && colorAdj == null ? "color" as const : null,
+    hasRegion && regionAdj == null ? "region" as const : null,
+  ].filter((v): v is "grade" | "color" | "region" => v != null);
+
+  if (residual == null || pending.length !== 1) {
+    return {
+      gradeAdjustment: gradeAdj,
+      colorAdjustment: colorAdj,
+      regionAdjustment: regionAdj,
+    };
+  }
+
+  const field = pending[0];
+  return {
+    gradeAdjustment: field === "grade" ? residual : gradeAdj,
+    colorAdjustment: field === "color" ? residual : colorAdj,
+    regionAdjustment: field === "region" ? residual : regionAdj,
+  };
 }
 
 function mileageFromAdjustedBy(adjustedBy: Record<string, unknown> | null): number | null {
@@ -307,8 +360,32 @@ export function extractManheimAdjustmentBreakdown(
 
   let buildAdj = build.adjustment;
   let odometerAdj = odometerDollar;
+  let gradeAdj: number | null = null;
+  let colorAdj: number | null = null;
+  let regionAdj: number | null = null;
+  let hasGrade = false;
+  let hasColor = false;
+  let hasRegion = false;
 
-  if (build.included && buildAdj == null && atAvg && total != null && total !== 0) {
+  if (adjustedBy) {
+    gradeAdj = readAdjustedByFieldDollars(adjustedBy, ["Grade", "grade"]);
+    colorAdj = readAdjustedByFieldDollars(adjustedBy, ["Color", "color"]);
+    regionAdj = readAdjustedByFieldDollars(adjustedBy, ["Region", "region"]);
+    hasGrade = adjustedByHasGrade(adjustedBy);
+    hasColor = adjustedByHasColor(adjustedBy);
+    hasRegion = adjustedByHasRegion(adjustedBy);
+  }
+
+  const otherAttrsPresent = hasGrade || hasColor || hasRegion;
+
+  if (
+    build.included &&
+    buildAdj == null &&
+    atAvg &&
+    total != null &&
+    total !== 0 &&
+    !otherAttrsPresent
+  ) {
     buildAdj = total;
   }
 
@@ -335,10 +412,30 @@ export function extractManheimAdjustmentBreakdown(
     odometerAdj = total;
   }
 
+  const knownTotal =
+    (buildAdj ?? 0) +
+    (atAvg ? 0 : odometerAdj ?? 0) +
+    (gradeAdj ?? 0) +
+    (colorAdj ?? 0) +
+    (regionAdj ?? 0);
+  const residual =
+    total != null && total !== knownTotal ? Math.round(total - knownTotal) : null;
+
+  const attributed = attributeSingleFieldResidual(
+    residual,
+    hasGrade,
+    hasColor,
+    hasRegion,
+    gradeAdj,
+    colorAdj,
+    regionAdj,
+  );
+
   return {
     buildOptionsIncluded: build.included,
     buildOptionsAdjustment: buildAdj,
     odometerAdjustment: atAvg ? null : odometerAdj,
+    ...attributed,
   };
 }
 
@@ -364,6 +461,15 @@ export function extractManheimBuildOptions(payload: unknown): ManheimBuildOption
 
   if (includedFlag === true) {
     return buildOptionsFromBooleanTrue(t, payload, adjustedBy);
+  }
+
+  if (
+    adjustedBy &&
+    (adjustedByHasGrade(adjustedBy) ||
+      adjustedByHasColor(adjustedBy) ||
+      adjustedByHasRegion(adjustedBy))
+  ) {
+    return none;
   }
 
   const delta = wholesaleBuildOptionsDelta(payload);

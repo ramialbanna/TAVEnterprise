@@ -70,6 +70,27 @@ function parseExpressGrade(raw: string): number | null {
   return Number.isInteger(n) && n >= 75 && n <= 100 ? n : null;
 }
 
+export type BuildOptionsSyncInput = Pick<
+  MmrAdjustments,
+  "buildOptions" | "buildOptionsUserExcluded"
+>;
+
+/** Resolve build-options toggle after a Cox lookup or recompute. */
+export function resolveBuildOptionsState(
+  prev: BuildOptionsSyncInput,
+  result: Parameters<typeof inferBuildOptionsIncluded>[0],
+): BuildOptionsSyncInput {
+  if (prev.buildOptionsUserExcluded) {
+    return { buildOptions: false, buildOptionsUserExcluded: true };
+  }
+
+  const buildOn = inferBuildOptionsIncluded(result);
+  return {
+    buildOptions: prev.buildOptions || buildOn,
+    buildOptionsUserExcluded: false,
+  };
+}
+
 /** Infer build-options YES from MMR values when the API omits buildOptionsIncluded. */
 export function inferBuildOptionsIncluded(result: {
   mmrValue?: number;
@@ -133,13 +154,7 @@ export function mapMmrAdjustmentsToApi(
   if (adjustments.exteriorColor) api.color = adjustments.exteriorColor;
   if (adjustments.buildOptions) {
     api.exclude_build = false;
-  } else if (
-    adjustments.buildOptionsUserExcluded ||
-    adjustments.region ||
-    adjustments.grade ||
-    adjustments.exteriorColor ||
-    adjustments.expressGrade
-  ) {
+  } else if (adjustments.buildOptionsUserExcluded) {
     api.exclude_build = true;
   }
   const evbh = parseExpressGrade(adjustments.expressGrade);

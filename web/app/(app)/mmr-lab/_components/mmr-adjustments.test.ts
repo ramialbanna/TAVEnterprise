@@ -5,6 +5,7 @@ import {
   seedMmrAdjustmentsFromResult,
   hasMmrAdjustments,
   mapMmrAdjustmentsToApi,
+  resolveBuildOptionsState,
 } from "./mmr-adjustments";
 
 describe("hasMmrAdjustments", () => {
@@ -42,12 +43,28 @@ describe("mapMmrAdjustmentsToApi", () => {
     });
   });
 
-  it("excludes build options when NO is selected alongside other adjustments", () => {
+  it("does not exclude build when region or grade change without explicit NO", () => {
+    expect(
+      mapMmrAdjustmentsToApi({
+        ...EMPTY_MMR_ADJUSTMENTS,
+        region: "West",
+        grade: "4.0",
+        exteriorColor: "Black",
+      }),
+    ).toEqual({
+      region: "West",
+      grade: "4.0",
+      color: "Black",
+    });
+  });
+
+  it("excludes build options only when user explicitly chose NO", () => {
     expect(
       mapMmrAdjustmentsToApi({
         ...EMPTY_MMR_ADJUSTMENTS,
         region: "West",
         buildOptions: false,
+        buildOptionsUserExcluded: true,
       }),
     ).toEqual({
       region: "West",
@@ -113,6 +130,69 @@ describe("mapMmrAdjustmentsToApi", () => {
     ).toEqual({
       ...EMPTY_MMR_ADJUSTMENTS,
       buildOptions: true,
+      buildOptionsUserExcluded: false,
+    });
+  });
+});
+
+describe("resolveBuildOptionsState", () => {
+  it("defaults to YES when Cox reports build options on initial load", () => {
+    expect(
+      resolveBuildOptionsState(EMPTY_MMR_ADJUSTMENTS, {
+        buildOptionsIncluded: true,
+        buildOptionsAdjustment: 200,
+      }),
+    ).toEqual({
+      buildOptions: true,
+      buildOptionsUserExcluded: false,
+    });
+  });
+
+  it("preserves user YES when recompute omits buildOptionsIncluded", () => {
+    expect(
+      resolveBuildOptionsState(
+        { ...EMPTY_MMR_ADJUSTMENTS, buildOptions: true },
+        {
+          mmrValue: 20200,
+          adjustedMmr: 23600,
+          mileageUsed: 40000,
+          avgOdometer: 66981,
+          buildOptionsIncluded: undefined,
+          buildOptionsAdjustment: null,
+        },
+      ),
+    ).toEqual({
+      buildOptions: true,
+      buildOptionsUserExcluded: false,
+    });
+  });
+
+  it("preserves user NO even when Cox reports build options included", () => {
+    expect(
+      resolveBuildOptionsState(
+        {
+          ...EMPTY_MMR_ADJUSTMENTS,
+          buildOptions: false,
+          buildOptionsUserExcluded: true,
+        },
+        {
+          buildOptionsIncluded: true,
+          buildOptionsAdjustment: 200,
+        },
+      ),
+    ).toEqual({
+      buildOptions: false,
+      buildOptionsUserExcluded: true,
+    });
+  });
+
+  it("does not mark user excluded when Cox reports no build options", () => {
+    expect(
+      resolveBuildOptionsState(EMPTY_MMR_ADJUSTMENTS, {
+        buildOptionsIncluded: false,
+      }),
+    ).toEqual({
+      buildOptions: false,
       buildOptionsUserExcluded: false,
     });
   });
