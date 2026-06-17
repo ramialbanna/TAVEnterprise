@@ -202,12 +202,18 @@ export function MmrLabClient() {
   );
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
+    // Capture into a local variable before clearing the ref. In React 18 the
+    // setView updater function runs asynchronously during the render phase — by
+    // that time pendingMarginalChangesRef.current has already been set to []
+    // if we clear it after calling setView.
+    const pendingChanges = pendingMarginalChangesRef.current.slice();
+    pendingMarginalChangesRef.current = [];
     setView((currentView) => {
       if (currentView.kind === "ok") {
         setAttributeMarginals((prev) =>
           applyAttributeMarginalDelta(
             prev,
-            pendingMarginalChangesRef.current,
+            pendingChanges,
             currentView.result.adjustedMmr ?? null,
             data.adjustedMmr ?? null,
           ),
@@ -215,7 +221,6 @@ export function MmrLabClient() {
       }
       return { kind: "ok", result: data };
     });
-    pendingMarginalChangesRef.current = [];
     const baseline = buildMmrAdjustmentBaseline(data);
     if (baseline) setAdjustmentBaseline(baseline);
     setAdjustments((prev) => syncAdjustmentsFromMmrResult({ ...prev, ...prevAdj }, data));

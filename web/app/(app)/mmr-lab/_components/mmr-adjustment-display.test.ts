@@ -111,6 +111,33 @@ describe("deriveMmrAdjustmentDeltas", () => {
     });
   });
 
+  it("subtracts grade and color marginals from baseline-derived odometer delta", () => {
+    // adjustedMmr = baseline(20400) + grade(400) + color(600) + odometer(-3400) = 18000 (hypothetical)
+    // odoAdj should be 18000 - 20400 - 400 - 600 = -3400 (not -3400 - 1000 without marginal subtraction)
+    expect(
+      deriveMmrAdjustmentDeltas({
+        baseMmr: 20200,
+        adjustedMmr: 17000,
+        buildOptionsAdjustment: null,
+        odometerAdjustment: null,
+        adjustments: {
+          ...EMPTY_MMR_ADJUSTMENTS,
+          odometer: "80000",
+          grade: "5.0",
+          exteriorColor: "Black",
+          buildOptions: true,
+        },
+        baseline,
+        attributeMarginals: { grade: 400, color: 600, region: null },
+      }),
+    ).toMatchObject({
+      odometerAdjustment: -4400, // 17000 - 20400 - 400 - 600 = -4400
+      buildOptionsAdjustment: 200,
+      gradeAdjustment: 400,
+      colorAdjustment: 600,
+    });
+  });
+
   it("prefers API grade and color adjustments when present", () => {
     expect(
       deriveMmrAdjustmentDeltas({

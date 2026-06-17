@@ -146,6 +146,14 @@ export function deriveMmrAdjustmentDeltas(params: {
 
   let odoAdj = nonZeroDelta(odometerAdjustment);
 
+  // Grade/color/region marginals captured via the marginal-tracking system.
+  // Subtract them from any baseline-derived odometer calculation so the
+  // odometer delta doesn't absorb their contribution.
+  const knownAttrDelta =
+    (attributeMarginals.grade ?? 0) +
+    (attributeMarginals.color ?? 0) +
+    (attributeMarginals.region ?? 0);
+
   if (
     odoAdj == null &&
     odo != null &&
@@ -153,7 +161,7 @@ export function deriveMmrAdjustmentDeltas(params: {
     baseline != null &&
     buildOn
   ) {
-    odoAdj = nonZeroDelta(adjustedMmr - baseline.adjustedAtAvgOdometer);
+    odoAdj = nonZeroDelta(adjustedMmr - baseline.adjustedAtAvgOdometer - knownAttrDelta);
   }
 
   if (
@@ -164,7 +172,7 @@ export function deriveMmrAdjustmentDeltas(params: {
     buildOn &&
     buildAdj != null
   ) {
-    odoAdj = nonZeroDelta(adjustedMmr - baseMmr - buildAdj);
+    odoAdj = nonZeroDelta(adjustedMmr - baseMmr - buildAdj - knownAttrDelta);
   }
 
   if (
@@ -174,7 +182,7 @@ export function deriveMmrAdjustmentDeltas(params: {
     adjustedMmr != null &&
     !buildOn
   ) {
-    odoAdj = nonZeroDelta(adjustedMmr - baseMmr);
+    odoAdj = nonZeroDelta(adjustedMmr - baseMmr - knownAttrDelta);
   }
 
   if (

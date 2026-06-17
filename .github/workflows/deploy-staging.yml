@@ -82,13 +82,28 @@ jobs:
 
           echo "should_deploy=true" >> "$GITHUB_ENV"
 
-      - name: Wrangler deploy
+      - name: Wrangler deploy (main worker)
         if: steps.node_project.outputs.has_node_project == 'true' && env.should_deploy == 'true'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy --env staging
+
+      - name: Check intel worker secrets (staging)
+        if: steps.node_project.outputs.has_node_project == 'true' && env.should_deploy == 'true'
+        run: bash scripts/check-intel-secrets.sh --env staging
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Wrangler deploy (intel worker)
+        if: steps.node_project.outputs.has_node_project == 'true' && env.should_deploy == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config workers/tav-intelligence-worker/wrangler.toml --env staging
 
       - name: Post-deploy /health check
         if: steps.node_project.outputs.has_node_project == 'true' && env.should_deploy == 'true' && env.should_healthcheck == 'true'

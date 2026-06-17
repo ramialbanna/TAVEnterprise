@@ -21,10 +21,32 @@ Main Worker:
 npm run deploy
 ```
 
-Intelligence Worker:
+Intelligence Worker — **always use the guarded scripts** (they run `check-intel-secrets.sh` first and block the deploy if any Manheim secret is missing):
 
 ```bash
-npm run deploy:intelligence
+# Staging
+npm run deploy:intelligence:staging
+
+# Production
+npm run deploy:intelligence:production
+```
+
+Do not use the bare `npm run deploy:intelligence` for staging/production deploys — it skips the secret check.
+
+> **Why this exists:** Cloudflare secrets are stored per-worker-name and per-environment. They survive normal redeployments but are silently absent when deploying to a new environment for the first time, after a worker is renamed, or after `wrangler secret delete` is run. The check script catches this before the deploy rather than discovering it after MMR lookups start returning 401.
+
+**On Windows:** run the scripts from Git Bash or WSL. PowerShell cannot execute `.sh` scripts directly.
+
+### Verify secrets manually
+
+```bash
+# Check without deploying (Git Bash / WSL / CI)
+npm run check-secrets:intelligence:staging
+npm run check-secrets:intelligence:production
+
+# Or directly:
+bash scripts/check-intel-secrets.sh --env staging
+bash scripts/check-intel-secrets.sh --env production
 ```
 
 Before deploying:
@@ -32,7 +54,7 @@ Before deploying:
 1. Confirm you are on the intended branch.
 2. Confirm `git status -sb` has only intended changes.
 3. Run the verification loop.
-4. Confirm Cloudflare secrets are present.
+4. Run `npm run check-secrets:intelligence:<env>` — fix any missing secrets before continuing.
 5. Deploy one Worker at a time.
 6. Run smoke checks immediately after deploy.
 

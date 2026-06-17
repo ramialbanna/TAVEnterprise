@@ -422,8 +422,15 @@ export function extractManheimAdjustmentBreakdown(
     (gradeAdj ?? 0) +
     (colorAdj ?? 0) +
     (regionAdj ?? 0);
+  // When the odometer mileage is non-average and Cox sent it as a string (not
+  // dollars), odometerAdj is null but there IS a non-zero odometer contribution
+  // in the total. The residual would absorb that unknown amount and wrongly
+  // attribute it to grade/color/region. Skip attribution in that case.
+  const odometerContributionUnknown = !atAvg && odometerAdj == null && mileage != null;
   const residual =
-    total != null && total !== knownTotal ? Math.round(total - knownTotal) : null;
+    total != null && total !== knownTotal && !odometerContributionUnknown
+      ? Math.round(total - knownTotal)
+      : null;
 
   const attributed = attributeSingleFieldResidual(
     residual,

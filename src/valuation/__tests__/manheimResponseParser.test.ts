@@ -426,6 +426,35 @@ describe("extractManheimAdjustmentBreakdown", () => {
     });
   });
 
+  it("does not attribute residual to grade when odometer is non-average string and build is included", () => {
+    // Cox sends Odometer as a string mileage value (not dollars) at non-average
+    // mileage, and Grade as a string code. build.included=true (buildOptions:true).
+    // The total delta includes unknown odometer + grade contributions.
+    // The residual must not be assigned to grade — it would absorb the missing
+    // odometer delta and display a wildly wrong grade number.
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 66981,
+          wholesale: { average: 101000 },
+          adjustedPricing: {
+            wholesale: { average: 98800 },
+            adjustedBy: { Odometer: "20000", Grade: "50", buildOptions: true },
+          },
+        },
+      ],
+    };
+    expect(extractManheimAdjustmentBreakdown(payload, 20000)).toEqual({
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: null,
+      odometerAdjustment: null,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
   it("reads numeric color adjustment from adjustedBy when Cox sends dollars", () => {
     const payload = {
       items: [

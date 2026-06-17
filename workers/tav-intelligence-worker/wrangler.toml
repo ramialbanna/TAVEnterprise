@@ -51,8 +51,18 @@ MANAGER_EMAIL_ALLOWLIST = ""
 # Phase 4 — Cox historical + forecast includes on MMR lookups (smoke on staging first).
 MANHEIM_INCLUDE_HISTORICAL = "true"
 MANHEIM_INCLUDE_FORECAST = "true"
+# Cox client_credentials config — not credentials, committed as vars so they can
+# never go missing after a deploy. Values are the same across all environments.
+MANHEIM_API_VENDOR   = "cox"
+MANHEIM_GRANT_TYPE   = "client_credentials"
+MANHEIM_SCOPE        = "wholesale-valuations.vehicle.mmr-ext.get"
+# Staging uses the Cox integration endpoint.
+MANHEIM_MMR_URL      = "https://integration.api.coxautoinc.com/wholesale-valuations/vehicle/mmr"
 # INTEL_SERVICE_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put INTEL_SERVICE_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
+# MANHEIM_CLIENT_ID + MANHEIM_CLIENT_SECRET must be set as Cloudflare secrets (actual credentials).
+# MANHEIM_TOKEN_URL must be set as a Cloudflare secret (contains the per-app OAuth server ID):
+#   wrangler secret put MANHEIM_TOKEN_URL --config workers/tav-intelligence-worker/wrangler.toml --env staging
 
 # ── Production ───────────────────────────────────────────────────────────────
 
@@ -72,26 +82,29 @@ MANAGER_EMAIL_ALLOWLIST = ""
 # Phase 4 — enable after staging smoke validates Cox historical/forecast payloads.
 MANHEIM_INCLUDE_HISTORICAL = "true"
 MANHEIM_INCLUDE_FORECAST = "true"
+# Cox client_credentials config — not credentials, committed as vars so they can
+# never go missing after a deploy. Values are the same across all environments.
+MANHEIM_API_VENDOR   = "cox"
+MANHEIM_GRANT_TYPE   = "client_credentials"
+MANHEIM_SCOPE        = "wholesale-valuations.vehicle.mmr-ext.get"
+# Production Cox Storefront MMR base URL (see docs/03-api/manheim-cox.md).
+MANHEIM_MMR_URL      = "https://api.coxautoinc.com/wholesale-valuations/vehicle/mmr"
 
-# ── Secrets (set before first deploy) ────────────────────────────────────────
+# ── Secrets (set before first deploy — credentials only) ─────────────────────
 #
-# All secrets are per-Worker and per-environment. Run each command for both
-# --env staging and --env production (swap as needed).
+# These are the ONLY values that must be manually set as secrets.
+# Everything else is committed above as [vars].
 #
-# Manheim OAuth + MMR (same values as the main tav-aip worker):
+# Per environment (run for both --env staging and --env production):
 #
-#   wrangler secret put MANHEIM_CLIENT_ID     --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put MANHEIM_CLIENT_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put MANHEIM_USERNAME      --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put MANHEIM_PASSWORD      --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put MANHEIM_TOKEN_URL     --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put MANHEIM_MMR_URL       --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#
-# Supabase (same project as the main tav-aip worker; service-role key only):
-#
-#   wrangler secret put SUPABASE_URL              --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/tav-intelligence-worker/wrangler.toml --env staging
-#
-# Repeat all of the above with --env production.
+#   wrangler secret put INTEL_SERVICE_SECRET  --config workers/tav-intelligence-worker/wrangler.toml --env production
+#   wrangler secret put SUPABASE_URL          --config workers/tav-intelligence-worker/wrangler.toml --env production
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --config workers/tav-intelligence-worker/wrangler.toml --env production
+#   wrangler secret put MANHEIM_CLIENT_ID     --config workers/tav-intelligence-worker/wrangler.toml --env production
+#   wrangler secret put MANHEIM_CLIENT_SECRET --config workers/tav-intelligence-worker/wrangler.toml --env production
+#   wrangler secret put MANHEIM_TOKEN_URL     --config workers/tav-intelligence-worker/wrangler.toml --env production
+#     ↑ MANHEIM_TOKEN_URL contains the per-app OAuth server ID — copy verbatim
+#       from the Cox app detail page. Format:
+#       https://authorize.coxautoinc.com/oauth2/<authServerId>/v1/token
 
 
