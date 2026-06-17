@@ -353,11 +353,6 @@ export function SearchPanel({
                 <span
                   className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto"
                   tabIndex={canSubmitYmm ? -1 : 0}
-                  aria-label={
-                    !canSubmitYmm && missingField
-                      ? `Select a ${missingField} to enable valuation`
-                      : undefined
-                  }
                 >
                   <Button
                     type="button"
