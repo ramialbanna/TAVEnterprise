@@ -1,9 +1,9 @@
 # Next Steps — MMR Lab
 
-**Last updated:** 2026-06-16 (Items 11 & 13 marked done; Item 1 pivoted to MarketCheck) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-16 (Items 11–14 archived → [`completed-tasks.md`](completed-tasks.md); Item 1 pivoted to MarketCheck; MarketCheck integration in progress) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
-> Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed UX rollout: [`02-product/ux-rollout-shipped.md`](02-product/ux-rollout-shipped.md).
+> Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
 
 **Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
 
@@ -39,21 +39,17 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **12** | VIN MMR — remove mileage inference, call Cox with VIN only | High | [x] |
-| **13** | MaxBuy — resolve VIN via YMM fallback when VIN not in TAV DB | High | [x] |
-| **14** | Mileage field cascade bug — can't clear the Miles input | High | [x] |
-| **15** | Retail value — enable Cox retail data (env var + entitlement check) | Medium | [ ] |
-| **1** | Auction Transactions — wire MarketCheck API (not Cox) | High | [ ] |
-| **2** | Year dropdown — pin recent years at top | Medium | [ ] |
-| **3** | Per-dropdown loading indicator | Medium | [ ] |
-| **4** | Auto-scroll to results on mobile after submit | Medium | [ ] |
-| **5** | Sticky SearchPanel header on desktop scroll | Medium | [ ] |
-| **6** | Value button — tooltip showing what field is missing | Medium | [ ] |
-| **7** | Style approximation notice — closeable banner above result band | Low | [ ] |
-| **8** | Mileage ↔ Adjustments odometer sync | Low | [ ] |
-| **9** | Keyboard tab flow through disabled dropdowns | Low | [ ] |
-| **10** | Cleared-field highlight animation | Low | [ ] |
-| **11** | MMR Range — promote to a blue highlight card (match Manheim MMR layout) | Low | [x] |
+| **1** | Auction Transactions — wire MarketCheck API | High | [~] |
+| **15** | Retail value — enable Cox retail data (env var + entitlement check) | Medium | [x] |
+| **2** | Year dropdown — pin recent years at top | Medium | [x] |
+| **3** | Per-dropdown loading indicator | Medium | [x] |
+| **4** | Auto-scroll to results on mobile after submit | Medium | [x] |
+| **5** | Sticky SearchPanel header on desktop scroll | Medium | [x] |
+| **6** | Value button — tooltip showing what field is missing | Medium | [x] |
+| **7** | Style approximation notice — closeable banner above result band | Low | [x] |
+| **8** | Mileage ↔ Adjustments odometer sync | Low | [x] |
+| **9** | Keyboard tab flow through disabled dropdowns | Low | [x] |
+| **10** | Cleared-field highlight animation | Low | [x] |
 
 ---
 
@@ -78,19 +74,62 @@ Reason: Cox Valuations API smoke (2026-06-12) returned `historicalAverages` + `f
 
 | Layer | Work |
 |---|---|
-| **Account** | Enable **Auction Search** on the TAV MarketCheck key (not on free tier as of 2026-06-12) |
-| **Backend** | New intel-worker route (or proxy) calling `GET /v2/search/car/auction/active`, keyed by VIN or Y/M/M from the active lookup |
-| **Parser** | Map MarketCheck listing fields → existing `ManheimTransaction` shape (or extend schema if columns differ) |
-| **Frontend** | Wire parsed rows into `transactions-table.tsx`; update section title + footer to disclose MarketCheck / active listings |
-| **Cache** | KV cache with TTL; graceful empty state when MarketCheck fails (MMR + MaxBuy unaffected) |
+| **Backend** | Intel-worker handler `GET /mmr/marketcheck-auction` calling `GET /v2/search/car/auction/active`, keyed by VIN or Y/M/M. KV cache TTL 15 min. |
+| **App route** | `GET /app/mmr/auction-listings` in `src/app/routes.ts` proxying to intel worker |
+| **Parser** | `src/clients/marketcheck.ts` maps MarketCheck listing fields → `MmrTransaction` shape |
+| **Frontend** | New `getMarketCheckAuctions()` client fn; `mmr-lab-client.tsx` calls it after MMR resolves; section title + footer updated |
 
-Primary endpoint: `GET /v2/search/car/auction/active`. Listing detail (`GET /v2/listing/car/auction/{id}`) optional for enrichment.
+Primary endpoint: `GET /v2/search/car/auction/active`. Base URL: `https://mc-api.marketcheck.com`. Auth: `?api_key=` query param.
 
-### Frontend status
+### MarketCheck field → MmrTransaction mapping
 
-- **Table shell built** — `transactions-table.tsx` has all 10 Manheim-style columns wired.
-- **Cox parser exists** — `manheimMarketContextParser.ts` mapped Cox aliases; **not used** for Zone C2 going forward. Add a MarketCheck parser instead.
-- **Column mapping TBD** — map MarketCheck response fields to: date, price, odometer, grade, evbh, engineTrans, exteriorColor, type, region, auction.
+| MmrTransaction field | MarketCheck source field |
+|---|---|
+| `date` | `last_seen_at` (ISO → date portion) |
+| `price` | `price` |
+| `odometer` | `miles` |
+| `grade` | `(none — null)` |
+| `evbh` | `(none — null)` |
+| `engineTrans` | `engine` + `" / " + transmission` |
+| `exteriorColor` | `exterior_color` |
+| `type` | `body_type` |
+| `region` | `city + ", " + state` |
+| `auction` | `dealer_name` |
+
+### Backend files
+
+| File | Change |
+|---|---|
+| `workers/tav-intelligence-worker/src/types/env.ts` | Add `MARKETCHECK_API_KEY: string` |
+| `workers/tav-intelligence-worker/wrangler.toml` | Add secret docs for `MARKETCHECK_API_KEY` |
+| `workers/tav-intelligence-worker/src/clients/marketcheck.ts` | New: HTTP client + parser |
+| `workers/tav-intelligence-worker/src/handlers/mmrMarketcheck.ts` | New: handler with KV cache |
+| `workers/tav-intelligence-worker/src/routes/index.ts` | Register `GET /mmr/marketcheck-auction` |
+| `src/app/routes.ts` | Add `GET /app/mmr/auction-listings` proxying to intel worker |
+
+### Frontend files
+
+| File | Change |
+|---|---|
+| `web/lib/app-api/schemas.ts` | Add `AuctionListingsResponseSchema` |
+| `web/lib/app-api/parse.ts` | Add `parseAuctionListings` |
+| `web/lib/app-api/client.ts` | Add `getMarketCheckAuctions(params)` |
+| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Fetch auction listings after MMR resolves; store in `auctionListings` state |
+| `web/app/(app)/mmr-lab/_components/transactions-table.tsx` | Update title/empty/idle copy to "MarketCheck auction listings" |
+| `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Accept + pass `auctionListings` prop |
+
+### Exit criteria
+
+- [x] Cox transaction gap documented (API empty vs parser bug) — see [`03-api/manheim-cox.md`](03-api/manheim-cox.md) §5
+- [x] Data-source decision locked: MarketCheck for Zone C2 (2026-06-16)
+- [x] Backend: intel-worker handler + MarketCheck client built
+- [x] Backend: app route `GET /app/mmr/auction-listings` proxying to intel worker
+- [ ] Auction Search enabled on TAV MarketCheck account (external — account action needed)
+- [ ] Intel-worker MarketCheck route smoke-tested against live API key
+- [ ] MarketCheck parser maps listing fields to transaction table columns
+- [ ] Transactions table shows rows for a VIN/YMM lookup
+- [ ] UI labels source as MarketCheck active auction listings (not Manheim sold comps)
+- [ ] Add "Showing N of N" footer to `transactions-table.tsx`
 
 ### Background — why Cox was abandoned for Zone C2
 
@@ -123,16 +162,36 @@ TAV is on a **team MarketCheck account, free tier** (2026-06-12). Licensed partn
 
 **Must enable for Item 1:** Auction Search (not on current free-tier license).
 
+---
+
+## 15 — Retail value: enable Cox retail data
+
+**Goal:** The result band has wired-up `retailValue`, `retailRangeLow`, `retailRangeHigh` columns that always show `--` because Cox is never asked for retail data.
+
+### Root cause
+
+`buildCoxIncludeTokens` in `workers/tav-intelligence-worker/src/clients/manheimHttp.ts` only appends `"retail"` to the Cox `include=` query param when `env.MANHEIM_INCLUDE_RETAIL === "true"`. That env var has never been set on the intel worker, so the retail block is never requested.
+
+### What to check first
+
+Before setting the env var, confirm with Cox/Manheim account rep whether the TAV API key is entitled for the `retail` include token. The `MANHEIM_INCLUDE_RETAIL` flag exists precisely because retail is a separate entitlement — enabling it on an un-entitled key will produce 4xx errors or empty retail blocks on every lookup.
+
+### What to change
+
+| Step | Action |
+|---|---|
+| 1 | Confirm Cox account has retail entitlement |
+| 2 | Set `MANHEIM_INCLUDE_RETAIL=true` in the intel worker's Cloudflare environment (wrangler secret or `[vars]` in `wrangler.toml`) |
+| 3 | Smoke-test a known VIN — confirm `retailValue` appears in the response envelope |
+| 4 | Verify `result-band.tsx` renders the retail card correctly once the value is non-null |
+
+If Cox confirms the account is **not** entitled for retail: hide the retail card in the result band UI rather than showing permanent `--` dashes.
+
 ### Exit criteria
 
-- [x] Cox transaction gap documented (API empty vs parser bug) — see [`03-api/manheim-cox.md`](03-api/manheim-cox.md) §5
-- [x] Data-source decision locked: MarketCheck for Zone C2 (2026-06-16)
-- [ ] Auction Search enabled on TAV MarketCheck account
-- [ ] Intel-worker MarketCheck route wired and smoke-tested
-- [ ] MarketCheck parser maps listing fields to transaction table columns
-- [ ] Transactions table shows rows for a VIN/YMM lookup
-- [ ] UI labels source as MarketCheck active auction listings (not Manheim sold comps)
-- [ ] Add "Showing N of N" footer to `transactions-table.tsx`
+- [ ] Either: retail value and range are populated in the result band for a live VIN lookup
+- [ ] Or: retail card is hidden in the UI with a doc note confirming the account lacks entitlement
+- [ ] No new 4xx errors appear in intel worker logs after enabling
 
 ---
 
@@ -225,6 +284,8 @@ TAV is on a **team MarketCheck account, free tier** (2026-06-12). Licensed partn
 - [ ] MMR recompute and MaxBuy evaluate use the same odometer value from adjustments
 - [ ] No stale or diverged mileage silently used after the buyer edits odometer
 
+---
+
 ## 9 — Keyboard tab flow through disabled dropdowns
 
 **Goal:** Tabbing through the form skips disabled dropdowns entirely. Buyers using keyboard-only navigation cannot reach the Year dropdown when the catalog is not connected, or Make when no year is selected.
@@ -248,213 +309,3 @@ TAV is on a **team MarketCheck account, free tier** (2026-06-12). Licensed partn
 - [ ] When a field is cleared due to catalog re-validation, it briefly flashes/highlights
 - [ ] The animation does not fire on initial page load or manual user clears
 - [ ] Animation respects `prefers-reduced-motion` (no animation if user has reduced motion set)
-
----
-
-## 11 — MMR Range: promote to blue highlight card
-
-**Status:** Done (2026-06-16) — blue `bg-primary` card in `result-band.tsx`.
-
-**Goal:** The MMR Range (`$25,200 – $29,700` in the Manheim screenshots) is displayed in a prominent blue card in the native tool. In the current ResultBand it appears in smaller secondary text and is easy to miss.
-
-**Approach:** In `result-band.tsx` (or the relevant result display component), give the MMR Range its own card with a blue background (`bg-primary text-primary-foreground`) at the same visual weight as the Base MMR and Adjusted MMR values. Match the Manheim layout: Range on the left or right of the adjusted value as a peer card, not sub-text.
-
-**Exit criteria:**
-- [x] MMR Range displayed in a visually prominent blue card matching Manheim MMR tool layout
-- [x] Range remains visible in both loading and error states (shows `--` placeholders)
-- [x] No regression on existing ResultBand tests
-
----
-
-## 12 — VIN MMR: remove mileage inference, call Cox with VIN only
-
-**Goal:** When a buyer searches by VIN, the MMR value shown must match Manheim's native tool. Currently it doesn't because the intel worker injects a fabricated mileage into every VIN lookup instead of letting Cox use its own vehicle data.
-
-### Root cause
-
-`getMmrMileageData` in `src/scoring/mmrMileage.ts` is called unconditionally for every VIN path lookup in `workers/tav-intelligence-worker/src/services/mmrLookup.ts`. When no mileage is provided (as is always the case for a plain VIN search in MMR Lab), it infers mileage from the model year:
-
-> `(currentYear − modelYear) × 15,000 + currentMonth × 1,250`, rounded to nearest 1,000
-
-For a 2026 model year vehicle in June 2026: `6 × 1,250 = 7,500 → 8,000`. That 8,000 is forwarded to Cox as `?odometer=8000`. Manheim's native tool queries Cox using the vehicle's actual auction/title odometer — producing a different number. The 8,000 also gets seeded into the frontend's mileage field via `hydrateVinAutofill`, which is where the ghost value comes from.
-
-### What to change
-
-| File | Change |
-|---|---|
-| `workers/tav-intelligence-worker/src/services/mmrLookup.ts` | On the VIN path: skip `getMmrMileageData` when `args.input.mileage` is absent. Pass `mileage: undefined` to `lookupByVin`. |
-| `workers/tav-intelligence-worker/src/clients/manheimHttp.ts` | Make `mileage` optional on `lookupByVin`. Only append `?odometer=` when mileage is explicitly provided. |
-| `workers/tav-intelligence-worker/src/clients/manheim.ts` | Make `mileage` optional on the `ManheimClient.lookupByVin` interface. |
-| `workers/tav-intelligence-worker/src/cache/mmrCacheKey.ts` | `deriveVinCacheKey` currently includes mileage in the key. When mileage is absent, omit it from the key (e.g. `vin:{vin}:no-odometer`). |
-| `workers/tav-intelligence-worker/src/services/mmrLookup.ts` | `mileage_used` in the envelope should be `null` (not 0) when no mileage was supplied. |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | `seedAdjustments(mileageUsed)` — when `mileageUsed` is `null`, seed `odometer: ""` (not "0"). `hydrateVinAutofill` receives `mileage: ""` — already the correct empty string. |
-
-**Do not remove `getMmrMileageData`** — it is still needed for the YMM path (you must supply a mileage to Cox's YMMT endpoint) and for MaxBuy's mileage estimation. Only remove it from the VIN path when the caller did not supply an explicit mileage.
-
-### Exit criteria
-
-- [x] VIN lookup sends no `?odometer` query param to Cox when buyer has not entered mileage
-- [ ] MMR value returned matches (or is within rounding of) Manheim's native tool for the same VIN
-- [x] `mileage_used` in the response envelope is `null` for a no-mileage VIN lookup
-- [x] Adjustment odometer field in the result band starts empty (not "8000") after a VIN lookup
-- [x] Search panel has no Miles field; odometer is entered only in MMR Adjustments
-- [x] YMM path is unchanged — mileage is still inferred/required for YMMT calls
-
----
-
-## 13 — MaxBuy: resolve VIN via YMM fallback when VIN not in TAV DB
-
-**Status:** Done (2026-06-16) — sequential VIN MaxBuy after MMR; `vehicleContextFromRequestFields` server fallback; Cox YMM passed from `mmrVinSessionFromResult`.
-
-**Goal:** MaxBuy currently fails with "Can't resolve VIN" for ~99% of VINs searched in MMR Lab because those vehicles haven't been through TAV's system before. MaxBuy should fall back to the year/make/model returned by Cox in the same MMR lookup and score the deal on that basis.
-
-### Root cause
-
-`runEvaluate` in `src/maxbuy/evaluateRun.ts` calls `resolveVehicleContext(db, { vin, region: "" })`. This searches `normalized_listings` and `purchase_outcomes` by VIN. Any VIN not already in TAV's DB returns `null` → `vehicle_context_missing` error. The VIN-only fallback (`if (vinModelYear != null && input.region)`) also fails because `region: ""` is falsy.
-
-Simultaneously, `buildMmrLabMaxbuyRequest` in `_components/build-mmr-lab-maxbuy-request.ts` deliberately sends `{ vin, year: "", make: "", model: "" }` for VIN sessions — so the server has no YMM to fall back to even if it tried.
-
-Both MMR and MaxBuy are fired in parallel (`runParallelLookup`), so year/make/model from the Cox MMR response aren't available yet when the MaxBuy request is built.
-
-### What to change — two-part fix
-
-**Part 1 — Server (`src/maxbuy/evaluateRun.ts`):**
-
-In the VIN path, after `resolveVehicleContext` returns `null`, check whether `request.year`, `request.make`, and `request.model` are present. If they are, construct `vehicleCtx` from them (same as the YMM path) rather than returning `vehicle_context_missing`. The VIN is still stored in the recommendation record. Add `vinAbsent = false` so VIN is retained but context comes from the provided YMM.
-
-```
-// pseudocode — exact shape to match existing YMM path in evaluateRun.ts
-if (!vehicleCtx && request.year && request.make && request.model) {
-  vehicleCtx = {
-    year:   request.year,
-    make:   request.make.toLowerCase(),
-    model:  request.model.toLowerCase(),
-    trim:   (request.trim ?? "base").toLowerCase(),
-    region: (request.region ?? "unknown").toLowerCase(),
-    cotCity: null, cotState: null,
-  };
-}
-```
-
-**Part 2 — Client (`_components/mmr-lab-client.tsx` + `build-mmr-lab-maxbuy-request.ts`):**
-
-For the VIN path, make MaxBuy launch **after** MMR resolves (sequential, not parallel). Once the MMR result returns with Cox year/make/model, build the MaxBuy request including those fields alongside the VIN. The MaxBuy loading state is shown immediately (spinner starts when the VIN search starts); it just resolves later.
-
-Update `MmrLabLookupSession` VIN variant to carry optional `year`, `make`, `model`, `trim` populated after the MMR response. Update `buildMmrLabMaxbuyRequest` to include them when present.
-
-| File | Change |
-|---|---|
-| `src/maxbuy/evaluateRun.ts` | VIN path: if context missing but request has year/make/model, construct vehicleCtx from them |
-| `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` | Pass `year`, `make`, `model`, `trim` from session when available for VIN path |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | VIN path in `runParallelLookup`: fire MaxBuy after MMR resolves (sequential for VIN; YMM path stays parallel) |
-| `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` | `MmrLabLookupSession` VIN variant: add optional `year`, `make`, `model`, `trim` fields |
-
-### Exit criteria
-
-- [x] MaxBuy returns a verdict for a VIN that has never been in TAV's DB
-- [x] The recommendation record still captures the VIN (not null)
-- [x] MaxBuy still works correctly for VINs that ARE in TAV's DB (no regression)
-- [x] YMM-path MaxBuy is unchanged
-- [x] If MMR itself fails (no Cox result), MaxBuy shows "evaluation could not run" — not a spurious VIN error
-
----
-
-## 14 — Mileage field cascade bug: can't clear the Miles input
-
-**Status:** Done (2026-06-15). Follow-up (2026-06-15): Miles input removed from the search panel entirely — odometer lives only in MMR Adjustments (`result-band.tsx`).
-
-**Goal:** The "Miles" input in the search panel became permanently stuck at whatever value was last seeded. After a VIN lookup the field showed 8,000 (the inferred mileage) and the user could not delete it — deleting the last digit always restored the previous value.
-
-### Root cause
-
-In `web/app/(app)/mmr-lab/_components/apply-ymm-cascade.ts`:
-
-```typescript
-const mileage = next.mileage !== "" ? next.mileage : prev.mileage;
-```
-
-This fires on every call to `onSelectionChange`, including direct mileage edits. The moment the field becomes empty string (`""`), the cascade substitutes the previous non-empty value. Deleting the last character is impossible — the field reverts on every keystroke.
-
-The original intent was to avoid wiping mileage when the user changes the Year dropdown. That's a reasonable goal, but the implementation is wrong: mileage is independent of the Y/M/M/S cascade and should not be governed by it at all.
-
-### What to change
-
-**`web/app/(app)/mmr-lab/_components/apply-ymm-cascade.ts`** — remove the mileage-preservation line entirely:
-
-```typescript
-// Before
-export function applyYmmCascadeChange(prev: MmrSelection, next: MmrSelection): MmrSelection {
-  const mileage = next.mileage !== "" ? next.mileage : prev.mileage;
-  if (next.year !== prev.year) {
-    return { ...next, mileage };
-  }
-  ...
-}
-
-// After
-export function applyYmmCascadeChange(prev: MmrSelection, next: MmrSelection): MmrSelection {
-  if (next.year !== prev.year) {
-    return { ...next };
-  }
-  ...
-}
-```
-
-Mileage is already carried through in `next` (the caller always spreads the full selection). The cascade only needs to clear downstream Y/M/M/S fields — it must not touch mileage.
-
-**Note:** Once Item 12 is done, the VIN lookup will no longer seed 8,000 into `selection.mileage` (it will seed `""`), so this fix becomes cleaner — but fix Item 14 regardless because it affects the YMM path too.
-
-### Exit criteria
-
-- [x] User can clear the Miles field to empty at any time
-- [x] Changing the Year dropdown does not wipe the mileage the user already typed
-- [x] Changing the Year dropdown does not restore a stale mileage if the field was manually cleared
-- [x] `applyYmmCascadeChange` unit tests updated to cover the empty-mileage case
-
----
-
-## 15 — Retail value: enable Cox retail data
-
-**Goal:** The result band has wired-up `retailValue`, `retailRangeLow`, `retailRangeHigh` columns that always show `--` because Cox is never asked for retail data.
-
-### Root cause
-
-`buildCoxIncludeTokens` in `workers/tav-intelligence-worker/src/clients/manheimHttp.ts` only appends `"retail"` to the Cox `include=` query param when `env.MANHEIM_INCLUDE_RETAIL === "true"`. That env var has never been set on the intel worker, so the retail block is never requested.
-
-### What to check first
-
-Before setting the env var, confirm with Cox/Manheim account rep whether the TAV API key is entitled for the `retail` include token. The `MANHEIM_INCLUDE_RETAIL` flag exists precisely because retail is a separate entitlement — enabling it on an un-entitled key will produce 4xx errors or empty retail blocks on every lookup.
-
-### What to change
-
-| Step | Action |
-|---|---|
-| 1 | Confirm Cox account has retail entitlement |
-| 2 | Set `MANHEIM_INCLUDE_RETAIL=true` in the intel worker's Cloudflare environment (wrangler secret or `[vars]` in `wrangler.toml`) |
-| 3 | Smoke-test a known VIN — confirm `retailValue` appears in the response envelope |
-| 4 | Verify `result-band.tsx` renders the retail card correctly once the value is non-null |
-
-If Cox confirms the account is **not** entitled for retail: hide the retail card in the result band UI rather than showing permanent `--` dashes.
-
-### Exit criteria
-
-- [ ] Either: retail value and range are populated in the result band for a live VIN lookup
-- [ ] Or: retail card is hidden in the UI with a doc note confirming the account lacks entitlement
-- [ ] No new 4xx errors appear in intel worker logs after enabling
-
----
-
-## Completed (archived)
-
-| Track | Doc |
-|-------|-----|
-| Opportunities UX rollout (Phases 0–7, Classic retired) | [`02-product/ux-rollout-shipped.md`](02-product/ux-rollout-shipped.md) |
-| MMR Lab Phases 1–4 (UI, live MaxBuy, adjustments, Cox historical) | [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md) |
-| MaxBuy P0–P9 | [`07-buybox/STATUS.md`](07-buybox/STATUS.md) |
-| **MMR Lab Item 1** — VIN autofill + YMM switch (DEC-MLB-1, DEC-MLB-6) | This doc §1 (2026-06-12) |
-| **MMR Lab Item 3** — MaxBuy plain-language explanation (DEC-MLB-4, DEC-MLB-5) | This doc §3 (2026-06-12) |
-| **MMR Lab Item 4** — YMM dependent dropdown cascade (DEC-MLB-7 through DEC-MLB-10) | This doc §4 (2026-06-15); year-change now preserves make/model/style and re-validates against new catalog |
-| **MMR Lab Item 11** — MMR Range blue highlight card in ResultBand | This doc §11 (2026-06-16) |
-| **MMR Lab Item 12** — VIN-only Cox lookup (no inferred odometer) | This doc §12 (2026-06-15) |
-| **MMR Lab Item 13** — MaxBuy YMM fallback for unknown VINs | This doc §13 (2026-06-16) |
-| **MMR Lab Item 14** — Miles input cascade clear fix (+ Miles removed from search panel) | This doc §14 (2026-06-15) |

@@ -429,17 +429,21 @@ export function ResultBand({
             )}
           </div>
         </div>
-        <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
-          Estimated Retail Value
-        </div>
-        <div className="text-xs opacity-75">Based on Cox Automotive Retail Transactions</div>
-        <div className="mt-1 text-lg font-semibold tabular-nums">
-          <MmrMoney value={retailValue} />
-        </div>
-        <div className="mt-4 text-sm uppercase tracking-wider opacity-90">Typical Range</div>
-        <div className="mt-1 text-lg font-semibold tabular-nums">
-          <MmrRange low={retailRangeLow} high={retailRangeHigh} />
-        </div>
+        {retailValue != null ? (
+          <>
+            <div className="mt-4 text-sm uppercase tracking-wider opacity-90">
+              Estimated Retail Value
+            </div>
+            <div className="text-xs opacity-75">Based on Cox Automotive Retail Transactions</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums">
+              <MmrMoney value={retailValue} />
+            </div>
+            <div className="mt-4 text-sm uppercase tracking-wider opacity-90">Typical Range</div>
+            <div className="mt-1 text-lg font-semibold tabular-nums">
+              <MmrRange low={retailRangeLow} high={retailRangeHigh} />
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );

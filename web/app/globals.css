@@ -162,6 +162,19 @@
   --chart-5: oklch(0.68 0.1 210);
 }
 
+/* field-cleared flash animation (Item 10 — cascade reset highlight) */
+@keyframes flash {
+  0%   { box-shadow: 0 0 0 2px oklch(0.52 0.19 25 / 0.7); background-color: oklch(0.95 0.04 25 / 0.3); }
+  70%  { box-shadow: 0 0 0 2px oklch(0.52 0.19 25 / 0.2); background-color: oklch(0.95 0.04 25 / 0.05); }
+  100% { box-shadow: none; background-color: transparent; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-flash {
+    animation: flash 1.5s ease-out;
+  }
+}
+
 /* base */
 * {
   border-color: var(--color-border);

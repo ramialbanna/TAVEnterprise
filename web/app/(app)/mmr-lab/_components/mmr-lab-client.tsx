@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert } from "@/components/ui/alert";
 import {
   getMmrCatalogMakes,
   getMmrCatalogModels,
@@ -138,6 +139,18 @@ export function MmrLabClient() {
   const [mmrRecomputing, setMmrRecomputing] = useState(false);
   const [catalog, setCatalog] = useState<MmrCatalogOptions>(emptyCatalog);
 
+  const [recentlyCleared, setRecentlyCleared] = useState<Set<"make" | "model" | "style">>(
+    new Set(),
+  );
+  const recentlyClearedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const markCleared = useCallback((fields: ("make" | "model" | "style")[]) => {
+    if (fields.length === 0) return;
+    if (recentlyClearedTimerRef.current) clearTimeout(recentlyClearedTimerRef.current);
+    setRecentlyCleared(new Set(fields));
+    recentlyClearedTimerRef.current = setTimeout(() => setRecentlyCleared(new Set()), 1500);
+  }, []);
+
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [adjustmentBaseline, setAdjustmentBaseline] = useState<MmrAdjustmentBaseline | null>(null);
@@ -154,6 +167,13 @@ export function MmrLabClient() {
     laneAskPriceRef.current = laneAskPrice;
     adjustmentsRef.current = adjustments;
   });
+
+  // Auto-scroll to results on mobile (Item 4) when a result arrives.
+  useEffect(() => {
+    if (view.kind !== "ok") return;
+    if (typeof window === "undefined" || window.innerWidth >= 768) return;
+    document.getElementById("mmr-result-band")?.scrollIntoView({ behavior: "smooth" });
+  }, [view.kind]);
 
   const reEvaluateMaxbuy = useCallback((
     session: MmrLabLookupSession,
@@ -298,12 +318,13 @@ export function MmrLabClient() {
       if (currentMake && !makes.includes(currentMake)) {
         setSelection((s) => ({ ...s, make: "", model: "", style: "" }));
         setCatalog((c) => ({ ...c, models: [], styles: [] }));
+        markCleared(["make", "model", "style"]);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [selection.year]);
+  }, [selection.year, markCleared]);
 
   useEffect(() => {
     if (!selection.year || !selection.make) return;
@@ -323,12 +344,13 @@ export function MmrLabClient() {
       if (currentModel && !models.includes(currentModel)) {
         setSelection((s) => ({ ...s, model: "", style: "" }));
         setCatalog((c) => ({ ...c, styles: [] }));
+        markCleared(["model", "style"]);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [selection.year, selection.make]);
+  }, [selection.year, selection.make, markCleared]);
 
   useEffect(() => {
     if (!selection.year || !selection.make || !selection.model) return;
@@ -624,22 +646,34 @@ export function MmrLabClient() {
 
   return (
     <div className="mx-auto w-full max-w-[96rem] space-y-4 sm:space-y-6">
-      <SearchPanel
-        vin={vinInput}
-        onVinChange={setVinInput}
-        vinReadOnly={vinLocked}
-        onVinReset={vinLocked ? onVinReset : undefined}
-        onVinSubmit={(v) => void onVinSubmit(v)}
-        vinPending={view.kind === "loading" && identity?.kind === "vin"}
-        selection={selection}
-        catalog={catalog}
-        onSelectionChange={onSelectionChange}
-        onYmmSubmit={() => void onYmmSubmit()}
-        ymmPending={view.kind === "loading" && identity?.kind === "vehicle"}
-        laneAskPrice={laneAskPrice}
-        onLaneAskPriceChange={handleLaneAskPriceChange}
-        styleMatchNotice={styleNotice}
-      />
+      {/* Sticky panel on desktop (Item 5) */}
+      <div className="sticky top-0 z-10">
+        <SearchPanel
+          vin={vinInput}
+          onVinChange={setVinInput}
+          vinReadOnly={vinLocked}
+          onVinReset={vinLocked ? onVinReset : undefined}
+          onVinSubmit={(v) => void onVinSubmit(v)}
+          vinPending={view.kind === "loading" && identity?.kind === "vin"}
+          selection={selection}
+          catalog={catalog}
+          onSelectionChange={onSelectionChange}
+          onYmmSubmit={() => void onYmmSubmit()}
+          ymmPending={view.kind === "loading" && identity?.kind === "vehicle"}
+          laneAskPrice={laneAskPrice}
+          onLaneAskPriceChange={handleLaneAskPriceChange}
+          recentlyCleared={recentlyCleared}
+        />
+      </div>
+
+      {/* Dismissible style approximation notice (Item 7) */}
+      {styleNotice ? (
+        <div className="px-4 sm:px-6">
+          <Alert variant="amber" onDismiss={() => setStyleNotice(null)}>
+            {styleNotice}
+          </Alert>
+        </div>
+      ) : null}
 
       {identity ? (
         <div className="border-b-4 border-primary px-4 pb-3 text-sm text-muted-foreground sm:px-6">
@@ -660,6 +694,7 @@ export function MmrLabClient() {
           <ErrorState error={view.error} onRetry={retryLookup} />
         </div>
       ) : (
+        <div id="mmr-result-band">
         <ResultBand
           phase={resultBandPhase}
           adjustments={adjustments}
@@ -683,6 +718,7 @@ export function MmrLabClient() {
           retailRangeLow={result?.retailRangeLow ?? null}
           retailRangeHigh={result?.retailRangeHigh ?? null}
         />
+        </div>
       )}
 
       <MaxbuyEvaluationSection state={maxbuyView} onRetry={onMaxbuyRetry} />
