@@ -1,6 +1,6 @@
 # Next Steps — MMR Lab
 
-**Last updated:** 2026-06-16 (Items 11–14 archived → [`completed-tasks.md`](completed-tasks.md); Item 1 pivoted to MarketCheck; MarketCheck integration in progress) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-17 (Item 16 added — MMR adjustment accuracy + Cloudflare deployment) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
 > Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
@@ -39,6 +39,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
+| **16** | MMR adjustment accuracy — deploy fixes + smoke-test grade/build deltas | High | [~] |
 | **1** | Auction Transactions — wire MarketCheck API | High | [~] |
 | **15** | Retail value — enable Cox retail data (env var + entitlement check) | Medium | [x] |
 | **2** | Year dropdown — pin recent years at top | Medium | [x] |
@@ -50,6 +51,85 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **8** | Mileage ↔ Adjustments odometer sync | Low | [x] |
 | **9** | Keyboard tab flow through disabled dropdowns | Low | [x] |
 | **10** | Cleared-field highlight animation | Low | [x] |
+
+---
+
+## 16 — MMR Adjustment Accuracy
+
+**Goal:** Grade, build-options, and odometer deltas in the MMR Adjustments panel must match the values shown in Manheim's native MMR tool for the same inputs.
+
+### Background — what was found (2026-06-17)
+
+Side-by-side comparison of our MMR Lab vs the native Manheim MMR tool on VIN `1GYTEEKL1SU107843` (2025 Cadillac Escalade IQ) revealed three linked bugs:
+
+#### Bug 1 — Build delta inflated when grade is also active
+
+**Root cause:** `buildOptionsFromBooleanTrue()` in `src/valuation/manheimResponseParser.ts` assigned the **entire** `adjustedPricing.wholesale.average − wholesale.average` delta to build options whenever Cox sends `adjustedBy.buildOptions: true` (boolean, not dollars). It only guarded against odometer mismatch — it did **not** bail when grade, color, or region were also present in `adjustedBy`.
+
+When grade=5.0 is active:
+- Cox returns total delta = grade ($420) + build ($890) = combined in `adjustedPricing.wholesale.average`
+- Our parser assigned $1,310 (or similar combined total) as build-only
+- Manheim correctly showed build = $890 and grade = $420 separately
+
+**Fix applied (commit `9d7783e`):** `buildOptionsFromBooleanTrue` now returns `{ included: true, adjustment: null }` when `adjustedByHasGrade`, `adjustedByHasColor`, or `adjustedByHasRegion` is true in `adjustedBy`. When adjustment is null, the breakdown function's residual logic can properly attribute the remaining delta to grade/color/region via single-field residual attribution.
+
+#### Bug 2 — Grade delta never shown in the adjustments panel
+
+**Root cause:** Two compounding issues:
+
+1. Cox returns `adjustedBy.Grade: "40"` (a string grade code on a 10-point scale, e.g. "40" = grade 4.0, "50" = grade 5.0). `readAdjustedByFieldDollars()` only reads **numeric** values — strings are ignored — so `gradeAdjustment` from the parser always comes back `null`.
+
+2. The fallback is **marginal tracking**: when the user changes grade from empty → 5.0, a recompute fires, and `applyAttributeMarginalDelta` captures the delta between the prior and new `adjustedMmr`. But `pendingMarginalChangesRef.current` was **overwritten** (not accumulated) on each `handleAdjustmentsChange` call. If the user entered an odometer value after selecting grade (both within the same 400ms debounce window), the odometer change would overwrite `pendingMarginalChangesRef = []`, losing the grade change, so the marginal was never stored.
+
+**Fix applied (commit `9d7783e`):** `pendingMarginalChangesRef.current` is now accumulated with `Array.from(new Set([...existing, ...newChanges]))` instead of overwritten. Grade/color/region changes are preserved even when odometer or other fields change before the debounce fires.
+
+#### Bug 3 — Odometer field fired Cox API on every keystroke
+
+**Root cause:** The odometer `<input>` called parent `onChange` on every keystroke. The parent debounced at 400ms, but slow typing (any pause >400ms between digits) fired one Cox API call per intermediate value (`4`, `40`, `400`, `4000`, `40000`). Each call set a new `adjustmentBaseline`, and out-of-order responses could corrupt the displayed build delta and grade marginals.
+
+The Express Grade input had the same problem.
+
+**Fix applied (commit `9d7783e`):** Both text inputs now hold local React state and only call the parent `onChange` (triggering the recompute) on `onBlur`. A `useEffect` syncs the local value back down when the parent resets it (e.g. Clear button).
+
+### What the numbers look like now vs target
+
+With odometer=20,000 entered, no grade selected (our app) vs grade=5.0 selected (Manheim):
+
+| Field | Our app (no grade) | Manheim (grade=5.0) | Expected when grade=5.0 added in our app |
+|---|---|---|---|
+| Adjusted MMR | $98,200 | $98,600 | $98,600 |
+| Odometer delta | −$3,800 | −$4,050 | ~−$4,050 |
+| Grade delta | — | +$400 | ~+$400 (via marginal) |
+| Build delta | +$1,000 | +$890 | ~+$890 (parser fix) |
+
+The $400 gap in adjusted MMR and the $110 build difference are both expected when grade is not applied — they disappear once grade=5.0 is selected in our app and the recompute runs. The numbers are **different inputs producing different outputs**, not a calculation error once the fixes are deployed.
+
+### What still needs to happen
+
+| Step | Action | Owner |
+|---|---|---|
+| **Deploy app worker** | Deploy `src/` (Cloudflare Worker) to production — contains the `buildOptionsFromBooleanTrue` parser fix | Engineering |
+| **Deploy web app** | Deploy `web/` (Next.js) to production — contains the blur-only inputs and marginal accumulation fix | Engineering |
+| **Smoke test** | On VIN `1GYTEEKL1SU107843`: enter odometer=12,181 (avg), select grade=5.0, confirm build delta shows ~$890 and grade delta shows ~$420 | QA |
+| **Smoke test** | Confirm build+grade+odometer all show when all three are active simultaneously | QA |
+| **Avg LV Battery Score** | `result-band.tsx` has `<Stat label="Avg EV Battery Score" />` hardcoded with no value. Parse `averageEvBatteryScore` (or equivalent key) from Cox payload in `manheimResponseParser.ts`, forward through `routes.ts`, and pass as a prop to `ResultBand`. Manheim shows 100% for this VIN. | Engineering |
+
+### Files changed in `9d7783e`
+
+| File | Change |
+|---|---|
+| `src/valuation/manheimResponseParser.ts` | `buildOptionsFromBooleanTrue` bails when grade/color/region present in `adjustedBy` |
+| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Accumulate `pendingMarginalChangesRef` instead of overwriting |
+| `web/app/(app)/mmr-lab/_components/result-band.tsx` | Odometer + Express Grade inputs fire recompute on blur only; local state for display |
+
+### Exit criteria
+
+- [ ] App worker and web app deployed to Cloudflare production
+- [ ] Selecting grade=5.0 on VIN `1GYTEEKL1SU107843` shows a grade delta ~+$420 next to the grade dropdown
+- [ ] Build delta shows ~+$890 (not $1,000) when grade=5.0 is active
+- [ ] Odometer input does not fire multiple Cox requests while typing
+- [ ] Avg LV Battery Score shows 100% for the Escalade IQ (or any EV with battery data)
+- [ ] No regression on build-only (no grade) scenario — build delta still shows when grade is not selected
 
 ---
 
