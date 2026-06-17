@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,13 @@ function MmrAdjustmentsPanel({
   onChange,
   onClear,
 }: AdjustmentsPanelProps) {
+  const [odometerInput, setOdometerInput] = useState(adjustments.odometer);
+  const [expressGradeInput, setExpressGradeInput] = useState(adjustments.expressGrade);
+
+  // Sync local input values when parent resets them (e.g. on Clear).
+  useEffect(() => { setOdometerInput(adjustments.odometer); }, [adjustments.odometer]);
+  useEffect(() => { setExpressGradeInput(adjustments.expressGrade); }, [adjustments.expressGrade]);
+
   const showOdometerDelta =
     adjustments.odometer !== "" &&
     odometerAdjustment != null &&
@@ -191,13 +199,9 @@ function MmrAdjustmentsPanel({
             placeholder="Enter ODO (mi)"
             aria-label="Enter ODO (mi)"
             inputMode="numeric"
-            value={adjustments.odometer}
-            onChange={(e) =>
-              onChange({
-                ...adjustments,
-                odometer: e.target.value.replace(/[^\d]/g, ""),
-              })
-            }
+            value={odometerInput}
+            onChange={(e) => setOdometerInput(e.target.value.replace(/[^\d]/g, ""))}
+            onBlur={() => onChange({ ...adjustments, odometer: odometerInput })}
             className={cn(adjSelectClass, "min-w-0 flex-1")}
           />
           {showOdometerDelta ? (
@@ -309,13 +313,9 @@ function MmrAdjustmentsPanel({
           placeholder="Enter Express grade"
           aria-label="Enter Express grade"
           inputMode="numeric"
-          value={adjustments.expressGrade}
-          onChange={(e) =>
-            onChange({
-              ...adjustments,
-              expressGrade: e.target.value.replace(/[^\d]/g, "").slice(0, 3),
-            })
-          }
+          value={expressGradeInput}
+          onChange={(e) => setExpressGradeInput(e.target.value.replace(/[^\d]/g, "").slice(0, 3))}
+          onBlur={() => onChange({ ...adjustments, expressGrade: expressGradeInput })}
           className={adjSelectClass}
         />
 

@@ -232,13 +232,17 @@ function buildOptionsFromBooleanTrue(
 ): ManheimBuildOptions {
   const delta = wholesaleBuildOptionsDelta(payload);
   if (delta === null) return { included: true, adjustment: null };
-  if (
-    adjustedBy &&
-    hasOdometerAdjustment(adjustedBy) &&
-    !odometerMatchesAverage(item, adjustedBy)
-  ) {
-    // Mileage and build both apply — wholesale delta is not build-only.
-    return { included: true, adjustment: null };
+  if (adjustedBy) {
+    const odometerOff =
+      hasOdometerAdjustment(adjustedBy) && !odometerMatchesAverage(item, adjustedBy);
+    const otherAttrs =
+      adjustedByHasGrade(adjustedBy) ||
+      adjustedByHasColor(adjustedBy) ||
+      adjustedByHasRegion(adjustedBy);
+    if (odometerOff || otherAttrs) {
+      // Other adjustments are also active — wholesale delta is not build-only.
+      return { included: true, adjustment: null };
+    }
   }
   return { included: true, adjustment: delta };
 }

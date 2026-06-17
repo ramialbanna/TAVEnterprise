@@ -246,7 +246,12 @@ export function MmrLabClient() {
 
   const handleAdjustmentsChange = useCallback(
     (next: MmrAdjustments) => {
-      pendingMarginalChangesRef.current = detectAttributeMarginalChanges(adjustments, next);
+      const newChanges = detectAttributeMarginalChanges(adjustments, next);
+      // Accumulate — don't overwrite — so grade/color/region changes aren't lost
+      // when the user also adjusts odometer before the debounce fires.
+      pendingMarginalChangesRef.current = Array.from(
+        new Set([...pendingMarginalChangesRef.current, ...newChanges]),
+      );
       setAdjustments(next);
       const session = lookupSessionRef.current;
       if (!session) return;
