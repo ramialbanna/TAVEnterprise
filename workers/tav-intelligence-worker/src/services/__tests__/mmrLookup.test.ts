@@ -211,27 +211,28 @@ describe("performMmrLookup", () => {
     );
   });
 
-  it("YMM inferred mileage propagates: missing mileage → client called with inferred value", async () => {
+  it("YMM without mileage: no odometer sent to client, mileage_used is null", async () => {
     const deps = makeDeps();
     deps.cache.get.mockResolvedValue(null);
     deps.lock.acquire.mockResolvedValue(true);
     deps.client.lookupByYmm.mockResolvedValue(ymmLiveResult);
 
-    const fixedNow = new Date("2026-06-15T12:00:00.000Z");
-
     const result = await performMmrLookup(
       {
         input: { kind: "ymm", year: 2020, make: "Toyota", model: "Camry", trim: "SE" },
         requestId: "req-6b",
-        now: () => fixedNow,
       },
       deps,
     );
 
-    expect(result.is_inferred_mileage).toBe(true);
-    const callArg = deps.client.lookupByYmm.mock.calls[0]?.[0] as { mileage: number };
-    expect(callArg.mileage).toBeGreaterThan(0);
-    expect(result.mileage_used).toBe(callArg.mileage);
+    expect(result.is_inferred_mileage).toBe(false);
+    expect(result.mileage_used).toBeNull();
+    const callArg = deps.client.lookupByYmm.mock.calls[0]?.[0] as { mileage?: number };
+    expect(callArg.mileage).toBeUndefined();
+    expect(deps.lock.release).toHaveBeenCalledWith(
+      "ymm:2020:toyota:camry:se",
+      "req-6b",
+    );
   });
 
   it("negative result (mmr_value=null): cache.set uses NEGATIVE_CACHE_TTL_SECONDS", async () => {

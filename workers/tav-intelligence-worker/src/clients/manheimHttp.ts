@@ -236,7 +236,7 @@ export class ManheimHttpClient implements ManheimClient {
     make:         string;
     model:        string;
     trim?:        string;
-    mileage:      number;
+    mileage?:     number;
     zipCode?:     string;
     evbh?:        number;
     adjustments?: CoxMmrQueryAdjustments;
@@ -441,7 +441,7 @@ export class ManheimHttpClient implements ManheimClient {
     make:          string;
     model:         string;
     trim?:         string;
-    mileage:       number;
+    mileage?:      number;
     zipCode?:      string;
     evbh?:         number;
     region?:       string;
@@ -474,7 +474,9 @@ export class ManheimHttpClient implements ManheimClient {
       `/valuations/search/${encodeURIComponent(args.year)}/${encodeURIComponent(args.make)}/${encodeURIComponent(args.model)}`,
       this.env.MANHEIM_MMR_URL,
     );
-    u.searchParams.set("odometer", String(args.mileage));
+    if (typeof args.mileage === "number" && Number.isFinite(args.mileage) && args.mileage >= 0) {
+      u.searchParams.set("odometer", String(args.mileage));
+    }
     u.searchParams.set("include", "ci");
     if (args.trim !== undefined && args.trim !== null && args.trim.trim().length > 0) {
       u.searchParams.set("trim", args.trim);

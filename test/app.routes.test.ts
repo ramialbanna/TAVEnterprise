@@ -968,7 +968,7 @@ describe("/app/mmr live catalog + YMM valuation", () => {
     expect(intelFetch).not.toHaveBeenCalled();
   });
 
-  it("POST /app/mmr/ymm requires style and mileage before intel fetch", async () => {
+  it("POST /app/mmr/ymm requires style before intel fetch", async () => {
     const intelFetch = vi.fn();
     const res = await worker.fetch(
       authedPost("/app/mmr/ymm", { year: 2026, make: "TESLA", model: "MODEL Y AWD", style: "" }),

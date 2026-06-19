@@ -9,12 +9,11 @@ Full inventory and when-to-use guidance: **`docs/tools.md`**.
 
 Quick defaults:
 
-- **Database / SQL / migrations:** MCP `supabase-TAVEnterprise` only (not `supabase-US-communication`).
+- **Database / SQL / migrations:** MCP `supabase-TAVEnterprise` only.
 - **Ingest diagnosis:** MCP `apify` + `supabase-TAVEnterprise`.
 - **Workers / KV / cron:** MCP `cloudflare-api`.
 - **Web deploy / Vercel env:** MCP `vercel`.
 - **UI verification:** MCP `chrome-devtools`.
 - **GitHub / PRs / CI:** `gh` CLI (no GitHub MCP).
-- **Make.com:** deprecated — do not add new flows.
 
 If tooling context matters, read `@docs/tools.md` (and `@docs/NEXT_STEPS.md` for priorities). Never print secrets from MCP or `.dev.vars`.

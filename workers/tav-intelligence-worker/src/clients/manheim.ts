@@ -60,9 +60,10 @@ export interface ManheimClient {
   lookupByYmm(args: {
     year:         number;
     make:         string;
-    model:        string;
+    model:         string;
     trim?:        string;
-    mileage:      number;
+    /** When omitted, Cox prices at the segment average odometer (no ?odometer=). */
+    mileage?:     number;
     requestId:    string;
     adjustments?: CoxMmrQueryAdjustments;
   }): Promise<ManheimYmmResponse>;

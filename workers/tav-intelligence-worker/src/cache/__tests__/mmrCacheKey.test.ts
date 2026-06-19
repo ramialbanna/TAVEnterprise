@@ -80,6 +80,13 @@ describe("deriveYmmCacheKey", () => {
     expect(k).toBe("ymm:2022:mercedes-benz:c300:amg_line:30000");
   });
 
+  it("omits mileage bucket when mileage is not supplied", () => {
+    const k = deriveYmmCacheKey({
+      year: 2025, make: "BMW", model: "7 SERIES", trim: "4D SEDAN 750E XDRIVE",
+    });
+    expect(k).toBe("ymm:2025:bmw:7_series:4d_sedan_750e_xdrive");
+  });
+
   it("is case-insensitive on make/model/trim", () => {
     const a = deriveYmmCacheKey({
       year: 2020, make: "TOYOTA", model: "CAMRY", trim: "SE", mileage: 60_000,

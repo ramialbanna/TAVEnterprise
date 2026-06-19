@@ -3,7 +3,7 @@
  *
  * Format (see docs/03-api/intelligence-contracts.md §A):
  *   - VIN:  vin:${normalizedVin}      where normalizedVin = vin.trim().toUpperCase()
- *   - YMM:  ymm:${year}:${makeLower}:${modelLower}:${trimLower ?? 'base'}:${mileageBucket}
+ *   - YMM:  ymm:${year}:${makeLower}:${modelLower}:${trimLower ?? 'base'}[:${mileageBucket}]
  *
  * Mileage is bucketed to the nearest 5,000 to maximize cache reuse and align
  * with MMR's own internal rounding tolerance. A bucket of 0 is valid — it
@@ -17,7 +17,8 @@ export interface YmmCacheKeyArgs {
   make:    string;
   model:   string;
   trim?:   string | null;
-  mileage: number;
+  /** Bucketed into the key when supplied; omitted for no-odometer lookups. */
+  mileage?: number;
 }
 
 /** Build the VIN-namespaced cache key. Mileage is bucketed when supplied so
@@ -38,9 +39,11 @@ export function deriveYmmCacheKey(args: YmmCacheKeyArgs): string {
     args.trim === undefined || args.trim === null || args.trim.trim().length === 0
       ? "base"
       : normalizeToken(args.trim);
-  const bucket = mileageBucket(args.mileage);
-
-  return `ymm:${args.year}:${makePart}:${modelPart}:${trimPart}:${bucket}`;
+  const base = `ymm:${args.year}:${makePart}:${modelPart}:${trimPart}`;
+  if (typeof args.mileage === "number" && Number.isFinite(args.mileage) && args.mileage >= 0) {
+    return `${base}:${mileageBucket(args.mileage)}`;
+  }
+  return base;
 }
 
 /** Round mileage to the nearest 5,000 (half-up, per Math.round). */

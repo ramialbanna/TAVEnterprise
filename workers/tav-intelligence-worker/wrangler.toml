@@ -51,6 +51,9 @@ MANAGER_EMAIL_ALLOWLIST = ""
 # Phase 4 — Cox historical + forecast includes on MMR lookups (smoke on staging first).
 MANHEIM_INCLUDE_HISTORICAL = "true"
 MANHEIM_INCLUDE_FORECAST = "true"
+# Cox retail tier — requires retail entitlement on the TAV API key.
+# Enables Estimated Retail Value + Typical Range in the MMR Lab result band.
+MANHEIM_INCLUDE_RETAIL = "true"
 # Cox client_credentials config — not credentials, committed as vars so they can
 # never go missing after a deploy. Values are the same across all environments.
 MANHEIM_API_VENDOR   = "cox"
@@ -82,6 +85,9 @@ MANAGER_EMAIL_ALLOWLIST = ""
 # Phase 4 — enable after staging smoke validates Cox historical/forecast payloads.
 MANHEIM_INCLUDE_HISTORICAL = "true"
 MANHEIM_INCLUDE_FORECAST = "true"
+# Cox retail tier — requires retail entitlement on the TAV API key.
+# Enables Estimated Retail Value + Typical Range in the MMR Lab result band.
+MANHEIM_INCLUDE_RETAIL = "true"
 # Cox client_credentials config — not credentials, committed as vars so they can
 # never go missing after a deploy. Values are the same across all environments.
 MANHEIM_API_VENDOR   = "cox"

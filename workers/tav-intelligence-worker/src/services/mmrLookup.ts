@@ -71,6 +71,7 @@ export type MmrLookupInput =
       make:         string;
       model:        string;
       trim?:        string;
+      /** When omitted, Cox prices at the segment average odometer (no ?odometer=). */
       mileage?:     number;
       adjustments?: MmrLookupAdjustments;
     };
@@ -130,26 +131,20 @@ interface LookupMileage {
 }
 
 function resolveLookupMileage(input: MmrLookupInput, now: Date): LookupMileage {
-  if (input.kind === "vin") {
-    if (input.mileage === undefined) {
-      return {
-        envelopeValue: null,
-        isInferred:    false,
-        clientValue:   undefined,
-        cacheValue:    undefined,
-      };
-    }
-    const inferenceYear = input.year ?? now.getFullYear();
-    const data = getMmrMileageData(inferenceYear, input.mileage, now);
+  if (input.mileage === undefined) {
     return {
-      envelopeValue: data.value,
-      isInferred:    data.isInferred,
-      clientValue:   data.value,
-      cacheValue:    data.value,
+      envelopeValue: null,
+      isInferred:    false,
+      clientValue:   undefined,
+      cacheValue:    undefined,
     };
   }
 
-  const data = getMmrMileageData(input.year, input.mileage ?? null, now);
+  const inferenceYear =
+    input.kind === "ymm"
+      ? input.year
+      : input.year ?? now.getFullYear();
+  const data = getMmrMileageData(inferenceYear, input.mileage, now);
   return {
     envelopeValue: data.value,
     isInferred:    data.isInferred,
@@ -185,8 +180,7 @@ export async function performMmrLookup(
   const userCtx     = args.userContext ?? NULL_USER_CONTEXT;
   const coxAdj      = toCoxAdjustments(adjustments);
 
-  // 1. Resolve mileage — VIN path skips inference when caller did not supply mileage;
-  // YMM path always resolves (infers when absent) because Cox requires odometer.
+  // 1. Resolve mileage — skip inference when caller did not supply mileage (VIN and YMM).
   const nowDate = args.now?.() ?? new Date();
   const lookupMileage = resolveLookupMileage(args.input, nowDate);
 
@@ -199,7 +193,7 @@ export async function performMmrLookup(
           make:    args.input.make,
           model:   args.input.model,
           trim:    args.input.trim ?? null,
-          mileage: lookupMileage.cacheValue!,
+          mileage: lookupMileage.cacheValue,
         });
 
   log("mmr.lookup.start", {
@@ -292,7 +286,9 @@ export async function performMmrLookup(
                 make:         args.input.make,
                 model:        args.input.model,
                 ...(args.input.trim !== undefined ? { trim: args.input.trim } : {}),
-                mileage:      lookupMileage.clientValue!,
+                ...(lookupMileage.clientValue !== undefined
+                  ? { mileage: lookupMileage.clientValue }
+                  : {}),
                 requestId,
                 ...(coxAdj !== undefined ? { adjustments: coxAdj } : {}),
               });
