@@ -623,12 +623,10 @@ export function MmrLabClient() {
           : view.kind === "unavailable"
             ? "unavailable"
             : "idle";
-  const retryLookup =
-    identity?.kind === "vin"
-      ? () => void onVinSubmit(identity.vin)
-      : identity?.kind === "vehicle"
-        ? () => void onYmmSubmit()
-        : undefined;
+  const retryLookup = useCallback(() => {
+    if (identity?.kind === "vin") void onVinSubmit(identity.vin);
+    else if (identity?.kind === "vehicle") void onYmmSubmit();
+  }, [identity, onVinSubmit, onYmmSubmit]);
 
   // MaxBuy-specific retry: re-evaluates using the current session enriched with
   // catalog YMM when the session was originally missing make/model (e.g. the

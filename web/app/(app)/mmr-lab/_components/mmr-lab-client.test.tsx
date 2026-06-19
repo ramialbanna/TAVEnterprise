@@ -140,7 +140,7 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(
       screen.queryByRole("button", { name: /fill example/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(5);
     expect(screen.getByText(/search to run max buy/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument(),

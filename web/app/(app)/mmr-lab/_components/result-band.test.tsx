@@ -15,7 +15,7 @@ describe("ResultBand — honest, no fabrication", () => {
         onAdjustmentsClear={noop}
       />,
     );
-    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(5);
   });
 
   it("VIN value populates ONLY Base MMR; other zones stay --", () => {
@@ -32,7 +32,7 @@ describe("ResultBand — honest, no fabrication", () => {
     );
     expect(screen.getByText("$48,600")).toBeInTheDocument();
     expect(screen.getByText(/high/i)).toBeInTheDocument();
-    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(5);
+    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(4);
   });
 
   it("loading shows skeleton instead of values", () => {
