@@ -716,6 +716,7 @@ export function MmrLabClient() {
           unavailableReason={view.kind === "unavailable" ? view.reason : null}
           avgOdometer={result?.avgOdometer ?? null}
           avgCondition={result?.avgCondition ?? null}
+          avgEvBatteryScore={result?.avgEvBatteryScore ?? null}
           rangeLow={result?.rangeLow ?? null}
           rangeHigh={result?.rangeHigh ?? null}
           adjustedMmr={result?.adjustedMmr ?? null}

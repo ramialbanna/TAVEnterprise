@@ -214,17 +214,37 @@ export async function runEvaluate(
     );
 
     if (!vehicleCtx) {
+      // Prefer year/make/model passed from the MMR session (frontend sends these
+      // from the Cox response whenever a VIN lookup succeeds).
       vehicleCtx = vehicleContextFromRequestFields(request);
-      if (!vehicleCtx) {
-        return {
-          ok: false,
-          error: {
-            code: "vehicle_context_missing",
-            message:
-              "Unable to resolve year/make/model for VIN — provide year/make/model from MMR or normalized_listing_id",
-          },
-        };
-      }
+    }
+
+    if (!vehicleCtx && vinModelYear !== null) {
+      // Last resort: VIN digit-decode gives at least the model year. Make and
+      // model are unknown — fetchHistoricalSummary returns 0 units, scoring
+      // degrades to low data-strength. The buyer gets a rough guide instead of
+      // an error. This path fires only when Cox did not return make/model AND
+      // the VIN is not in TAV's database.
+      vehicleCtx = {
+        year: vinModelYear,
+        make: "unknown",
+        model: "unknown",
+        trim: "base",
+        region: (request.region ?? "unknown").toLowerCase(),
+        cotCity: null,
+        cotState: null,
+      };
+    }
+
+    if (!vehicleCtx) {
+      return {
+        ok: false,
+        error: {
+          code: "vehicle_context_missing",
+          message:
+            "Unable to resolve year/make/model for VIN — provide year/make/model from MMR or normalized_listing_id",
+        },
+      };
     }
   } else {
     // ── YMM path (OPEN-5) ─────────────────────────────────────────────────────

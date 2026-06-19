@@ -30,6 +30,7 @@ type Props = {
   unavailableReason?: string | null;
   avgOdometer?: number | null;
   avgCondition?: number | null;
+  avgEvBatteryScore?: number | null;
   rangeLow?: number | null;
   rangeHigh?: number | null;
   adjustedMmr?: number | null;
@@ -338,6 +339,7 @@ export function ResultBand({
   unavailableReason,
   avgOdometer,
   avgCondition,
+  avgEvBatteryScore,
   rangeLow,
   rangeHigh,
   adjustedMmr,
@@ -381,7 +383,9 @@ export function ResultBand({
         <div className="mt-4">
           <Stat label="Avg Odometer (mi)" value={avgOdometer} />
           <Stat label="Avg Condition" value={avgCondition} />
-          <Stat label="Avg EV Battery Score" />
+          {avgEvBatteryScore != null ? (
+            <Stat label="Avg EV Battery Score" value={avgEvBatteryScore} />
+          ) : null}
         </div>
       </div>
 

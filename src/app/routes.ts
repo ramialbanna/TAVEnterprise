@@ -60,7 +60,7 @@ import type { MmrResponseEnvelope } from "../types/intelligence";
 import { extractManheimAdjustmentBreakdown, extractManheimDistribution } from "../valuation/manheimResponseParser";
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
-import { selectMmrPayloadItem } from "../valuation/manheimPayloadItem";
+import { selectMmrPayloadItem, selectMmrPayloadItemByStyle } from "../valuation/manheimPayloadItem";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
@@ -516,23 +516,40 @@ async function handleHistoricalSales(env: Env, url: URL): Promise<Response> {
   }
 }
 
+/**
+ * Maps a validated intel-worker MMR envelope into the shape returned to the
+ * frontend. Accepts an optional `styleName` (for YMM lookups) to pre-select
+ * the best-matching item from `items[]` before parsing — see Item 17.
+ */
 function mapIntelMmrEnvelopeToAppData(
   envelope: MmrResponseEnvelope,
   method: "vin" | "year_make_model",
   confidence: "high" | "medium",
+  styleName?: string,
 ): Record<string, unknown> {
   if (!envelope.ok || envelope.mmr_value === null) {
     return { mmrValue: null, missingReason: envelope.error_code ?? "no_mmr_value" };
   }
 
-  const distribution = extractManheimDistribution(envelope.mmr_payload ?? {});
+  // For YMM calls, select the item that best matches the user's chosen style
+  // name before handing off to parsers. A single item (without an `items[]`
+  // wrapper) is treated by all parsers as the root object, so they pick it up
+  // correctly via `selectMmrPayloadItem`. Falls back to the full payload if no
+  // style name is provided or scoring finds no candidate.
+  const rawPayload = envelope.mmr_payload ?? {};
+  const parserPayload: Record<string, unknown> =
+    styleName
+      ? (selectMmrPayloadItemByStyle(rawPayload, styleName) ?? rawPayload)
+      : rawPayload;
+
+  const distribution = extractManheimDistribution(parserPayload);
   const adjustmentBreakdown = extractManheimAdjustmentBreakdown(
-    envelope.mmr_payload ?? {},
+    parserPayload,
     envelope.mileage_used,
   );
-  const marketContext = extractManheimMarketContext(envelope.mmr_payload ?? {});
-  const vehicleIdentity = extractManheimVehicleIdentity(envelope.mmr_payload ?? {});
-  const payloadItem = selectMmrPayloadItem(envelope.mmr_payload);
+  const marketContext = extractManheimMarketContext(parserPayload);
+  const vehicleIdentity = extractManheimVehicleIdentity(parserPayload);
+  const payloadItem = selectMmrPayloadItem(parserPayload);
   const baseMmr =
     distribution.wholesaleBaseAvg ??
     distribution.wholesaleAvg ??
@@ -562,6 +579,9 @@ function mapIntelMmrEnvelopeToAppData(
     retailValue: distribution.retailAvg,
     retailRangeLow: distribution.retailRough,
     retailRangeHigh: distribution.retailClean,
+    ...(distribution.avgEvBatteryScore !== null
+      ? { avgEvBatteryScore: distribution.avgEvBatteryScore }
+      : {}),
     ...(marketContext.historicalAverages !== null
       ? { historicalAverages: marketContext.historicalAverages }
       : {}),
@@ -581,6 +601,7 @@ async function fetchIntelMmrLookup(
   logLabel: "mmr_vin" | "mmr_ymm",
   method: "vin" | "year_make_model",
   confidence: "high" | "medium",
+  styleName?: string,
 ): Promise<Response> {
   if (!env.INTEL_WORKER_URL && env.INTEL_WORKER === undefined) {
     return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
@@ -624,7 +645,7 @@ async function fetchIntelMmrLookup(
 
   return json({
     ok: true,
-    data: mapIntelMmrEnvelopeToAppData(wrapped.data.data, method, confidence),
+    data: mapIntelMmrEnvelopeToAppData(wrapped.data.data, method, confidence, styleName),
   });
 }
 
@@ -765,6 +786,7 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
     "mmr_ymm",
     "year_make_model",
     "medium",
+    style,
   );
 }
 

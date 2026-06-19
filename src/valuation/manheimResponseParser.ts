@@ -36,6 +36,8 @@ export interface ManheimDistribution {
   /** Cox MMR 1.4 retail tier below. Null when retail include flag is off or absent from payload. */
   retailRough:    number | null;
   sampleCount:    number | null;
+  /** Average EV battery health score (0–100). Present for EVs; null for ICE vehicles or when absent. */
+  avgEvBatteryScore: number | null;
 }
 
 export function extractManheimDistribution(payload: unknown): ManheimDistribution {
@@ -50,6 +52,7 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     retailAvg:      null,
     retailRough:    null,
     sampleCount:    null,
+    avgEvBatteryScore: null,
   };
 
   if (!payload || typeof payload !== "object") return none;
@@ -90,6 +93,14 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     wholesaleBaseRough = posNum(w.below);
   }
 
+  const avgEvBatteryScore = parseEvBatteryScore(
+    t.averageEvBatteryScore ??
+    t.averageEVBatteryScore ??
+    t.avgEvBatteryScore ??
+    t.avgEVBatteryScore ??
+    t.averageEVBH,
+  );
+
   return {
     wholesaleAvg,
     wholesaleClean,
@@ -101,7 +112,21 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     retailAvg,
     retailRough,
     sampleCount: parseSampleSize(t.sampleSize),
+    avgEvBatteryScore,
   };
+}
+
+/**
+ * EV battery score — Cox may return a 0–100 percentage or a 0–1 fraction.
+ * Values in (0, 1] are treated as fractions and multiplied by 100.
+ */
+function parseEvBatteryScore(v: unknown): number | null {
+  if (typeof v !== "number" && typeof v !== "string") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n) || n < 0) return null;
+  if (n <= 1) return Math.round(n * 100);
+  if (n <= 100) return Math.round(n);
+  return null;
 }
 
 /** Accept a positive number and round it; return null for zero, negative, or non-number. */

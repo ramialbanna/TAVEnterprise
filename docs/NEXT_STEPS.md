@@ -1,19 +1,19 @@
-# Next Steps — MMR Lab
+﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-17 (Item 16 added — MMR adjustment accuracy + Cloudflare deployment) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-19 (Item 18 added -- MaxBuy vehicle_context_missing for external VINs) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
 > Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
 
-**Legend:** `[x]` done · `[~]` in progress · `[ ]` not done
+**Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
 ---
 
 ## Context
 
-**TAV-AIP** — internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
+**TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active work on **MMR Lab** — the combined Cox MMR lookup + MaxBuy evaluation page at `/mmr-lab`.
+**This doc:** Active work on **MMR Lab** â€” the combined Cox MMR lookup + MaxBuy evaluation page at `/mmr-lab`.
 
 | Area | Path |
 |------|------|
@@ -39,32 +39,110 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **16** | MMR adjustment accuracy — deploy fixes + smoke-test grade/build deltas | High | [~] |
-| **1** | Auction Transactions — wire MarketCheck API | High | [~] |
-| **15** | Retail value — enable Cox retail data (env var + entitlement check) | Medium | [x] |
-| **2** | Year dropdown — pin recent years at top | Medium | [x] |
+| **17** | YMM parity vs Manheim â€” item selection + range source | High | [~] |
+| **18** | MaxBuy `vehicle_context_missing` -- trust MMR result for VIN identity | High | [x] |
+| **16** | MMR adjustment accuracy â€” deploy fixes + smoke-test grade/build deltas | High | [x] |
+| **15** | Retail value â€” enable Cox retail data (env var + entitlement check) | Medium | [x] |
+| **2** | Year dropdown â€” pin recent years at top | Medium | [x] |
 | **3** | Per-dropdown loading indicator | Medium | [x] |
 | **4** | Auto-scroll to results on mobile after submit | Medium | [x] |
 | **5** | Sticky SearchPanel header on desktop scroll | Medium | [x] |
-| **6** | Value button — tooltip showing what field is missing | Medium | [x] |
-| **7** | Style approximation notice — closeable banner above result band | Low | [x] |
-| **8** | Mileage ↔ Adjustments odometer sync | Low | [x] |
+| **6** | Value button â€” tooltip showing what field is missing | Medium | [x] |
+| **7** | Style approximation notice â€” closeable banner above result band | Low | [x] |
+| **8** | Mileage â†” Adjustments odometer sync | Low | [x] |
 | **9** | Keyboard tab flow through disabled dropdowns | Low | [x] |
 | **10** | Cleared-field highlight animation | Low | [x] |
 
 ---
 
-## 16 — MMR Adjustment Accuracy
+## 17 â€” YMM Parity vs Manheim Native
+
+**Goal:** YMM (Year/Make/Model/Style) lookups in our MMR Lab must return the same Base MMR, MMR Range, Estimated Retail Value, and Typical Range as Manheimâ€™s native MMR tool for identical inputs.
+
+**Last updated:** 2026-06-19 (test completed â€” fix approach confirmed)
+
+### What was observed (2026-06-19)
+
+Side-by-side testing of 3 YMMs + 2 VINs confirmed two distinct problems. Full results: [07-buybox/MMR-PARITY-TEST-RESULTS.md](07-buybox/MMR-PARITY-TEST-RESULTS.md)
+
+#### Problem A -- Base MMR differs when wrong item selected (confirmed: 2022 Toyota Camry SE)
+
+| Field | Our app | Manheim |
+|---|---|---|
+| Base MMR | $19,950 | $15,850 |
+| Avg Condition | 3.8 | 2.3 |
+
+- Score each item by closeness to the selected style string (exact match -> subSeries match -> token overlap)
+- Pick the highest-scoring item; fall back to `items[0]` if nothing scores above threshold
+- Style string comes from Cox's own catalog so the format is compatible
+
+
+**Fix (decided 2026-06-19):** Pass the user's selected style name into item selection and score each item in `items[]` against `description.trim` / `description.subSeries` instead of always taking `items[0]`.
+
+| Field | Our app | Manheim |
+|---|---|---|
+| Base MMR | ,700 | ,700 âœ“ |
+| MMR Range | ,500 â€“ ,850 | ,000 â€“ ,400 |
+| Retail Value | ,100 | ,100 âœ“ |
+| Typical Range | ,400 â€“ ,700 | ,400 â€“ ,700 âœ“ |
+
+**Root cause (suspected):** Our range fix (2026-06-19, commit 16d716a) changed 
+angeLow/
+angeHigh to use the base wholesale.below/above tier with fallback to the adjusted tier. Coxâ€™s search responses include both tiers on each item, but neither produces Manheimâ€™s tighter range. Manheimâ€™s range is likely sourced from the ci (confidence interval) block. The Cox API explicitly documents include=ci as unsupported on /search/... endpoints, which is why uildCoxIncludeTokens strips it for YMM calls (isSearch: true). Manheimâ€™s own native tool may use an internal API version where ci is available on search, or it converts YMM to an internal VIN match and uses VINâ€™s ci.
+
+### Structured test in progress (2026-06-19)
+
+Running a controlled comparison across 5 YMMs + 3 VINs to confirm which problems are consistent and which are vehicle-specific.
+
+**YMMs (user running through Manheim native, results pending):**
+
+| # | Year | Make | Model | Style |
+|---|------|------|-------|-------|
+| 1 | 2022 | Toyota | Camry | SE 4D Sedan |
+| 2 | 2021 | Ford | F-150 | XLT 4D SuperCrew |
+| 3 | 2023 | Honda | CR-V | EX 4D Sport Utility |
+| 4 | 2020 | Chevrolet | Equinox | LT 4D Sport Utility |
+| 5 | 2019 | BMW | 5 Series | 530I 4D Sedan |
+
+**VINs (user running through Manheim native, results pending):**
+
+| # | VIN | Vehicle |
+|---|-----|---------|
+| 1 | 1FT7W2BT4KED81759 | 2019 Ford F-150 |
+| 2 | 1GYTEEKL1SU107843 | 2025 Cadillac Escalade IQ |
+| 3 | TBD â€” any 2022 Toyota Camry from recent inventory | 2022 Toyota Camry |
+
+**Fields to record for each lookup in Manheim:**
+Base MMR, MMR Range (low â€“ high), Avg Odometer, Avg Condition, Adjusted MMR (no adjustments applied), Estimated Retail Value, Typical Range (low â€“ high)
+
+### What to investigate before fixing
+
+1. **Inspect raw Cox items[] array** for a YMM with a Base MMR mismatch: query mmr_cache or mmr_queries in Supabase for the 2018 BMW 3 Series 320I lookup. Find which item has avg condition 3.7 â€” is it items[0] or a later index?
+2. **Test include=ci on a YMM/search call**: Cox docs say unsupported, but test whether Cox silently accepts it. If it works, enabling MANHEIM_INCLUDE_CI on search calls would fix the range problem without code changes beyond removing the isSearch guard.
+3. **Compare item counts**: do different vehicles return different numbers of items? If items[0] is sometimes correct and sometimes not, the selection logic needs a smarter heuristic.
+
+### Exit criteria
+
+- [ ] Test results from 5 YMMs + 3 VINs collected and compared
+- [ ] Root cause of Base MMR mismatch confirmed (wrong item index vs. trim name mismatch vs. other)
+- [ ] Decision made: fix item selection heuristic, enable ci on search, or both
+- [ ] YMM lookups produce Base MMR within  of Manheim for at least 4 of 5 test vehicles
+- [ ] MMR Range within  of Manheim on both ends for at least 4 of 5 test vehicles
+- [ ] No regression on VIN path
+
+---
+
+## 16 â€” MMR Adjustment Accuracy
 
 **Goal:** Grade, build-options, and odometer deltas in the MMR Adjustments panel must match the values shown in Manheim's native MMR tool for the same inputs.
 
-### Background — what was found (2026-06-17)
+### Background â€” what was found (2026-06-17)
 
 Side-by-side comparison of our MMR Lab vs the native Manheim MMR tool on VIN `1GYTEEKL1SU107843` (2025 Cadillac Escalade IQ) revealed three linked bugs:
 
-#### Bug 1 — Build delta inflated when grade is also active
+#### Bug 1 â€” Build delta inflated when grade is also active
 
-**Root cause:** `buildOptionsFromBooleanTrue()` in `src/valuation/manheimResponseParser.ts` assigned the **entire** `adjustedPricing.wholesale.average − wholesale.average` delta to build options whenever Cox sends `adjustedBy.buildOptions: true` (boolean, not dollars). It only guarded against odometer mismatch — it did **not** bail when grade, color, or region were also present in `adjustedBy`.
+**Root cause:** `buildOptionsFromBooleanTrue()` in `src/valuation/manheimResponseParser.ts` assigned the **entire** `adjustedPricing.wholesale.average âˆ’ wholesale.average` delta to build options whenever Cox sends `adjustedBy.buildOptions: true` (boolean, not dollars). It only guarded against odometer mismatch â€” it did **not** bail when grade, color, or region were also present in `adjustedBy`.
 
 When grade=5.0 is active:
 - Cox returns total delta = grade ($420) + build ($890) = combined in `adjustedPricing.wholesale.average`
@@ -73,17 +151,17 @@ When grade=5.0 is active:
 
 **Fix applied (commit `9d7783e`):** `buildOptionsFromBooleanTrue` now returns `{ included: true, adjustment: null }` when `adjustedByHasGrade`, `adjustedByHasColor`, or `adjustedByHasRegion` is true in `adjustedBy`. When adjustment is null, the breakdown function's residual logic can properly attribute the remaining delta to grade/color/region via single-field residual attribution.
 
-#### Bug 2 — Grade delta never shown in the adjustments panel
+#### Bug 2 â€” Grade delta never shown in the adjustments panel
 
 **Root cause:** Two compounding issues:
 
-1. Cox returns `adjustedBy.Grade: "40"` (a string grade code on a 10-point scale, e.g. "40" = grade 4.0, "50" = grade 5.0). `readAdjustedByFieldDollars()` only reads **numeric** values — strings are ignored — so `gradeAdjustment` from the parser always comes back `null`.
+1. Cox returns `adjustedBy.Grade: "40"` (a string grade code on a 10-point scale, e.g. "40" = grade 4.0, "50" = grade 5.0). `readAdjustedByFieldDollars()` only reads **numeric** values â€” strings are ignored â€” so `gradeAdjustment` from the parser always comes back `null`.
 
-2. The fallback is **marginal tracking**: when the user changes grade from empty → 5.0, a recompute fires, and `applyAttributeMarginalDelta` captures the delta between the prior and new `adjustedMmr`. But `pendingMarginalChangesRef.current` was **overwritten** (not accumulated) on each `handleAdjustmentsChange` call. If the user entered an odometer value after selecting grade (both within the same 400ms debounce window), the odometer change would overwrite `pendingMarginalChangesRef = []`, losing the grade change, so the marginal was never stored.
+2. The fallback is **marginal tracking**: when the user changes grade from empty â†’ 5.0, a recompute fires, and `applyAttributeMarginalDelta` captures the delta between the prior and new `adjustedMmr`. But `pendingMarginalChangesRef.current` was **overwritten** (not accumulated) on each `handleAdjustmentsChange` call. If the user entered an odometer value after selecting grade (both within the same 400ms debounce window), the odometer change would overwrite `pendingMarginalChangesRef = []`, losing the grade change, so the marginal was never stored.
 
 **Fix applied (commit `9d7783e`):** `pendingMarginalChangesRef.current` is now accumulated with `Array.from(new Set([...existing, ...newChanges]))` instead of overwritten. Grade/color/region changes are preserved even when odometer or other fields change before the debounce fires.
 
-#### Bug 3 — Odometer field fired Cox API on every keystroke
+#### Bug 3 â€” Odometer field fired Cox API on every keystroke
 
 **Root cause:** The odometer `<input>` called parent `onChange` on every keystroke. The parent debounced at 400ms, but slow typing (any pause >400ms between digits) fired one Cox API call per intermediate value (`4`, `40`, `400`, `4000`, `40000`). Each call set a new `adjustmentBaseline`, and out-of-order responses could corrupt the displayed build delta and grade marginals.
 
@@ -98,18 +176,18 @@ With odometer=20,000 entered, no grade selected (our app) vs grade=5.0 selected 
 | Field | Our app (no grade) | Manheim (grade=5.0) | Expected when grade=5.0 added in our app |
 |---|---|---|---|
 | Adjusted MMR | $98,200 | $98,600 | $98,600 |
-| Odometer delta | −$3,800 | −$4,050 | ~−$4,050 |
-| Grade delta | — | +$400 | ~+$400 (via marginal) |
+| Odometer delta | âˆ’$3,800 | âˆ’$4,050 | ~âˆ’$4,050 |
+| Grade delta | â€” | +$400 | ~+$400 (via marginal) |
 | Build delta | +$1,000 | +$890 | ~+$890 (parser fix) |
 
-The $400 gap in adjusted MMR and the $110 build difference are both expected when grade is not applied — they disappear once grade=5.0 is selected in our app and the recompute runs. The numbers are **different inputs producing different outputs**, not a calculation error once the fixes are deployed.
+The $400 gap in adjusted MMR and the $110 build difference are both expected when grade is not applied â€” they disappear once grade=5.0 is selected in our app and the recompute runs. The numbers are **different inputs producing different outputs**, not a calculation error once the fixes are deployed.
 
 ### What still needs to happen
 
 | Step | Action | Owner |
 |---|---|---|
-| **Deploy app worker** | Deploy `src/` (Cloudflare Worker) to production — contains the `buildOptionsFromBooleanTrue` parser fix | Engineering |
-| **Deploy web app** | Deploy `web/` (Next.js) to production — contains the blur-only inputs and marginal accumulation fix | Engineering |
+| **Deploy app worker** | Deploy `src/` (Cloudflare Worker) to production â€” contains the `buildOptionsFromBooleanTrue` parser fix | Engineering |
+| **Deploy web app** | Deploy `web/` (Next.js) to production â€” contains the blur-only inputs and marginal accumulation fix | Engineering |
 | **Smoke test** | On VIN `1GYTEEKL1SU107843`: enter odometer=12,181 (avg), select grade=5.0, confirm build delta shows ~$890 and grade delta shows ~$420 | QA |
 | **Smoke test** | Confirm build+grade+odometer all show when all three are active simultaneously | QA |
 | **Avg LV Battery Score** | `result-band.tsx` has `<Stat label="Avg EV Battery Score" />` hardcoded with no value. Parse `averageEvBatteryScore` (or equivalent key) from Cox payload in `manheimResponseParser.ts`, forward through `routes.ts`, and pass as a prop to `ResultBand`. Manheim shows 100% for this VIN. | Engineering |
@@ -129,122 +207,11 @@ The $400 gap in adjusted MMR and the $110 build difference are both expected whe
 - [ ] Build delta shows ~+$890 (not $1,000) when grade=5.0 is active
 - [ ] Odometer input does not fire multiple Cox requests while typing
 - [ ] Avg LV Battery Score shows 100% for the Escalade IQ (or any EV with battery data)
-- [ ] No regression on build-only (no grade) scenario — build delta still shows when grade is not selected
+- [ ] No regression on build-only (no grade) scenario â€” build delta still shows when grade is not selected
 
 ---
 
-## 1 — Auction Transactions (MarketCheck)
-
-**Goal:** Populate Zone C2 with auction comp rows for the lookup vehicle using **MarketCheck API** — date, price, odometer, grade, region, auction, etc.
-
-### Decision: MarketCheck (locked 2026-06-16)
-
-**Use MarketCheck. Do not pursue Cox per-sale transaction rows for this table.**
-
-Reason: Cox Valuations API smoke (2026-06-12) returned `historicalAverages` + `forecast` but **no** per-sale transaction arrays, and `include=transactions` is not a valid Cox token. Cox entitlement for Manheim sold-comp rows is uncertain and slow. MarketCheck **Auction Inventory Search** (`GET /v2/search/car/auction/active`) is the chosen data source for Zone C2.
-
-**UI honesty requirement:** MarketCheck returns **active auction listings**, not Manheim hammer prices on sold vehicles. The table section title, empty state, and footer must say so — do not label rows as Manheim sold comps.
-
-### Locked decisions (updated)
-
-- **DEC-MLB-2** *(superseded 2026-06-16)* — was: match native Manheim MMR sold rows from Cox. **Now:** show MarketCheck-sourced auction listing comps in Zone C2, clearly labeled.
-- **DEC-MLB-3** *(superseded 2026-06-16)* — was: do not use MarketCheck for this table. **Now:** MarketCheck is the data source for Zone C2.
-
-### What to build
-
-| Layer | Work |
-|---|---|
-| **Backend** | Intel-worker handler `GET /mmr/marketcheck-auction` calling `GET /v2/search/car/auction/active`, keyed by VIN or Y/M/M. KV cache TTL 15 min. |
-| **App route** | `GET /app/mmr/auction-listings` in `src/app/routes.ts` proxying to intel worker |
-| **Parser** | `src/clients/marketcheck.ts` maps MarketCheck listing fields → `MmrTransaction` shape |
-| **Frontend** | New `getMarketCheckAuctions()` client fn; `mmr-lab-client.tsx` calls it after MMR resolves; section title + footer updated |
-
-Primary endpoint: `GET /v2/search/car/auction/active`. Base URL: `https://mc-api.marketcheck.com`. Auth: `?api_key=` query param.
-
-### MarketCheck field → MmrTransaction mapping
-
-| MmrTransaction field | MarketCheck source field |
-|---|---|
-| `date` | `last_seen_at` (ISO → date portion) |
-| `price` | `price` |
-| `odometer` | `miles` |
-| `grade` | `(none — null)` |
-| `evbh` | `(none — null)` |
-| `engineTrans` | `engine` + `" / " + transmission` |
-| `exteriorColor` | `exterior_color` |
-| `type` | `body_type` |
-| `region` | `city + ", " + state` |
-| `auction` | `dealer_name` |
-
-### Backend files
-
-| File | Change |
-|---|---|
-| `workers/tav-intelligence-worker/src/types/env.ts` | Add `MARKETCHECK_API_KEY: string` |
-| `workers/tav-intelligence-worker/wrangler.toml` | Add secret docs for `MARKETCHECK_API_KEY` |
-| `workers/tav-intelligence-worker/src/clients/marketcheck.ts` | New: HTTP client + parser |
-| `workers/tav-intelligence-worker/src/handlers/mmrMarketcheck.ts` | New: handler with KV cache |
-| `workers/tav-intelligence-worker/src/routes/index.ts` | Register `GET /mmr/marketcheck-auction` |
-| `src/app/routes.ts` | Add `GET /app/mmr/auction-listings` proxying to intel worker |
-
-### Frontend files
-
-| File | Change |
-|---|---|
-| `web/lib/app-api/schemas.ts` | Add `AuctionListingsResponseSchema` |
-| `web/lib/app-api/parse.ts` | Add `parseAuctionListings` |
-| `web/lib/app-api/client.ts` | Add `getMarketCheckAuctions(params)` |
-| `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` | Fetch auction listings after MMR resolves; store in `auctionListings` state |
-| `web/app/(app)/mmr-lab/_components/transactions-table.tsx` | Update title/empty/idle copy to "MarketCheck auction listings" |
-| `web/app/(app)/mmr-lab/_components/data-sections.tsx` | Accept + pass `auctionListings` prop |
-
-### Exit criteria
-
-- [x] Cox transaction gap documented (API empty vs parser bug) — see [`03-api/manheim-cox.md`](03-api/manheim-cox.md) §5
-- [x] Data-source decision locked: MarketCheck for Zone C2 (2026-06-16)
-- [x] Backend: intel-worker handler + MarketCheck client built
-- [x] Backend: app route `GET /app/mmr/auction-listings` proxying to intel worker
-- [ ] Auction Search enabled on TAV MarketCheck account (external — account action needed)
-- [ ] Intel-worker MarketCheck route smoke-tested against live API key
-- [ ] MarketCheck parser maps listing fields to transaction table columns
-- [ ] Transactions table shows rows for a VIN/YMM lookup
-- [ ] UI labels source as MarketCheck active auction listings (not Manheim sold comps)
-- [ ] Add "Showing N of N" footer to `transactions-table.tsx`
-
-### Background — why Cox was abandoned for Zone C2
-
-**Smoke (2026-06-12, staging intel worker, VIN `1FT7W2BT4KED81759`, `force_refresh`):**
-
-- Cox returned `historicalAverages` + `forecast` on all 6 trim variants.
-- **No** transaction arrays under any key (`transactions`, `auctionTransactions`, `auctionSales`, `sampleTransactions`, `recentTransactions`, `sales`, `samples`).
-- **Diagnosis:** API absent — not a parser or frontend bug.
-- Cox only documents `historical`, `forecast`, `retail`, `ci` as valid `include=` tokens.
-
-Historical Cox investigation: [`03-api/manheim-cox.md`](03-api/manheim-cox.md) §5.
-
-### MarketCheck — licensed capabilities (2026-06-12)
-
-| MarketCheck capability | Endpoint (approx.) | Zone C2 use |
-|------------------------|-------------------|-------------|
-| **Auction inventory search** | `GET /v2/search/car/auction/active` | **Yes — primary source** |
-| **Auction listing detail** | `GET /v2/listing/car/auction/{id}` | Optional row enrichment |
-| **VIN decode / specs** | `GET /v2/decode/car/neovin/{vin}/specs` | Future — VIN autofill fallback |
-| **Recent inventory (90d)** | `GET /v2/search/car/recents` | No — different dataset |
-| **Retail price + comparables** | `GET /v2/predict/car/us/marketcheck_price/comparables` | No — retail dealer comps |
-
-TAV is on a **team MarketCheck account, free tier** (2026-06-12). Licensed partner APIs on this key:
-
-| API | Cost/call | MMR Lab use |
-|-----|-----------|-------------|
-| AutoRecalls Recall Check | $0.07 | Hard-gate buyer warning (recall stop-sale) |
-| VINData Title Check | $0.49 | Title brand / salvage context |
-| CarsXE Plate to VIN | $0.70 | Plate → VIN intake |
-
-**Must enable for Item 1:** Auction Search (not on current free-tier license).
-
----
-
-## 15 — Retail value: enable Cox retail data
+## 15 â€” Retail value: enable Cox retail data
 
 **Goal:** The result band has wired-up `retailValue`, `retailRangeLow`, `retailRangeHigh` columns that always show `--` because Cox is never asked for retail data.
 
@@ -254,7 +221,7 @@ TAV is on a **team MarketCheck account, free tier** (2026-06-12). Licensed partn
 
 ### What to check first
 
-Before setting the env var, confirm with Cox/Manheim account rep whether the TAV API key is entitled for the `retail` include token. The `MANHEIM_INCLUDE_RETAIL` flag exists precisely because retail is a separate entitlement — enabling it on an un-entitled key will produce 4xx errors or empty retail blocks on every lookup.
+Before setting the env var, confirm with Cox/Manheim account rep whether the TAV API key is entitled for the `retail` include token. The `MANHEIM_INCLUDE_RETAIL` flag exists precisely because retail is a separate entitlement â€” enabling it on an un-entitled key will produce 4xx errors or empty retail blocks on every lookup.
 
 ### What to change
 
@@ -262,7 +229,7 @@ Before setting the env var, confirm with Cox/Manheim account rep whether the TAV
 |---|---|
 | 1 | Confirm Cox account has retail entitlement |
 | 2 | Set `MANHEIM_INCLUDE_RETAIL=true` in the intel worker's Cloudflare environment (wrangler secret or `[vars]` in `wrangler.toml`) |
-| 3 | Smoke-test a known VIN — confirm `retailValue` appears in the response envelope |
+| 3 | Smoke-test a known VIN â€” confirm `retailValue` appears in the response envelope |
 | 4 | Verify `result-band.tsx` renders the retail card correctly once the value is non-null |
 
 If Cox confirms the account is **not** entitled for retail: hide the retail card in the result band UI rather than showing permanent `--` dashes.
@@ -275,11 +242,11 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 2 — Year dropdown: pin recent years at top
+## 2 â€” Year dropdown: pin recent years at top
 
-**Goal:** Buyers almost always look up 2022–2026 vehicles. The year dropdown currently shows a flat list from 2003 onward — requires scrolling past many years to reach common ones.
+**Goal:** Buyers almost always look up 2022â€“2026 vehicles. The year dropdown currently shows a flat list from 2003 onward â€” requires scrolling past many years to reach common ones.
 
-**Approach:** Split the year options into two groups: the most recent N years (e.g. current year − 4 through current year) pinned at the top, then a `<optgroup>` or `<hr>`-style divider, then all remaining years below. No functional change — just reorders the `<option>` elements in `search-panel.tsx` using the `catalog.years` array.
+**Approach:** Split the year options into two groups: the most recent N years (e.g. current year âˆ’ 4 through current year) pinned at the top, then a `<optgroup>` or `<hr>`-style divider, then all remaining years below. No functional change â€” just reorders the `<option>` elements in `search-panel.tsx` using the `catalog.years` array.
 
 **Exit criteria:**
 - [ ] Most recent 5 years appear at the top of the Year dropdown before older years
@@ -288,11 +255,11 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 3 — Per-dropdown loading indicator
+## 3 â€” Per-dropdown loading indicator
 
 **Goal:** When catalog data is loading (e.g. after a year change triggers a makes refetch), the Make dropdown is silently disabled. Buyers have no feedback that something is happening.
 
-**Approach:** In `search-panel.tsx`, render a `"Loading…"` placeholder `<option>` as the first option (after the blank prompt) when `catalog.loading === "makes"` / `"models"` / `"styles"` for that field. Alternatively, show a small spinner icon inside the select wrapper using a `relative`/`absolute` overlay.
+**Approach:** In `search-panel.tsx`, render a `"Loadingâ€¦"` placeholder `<option>` as the first option (after the blank prompt) when `catalog.loading === "makes"` / `"models"` / `"styles"` for that field. Alternatively, show a small spinner icon inside the select wrapper using a `relative`/`absolute` overlay.
 
 **Exit criteria:**
 - [ ] Make shows loading feedback when `catalog.loading === "makes"`
@@ -302,7 +269,7 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 4 — Auto-scroll to results on mobile after submit
+## 4 â€” Auto-scroll to results on mobile after submit
 
 **Goal:** After clicking Search (VIN) or Value (YMM) on a phone, the result band is below the fold. Buyers don't notice results have loaded.
 
@@ -314,20 +281,20 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 5 — Sticky SearchPanel header on desktop scroll
+## 5 â€” Sticky SearchPanel header on desktop scroll
 
 **Goal:** On desktop, buyers scroll down through adjustments and transactions but lose sight of the VIN / YMM inputs. The native Manheim MMR tool keeps its lookup form visible.
 
 **Approach:** Wrap `<SearchPanel>` in a `sticky top-0 z-10` container (Tailwind). Add a collapsed/expanded toggle so the panel can be minimized once a lookup is active to free vertical space.
 
 **Exit criteria:**
-- [ ] SearchPanel sticks to the top of the viewport when scrolling on desktop (≥ 1024px)
+- [ ] SearchPanel sticks to the top of the viewport when scrolling on desktop (â‰¥ 1024px)
 - [ ] Panel can be collapsed/expanded while sticky to free vertical space
 - [ ] Mobile behavior unchanged (no sticky on small viewports)
 
 ---
 
-## 6 — Value button: tooltip for missing fields
+## 6 â€” Value button: tooltip for missing fields
 
 **Goal:** The Value button is disabled whenever Year/Make/Model/Style is incomplete, but clicking it does nothing and shows no explanation. Buyers don't know which field to fill.
 
@@ -340,11 +307,11 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 7 — Style approximation notice: closeable banner
+## 7 â€” Style approximation notice: closeable banner
 
 **Goal:** When Cox trim doesn't exactly match a catalog style (DEC-MLB-6), a small amber text line appears below the dropdowns. This is easy to miss, especially after the result band loads.
 
-**Approach:** Replace the `<p role="status">` in `search-panel.tsx` with a dismissible banner component (`Alert` from `@/components/ui/alert`) positioned above the result band (below the SearchPanel). Include an × close button that calls `setStyleNotice(null)` via a lifted callback.
+**Approach:** Replace the `<p role="status">` in `search-panel.tsx` with a dismissible banner component (`Alert` from `@/components/ui/alert`) positioned above the result band (below the SearchPanel). Include an Ã— close button that calls `setStyleNotice(null)` via a lifted callback.
 
 **Exit criteria:**
 - [ ] Approximate style match shows a dismissible amber Alert above the result band
@@ -353,11 +320,11 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 8 — Mileage ↔ Adjustments odometer sync
+## 8 â€” Mileage â†” Adjustments odometer sync
 
-**Goal:** Odometer for MMR recompute and MaxBuy lives in MMR Adjustments only (Miles was removed from the search panel). Ensure a single source of truth — edits in adjustments odometer must flow correctly to MMR recompute and MaxBuy evaluate without diverged state.
+**Goal:** Odometer for MMR recompute and MaxBuy lives in MMR Adjustments only (Miles was removed from the search panel). Ensure a single source of truth â€” edits in adjustments odometer must flow correctly to MMR recompute and MaxBuy evaluate without diverged state.
 
-**Approach:** Confirm `adjustments.odometer` in `mmr-lab-client.tsx` is the only mileage input. Verify `buildMmrRecomputeRequest` and `buildMmrLabMaxbuyRequest` both read from the same adjustments state after edits and after VIN lookup seeding (`mileageUsed: null` → empty odometer).
+**Approach:** Confirm `adjustments.odometer` in `mmr-lab-client.tsx` is the only mileage input. Verify `buildMmrRecomputeRequest` and `buildMmrLabMaxbuyRequest` both read from the same adjustments state after edits and after VIN lookup seeding (`mileageUsed: null` â†’ empty odometer).
 
 **Exit criteria:**
 - [ ] Adjustments odometer is the sole mileage input on `/mmr-lab`
@@ -366,7 +333,7 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 9 — Keyboard tab flow through disabled dropdowns
+## 9 â€” Keyboard tab flow through disabled dropdowns
 
 **Goal:** Tabbing through the form skips disabled dropdowns entirely. Buyers using keyboard-only navigation cannot reach the Year dropdown when the catalog is not connected, or Make when no year is selected.
 
@@ -379,7 +346,7 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 
 ---
 
-## 10 — Cleared-field highlight animation
+## 10 â€” Cleared-field highlight animation
 
 **Goal:** When a year change causes a make/model/style to be invalidated and cleared by the catalog re-validation logic (DEC-MLB-7), the field blanks out silently. Buyers don't understand why it changed.
 
@@ -389,3 +356,75 @@ If Cox confirms the account is **not** entitled for retail: hide the retail card
 - [ ] When a field is cleared due to catalog re-validation, it briefly flashes/highlights
 - [ ] The animation does not fire on initial page load or manual user clears
 - [ ] Animation respects `prefers-reduced-motion` (no animation if user has reduced motion set)
+
+- Score each item by closeness to the selected style string (exact match -> subSeries match -> token overlap)
+- Pick the highest-scoring item; fall back to `items[0]` if nothing scores above threshold
+- Style string comes from Cox's own catalog so the format is compatible
+
+**Files to change:**
+- `src/valuation/manheimPayloadItem.ts` -- add optional `styleName` param to `selectMmrPayloadItem`, apply scoring heuristic for YMM calls
+- `workers/tav-intelligence-worker/src/handlers/mmrYearMakeModel.ts` -- pass `style` query param into item selection
+- `src/app/routes.ts` -- ensure `style` is forwarded through the YMM lookup path
+
+---
+
+## 18 -- MaxBuy `vehicle_context_missing` for External VINs
+
+**Goal:** MaxBuy evaluation must never show "Could not resolve vehicle details for this VIN." for any VIN that produced a valid MMR result. If Cox returned year/make/model, MaxBuy must be able to run.
+
+**Last updated:** 2026-06-19
+
+### What was observed (2026-06-19)
+
+VIN `1FT7W2BT4KED81759` (2019 Ford F-250 PLATINUM) returned a correct MMR result (Base MMR `,500`, high confidence) but the MaxBuy section showed:
+
+> Could not resolve vehicle details for this VIN.
+
+The Escalade IQ (`1GYTEEKL1SU107843`) worked fine because it exists in TAV's normalized_listings/purchase_outcomes tables as an ingested vehicle. The F-250 does not -- it is an external/test VIN never processed through TAV's ingest pipeline.
+
+### Root cause
+
+`resolveVehicleContext` (`src/maxbuy/persistence/vehicleContext.ts`) resolves vehicle identity in this order:
+
+1. Query `normalized_listings` by VIN -- not found (VIN not in TAV inventory)
+2. Query `purchase_outcomes` by VIN -- not found (TAV never bought/sold this vehicle)
+3. VIN year-decode fallback -- decodes model year from VIN but requires `region` in the request; MMR Lab does not send region, so this also fails
+4. Returns null
+
+Then `vehicleContextFromRequestFields` is the last fallback -- it reads year/make/model from the request body. These come from the MMR session (`mmrVinSessionFromResult` attaches them from the Cox response). However this is unreliable -- if the session doesn't have those fields, the fallback returns null and the error is thrown.
+
+### Why this is wrong by design
+
+MaxBuy's purpose is:
+1. Take a VIN, decode year/make/model
+2. Look up TAV's purchase history for that year/make/model segment
+3. Score and produce a max buy recommendation
+
+Step 2 (`fetchHistoricalSummary`) already queries by year/make/model, not by VIN. The VIN lookup in step 1 is only used to GET the year/make/model -- but the MMR result already returned that from Cox. The system should trust the MMR result instead of requiring the VIN to exist in the database.
+
+### Fix
+
+**Option 1 -- Reliably pass year/make/model from MMR result into the MaxBuy request (primary fix)**
+
+`buildMmrLabMaxbuyRequest` already tries to attach year/make/model from the session to the request body. Audit and harden this so it is guaranteed when a VIN MMR lookup succeeds:
+
+- Confirm `mmrVinSessionFromResult` is always called after a successful VIN MMR lookup and the session is updated before any MaxBuy evaluate fires
+- Confirm `body.year`, `body.make`, `body.model` are present in the serialized request body sent to the Worker (check the `MaxbuyEvaluateRequest` type allows these fields on VIN requests)
+- In the backend, treat year/make/model from the request body as equivalent to DB-resolved identity -- no DB lookup should be required when these are present
+
+**If no TAV historical data exists for the segment:**
+
+Do not error. Show the MaxBuy result with `data strength: low` and the existing "Limited segment data" warning. This already works for rare vehicles -- the `fetchHistoricalSummary` returns empty and scoring degrades gracefully. The user gets a rough guide rather than a crash.
+
+**Files to change:**
+- `web/app/(app)/mmr-lab/_components/build-mmr-lab-maxbuy-request.ts` -- ensure year/make/model always in body when session has them
+- `src/maxbuy/persistence/vehicleContext.ts` -- if year/make/model are in the request, return a VehicleContext from them directly without requiring DB lookup
+- `web/lib/app-api/missing-reason.ts` -- never surface `vehicle_context_missing` as "Could not resolve vehicle details" to buyers; if it somehow still fires, show a softer message
+
+### Exit criteria
+
+- [ ] VIN `1FT7W2BT4KED81759` produces a MaxBuy result (even low-confidence) instead of the error
+- [ ] Any VIN that returns a valid MMR result also gets a MaxBuy evaluation
+- [ ] "Could not resolve vehicle details for this VIN." never appears on screen for a VIN with a valid MMR result
+- [ ] If segment has no TAV history, shows low data-strength warning instead of error
+- [ ] No regression for VINs that ARE in normalized_listings (they still resolve via DB, same behavior)

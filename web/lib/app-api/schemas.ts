@@ -241,6 +241,7 @@ export const MmrVinOkSchema = z.object({
   retailValue: z.number().nullable().optional(),
   retailRangeLow: z.number().nullable().optional(),
   retailRangeHigh: z.number().nullable().optional(),
+  avgEvBatteryScore: z.number().nullable().optional(),
   historicalAverages: MmrHistoricalAveragesSchema.optional(),
   projectedAverage: MmrProjectedAverageSchema.optional(),
   transactions: z.array(MmrTransactionSchema).optional(),

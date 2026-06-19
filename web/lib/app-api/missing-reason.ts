@@ -67,7 +67,7 @@ const CODE_MESSAGES: Record<string, string> = {
   maxbuy_not_configured: "Max buy worker is not configured.",
   maxbuy_unavailable: "Max buy service is temporarily unavailable.",
   invalid_vin: "VIN is invalid or could not be decoded.",
-  vehicle_context_missing: "Could not resolve vehicle details for this VIN.",
+  vehicle_context_missing: "Vehicle details could not be confirmed — Max Buy estimate may be approximate.",
 };
 
 const GENERIC = "Not available.";
