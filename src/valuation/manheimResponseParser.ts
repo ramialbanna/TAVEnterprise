@@ -129,9 +129,9 @@ function parseEvBatteryScore(v: unknown): number | null {
   return null;
 }
 
-/** Accept a positive number and round it; return null for zero, negative, or non-number. */
+/** Accept a positive number; return null for zero, negative, or non-number. */
 function posNum(v: unknown): number | null {
-  return typeof v === "number" && v > 0 ? Math.round(v) : null;
+  return typeof v === "number" && v > 0 ? v : null;
 }
 
 /**
@@ -168,7 +168,7 @@ export function extractMmrAdjustedValue(payload: unknown): number | null {
     "value",
   ]) {
     const v = t[key];
-    if (typeof v === "number" && v > 0) return Math.round(v);
+    if (typeof v === "number" && v > 0) return v;
   }
 
   if (t.wholesale && typeof t.wholesale === "object") {
@@ -189,8 +189,7 @@ export interface ManheimBuildOptions {
 
 function readBuildOptionsDollars(raw: unknown): number | null {
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
-  const rounded = Math.round(raw);
-  return rounded !== 0 ? rounded : null;
+  return raw !== 0 ? raw : null;
 }
 
 function readBuildOptionsIncludedFlag(raw: unknown): boolean | null {
@@ -288,10 +287,7 @@ function readAdjustedByFieldDollars(
 ): number | null {
   for (const key of keys) {
     const val = obj[key];
-    if (typeof val === "number" && Number.isFinite(val)) {
-      const rounded = Math.round(val);
-      if (rounded !== 0) return rounded;
-    }
+    if (typeof val === "number" && Number.isFinite(val) && val !== 0) return val;
   }
   return null;
 }
@@ -349,7 +345,7 @@ function attributeSingleFieldResidual(
 function mileageFromAdjustedBy(adjustedBy: Record<string, unknown> | null): number | null {
   if (!adjustedBy) return null;
   const raw = adjustedBy.Odometer ?? adjustedBy.odometer;
-  if (typeof raw === "number" && Number.isFinite(raw)) return Math.round(raw);
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   if (typeof raw === "string") {
     const n = Number(raw.replace(/[^\d]/g, ""));
     return Number.isFinite(n) ? n : null;
@@ -373,13 +369,13 @@ export function extractManheimAdjustmentBreakdown(
   const base = dist.wholesaleBaseAvg;
   const adjusted = dist.wholesaleAvg;
   const total =
-    base != null && adjusted != null ? Math.round(adjusted - base) : null;
+    base != null && adjusted != null ? adjusted - base : null;
 
   const avgOdo =
-    item?.averageOdometer != null ? Math.round(Number(item.averageOdometer)) : null;
+    item?.averageOdometer != null ? Number(item.averageOdometer) : null;
   const mileage =
     mileageUsed != null && mileageUsed > 0
-      ? Math.round(mileageUsed)
+      ? mileageUsed
       : mileageFromAdjustedBy(adjustedBy);
   const atAvg = mileage != null && avgOdo != null && mileage === avgOdo;
 
@@ -454,7 +450,7 @@ export function extractManheimAdjustmentBreakdown(
   const odometerContributionUnknown = !atAvg && odometerAdj == null && mileage != null;
   const residual =
     total != null && total !== knownTotal && !odometerContributionUnknown
-      ? Math.round(total - knownTotal)
+      ? total - knownTotal
       : null;
 
   const attributed = attributeSingleFieldResidual(
