@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-19 (Item 18 added -- MaxBuy vehicle_context_missing for external VINs) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-20 (Avg Condition 10× display bug fixed; EV Battery Score wiring audited) · **Focus:** `/mmr-lab` buyer experience
 
 > **Fresh chat prompt:**  
 > Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
@@ -41,6 +41,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|----------|--------|
 | **17** | YMM parity vs Manheim â€” item selection + range source | High | [~] |
 | **18** | MaxBuy `vehicle_context_missing` -- trust MMR result for VIN identity | High | [x] |
+| **19** | Avg Condition 10x display bug -- `averageGrade` integer not normalized | High | [x] |
+| **20** | Avg EV Battery Score -- identify correct Cox response field name | Medium | [~] |
 | **16** | MMR adjustment accuracy â€” deploy fixes + smoke-test grade/build deltas | High | [x] |
 | **15** | Retail value â€” enable Cox retail data (env var + entitlement check) | Medium | [x] |
 | **2** | Year dropdown â€” pin recent years at top | Medium | [x] |
@@ -428,3 +430,56 @@ Do not error. Show the MaxBuy result with `data strength: low` and the existing 
 - [ ] "Could not resolve vehicle details for this VIN." never appears on screen for a VIN with a valid MMR result
 - [ ] If segment has no TAV history, shows low data-strength warning instead of error
 - [ ] No regression for VINs that ARE in normalized_listings (they still resolve via DB, same behavior)
+
+---
+
+## 19 -- Avg Condition 10x display bug
+
+**Goal:** verageGrade returned by Cox is a 10x integer (e.g. 38 = grade 3.8). The result band was displaying the raw integer instead of the decimal.
+
+**Last updated:** 2026-06-20
+
+**Root cause:** eadNumericField(payloadItem, "averageGrade") in src/app/routes.ts forwarded the raw Cox integer directly to the frontend. The frontend ormatNumber renders it as-is (38 instead of 3.8).
+
+**Fix applied (2026-06-20):** Added 
+ormalizeAverageGrade() helper to outes.ts that divides by 10 when the raw value exceeds 10. Called at the single assignment site for vgCondition. Logic matches ormatGrade() already used by manheimMarketContextParser.ts for transaction-row conditions.
+
+**Files changed:**
+- src/app/routes.ts -- 
+ormalizeAverageGrade helper; vgCondition now normalized before response
+- web/app/(app)/mmr-lab/_components/result-band.test.tsx -- test that vgCondition={3.9} renders 3.9 not 39
+
+### Exit criteria
+
+- [x] Avg Condition displays 3.9 (not 39) for a VIN/YMM lookup
+- [x] Unit test asserts decimal rendering
+- [x] No regressions (1137 src tests + 12 result-band tests pass)
+
+---
+
+## 20 -- Avg EV Battery Score: identify correct Cox field name
+
+**Goal:** Manheim native shows 100% EV Battery Score for VIN 1GYTEEKL1SU107843 (2025 Cadillac Escalade IQ). Our result band shows --.
+
+**Last updated:** 2026-06-20
+
+**What is already wired:** The pipeline is complete end-to-end:
+- manheimResponseParser.ts -- parseEvBatteryScore tries keys: verageEvBatteryScore, verageEVBatteryScore, vgEvBatteryScore, vgEVBatteryScore, verageEVBH
+- outes.ts -- conditionally includes vgEvBatteryScore in the response envelope
+- mmr-lab-client.tsx -- passes vgEvBatteryScore to ResultBand
+- esult-band.tsx -- renders the stat when non-null
+
+**Blocker:** Cox returns the field under a key name that does not match any of the 5 tried names. The correct key cannot be determined from the codebase alone -- it requires inspecting a raw Cox payload for an EV VIN.
+
+### How to find the correct key name
+
+1. Run a VIN lookup for 1GYTEEKL1SU107843 in the app (with the intel worker deployed)
+2. Temporarily log or store the raw mmr_payload from the Cox response
+3. Search the payload JSON for any key containing "battery", "evbh", "ev", or "health"
+4. Add the discovered key to the tried-keys list in parseEvBatteryScore in manheimResponseParser.ts
+
+### Exit criteria
+
+- [ ] Correct Cox field name identified by inspecting raw payload
+- [ ] Key added to parseEvBatteryScore fallback list
+- [ ] Escalade IQ VIN lookup shows Avg EV Battery Score = 100% (or whatever Cox returns)

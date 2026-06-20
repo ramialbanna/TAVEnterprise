@@ -180,6 +180,22 @@ describe("ResultBand — honest, no fabrication", () => {
     expect(screen.queryByText("+$200")).not.toBeInTheDocument();
   });
 
+  it("avgCondition renders as decimal (routes.ts normalizes Cox 10× integer before sending)", () => {
+    render(
+      <ResultBand
+        phase="ready"
+        baseMmr={43500}
+        avgOdometer={114741}
+        avgCondition={3.9}
+        adjustments={EMPTY_MMR_ADJUSTMENTS}
+        onAdjustmentsChange={noop}
+        onAdjustmentsClear={noop}
+      />,
+    );
+    expect(screen.getByText("3.9")).toBeInTheDocument();
+    expect(screen.queryByText("39")).not.toBeInTheDocument();
+  });
+
   it("renders an honest unavailable message for a missingReason (not an error UI)", () => {
     render(
       <ResultBand

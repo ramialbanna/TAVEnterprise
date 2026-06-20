@@ -565,7 +565,7 @@ function mapIntelMmrEnvelopeToAppData(
     ...(vehicleIdentity.model !== null ? { model: vehicleIdentity.model } : {}),
     ...(vehicleIdentity.trim !== null ? { trim: vehicleIdentity.trim } : {}),
     avgOdometer: readNumericField(payloadItem, "averageOdometer"),
-    avgCondition: readNumericField(payloadItem, "averageGrade"),
+    avgCondition: normalizeAverageGrade(readNumericField(payloadItem, "averageGrade")),
     sampleCount: distribution.sampleCount,
     rangeLow: distribution.wholesaleBaseRough ?? distribution.wholesaleRough,
     rangeHigh: distribution.wholesaleBaseClean ?? distribution.wholesaleClean,
@@ -804,6 +804,15 @@ function parseJsonText(text: string): unknown {
   } catch {
     return null;
   }
+}
+
+/**
+ * Cox returns averageGrade as a 10× integer (e.g. 38 = grade 3.8).
+ * Normalize to a one-decimal float when the raw value exceeds 10.
+ */
+function normalizeAverageGrade(raw: number | null): number | null {
+  if (raw === null) return null;
+  return raw > 10 ? Math.round((raw / 10) * 10) / 10 : raw;
 }
 
 function readNumericField(record: Record<string, unknown> | null, key: string): number | null {
