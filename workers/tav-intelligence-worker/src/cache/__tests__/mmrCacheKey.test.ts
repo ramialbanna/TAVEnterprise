@@ -21,6 +21,22 @@ describe("deriveVinCacheKey", () => {
   it("appends mileage bucket when mileage is supplied", () => {
     expect(deriveVinCacheKey("1HGCM82633A123456", 47_250)).toBe("vin:1HGCM82633A123456:45000");
   });
+
+  it("uses exact mileage when exact=true", () => {
+    expect(deriveVinCacheKey("1HGCM82633A123456", 5_800, true)).toBe("vin:1HGCM82633A123456:5800");
+  });
+
+  it("5000 and 5800 produce different keys with exact=true", () => {
+    expect(deriveVinCacheKey("1HGCM82633A123456", 5_000, true)).not.toBe(
+      deriveVinCacheKey("1HGCM82633A123456", 5_800, true),
+    );
+  });
+
+  it("5000 and 5800 share the same bucket key with exact=false (default)", () => {
+    expect(deriveVinCacheKey("1HGCM82633A123456", 5_000)).toBe(
+      deriveVinCacheKey("1HGCM82633A123456", 5_800),
+    );
+  });
 });
 
 describe("deriveYmmCacheKey", () => {
@@ -103,5 +119,13 @@ describe("deriveYmmCacheKey", () => {
 
   it("rounds 50,000 to itself (boundary)", () => {
     expect(mileageBucket(50_000)).toBe(50_000);
+  });
+
+  it("uses exact mileage when exact=true", () => {
+    const a = deriveYmmCacheKey({ year: 2025, make: "Tesla", model: "Model Y", mileage: 5_000, exact: true });
+    const b = deriveYmmCacheKey({ year: 2025, make: "Tesla", model: "Model Y", mileage: 5_800, exact: true });
+    expect(a).toBe("ymm:2025:tesla:model_y:base:5000");
+    expect(b).toBe("ymm:2025:tesla:model_y:base:5800");
+    expect(a).not.toBe(b);
   });
 });

@@ -106,16 +106,24 @@ function scoreItemAgainstStyle(item: Record<string, unknown>, normalStyle: strin
 
   if (trimStr && trimStr === normalStyle) return 100;
   if (subSeriesStr && subSeriesStr === normalStyle) return 80;
-  if (trimStr && normalStyle.startsWith(trimStr)) return 60;
+  // Single-word trims (e.g. "SE") must not win via prefix — that incorrectly
+  // selects items[0] when many trims share the same short name (2022 Camry).
+  if (trimStr && trimStr.includes(" ") && normalStyle.startsWith(trimStr)) return 60;
   if (subSeriesStr && normalStyle.startsWith(subSeriesStr)) return 50;
 
-  // Token overlap: count how many whitespace-separated tokens from the style
-  // name appear in the concatenated item description text.
+  // Token overlap: reward style-token coverage; penalize extra item tokens
+  // (e.g. "awd") not present in the user's selected style string.
   const itemText = [trimStr, subSeriesStr, fullDescStr].filter(Boolean).join(" ");
   if (itemText) {
     const styleTokens = normalStyle.split(/\s+/).filter(Boolean);
     const matches = styleTokens.filter((t) => itemText.includes(t)).length;
-    if (matches > 0) return matches;
+    if (matches > 0) {
+      const styleSet = new Set(styleTokens);
+      const penalty = itemText
+        .split(/\s+/)
+        .filter((t) => t.length > 2 && !styleSet.has(t)).length;
+      return Math.max(1, matches * 10 - penalty * 8);
+    }
   }
 
   return 0;

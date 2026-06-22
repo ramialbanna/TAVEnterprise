@@ -6,6 +6,7 @@ import {
   hasMmrAdjustments,
   mapMmrAdjustmentsToApi,
   resolveBuildOptionsState,
+  toCoxGradeParam,
 } from "./mmr-adjustments";
 
 describe("hasMmrAdjustments", () => {
@@ -36,11 +37,18 @@ describe("mapMmrAdjustmentsToApi", () => {
       }),
     ).toEqual({
       region: "Southeast",
-      grade: "4.0",
+      grade: "40",
       color: "Black",
       exclude_build: false,
       evbh: 88,
     });
+  });
+
+  it("converts UI grade 4.5 to Cox grade 45", () => {
+    expect(toCoxGradeParam("4.5")).toBe("45");
+    expect(
+      mapMmrAdjustmentsToApi({ ...EMPTY_MMR_ADJUSTMENTS, grade: "4.5" }),
+    ).toEqual({ grade: "45" });
   });
 
   it("does not exclude build when region or grade change without explicit NO", () => {
@@ -53,7 +61,7 @@ describe("mapMmrAdjustmentsToApi", () => {
       }),
     ).toEqual({
       region: "West",
-      grade: "4.0",
+      grade: "40",
       color: "Black",
     });
   });

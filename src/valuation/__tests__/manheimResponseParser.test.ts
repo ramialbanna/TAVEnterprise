@@ -83,6 +83,24 @@ describe("extractManheimDistribution — full VIN payload", () => {
     expect(extractManheimDistribution(VIN_PAYLOAD).retailAvg).toBeNull();
     expect(extractManheimDistribution(VIN_PAYLOAD).retailRough).toBeNull();
   });
+
+  it("extracts ciRangeLow/High from confidenceInterval.priceRange (include=ci)", () => {
+    const payload = {
+      items: [{
+        adjustedPricing: {
+          wholesale: { below: 22_200, average: 25_100, above: 28_100 },
+          confidenceInterval: {
+            priceRange: { adjustedLow: 23_900, adjustedHigh: 26_300 },
+          },
+        },
+        wholesale: { below: 22_200, average: 25_100, above: 28_100 },
+        sampleSize: "140",
+      }],
+    };
+    const dist = extractManheimDistribution(payload);
+    expect(dist.ciRangeLow).toBe(23_900);
+    expect(dist.ciRangeHigh).toBe(26_300);
+  });
 });
 
 // ── Cox MMR 1.4 retail tier (when MANHEIM_INCLUDE_RETAIL=true) ────────────────
@@ -427,11 +445,7 @@ describe("extractManheimAdjustmentBreakdown", () => {
   });
 
   it("does not attribute residual to grade when odometer is non-average string and build is included", () => {
-    // Cox sends Odometer as a string mileage value (not dollars) at non-average
-    // mileage, and Grade as a string code. build.included=true (buildOptions:true).
-    // The total delta includes unknown odometer + grade contributions.
-    // The residual must not be assigned to grade — it would absorb the missing
-    // odometer delta and display a wildly wrong grade number.
+    // Grade + odometer string + build flag — delta is ambiguous; do not guess.
     const payload = {
       items: [
         {
@@ -449,6 +463,30 @@ describe("extractManheimAdjustmentBreakdown", () => {
       buildOptionsIncluded: true,
       buildOptionsAdjustment: null,
       odometerAdjustment: null,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
+  it("derives odometer delta when build flag is true but build dollars are unknown (F450 case)", () => {
+    const payload = {
+      items: [
+        {
+          bestMatch: true,
+          averageOdometer: 99_606,
+          wholesale: { average: 50_700 },
+          adjustedPricing: {
+            wholesale: { average: 66_100 },
+            adjustedBy: { Odometer: "200", buildOptions: true },
+          },
+        },
+      ],
+    };
+    expect(extractManheimAdjustmentBreakdown(payload, 200)).toEqual({
+      buildOptionsIncluded: true,
+      buildOptionsAdjustment: null,
+      odometerAdjustment: 15_400,
       gradeAdjustment: null,
       colorAdjustment: null,
       regionAdjustment: null,

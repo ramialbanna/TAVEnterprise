@@ -780,23 +780,47 @@ describe("POST /app/mmr/vin", () => {
   });
 
   it("maps odometer and build splits when mileage differs from average", async () => {
-    const intelFetch = vi.fn().mockResolvedValue(intelOk({
-      ...vinEnvelope,
-      mmr_value: 23800,
-      mileage_used: 40000,
-      mmr_payload: {
-        items: [{
-          description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
-          bestMatch: true,
-          averageOdometer: 66981,
-          wholesale: { below: 18000, average: 20200, above: 22500 },
-          adjustedPricing: {
-            wholesale: { below: 21500, average: 23800, above: 26000 },
-            adjustedBy: { Odometer: "40000", buildOptions: true },
-          },
-        }],
-      },
-    }));
+    const primaryPayload = {
+      items: [{
+        description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
+        bestMatch: true,
+        averageOdometer: 66981,
+        wholesale: { below: 18000, average: 20200, above: 22500 },
+        adjustedPricing: {
+          wholesale: { below: 21500, average: 23800, above: 26000 },
+          adjustedBy: { Odometer: "40000", buildOptions: true },
+        },
+      }],
+    };
+    const avgPayload = {
+      items: [{
+        description: { year: 2022, make: "FORD", model: "EXPLORER", trim: "4D SUV XLT" },
+        bestMatch: true,
+        averageOdometer: 66981,
+        wholesale: { below: 18000, average: 20200, above: 22500 },
+        adjustedPricing: {
+          wholesale: { below: 25200, average: 20400, above: 29700 },
+          adjustedBy: { Odometer: "66981", buildOptions: true },
+        },
+      }],
+    };
+    const intelFetch = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { mileage?: number };
+      if (request.mileage === 66981) {
+        return Promise.resolve(intelOk({
+          ...vinEnvelope,
+          mmr_value: 20400,
+          mileage_used: 66981,
+          mmr_payload: avgPayload,
+        }));
+      }
+      return Promise.resolve(intelOk({
+        ...vinEnvelope,
+        mmr_value: 23800,
+        mileage_used: 40000,
+        mmr_payload: primaryPayload,
+      }));
+    });
     const res = await worker.fetch(
       authedPost("/app/mmr/vin", { vin: VIN, mileage: 40000 }),
       intelEnv(intelFetch),
@@ -808,8 +832,113 @@ describe("POST /app/mmr/vin", () => {
       adjustedMmr: 23800,
       buildOptionsIncluded: true,
       buildOptionsAdjustment: null,
-      odometerAdjustment: null,
+      odometerAdjustment: 3400,
     });
+    expect(intelFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("isolates grade and color adjustment dollars via counterfactual Cox lookups", async () => {
+    const fullPayload = {
+      items: [{
+        description: { year: 2018, make: "FORD", model: "F450", trim: "CREW CAB" },
+        bestMatch: true,
+        averageOdometer: 99606,
+        wholesale: { below: 48000, average: 50670, above: 53300 },
+        adjustedPricing: {
+          wholesale: { below: 63000, average: 66300, above: 69600 },
+          adjustedBy: {
+            Odometer: "200",
+            Grade: "45",
+            Color: "BLACK",
+            buildOptions: true,
+          },
+        },
+      }],
+    };
+    const intelFetch = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as {
+        mileage?: number;
+        adjustments?: Record<string, unknown>;
+      };
+      const adj = request.adjustments ?? {};
+      if (adj.grade === undefined && adj.color === "Black") {
+        return Promise.resolve(intelOk({
+          ...vinEnvelope,
+          mmr_value: 65590,
+          mileage_used: 200,
+          mmr_payload: {
+            items: [{
+              ...fullPayload.items[0],
+              adjustedPricing: {
+                wholesale: { average: 65590 },
+                adjustedBy: { Odometer: "200", Color: "BLACK", buildOptions: true },
+              },
+            }],
+          },
+        }));
+      }
+      if (adj.color === undefined && adj.grade === "45") {
+        return Promise.resolve(intelOk({
+          ...vinEnvelope,
+          mmr_value: 66780,
+          mileage_used: 200,
+          mmr_payload: {
+            items: [{
+              ...fullPayload.items[0],
+              adjustedPricing: {
+                wholesale: { average: 66780 },
+                adjustedBy: { Odometer: "200", Grade: "45", buildOptions: true },
+              },
+            }],
+          },
+        }));
+      }
+      if (request.mileage === 99606) {
+        return Promise.resolve(intelOk({
+          ...vinEnvelope,
+          mmr_value: 50870,
+          mileage_used: 99606,
+          mmr_payload: {
+            items: [{
+              ...fullPayload.items[0],
+              adjustedPricing: {
+                wholesale: { average: 50870 },
+                adjustedBy: {
+                  Odometer: "99606",
+                  Grade: "45",
+                  Color: "BLACK",
+                  buildOptions: true,
+                },
+              },
+            }],
+          },
+        }));
+      }
+      return Promise.resolve(intelOk({
+        ...vinEnvelope,
+        mmr_value: 66300,
+        mileage_used: 200,
+        mmr_payload: fullPayload,
+      }));
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", {
+        vin: VIN,
+        mileage: 200,
+        adjustments: { grade: "4.5", color: "Black", exclude_build: false },
+      }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      adjustedMmr: 66300,
+      gradeAdjustment: 710,
+      colorAdjustment: -480,
+      odometerAdjustment: 15430,
+    });
+    expect(intelFetch.mock.calls.length).toBeGreaterThanOrEqual(4);
   });
 
   it("forwards optional year, mileage, and adjustments to intel", async () => {
@@ -830,7 +959,7 @@ describe("POST /app/mmr/vin", () => {
       vin: VIN,
       year: 2020,
       mileage: 45000,
-      adjustments: { region: "Southeast", grade: "4.0", evbh: 88 },
+      adjustments: { region: "Southeast", grade: "40", evbh: 88 },
     });
   });
 
@@ -1040,6 +1169,62 @@ describe("/app/mmr live catalog + YMM valuation", () => {
       retailValue: 26600,
       retailRangeLow: 23500,
       retailRangeHigh: 29800,
+    });
+  });
+
+  it("POST /app/mmr/ymm selects style-matched item and uses CI range (Item 17)", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk({
+      ok: true,
+      mmr_value: 19_950,
+      mileage_used: null,
+      is_inferred_mileage: true,
+      cache_hit: false,
+      source: "manheim",
+      fetched_at: "2026-05-17T12:00:00.000Z",
+      expires_at: "2026-05-18T12:00:00.000Z",
+      error_code: null,
+      error_message: null,
+      mmr_payload: {
+        items: [
+          {
+            description: { trim: "SE", subSeries: "AWD 4D SEDAN SE" },
+            wholesale: { average: 19_950, below: 16_400, above: 23_500 },
+            averageGrade: 38,
+            adjustedPricing: {
+              wholesale: { average: 19_950, below: 16_400, above: 23_500 },
+              confidenceInterval: { priceRange: { adjustedLow: 16_400, adjustedHigh: 23_500 } },
+            },
+          },
+          {
+            description: { trim: "SE", subSeries: "4D SEDAN SE" },
+            wholesale: { average: 15_850, below: 14_000, above: 17_700 },
+            averageGrade: 23,
+            adjustedPricing: {
+              wholesale: { average: 15_850, below: 14_000, above: 17_700 },
+              confidenceInterval: { priceRange: { adjustedLow: 14_000, adjustedHigh: 17_700 } },
+            },
+          },
+        ],
+      },
+    }));
+    const res = await worker.fetch(
+      authedPost("/app/mmr/ymm", {
+        year: 2022,
+        make: "Toyota",
+        model: "Camry",
+        style: "SE 4D Sedan",
+      }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      mmrValue: 15_850,
+      avgCondition: 2.3,
+      rangeLow: 14_000,
+      rangeHigh: 17_700,
+      method: "year_make_model",
     });
   });
 });

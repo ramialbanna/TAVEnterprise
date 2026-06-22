@@ -31,6 +31,8 @@ yarn-error.log*
 # --- Cloudflare Workers / Wrangler / Miniflare ------------------------------
 .wrangler/
 **/.wrangler/
+.wrangler-out-test/
+**/.wrangler-out-test/
 .miniflare/
 worker-configuration.d.ts
 
@@ -60,3 +62,5 @@ logs/
 tmp/
 scratch/
 supabase/.temp/
+
+.vercel

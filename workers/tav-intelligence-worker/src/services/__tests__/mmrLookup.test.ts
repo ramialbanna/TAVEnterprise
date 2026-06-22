@@ -429,4 +429,102 @@ describe("performMmrLookup", () => {
     expect(arg.trim).toBe("SE");
     expect(arg.mileage).toBe(60_000);
   });
+
+  // ── Adjustment recompute path: lock bypass (race-condition fix) ─────────────
+  // When adjustments are supplied, skipCache=true and forceRefresh=true. The
+  // lock exists only to prevent stampedes on cache misses; adjustment calls
+  // neither read nor write the cache, so acquiring the lock only causes
+  // contention when a buyer changes color/grade while an odometer recompute
+  // is in flight. The fix: skip acquire/release entirely for adjustment calls.
+
+  it("adjustment recompute: bypasses lock.acquire, calls client, bypasses lock.release", async () => {
+    const deps = makeDeps();
+    deps.client.lookupByVin.mockResolvedValue(vinLiveResult);
+
+    const result = await performMmrLookup(
+      {
+        input: {
+          ...VIN_INPUT,
+          adjustments: { grade: "45", color: "Black", exclude_build: false },
+        },
+        requestId: "adj-1",
+      },
+      deps,
+    );
+
+    expect(result.mmr_value).toBe(18_500);
+    expect(result.cache_hit).toBe(false);
+    expect(deps.client.lookupByVin).toHaveBeenCalledTimes(1);
+    // Cache is never read or written for adjustment recomputes.
+    expect(deps.cache.get).not.toHaveBeenCalled();
+    expect(deps.cache.set).not.toHaveBeenCalled();
+    // Lock is neither acquired nor released — the caller is doing a
+    // force-refresh and must not contend with or invalidate another
+    // request's lock on the same VIN+mileage key.
+    expect(deps.lock.acquire).not.toHaveBeenCalled();
+    expect(deps.lock.release).not.toHaveBeenCalled();
+  });
+
+  it("adjustment recompute: does not block a concurrent cache-miss lookup's lock", async () => {
+    // Two concurrent calls for the same VIN+mileage: one adjustment recompute
+    // (skipCache=true), one normal cache-miss lookup. The adjustment call
+    // must NOT release a lock it never acquired — otherwise it could delete
+    // the normal lookup's lock mid-flight.
+    const deps = makeDeps();
+    deps.cache.get.mockResolvedValue(null);
+    deps.lock.acquire.mockResolvedValue(true);
+    deps.client.lookupByVin.mockResolvedValue(vinLiveResult);
+
+    // Fire both concurrently.
+    await Promise.all([
+      performMmrLookup(
+        {
+          input: {
+            ...VIN_INPUT,
+            adjustments: { grade: "45" },
+          },
+          requestId: "adj-concurrent",
+        },
+        deps,
+      ),
+      performMmrLookup(
+        { input: VIN_INPUT, requestId: "normal-concurrent" },
+        deps,
+      ),
+    ]);
+
+    // The normal lookup acquired and released its lock exactly once.
+    expect(deps.lock.acquire).toHaveBeenCalledTimes(1);
+    expect(deps.lock.acquire).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Number),
+      "normal-concurrent",
+    );
+    expect(deps.lock.release).toHaveBeenCalledTimes(1);
+    expect(deps.lock.release).toHaveBeenCalledWith(
+      expect.any(String),
+      "normal-concurrent",
+    );
+  });
+
+  it("adjustment recompute: completion log records lockAttempted=false", async () => {
+    const deps = makeDeps();
+    deps.client.lookupByVin.mockResolvedValue(vinLiveResult);
+
+    await performMmrLookup(
+      {
+        input: {
+          ...VIN_INPUT,
+          adjustments: { color: "Black" },
+        },
+        requestId: "adj-log",
+      },
+      deps,
+    );
+
+    const completion = logEvents().find((e) => e.event === "mmr.lookup.complete");
+    expect(completion).toBeDefined();
+    expect(completion?.cacheHit).toBe(false);
+    expect(completion?.lockAttempted).toBe(false);
+  });
 });

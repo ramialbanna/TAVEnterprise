@@ -116,15 +116,15 @@ function envBool(value: string | undefined): boolean {
 /**
  * Build the Cox `include` query value from configured flags.
  * Returns null when no flags are set (caller omits the parameter entirely).
- * The `ci` token is dropped on Search/YMMT calls — the MMR Lookup guide
- * documents `include=ci` as unsupported on `/search/...`.
+ * Cox documents `include=ci` for Search/YMMT as well as VIN; MMR Range in the
+ * native tool uses confidenceInterval.priceRange, not wholesale below/above.
  */
-function buildCoxIncludeTokens(env: Env, isSearch: boolean): string | null {
+function buildCoxIncludeTokens(env: Env, _isSearch: boolean): string | null {
   const tokens: string[] = [];
   if (envBool(env.MANHEIM_INCLUDE_RETAIL))     tokens.push("retail");
   if (envBool(env.MANHEIM_INCLUDE_FORECAST))   tokens.push("forecast");
   if (envBool(env.MANHEIM_INCLUDE_HISTORICAL)) tokens.push("historical");
-  if (!isSearch && envBool(env.MANHEIM_INCLUDE_CI)) tokens.push("ci");
+  if (envBool(env.MANHEIM_INCLUDE_CI))         tokens.push("ci");
   return tokens.length > 0 ? tokens.join(",") : null;
 }
 

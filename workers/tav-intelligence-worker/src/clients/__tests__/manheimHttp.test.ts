@@ -974,9 +974,9 @@ describe("ManheimHttpClient", () => {
     expect(url.searchParams.get("include")).toBe("retail,forecast,historical,ci");
   });
 
-  // ── 27. Cox include flags: Search/YMMT strips ci ────────────────────────────
+  // ── 27. Cox include flags: Search/YMMT includes ci when MANHEIM_INCLUDE_CI is true ─
 
-  it("cox vendor: Search/YMMT include= strips ci even when MANHEIM_INCLUDE_CI is true", async () => {
+  it("cox vendor: Search/YMMT include= includes ci when MANHEIM_INCLUDE_CI is true", async () => {
     const { kv } = makeFakeKv();
     const fetchFn = vi.fn();
     fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
@@ -1000,8 +1000,7 @@ describe("ManheimHttpClient", () => {
 
     const url = new URL(urlOfCall(fetchFn, 1));
     const include = url.searchParams.get("include");
-    expect(include).toBe("retail,forecast,historical");
-    expect(include).not.toContain("ci");
+    expect(include).toBe("retail,forecast,historical,ci");
   });
 
   // ── 28. Cox include flags: omitted entirely when no env flags set ───────────

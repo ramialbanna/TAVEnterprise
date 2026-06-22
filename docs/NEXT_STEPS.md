@@ -1,11 +1,29 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-20 (Avg Condition 10× display bug fixed; EV Battery Score wiring audited) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-20 (Odometer cache bucket fix deployed; no-rounding rule added) · **Focus:** `/mmr-lab` buyer experience
 
-> **Fresh chat prompt:**  
-> Pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
+> **Fresh chat prompt:**
+> Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
+
+---
+
+> ## ⚠ CRITICAL — NEVER ROUND MMR ADJUSTMENT DOLLAR VALUES
+>
+> **Do not round, truncate, or approximate any dollar figure in the MMR Adjustments panel.**
+> Cox/Manheim returns exact cents-precision values for odometer, build-options, grade, color, and region adjustments.
+> Any rounding — even to the nearest dollar — produces deltas that diverge from Manheim's native tool and mislead buyers.
+>
+> **Known violation history (2026-06-20):**
+> - The intel worker's mileage cache key used a 5,000-mile bucket (`mileageBucket`), causing lookups at 5,000 and 5,800 miles to return the same cached Cox response. The user saw `+$3,000` (the cached 5,000-mile result) instead of the correct `+$2,560` for 5,800 miles.
+> - **Fix deployed:** `deriveVinCacheKey` / `deriveYmmCacheKey` now use the exact mileage integer (no bucket) whenever the caller provides a real odometer value (`isInferred = false`).
+>
+> **Rules for all future work on MMR Lab:**
+> 1. Cox adjustment values (`adjustedBy.Odometer`, `adjustedBy.buildOptions`, `adjustedBy.Grade`, etc.) must be forwarded to the frontend as-is — no `Math.round`, no `toFixed`, no division by 1,000.
+> 2. The `nonZeroDelta` helper in `mmr-adjustment-display.ts` applies `Math.round` (nearest dollar) — this is acceptable only because Cox already returns whole-dollar integers; do not change it to round to larger increments.
+> 3. Cache keys that include mileage must use the exact value for user-provided/listing-actual mileage. The 5,000-mile bucket is reserved for inferred (year-estimated) mileage only.
+> 4. Any derived odometer adjustment (computed as `total − buildAdj` when Cox sends mileage as a string) is only as accurate as the underlying `adjustedPricing.wholesale.average`. If Cox rounds that value, our derived delta inherits the rounding — do not attempt to "correct" it with additional math.
 
 ---
 
@@ -39,6 +57,9 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
+| **21** | Odometer delta badge missing when Cox sends mileage-as-string | High | [~] |
+| **22** | Grade not applied — UI CR grade must convert to Cox 10× integer | High | [~] |
+| **23** | Grade & color deltas — exact Cox dollar amounts, no marginal / no Math.round | High | [ ] |
 | **17** | YMM parity vs Manheim â€” item selection + range source | High | [~] |
 | **18** | MaxBuy `vehicle_context_missing` -- trust MMR result for VIN identity | High | [x] |
 | **19** | Avg Condition 10x display bug -- `averageGrade` integer not normalized | High | [x] |
@@ -433,16 +454,104 @@ Do not error. Show the MaxBuy result with `data strength: low` and the existing 
 
 ---
 
+## 22 — Grade: convert UI CR grade to Cox query param
+
+**Goal:** Selecting grade **4.5** in MMR Adjustments must send `grade=45` to Cox (not `grade=4.5`, which Cox silently ignores).
+
+**Last updated:** 2026-06-22 (fix applied — **pending production smoke confirmation**)
+
+### Fix applied
+
+- **Web** (`mmr-adjustments.ts`): `toCoxGradeParam()` converts `"4.5"` → `"45"` inside `mapMmrAdjustmentsToApi`; UI dropdown unchanged.
+- **Main worker** (`coxGradeParam.ts` + `routes.ts`): `normalizeMmrLookupAdjustments()` applies the same conversion before forwarding to the intel worker.
+
+### Exit criteria (confirm before marking [x])
+
+- [ ] F450 VIN at odometer 200 + grade 4.5 + Black: Adjusted MMR ≈ **$66,300** (matches Manheim)
+- [ ] Grade delta badge shows ≈ **+$710** (display fix may still be separate if Cox returns grade as string code)
+- [ ] Vercel deploy includes web `mapMmrAdjustmentsToApi` change
+
+---
+
+## 23 — Grade & color adjustment deltas: exact Cox dollar amounts
+
+**Goal:** Grade and color badges must show the **exact per-field dollar adjustment Cox returns** — matching Manheim native (e.g. grade **+$710**, color **−$480** on F450 VIN `1FT8W4DT8JEB57132`), not derived approximations.
+
+**Last updated:** 2026-06-22 (analysis — fix not started)
+
+### Grade (+$700 in our app vs +$710 Manheim)
+
+Cox does **not** send a grade dollar amount in the field we currently read. It sends a grade **code** (e.g. `"45"` for CR 4.5). Our parser uses `readAdjustedByFieldDollars()`, which **only accepts numeric values**, so the grade code is ignored for dollar display.
+
+The **+$700** shown in our app is **not** from Cox's grade adjustment field. It is almost certainly from **marginal tracking**: the change in Adjusted MMR when the user selected grade (e.g. $66,300 − $65,600 = $700). That is close to Manheim's **+$710** but not the same — it is a recomputed total delta, not Cox's labeled grade split.
+
+**Requirement:** We must **not** rely on marginal tracking or residual math for grade. We need the **exact grade dollar amount from Cox** — the same value Manheim shows next to the grade dropdown. Investigate the raw Cox payload (`adjustedBy` and related fields) for VIN `1FT8W4DT8JEB57132` with grade=45 to find where Cox exposes the grade adjustment in dollars (may be a separate key from `Grade` the code string).
+
+**Files likely involved:**
+- `src/valuation/manheimResponseParser.ts` — `readAdjustedByFieldDollars`, `extractManheimAdjustmentBreakdown`
+- `web/app/(app)/mmr-lab/_components/mmr-adjustment-display.ts` — stop preferring `attributeMarginals.grade` when Cox provides a dollar field
+
+### Color (−$500 in our app vs −$480 Manheim)
+
+Color **may** already be a numeric Cox value (`adjustedBy.Color` = −500), which we forward with only nearest-dollar `Math.round` in `nonZeroDelta` — that does not change whole integers, so **−$500 may be exactly what Cox returned** on that lookup. Manheim's **−$480** suggests either Cox returns a different value than we parse, or our decomposition diverges when odometer + grade + color are all active.
+
+**Requirement:** **Remove `Math.round`** from the grade/color adjustment display path (align with the no-rounding rule in the CRITICAL block at top of this doc for adjustment dollars). **Parse and forward the exact dollar amount Cox returns** for color (and grade once the correct field is identified) — no rounding, no marginal fallback when Cox provides the value.
+
+**Files likely involved:**
+- `src/valuation/manheimResponseParser.ts` — color/grade dollar extraction
+- `web/app/(app)/mmr-lab/_components/mmr-adjustment-display.ts` — `nonZeroDelta` / `deriveMmrAdjustmentDeltas`
+
+### Exit criteria
+
+- [ ] F450 VIN (odometer 200, grade 4.5, Black): grade badge **+$710**, color badge **−$480** (match Manheim)
+- [ ] Values sourced from Cox payload fields, not marginal tracking, when Cox provides them
+- [ ] No `Math.round` on grade/color adjustment dollars in the display pipeline
+- [ ] Adjusted MMR remains **$66,300** — no regression on hero price
+
+---
+
+## 21 — Odometer delta badge missing (mileage-as-string)
+
+**Goal:** When a buyer enters a non-average odometer, the green/red **+$X** badge next to the odometer field must match Manheim's native MMR tool. Adjusted MMR was already correct; only the per-field delta label was missing.
+
+**Last updated:** 2026-06-22 (fix applied — **pending production smoke confirmation**)
+
+### What was observed (2026-06-22)
+
+VIN `1FT8W4DT8JEB57132` (2018 Ford F450): odometer **200** mi (avg 99,606). Manheim shows **+$15,430** next to odometer; our app showed Adjusted MMR **$66,100** (correct) but **no odometer delta badge**.
+
+### Root cause
+
+1. Cox sends `adjustedBy.Odometer` as mileage string `"200"`, not a dollar amount — parser could not read a dollar delta.
+2. `buildOptions: true` with odometer ≠ average left `buildAdj` null, blocking the `total − buildAdj` derivation path.
+3. Client fallback required build dollars or an average-odometer baseline; neither existed after recompute at 200 mi.
+
+### Fix applied (2026-06-22)
+
+- **Parser** (`manheimResponseParser.ts`): when build flag is on, build dollars unknown, no grade/color/region, and odometer ≠ average → assign wholesale delta to `odometerAdjustment`.
+- **Client** (`mmr-adjustment-display.ts`): when build on, build dollars null, no baseline → derive odometer from `adjustedMmr − baseMmr`.
+
+### Exit criteria (confirm before marking [x])
+
+- [ ] VIN `1FT8W4DT8JEB57132` at odometer 200 shows odometer delta ≈ **+$15,400** (within ~$50 of Manheim +$15,430)
+- [ ] Adjusted MMR still **$66,100** — no regression on hero price
+- [ ] Grade + odometer + build combined case still does **not** show a bogus grade/odo split (regression test passes)
+- [ ] Deploy main worker + verify on https://tav-enterprise.vercel.app/mmr-lab
+
+---
+
 ## 19 -- Avg Condition 10x display bug
 
 **Goal:** verageGrade returned by Cox is a 10x integer (e.g. 38 = grade 3.8). The result band was displaying the raw integer instead of the decimal.
 
 **Last updated:** 2026-06-20
 
-**Root cause:** eadNumericField(payloadItem, "averageGrade") in src/app/routes.ts forwarded the raw Cox integer directly to the frontend. The frontend ormatNumber renders it as-is (38 instead of 3.8).
+**Root cause:** 
+eadNumericField(payloadItem, "averageGrade") in src/app/routes.ts forwarded the raw Cox integer directly to the frontend. The frontend ormatNumber renders it as-is (38 instead of 3.8).
 
 **Fix applied (2026-06-20):** Added 
-ormalizeAverageGrade() helper to outes.ts that divides by 10 when the raw value exceeds 10. Called at the single assignment site for vgCondition. Logic matches ormatGrade() already used by manheimMarketContextParser.ts for transaction-row conditions.
+ormalizeAverageGrade() helper to 
+outes.ts that divides by 10 when the raw value exceeds 10. Called at the single assignment site for vgCondition. Logic matches ormatGrade() already used by manheimMarketContextParser.ts for transaction-row conditions.
 
 **Files changed:**
 - src/app/routes.ts -- 
@@ -465,9 +574,11 @@ ormalizeAverageGrade helper; vgCondition now normalized before response
 
 **What is already wired:** The pipeline is complete end-to-end:
 - manheimResponseParser.ts -- parseEvBatteryScore tries keys: verageEvBatteryScore, verageEVBatteryScore, vgEvBatteryScore, vgEVBatteryScore, verageEVBH
-- outes.ts -- conditionally includes vgEvBatteryScore in the response envelope
+- 
+outes.ts -- conditionally includes vgEvBatteryScore in the response envelope
 - mmr-lab-client.tsx -- passes vgEvBatteryScore to ResultBand
-- esult-band.tsx -- renders the stat when non-null
+- 
+esult-band.tsx -- renders the stat when non-null
 
 **Blocker:** Cox returns the field under a key name that does not match any of the 5 tried names. The correct key cannot be determined from the codebase alone -- it requires inspecting a raw Cox payload for an EV VIN.
 

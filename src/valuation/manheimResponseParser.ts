@@ -36,6 +36,9 @@ export interface ManheimDistribution {
   /** Cox MMR 1.4 retail tier below. Null when retail include flag is off or absent from payload. */
   retailRough:    number | null;
   sampleCount:    number | null;
+  /** Confidence-interval range (include=ci). Maps to Manheim native MMR Range. */
+  ciRangeLow:     number | null;
+  ciRangeHigh:    number | null;
   /** Average EV battery health score (0–100). Present for EVs; null for ICE vehicles or when absent. */
   avgEvBatteryScore: number | null;
 }
@@ -53,6 +56,8 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     retailRough:    null,
     sampleCount:    null,
     avgEvBatteryScore: null,
+    ciRangeLow:     null,
+    ciRangeHigh:    null,
   };
 
   if (!payload || typeof payload !== "object") return none;
@@ -69,6 +74,8 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
   let retailClean:    number | null = null;
   let retailAvg:      number | null = null;
   let retailRough:    number | null = null;
+  let ciRangeLow:     number | null = null;
+  let ciRangeHigh:    number | null = null;
 
   if (t.adjustedPricing && typeof t.adjustedPricing === "object") {
     const ap = t.adjustedPricing as Record<string, unknown>;
@@ -84,6 +91,9 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
       retailClean = posNum(r.above);
       retailRough = posNum(r.below);
     }
+    const ciRange = readConfidenceIntervalRange(ap);
+    ciRangeLow  = ciRange.low;
+    ciRangeHigh = ciRange.high;
   }
 
   if (t.wholesale && typeof t.wholesale === "object") {
@@ -113,6 +123,39 @@ export function extractManheimDistribution(payload: unknown): ManheimDistributio
     retailRough,
     sampleCount: parseSampleSize(t.sampleSize),
     avgEvBatteryScore,
+    ciRangeLow,
+    ciRangeHigh,
+  };
+}
+
+/** Cox include=ci → adjustedPricing.confidenceInterval.priceRange.{adjustedLow,adjustedHigh}. */
+function readConfidenceIntervalRange(
+  adjustedPricing: Record<string, unknown>,
+): { low: number | null; high: number | null } {
+  const ci = adjustedPricing.confidenceInterval;
+  if (!ci || typeof ci !== "object") return { low: null, high: null };
+
+  if (Array.isArray(ci)) {
+    for (const entry of ci) {
+      if (entry && typeof entry === "object" && !Array.isArray(entry)) {
+        const range = readCiPriceRange(entry as Record<string, unknown>);
+        if (range.low !== null || range.high !== null) return range;
+      }
+    }
+    return { low: null, high: null };
+  }
+
+  return readCiPriceRange(ci as Record<string, unknown>);
+}
+
+function readCiPriceRange(ci: Record<string, unknown>): { low: number | null; high: number | null } {
+  const priceRange =
+    ci.priceRange && typeof ci.priceRange === "object" && !Array.isArray(ci.priceRange)
+      ? (ci.priceRange as Record<string, unknown>)
+      : ci;
+  return {
+    low:  posNum(priceRange.adjustedLow ?? priceRange.below),
+    high: posNum(priceRange.adjustedHigh ?? priceRange.above),
   };
 }
 
@@ -433,6 +476,22 @@ export function extractManheimAdjustmentBreakdown(
     total != null &&
     mileage != null &&
     !atAvg
+  ) {
+    odometerAdj = total;
+  }
+
+  // Cox flags buildOptions:true and sends Odometer as a mileage string (not dollars).
+  // buildOptionsFromBooleanTrue leaves buildAdj null when odometer ≠ average, so the
+  // total−buildAdj path never runs. With no grade/color/region, the wholesale delta
+  // is odometer-only (e.g. 2018 F450 at 200 mi vs 99,606 avg).
+  if (
+    odometerAdj == null &&
+    build.included &&
+    buildAdj == null &&
+    total != null &&
+    mileage != null &&
+    !atAvg &&
+    !otherAttrsPresent
   ) {
     odometerAdj = total;
   }

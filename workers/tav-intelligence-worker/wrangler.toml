@@ -54,6 +54,8 @@ MANHEIM_INCLUDE_FORECAST = "true"
 # Cox retail tier — requires retail entitlement on the TAV API key.
 # Enables Estimated Retail Value + Typical Range in the MMR Lab result band.
 MANHEIM_INCLUDE_RETAIL = "true"
+# MMR Range parity — confidenceInterval.priceRange (Manheim native MMR Range).
+MANHEIM_INCLUDE_CI = "true"
 # Cox client_credentials config — not credentials, committed as vars so they can
 # never go missing after a deploy. Values are the same across all environments.
 MANHEIM_API_VENDOR   = "cox"
@@ -88,6 +90,8 @@ MANHEIM_INCLUDE_FORECAST = "true"
 # Cox retail tier — requires retail entitlement on the TAV API key.
 # Enables Estimated Retail Value + Typical Range in the MMR Lab result band.
 MANHEIM_INCLUDE_RETAIL = "true"
+# MMR Range parity — confidenceInterval.priceRange (Manheim native MMR Range).
+MANHEIM_INCLUDE_CI = "true"
 # Cox client_credentials config — not credentials, committed as vars so they can
 # never go missing after a deploy. Values are the same across all environments.
 MANHEIM_API_VENDOR   = "cox"

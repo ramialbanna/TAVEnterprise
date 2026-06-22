@@ -138,6 +138,26 @@ describe("deriveMmrAdjustmentDeltas", () => {
     });
   });
 
+  it("derives odometer delta when build is on but build dollars and baseline are unknown", () => {
+    expect(
+      deriveMmrAdjustmentDeltas({
+        baseMmr: 50_700,
+        adjustedMmr: 66_100,
+        buildOptionsIncluded: true,
+        buildOptionsAdjustment: null,
+        odometerAdjustment: null,
+        adjustments: { ...EMPTY_MMR_ADJUSTMENTS, odometer: "200", buildOptions: true },
+        baseline: null,
+      }),
+    ).toEqual({
+      odometerAdjustment: 15_400,
+      buildOptionsAdjustment: null,
+      gradeAdjustment: null,
+      colorAdjustment: null,
+      regionAdjustment: null,
+    });
+  });
+
   it("prefers API grade and color adjustments when present", () => {
     expect(
       deriveMmrAdjustmentDeltas({

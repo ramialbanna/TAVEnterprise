@@ -31,6 +31,29 @@ export const MMR_REGION_OPTIONS = [
 
 export const MMR_GRADE_OPTIONS = ["1.0", "2.0", "3.0", "3.5", "4.0", "4.5", "5.0"] as const;
 
+/**
+ * Convert UI CR grade (e.g. "4.5") to Cox query param (e.g. "45").
+ * Cox accepts integers 10–50; decimal values are silently ignored.
+ */
+export function toCoxGradeParam(displayGrade: string): string | null {
+  const trimmed = displayGrade.trim();
+  if (!trimmed) return null;
+
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return null;
+
+  if (trimmed.includes(".")) {
+    if (n < 1 || n > 5) return null;
+    const cox = Math.round(n * 10);
+    if (cox < 10 || cox > 50) return null;
+    return String(cox);
+  }
+
+  if (Number.isInteger(n) && n >= 10 && n <= 50) return trimmed;
+
+  return null;
+}
+
 export const MMR_COLOR_OPTIONS = [
   "Black",
   "White",
@@ -150,7 +173,10 @@ export function mapMmrAdjustmentsToApi(
 ): MmrAdjustmentsApi | undefined {
   const api: MmrAdjustmentsApi = {};
   if (adjustments.region) api.region = adjustments.region;
-  if (adjustments.grade) api.grade = adjustments.grade;
+  if (adjustments.grade) {
+    const coxGrade = toCoxGradeParam(adjustments.grade);
+    if (coxGrade !== null) api.grade = coxGrade;
+  }
   if (adjustments.exteriorColor) api.color = adjustments.exteriorColor;
   if (adjustments.buildOptions) {
     api.exclude_build = false;

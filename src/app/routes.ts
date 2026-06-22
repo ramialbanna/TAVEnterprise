@@ -61,6 +61,16 @@ import { extractManheimAdjustmentBreakdown, extractManheimDistribution } from ".
 import { extractManheimMarketContext } from "../valuation/manheimMarketContextParser";
 import { extractManheimVehicleIdentity } from "../valuation/manheimVehicleIdentityParser";
 import { selectMmrPayloadItem, selectMmrPayloadItemByStyle } from "../valuation/manheimPayloadItem";
+import { normalizeMmrLookupAdjustments } from "../valuation/coxGradeParam";
+import {
+  applyMmrIsolationOverrides,
+  buildMmrIsolationBody,
+  computeMmrIsolatedAdjustments,
+  isolationFlagsFromBody,
+  listMmrIsolationKinds,
+  shouldRunMmrAdjustmentIsolation,
+  type MmrIsolationKind,
+} from "../valuation/mmrAdjustmentIsolation";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { handleMaxbuyAppRoute, maxbuySystemStatus, fireMaxbuyEvaluateBackground } from "./maxbuyProxy";
@@ -567,8 +577,8 @@ function mapIntelMmrEnvelopeToAppData(
     avgOdometer: readNumericField(payloadItem, "averageOdometer"),
     avgCondition: normalizeAverageGrade(readNumericField(payloadItem, "averageGrade")),
     sampleCount: distribution.sampleCount,
-    rangeLow: distribution.wholesaleBaseRough ?? distribution.wholesaleRough,
-    rangeHigh: distribution.wholesaleBaseClean ?? distribution.wholesaleClean,
+    rangeLow: distribution.ciRangeLow ?? distribution.wholesaleBaseRough ?? distribution.wholesaleRough,
+    rangeHigh: distribution.ciRangeHigh ?? distribution.wholesaleBaseClean ?? distribution.wholesaleClean,
     adjustedMmr,
     buildOptionsIncluded: adjustmentBreakdown.buildOptionsIncluded,
     buildOptionsAdjustment: adjustmentBreakdown.buildOptionsAdjustment,
@@ -592,6 +602,105 @@ function mapIntelMmrEnvelopeToAppData(
       ? { transactions: marketContext.transactions }
       : {}),
   };
+}
+
+function parserPayloadFromEnvelope(
+  envelope: MmrResponseEnvelope,
+  styleName?: string,
+): Record<string, unknown> {
+  const rawPayload = envelope.mmr_payload ?? {};
+  return styleName
+    ? (selectMmrPayloadItemByStyle(rawPayload, styleName) ?? rawPayload)
+    : rawPayload;
+}
+
+function adjustedWholesaleFromEnvelope(
+  envelope: MmrResponseEnvelope,
+  styleName?: string,
+): number | null {
+  if (!envelope.ok) return null;
+  const distribution = extractManheimDistribution(parserPayloadFromEnvelope(envelope, styleName));
+  return distribution.wholesaleAvg ?? envelope.mmr_value;
+}
+
+async function resolveIsolatedAdjustmentOverrides(
+  env: Env,
+  intelPath: string,
+  primaryBody: Record<string, unknown>,
+  envelope: MmrResponseEnvelope,
+  styleName?: string,
+): Promise<{ isolated: ReturnType<typeof computeMmrIsolatedAdjustments>; fetched: Set<MmrIsolationKind> } | null> {
+  if (!envelope.ok) return null;
+
+  const parserPayload = parserPayloadFromEnvelope(envelope, styleName);
+  const payloadItem = selectMmrPayloadItem(parserPayload);
+  const avgOdometer = readNumericField(payloadItem, "averageOdometer");
+  const adjustmentBreakdown = extractManheimAdjustmentBreakdown(
+    parserPayload,
+    envelope.mileage_used,
+  );
+
+  if (
+    !shouldRunMmrAdjustmentIsolation(
+      primaryBody,
+      avgOdometer,
+      adjustmentBreakdown.buildOptionsIncluded,
+    )
+  ) {
+    return null;
+  }
+
+  const kinds = listMmrIsolationKinds(
+    primaryBody,
+    avgOdometer,
+    adjustmentBreakdown.buildOptionsIncluded,
+  );
+  if (kinds.length === 0) return null;
+
+  const fullAdjusted = adjustedWholesaleFromEnvelope(envelope, styleName);
+  if (fullAdjusted == null) return null;
+
+  const partials = new Map<MmrIsolationKind, number>();
+  for (const kind of kinds) {
+    const cfBody = buildMmrIsolationBody(primaryBody, kind, avgOdometer);
+    try {
+      const res = await fetchIntelWorker(env, intelPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfBody),
+      });
+      if (!res?.ok) continue;
+      const responseJson = parseJsonText(await res.text());
+      const wrapped = IntelMmrEnvelopeSchema.safeParse(responseJson);
+      if (!wrapped.success || !wrapped.data.data.ok) continue;
+      const adjusted = adjustedWholesaleFromEnvelope(wrapped.data.data, styleName);
+      if (adjusted == null) continue;
+      partials.set(kind, adjusted);
+    } catch (err) {
+      log("app.mmr.isolation_lookup_failed", {
+        kind,
+        error: serializeError(err),
+      });
+    }
+  }
+
+  if (partials.size === 0) return null;
+
+  const isolated = computeMmrIsolatedAdjustments({
+    fullAdjusted,
+    withoutGrade: partials.get("without_grade"),
+    withoutColor: partials.get("without_color"),
+    withoutRegion: partials.get("without_region"),
+    atAverageOdometer: partials.get("at_average_odometer"),
+    withoutBuild: partials.get("without_build"),
+    ...isolationFlagsFromBody(
+      primaryBody,
+      avgOdometer,
+      adjustmentBreakdown.buildOptionsIncluded,
+    ),
+  });
+
+  return { isolated, fetched: new Set(partials.keys()) };
 }
 
 async function fetchIntelMmrLookup(
@@ -643,10 +752,19 @@ async function fetchIntelMmrLookup(
     return json({ ok: true, data: { mmrValue: null, missingReason: "envelope_invalid" } });
   }
 
-  return json({
-    ok: true,
-    data: mapIntelMmrEnvelopeToAppData(wrapped.data.data, method, confidence, styleName),
-  });
+  const data = mapIntelMmrEnvelopeToAppData(wrapped.data.data, method, confidence, styleName);
+  const isolation = await resolveIsolatedAdjustmentOverrides(
+    env,
+    intelPath,
+    body,
+    wrapped.data.data,
+    styleName,
+  );
+  if (isolation) {
+    applyMmrIsolationOverrides(data, isolation.isolated, isolation.fetched);
+  }
+
+  return json({ ok: true, data });
 }
 
 /**
@@ -670,7 +788,9 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
   const body: Record<string, unknown> = { vin };
   if (year !== undefined) body.year = year;
   if (mileage !== undefined) body.mileage = mileage;
-  if (adjustments !== undefined) body.adjustments = adjustments;
+  if (adjustments !== undefined) {
+    body.adjustments = normalizeMmrLookupAdjustments(adjustments);
+  }
 
   return fetchIntelMmrLookup(env, "/mmr/vin", body, "mmr_vin", "vin", "high");
 }
@@ -777,7 +897,9 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
   const { year, make, model, style, mileage, adjustments } = parsed.data;
   const body: Record<string, unknown> = { year, make, model, trim: style };
   if (mileage !== undefined) body.mileage = mileage;
-  if (adjustments !== undefined) body.adjustments = adjustments;
+  if (adjustments !== undefined) {
+    body.adjustments = normalizeMmrLookupAdjustments(adjustments);
+  }
 
   return fetchIntelMmrLookup(
     env,

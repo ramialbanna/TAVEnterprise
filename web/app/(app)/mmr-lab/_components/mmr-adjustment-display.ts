@@ -39,6 +39,12 @@ function nonZeroDelta(value: number | null | undefined): number | null {
   return rounded !== 0 ? rounded : null;
 }
 
+/** Exact Cox dollars for grade/color/region — no rounding. */
+function nonZeroExact(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return value !== 0 ? value : null;
+}
+
 /** Capture baseline when Cox prices at average odometer with build options. */
 export function buildMmrAdjustmentBaseline(
   result: Pick<
@@ -180,6 +186,18 @@ export function deriveMmrAdjustmentDeltas(params: {
     odo != null &&
     baseMmr != null &&
     adjustedMmr != null &&
+    buildOn &&
+    buildAdj == null &&
+    baseline == null
+  ) {
+    odoAdj = nonZeroDelta(adjustedMmr - baseMmr - knownAttrDelta);
+  }
+
+  if (
+    odoAdj == null &&
+    odo != null &&
+    baseMmr != null &&
+    adjustedMmr != null &&
     !buildOn
   ) {
     odoAdj = nonZeroDelta(adjustedMmr - baseMmr - knownAttrDelta);
@@ -196,14 +214,26 @@ export function deriveMmrAdjustmentDeltas(params: {
   }
 
   const gradeAdj = adjustments.grade
-    ? nonZeroDelta(gradeAdjustment ?? attributeMarginals.grade)
+    ? nonZeroExact(
+        gradeAdjustment !== undefined && gradeAdjustment !== null
+          ? gradeAdjustment
+          : attributeMarginals.grade,
+      )
     : null;
   const colorAdj = adjustments.exteriorColor
-    ? nonZeroDelta(colorAdjustment ?? attributeMarginals.color)
+    ? nonZeroExact(
+        colorAdjustment !== undefined && colorAdjustment !== null
+          ? colorAdjustment
+          : attributeMarginals.color,
+      )
     : null;
   const regionAdj =
     adjustments.region && adjustments.region !== "National"
-      ? nonZeroDelta(regionAdjustment ?? attributeMarginals.region)
+      ? nonZeroExact(
+          regionAdjustment !== undefined && regionAdjustment !== null
+            ? regionAdjustment
+            : attributeMarginals.region,
+        )
       : null;
 
   return {

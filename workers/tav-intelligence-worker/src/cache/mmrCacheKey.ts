@@ -19,19 +19,32 @@ export interface YmmCacheKeyArgs {
   trim?:   string | null;
   /** Bucketed into the key when supplied; omitted for no-odometer lookups. */
   mileage?: number;
+  /** When true, use the raw mileage integer instead of the 5,000-mile bucket. */
+  exact?:  boolean;
 }
 
-/** Build the VIN-namespaced cache key. Mileage is bucketed when supplied so
- *  odometer adjustments do not reuse a stale wholesale value. */
-export function deriveVinCacheKey(vin: string, mileage?: number): string {
+/**
+ * Build the VIN-namespaced cache key.
+ *
+ * When `exact` is false (default), mileage is rounded to the nearest 5,000
+ * so that estimated/inferred odometer values share cache entries.
+ * When `exact` is true, the raw mileage integer is used so that every
+ * distinct user-entered odometer value gets its own entry and returns
+ * the precise Cox adjustment for that exact mileage.
+ */
+export function deriveVinCacheKey(vin: string, mileage?: number, exact = false): string {
   const normalized = vin.trim().toUpperCase();
   if (typeof mileage === "number" && Number.isFinite(mileage) && mileage >= 0) {
-    return `vin:${normalized}:${mileageBucket(mileage)}`;
+    const key = exact ? mileage : mileageBucket(mileage);
+    return `vin:${normalized}:${key}`;
   }
   return `vin:${normalized}`;
 }
 
-/** Build the YMM-namespaced cache key. */
+/**
+ * Build the YMM-namespaced cache key.
+ * `args.exact` mirrors the same semantics as `deriveVinCacheKey`'s `exact` param.
+ */
 export function deriveYmmCacheKey(args: YmmCacheKeyArgs): string {
   const makePart  = normalizeToken(args.make);
   const modelPart = normalizeToken(args.model);
@@ -41,7 +54,8 @@ export function deriveYmmCacheKey(args: YmmCacheKeyArgs): string {
       : normalizeToken(args.trim);
   const base = `ymm:${args.year}:${makePart}:${modelPart}:${trimPart}`;
   if (typeof args.mileage === "number" && Number.isFinite(args.mileage) && args.mileage >= 0) {
-    return `${base}:${mileageBucket(args.mileage)}`;
+    const key = args.exact ? args.mileage : mileageBucket(args.mileage);
+    return `${base}:${key}`;
   }
   return base;
 }

@@ -185,15 +185,21 @@ export async function performMmrLookup(
   const lookupMileage = resolveLookupMileage(args.input, nowDate);
 
   // 2. Derive cache key.
+  // Use the exact mileage (no 5,000-mile bucket) when the caller supplied a
+  // real odometer value. Bucketing is reserved for estimated/inferred mileage
+  // where ±2,500-mile imprecision is acceptable. User-entered or listing-actual
+  // mileages need distinct keys so every unique value gets the right Cox adjustment.
+  const exactMileage = !lookupMileage.isInferred && lookupMileage.cacheValue !== undefined;
   const cacheKey =
     args.input.kind === "vin"
-      ? deriveVinCacheKey(args.input.vin, lookupMileage.cacheValue)
+      ? deriveVinCacheKey(args.input.vin, lookupMileage.cacheValue, exactMileage)
       : deriveYmmCacheKey({
           year:    args.input.year,
           make:    args.input.make,
           model:   args.input.model,
           trim:    args.input.trim ?? null,
           mileage: lookupMileage.cacheValue,
+          exact:   exactMileage,
         });
 
   log("mmr.lookup.start", {
@@ -234,7 +240,14 @@ export async function performMmrLookup(
     }
 
     // 4. Lock acquire.
-    const acquired = await deps.lock.acquire(cacheKey, LOCK_TIMEOUT_MS, requestId);
+    //
+    // Adjustment recomputes (skipCache=true) bypass the lock entirely. They
+    // are force-refresh by definition — they neither read nor write the
+    // cache, so the lock serves no purpose and only causes contention when
+    // a buyer changes color/grade while an odometer recompute is in flight.
+    // Two concurrent adjustment calls now each issue their own live Cox
+    // request and return independently, which is exactly what the UI expects.
+    const acquired = skipCache || await deps.lock.acquire(cacheKey, LOCK_TIMEOUT_MS, requestId);
 
     if (acquired) {
       try {
@@ -331,7 +344,7 @@ export async function performMmrLookup(
           requestId,
           route:           args.input.kind,
           cacheHit:        false,
-          lockAttempted:   true,
+          lockAttempted:   !skipCache,
           cacheKey,
           inferredMileage: lookupMileage.isInferred,
           retryCount:      result.retryCount,
@@ -347,14 +360,19 @@ export async function performMmrLookup(
 
         return envelope;
       } finally {
-        // Release ALWAYS — even on Manheim error — so peers don't wait on a
-        // dead owner. KV's TTL is the safety net for crashed workers; this
-        // is the polite path.
-        await deps.lock.release(cacheKey, requestId);
+        // Release ONLY when we actually acquired the lock. Adjustment
+        // recomputes skip acquire and therefore must skip release too,
+        // otherwise they could delete a lock owned by a concurrent
+        // cache-miss lookup.
+        if (!skipCache) {
+          await deps.lock.release(cacheKey, requestId);
+        }
       }
     }
 
     // 5. Lock held by someone else — wait, then re-read.
+    // Unreachable when skipCache=true (acquired is always true above), but
+    // kept for the normal cache-miss path.
     log("mmr.lookup.lock_wait", { requestId, cacheKey });
     await deps.lock.wait(cacheKey, LOCK_TIMEOUT_MS);
     const afterWait = await deps.cache.get(cacheKey, requestId);
