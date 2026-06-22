@@ -158,6 +158,35 @@ describe("deriveMmrAdjustmentDeltas", () => {
     });
   });
 
+  it("does not attribute grade and color residual to build when other attrs are active", () => {
+    // 2018 F450 VIN 1FT8W4DT8JEB57132 — odo 200, grade 1.0, Black, build ON.
+    // Residual after odometer is grade+color (~−23,100); must not appear on build badge.
+    expect(
+      deriveMmrAdjustmentDeltas({
+        baseMmr: 50_700,
+        adjustedMmr: 43_000,
+        buildOptionsAdjustment: null,
+        odometerAdjustment: 15_400,
+        gradeAdjustment: -22_600,
+        colorAdjustment: -480,
+        adjustments: {
+          ...EMPTY_MMR_ADJUSTMENTS,
+          odometer: "200",
+          grade: "1.0",
+          exteriorColor: "Black",
+          buildOptions: true,
+        },
+        baseline: null,
+      }),
+    ).toEqual({
+      odometerAdjustment: 15_400,
+      buildOptionsAdjustment: null,
+      gradeAdjustment: -22_600,
+      colorAdjustment: -480,
+      regionAdjustment: null,
+    });
+  });
+
   it("prefers API grade and color adjustments when present", () => {
     expect(
       deriveMmrAdjustmentDeltas({

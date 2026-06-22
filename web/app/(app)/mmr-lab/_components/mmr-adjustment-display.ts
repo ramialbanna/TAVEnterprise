@@ -203,12 +203,21 @@ export function deriveMmrAdjustmentDeltas(params: {
     odoAdj = nonZeroDelta(adjustedMmr - baseMmr - knownAttrDelta);
   }
 
+  const hasOtherAttrs =
+    adjustments.grade !== "" ||
+    adjustments.exteriorColor !== "" ||
+    (adjustments.region !== "" && adjustments.region !== "National");
+
+  // Only derive build from wholesale residual when no grade/color/region are active.
+  // Cox sends buildOptions:true without dollars when other attrs are present — same
+  // rule as buildOptionsFromBooleanTrue on the backend (NEXT_STEPS #16).
   if (
     buildAdj == null &&
     buildOn &&
     baseMmr != null &&
     adjustedMmr != null &&
-    odoAdj != null
+    odoAdj != null &&
+    !hasOtherAttrs
   ) {
     buildAdj = nonZeroDelta(adjustedMmr - baseMmr - odoAdj);
   }
