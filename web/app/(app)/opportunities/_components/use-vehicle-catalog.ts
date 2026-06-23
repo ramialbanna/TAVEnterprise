@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   getMmrCatalogMakes,
@@ -123,17 +123,17 @@ export function applyVehicleCascadeChange(
  */
 export function useVehicleCatalogOptions(selection: VehicleSelection): VehicleCatalogOptions {
   const [options, setOptions] = useState<VehicleCatalogOptions>(INITIAL_OPTIONS);
-  // Track whether a downstream field's current value is still valid after a
-  // parent refetch; if not, the parent form must clear it. We can't clear it
-  // here because we don't own the selection — instead we expose the invalid
-  // state via a callback the parent can register.
+  // Mirror selection into a ref inside a layout effect (not during render) so
+  // async callbacks can read the latest values without resubscribing. Same
+  // pattern as `mmr-lab-client.tsx`.
   const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  useLayoutEffect(() => {
+    selectionRef.current = selection;
+  });
 
   // Years — fetch once on mount.
   useEffect(() => {
     let cancelled = false;
-    setOptions((c) => ({ ...c, loading: "years" }));
     void getMmrCatalogYears().then((res) => {
       if (cancelled) return;
       if (res.ok) {
@@ -161,12 +161,8 @@ export function useVehicleCatalogOptions(selection: VehicleSelection): VehicleCa
 
   // Makes — fetch when year changes.
   useEffect(() => {
-    if (!selection.year) {
-      setOptions((c) => ({ ...c, makes: [], loading: null }));
-      return;
-    }
+    if (!selection.year) return;
     let cancelled = false;
-    setOptions((c) => ({ ...c, loading: "makes" }));
     void getMmrCatalogMakes(selection.year).then((res) => {
       if (cancelled) return;
       const makes = res.ok ? res.data.items : [];
@@ -185,12 +181,8 @@ export function useVehicleCatalogOptions(selection: VehicleSelection): VehicleCa
 
   // Models — fetch when year+make change.
   useEffect(() => {
-    if (!selection.year || !selection.make) {
-      setOptions((c) => ({ ...c, models: [], loading: null }));
-      return;
-    }
+    if (!selection.year || !selection.make) return;
     let cancelled = false;
-    setOptions((c) => ({ ...c, loading: "models" }));
     void getMmrCatalogModels(selection.year, selection.make).then((res) => {
       if (cancelled) return;
       const models = res.ok ? res.data.items : [];
@@ -209,12 +201,8 @@ export function useVehicleCatalogOptions(selection: VehicleSelection): VehicleCa
 
   // Styles — fetch when year+make+model change.
   useEffect(() => {
-    if (!selection.year || !selection.make || !selection.model) {
-      setOptions((c) => ({ ...c, styles: [], loading: null }));
-      return;
-    }
+    if (!selection.year || !selection.make || !selection.model) return;
     let cancelled = false;
-    setOptions((c) => ({ ...c, loading: "styles" }));
     void getMmrCatalogStyles(selection.year, selection.make, selection.model).then((res) => {
       if (cancelled) return;
       setOptions((current) => ({

@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 
 import {
   applyVehicleCascadeChange,
-  matchCatalogOption,
   partitionYears,
   resolveParsedVehicleFields,
   useVehicleCatalogOptions,
@@ -347,7 +346,6 @@ export function ManualSubmitFormFields({
   parseMutation,
   catalog,
   useDropdowns,
-  manualVehicleEntry,
   setManualVehicleEntry,
   footer,
 }: Omit<ReturnType<typeof useManualSubmitForm>, "canSubmit" | "mutation"> & {
@@ -582,7 +580,7 @@ export function ManualSubmitFormFields({
           </div>
           {catalogDown ? (
             <p className="text-xs text-muted-foreground">
-              Live vehicle catalog isn't connected — enter year/make/model/style as text.
+              Live vehicle catalog isn&rsquo;t connected — enter year/make/model/style as text.
             </p>
           ) : (
             <button
