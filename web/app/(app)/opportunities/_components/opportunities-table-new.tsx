@@ -146,7 +146,6 @@ export function OpportunitiesTableNew({
   selectedId,
   claimActor,
   claimPendingId,
-  onSelect,
   onOpenDetail,
   onPaginationChange,
   onSortChange,
@@ -162,7 +161,7 @@ export function OpportunitiesTableNew({
   selectedId?: string | null;
   claimActor: Parameters<typeof canShowClaimAction>[0];
   claimPendingId?: string | null;
-  onSelect: (row: OpportunityRow) => void;
+  onSelect?: (row: OpportunityRow) => void;
   onOpenDetail: (row: OpportunityRow) => void;
   onPaginationChange: (offset: number, limit: number) => void;
   onSortChange: (sort: OpportunitySort) => void;
@@ -331,12 +330,11 @@ export function OpportunitiesTableNew({
                     key={row.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => onSelect(row)}
-                    onDoubleClick={() => onOpenDetail(row)}
+                    onClick={() => onOpenDetail(row)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        onSelect(row);
+                        onOpenDetail(row);
                       }
                     }}
                     data-selected={selected ? "true" : undefined}

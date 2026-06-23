@@ -18,6 +18,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import {
+  applyVehicleCascadeChange,
+  matchCatalogOption,
+  partitionYears,
+  resolveParsedVehicleFields,
+  useVehicleCatalogOptions,
+  type VehicleSelection,
+} from "./use-vehicle-catalog";
+
 const REGIONS = [
   { value: "dallas_tx", label: "Dallas TX" },
   { value: "houston_tx", label: "Houston TX" },
@@ -126,6 +135,11 @@ function applyParsedFields(prev: FormState, parsed: ParsedListingFields): FormSt
     listingUrl: parsed.listingUrl,
     source: parsed.source,
   };
+  // Y/M/M/S are resolved against the catalog in `useManualSubmitForm`'s parse
+  // handler (see `resolveParsedVehicleFields`) before this is called for the
+  // dropdown path. When the catalog isn't connected (manual entry fallback),
+  // we fall back to writing the parsed strings directly so the free-text
+  // inputs still populate.
   if (parsed.year !== undefined) next.year = String(parsed.year);
   if (parsed.make) next.make = parsed.make;
   if (parsed.model) next.model = parsed.model;
@@ -140,6 +154,18 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Free-text fallback for Y/M/M/S when the catalog isn't connected or the
+  // user explicitly opts out of dropdowns (e.g. vehicle not in catalog).
+  const [manualVehicleEntry, setManualVehicleEntry] = useState(false);
+
+  const vehicleSelection: VehicleSelection = {
+    year: form.year,
+    make: form.make,
+    model: form.model,
+    style: form.style,
+  };
+  const catalog = useVehicleCatalogOptions(vehicleSelection);
+  const useDropdowns = !manualVehicleEntry && catalog.catalogState !== "not_connected";
 
   const usersQuery = useQuery({
     queryKey: queryKeys.appUsers,
@@ -149,18 +175,52 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
 
   const parseMutation = useMutation({
     mutationFn: parseListingUrl,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (!result.ok) {
         toast.error(result.message);
         return;
       }
-      setForm((prev) => applyParsedFields(prev, result.data));
-      setDetailsOpen(true);
-      if (result.data.warnings.length > 0) {
-        toast.message("Listing parsed with notes", {
-          description: result.data.warnings.join(" · "),
+      const parsed = result.data;
+      // When dropdowns are active, resolve Y/M/M/S against the catalog so the
+      // parsed values land on valid options (case-insensitive match). Fields
+      // that don't match are left empty for the user to pick from the dropdown.
+      if (useDropdowns) {
+        const resolved = await resolveParsedVehicleFields({
+          year: parsed.year !== undefined ? String(parsed.year) : undefined,
+          make: parsed.make,
+          model: parsed.model,
+          style: parsed.style,
         });
+        setForm((prev) => ({
+          ...prev,
+          listingUrl: parsed.listingUrl,
+          source: parsed.source,
+          year: resolved.year,
+          make: resolved.make,
+          model: resolved.model,
+          style: resolved.style,
+          price: parsed.price !== undefined ? String(parsed.price) : prev.price,
+          mileage: parsed.mileage !== undefined ? String(parsed.mileage) : prev.mileage,
+        }));
+        const unmatched: string[] = [];
+        if (parsed.year !== undefined && !resolved.year) unmatched.push("year");
+        if (parsed.make && !resolved.make) unmatched.push("make");
+        if (parsed.model && !resolved.model) unmatched.push("model");
+        if (parsed.style && !resolved.style) unmatched.push("style");
+        if (unmatched.length > 0) {
+          toast.message("Listing parsed — some fields need a dropdown pick", {
+            description: `Couldn't auto-match: ${unmatched.join(", ")}`,
+          });
+        }
       } else {
+        setForm((prev) => applyParsedFields(prev, parsed));
+      }
+      setDetailsOpen(true);
+      if (parsed.warnings.length > 0) {
+        toast.message("Listing parsed with notes", {
+          description: parsed.warnings.join(" · "),
+        });
+      } else if (!useDropdowns || parsed.year === undefined || parsed.make === undefined) {
         toast.success("Listing parsed — confirm region and submit");
       }
     },
@@ -203,7 +263,22 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
   });
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      if (useDropdowns && (key === "year" || key === "make" || key === "model" || key === "style")) {
+        const prevVehicle: VehicleSelection = {
+          year: prev.year,
+          make: prev.make,
+          model: prev.model,
+          style: prev.style,
+        };
+        const nextVehicle = applyVehicleCascadeChange(prevVehicle, {
+          ...prevVehicle,
+          [key]: value,
+        });
+        return { ...prev, ...nextVehicle };
+      }
+      return { ...prev, [key]: value };
+    });
   }
 
   function handleParse() {
@@ -251,6 +326,10 @@ export function useManualSubmitForm(options: { loadUsers: boolean; onSuccessClos
     canSubmit,
     mutation,
     parseMutation,
+    catalog,
+    useDropdowns,
+    manualVehicleEntry,
+    setManualVehicleEntry,
   };
 }
 
@@ -266,6 +345,10 @@ export function ManualSubmitFormFields({
   usersQuery,
   users,
   parseMutation,
+  catalog,
+  useDropdowns,
+  manualVehicleEntry,
+  setManualVehicleEntry,
   footer,
 }: Omit<ReturnType<typeof useManualSubmitForm>, "canSubmit" | "mutation"> & {
   idPrefix?: string;
@@ -273,6 +356,8 @@ export function ManualSubmitFormFields({
 }) {
   const pid = (name: string) => (idPrefix ? `${idPrefix}-${name}` : name);
   const parsing = parseMutation.isPending;
+  const { recent: recentYears, older: olderYears } = partitionYears(catalog.years);
+  const catalogDown = catalog.catalogState === "not_connected";
 
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
@@ -356,50 +441,162 @@ export function ManualSubmitFormFields({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor={pid("year")}>Year</Label>
-          <Input
-            id={pid("year")}
-            inputMode="numeric"
-            required
-            placeholder="2020"
-            value={form.year}
-            onChange={(e) => updateField("year", e.target.value)}
-          />
+      {useDropdowns ? (
+        <div className="space-y-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor={pid("year")}>Year</Label>
+              <select
+                id={pid("year")}
+                className={selectClass}
+                required
+                value={form.year}
+                onChange={(e) => updateField("year", e.target.value)}
+                disabled={catalog.loading === "years"}
+              >
+                <option value="" disabled>
+                  {catalog.loading === "years" ? "Loading…" : "Select year"}
+                </option>
+                {recentYears.length > 0 && olderYears.length > 0 ? (
+                  <>
+                    {recentYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                    <option disabled>──────────</option>
+                    {olderYears.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </>
+                ) : (
+                  catalog.years.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={pid("make")}>Make</Label>
+              <select
+                id={pid("make")}
+                className={selectClass}
+                required
+                value={form.make}
+                onChange={(e) => updateField("make", e.target.value)}
+                disabled={!form.year || catalog.loading === "makes"}
+              >
+                <option value="" disabled>
+                  {!form.year ? "Select year first" : catalog.loading === "makes" ? "Loading…" : "Select make"}
+                </option>
+                {catalog.makes.map((make) => (
+                  <option key={make} value={make}>{make}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={pid("model")}>Model</Label>
+              <select
+                id={pid("model")}
+                className={selectClass}
+                required
+                value={form.model}
+                onChange={(e) => updateField("model", e.target.value)}
+                disabled={!form.make || catalog.loading === "models"}
+              >
+                <option value="" disabled>
+                  {!form.make ? "Select make first" : catalog.loading === "models" ? "Loading…" : "Select model"}
+                </option>
+                {catalog.models.map((model) => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={pid("style")}>Style / trim</Label>
+              <select
+                id={pid("style")}
+                className={selectClass}
+                value={form.style}
+                onChange={(e) => updateField("style", e.target.value)}
+                disabled={!form.model || catalog.loading === "styles"}
+              >
+                <option value="">
+                  {!form.model ? "Select model first" : catalog.loading === "styles" ? "Loading…" : "Any style"}
+                </option>
+                {catalog.styles.map((style) => (
+                  <option key={style} value={style}>{style}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => setManualVehicleEntry(true)}
+          >
+            Vehicle not in catalog? Type manually
+          </button>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={pid("make")}>Make</Label>
-          <Input
-            id={pid("make")}
-            required
-            placeholder="toyota"
-            value={form.make}
-            onChange={(e) => updateField("make", e.target.value)}
-          />
+      ) : (
+        <div className="space-y-3">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor={pid("year")}>Year</Label>
+              <Input
+                id={pid("year")}
+                inputMode="numeric"
+                required
+                placeholder="2020"
+                value={form.year}
+                onChange={(e) => updateField("year", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={pid("make")}>Make</Label>
+              <Input
+                id={pid("make")}
+                required
+                placeholder="toyota"
+                value={form.make}
+                onChange={(e) => updateField("make", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={pid("model")}>Model</Label>
+              <Input
+                id={pid("model")}
+                required
+                placeholder="camry"
+                value={form.model}
+                onChange={(e) => updateField("model", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={pid("style")}>Style / trim</Label>
+            <Input
+              id={pid("style")}
+              placeholder="se"
+              value={form.style}
+              onChange={(e) => updateField("style", e.target.value)}
+            />
+          </div>
+          {catalogDown ? (
+            <p className="text-xs text-muted-foreground">
+              Live vehicle catalog isn't connected — enter year/make/model/style as text.
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => setManualVehicleEntry(false)}
+            >
+              Back to dropdowns
+            </button>
+          )}
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={pid("model")}>Model</Label>
-          <Input
-            id={pid("model")}
-            required
-            placeholder="camry"
-            value={form.model}
-            onChange={(e) => updateField("model", e.target.value)}
-          />
-        </div>
-      </div>
+      )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor={pid("style")}>Style / trim</Label>
-          <Input
-            id={pid("style")}
-            placeholder="se"
-            value={form.style}
-            onChange={(e) => updateField("style", e.target.value)}
-          />
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor={pid("price")}>Price</Label>
           <Input

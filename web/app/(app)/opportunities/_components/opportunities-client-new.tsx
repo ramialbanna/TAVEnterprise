@@ -36,7 +36,6 @@ import { OpportunitiesMobileActionBar } from "./opportunities-mobile-action-bar"
 import { OpportunitiesQueueTabs } from "./opportunities-queue-tabs";
 import { OpportunitiesTableNew } from "./opportunities-table-new";
 import { OpportunitiesTourNew } from "./opportunities-tour-new";
-import { OpportunityPreviewSheetNew } from "./opportunity-preview-sheet-new";
 import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
@@ -284,7 +283,6 @@ export function OpportunitiesClientNew({
             selectedId={selected?.id ?? null}
             claimActor={claimActor}
             claimPendingId={claimMutation.isPending ? (claimMutation.variables?.id ?? null) : null}
-            onSelect={(row) => setSelected(row)}
             onOpenDetail={(row) => router.push(`/opportunities/${row.id}`)}
             onPaginationChange={handlePaginationChange}
             onSortChange={handleSortChange}
@@ -293,8 +291,6 @@ export function OpportunitiesClientNew({
           />
         </CardContent>
       </Card>
-
-      <OpportunityPreviewSheetNew row={selected} onClose={() => setSelected(null)} />
 
       {selected ? (
         <OpportunitiesMobileActionBar

@@ -89,8 +89,8 @@ describe("OpportunitiesTableNew", () => {
     expect(document.querySelector('[data-selected="true"]')).not.toBeNull();
   });
 
-  it("calls onSelect when a row is clicked", () => {
-    const onSelect = vi.fn();
+  it("calls onOpenDetail when a row is clicked", () => {
+    const onOpenDetail = vi.fn();
     render(
       <OpportunitiesTableNew
         rows={[baseRow]}
@@ -99,8 +99,8 @@ describe("OpportunitiesTableNew", () => {
         limit={25}
         sort="spread_desc"
         claimActor={null}
-        onSelect={onSelect}
-        onOpenDetail={vi.fn()}
+        onSelect={vi.fn()}
+        onOpenDetail={onOpenDetail}
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
@@ -109,6 +109,6 @@ describe("OpportunitiesTableNew", () => {
     );
 
     fireEvent.click(screen.getByText("2019 Honda Accord"));
-    expect(onSelect).toHaveBeenCalledWith(baseRow);
+    expect(onOpenDetail).toHaveBeenCalledWith(baseRow);
   });
 });
