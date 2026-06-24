@@ -22,12 +22,19 @@ function formatVehicleLine(opp: OpportunityDetail): string {
   return [ymm, price, miles, source].filter(Boolean).join(" · ");
 }
 
+/**
+ * Detail hero per redesign §1. Holds all primary actions (claim + workflow
+ * CTAs) passed in from the parent client, plus listing link and badges.
+ * Badges appear here only — not duplicated in other blocks.
+ */
 export function OpportunityDetailHero({
   opportunity,
   primaryAction,
+  secondaryActions,
 }: {
   opportunity: OpportunityDetail;
   primaryAction?: ReactNode;
+  secondaryActions?: ReactNode[];
 }) {
   return (
     <Card className="overflow-hidden border-border bg-card">
@@ -57,6 +64,7 @@ export function OpportunityDetailHero({
             </Button>
           ) : null}
           {primaryAction}
+          {secondaryActions}
         </div>
       </CardContent>
     </Card>

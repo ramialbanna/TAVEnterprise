@@ -1,36 +1,48 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { claimOpportunity, getAppMe } from "@/lib/app-api/client";
+import {
+  assignOpportunity,
+  claimOpportunity,
+  evaluateOpportunity,
+  getAppMe,
+  updateOpportunityStatus,
+} from "@/lib/app-api/client";
 import { codeMessage } from "@/lib/app-api";
-import type { OpportunityDetail } from "@/lib/app-api/schemas";
+import type { MutatableWorkflowStatus, OpportunityDetail } from "@/lib/app-api/schemas";
 import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import {
   getPrimaryWorkflowAction,
+  getSecondaryWorkflowActions,
   isClaimActive,
+  type WorkflowTarget,
 } from "@/lib/opportunities/workflow-steps";
-import { canMutateWorkflow } from "./workflow-helpers";
 import { queryKeys } from "@/lib/query";
-import { formatMoney, formatNumber } from "@/lib/format";
-import { MaxbuyLiveCard } from "@/components/maxbuy/maxbuy-live-card";
-import type { MaxbuyEvaluateFormValues } from "@/components/maxbuy/maxbuy-evaluate-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleBlock } from "@/components/ui/collapsible-block";
 
 import { OpportunityDetailHero } from "./opportunity-detail-hero";
 import { OpportunityWorkflowStepper } from "./opportunity-workflow-stepper";
-import { OpportunityWorkflowPanelNew } from "./opportunity-workflow-panel-new";
+import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
+import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
+import { OpportunityListingBlock } from "./opportunity-listing-block";
+import { OpportunityValuationBlock } from "./opportunity-valuation-block";
+import { OpportunitySellerNotesBlock } from "./opportunity-seller-notes-block";
+import { OpportunityNotesBlock } from "./opportunity-notes-block";
+import { OpportunityActionHistory } from "./opportunity-action-history";
+import { canMutateWorkflow } from "./workflow-helpers";
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium tabular-nums">{value}</span>
-    </div>
-  );
+function invalidateOpportunityQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  opportunityId: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(opportunityId) });
+  void queryClient.invalidateQueries({ queryKey: ["opportunities"] });
+  void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
+  void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
 }
 
 export function OpportunityDetailClientNew({
@@ -45,13 +57,63 @@ export function OpportunityDetailClientNew({
     queryFn: getAppMe,
   });
 
+  // Silent evaluate-on-open — no UI feedback (redesign §2).
+  const evaluateMutation = useMutation({
+    mutationFn: () => evaluateOpportunity(initial.id),
+    onSuccess: (result) => {
+      if (result.ok) {
+        invalidateOpportunityQueries(queryClient, initial.id);
+      }
+    },
+  });
+
+  useEffect(() => {
+    if (meQuery.data?.ok) {
+      evaluateMutation.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.id, meQuery.data?.ok]);
+
   const claimMutation = useMutation({
     mutationFn: () => claimOpportunity(initial.id),
     onSuccess: (result) => {
       if (result.ok) {
         toast.success(PAGE_COPY.claimAction);
-        void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(initial.id) });
-        void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
+        invalidateOpportunityQueries(queryClient, initial.id);
+        return;
+      }
+      toast.error(codeMessage(result.error));
+    },
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (assignedToUserId: string | null) =>
+      assignOpportunity(initial.id, { assignedToUserId }),
+    onSuccess: (result) => {
+      if (result.ok) {
+        toast.success("Assignment updated");
+        invalidateOpportunityQueries(queryClient, initial.id);
+        return;
+      }
+      toast.error(codeMessage(result.error));
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (status: MutatableWorkflowStatus) =>
+      updateOpportunityStatus(initial.id, { status }),
+    onSuccess: (result, status) => {
+      if (result.ok) {
+        const label =
+          status === "purchased"
+            ? "Bought"
+            : status === "passed"
+              ? "Passed"
+              : status === "contacted"
+                ? "Contacted"
+                : "Updated";
+        toast.success(`Marked ${label.toLowerCase()}`);
+        invalidateOpportunityQueries(queryClient, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -65,100 +127,128 @@ export function OpportunityDetailClientNew({
   const claimOwnerIsMe =
     initial.claimedBy === me?.displayName || initial.claimedBy === me?.id;
 
-  const primaryWorkflow = getPrimaryWorkflowAction({
+  // Collision detection reused from the workflow block logic.
+  const collision = useMemo(() => {
+    if (!me) return null;
+    if (
+      initial.claimedBy &&
+      claimActive &&
+      initial.claimedBy !== me.displayName &&
+      initial.claimedBy !== me.id
+    ) {
+      return `${initial.claimedBy} is working this deal.`;
+    }
+    return null;
+  }, [me, initial.claimedBy, claimActive]);
+
+  const hasCollision = collision !== null;
+
+  const primaryAction = getPrimaryWorkflowAction({
     opportunity: initial,
     canClaim,
     canMutate,
     claimActive,
     claimOwnerIsMe,
-    hasCollision: false,
+    hasCollision,
   });
 
+  const secondaryActions = getSecondaryWorkflowActions({
+    opportunity: initial,
+    canMutate,
+    hasCollision,
+  });
+
+  const pending =
+    claimMutation.isPending || statusMutation.isPending || assignMutation.isPending;
+
+  function runPrimaryAction() {
+    if (primaryAction.kind === "claim") {
+      claimMutation.mutate();
+      return;
+    }
+    if (primaryAction.kind === "status") {
+      statusMutation.mutate(primaryAction.status);
+    }
+  }
+
   const heroPrimaryAction = useMemo(() => {
-    if (primaryWorkflow.kind !== "claim") return null;
+    if (primaryAction.kind === "none") return null;
     return (
-      <Button
-        size="sm"
-        onClick={() => claimMutation.mutate()}
-        disabled={claimMutation.isPending}
-      >
-        {primaryWorkflow.label}
+      <Button size="sm" onClick={runPrimaryAction} disabled={pending}>
+        {primaryAction.label}
       </Button>
     );
-  }, [primaryWorkflow, claimMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryAction, pending]);
 
-  const maxBuyInitial = useMemo((): MaxbuyEvaluateFormValues => {
-    const region =
-      initial.region === "dallas_tx"
-      || initial.region === "houston_tx"
-      || initial.region === "austin_tx"
-      || initial.region === "san_antonio_tx"
-      || initial.region === "lubbock_tx"
-      || initial.region === "oklahoma_city_ok"
-        ? initial.region
-        : "";
-    return {
-      vin: initial.vin?.trim() ?? "",
-      year: initial.year != null ? String(initial.year) : "",
-      make: initial.make ?? "",
-      model: initial.model ?? "",
-      trim: initial.style ?? "",
-      mileage: initial.mileage != null ? String(initial.mileage) : "",
-      askingPrice: initial.price != null ? String(Math.round(initial.price)) : "",
-      region,
-    };
-  }, [initial]);
+  const heroSecondaryActions = useMemo(
+    () =>
+      secondaryActions.map((action) => (
+        <Button
+          key={action.status}
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() => statusMutation.mutate(action.status)}
+        >
+          {action.label}
+        </Button>
+      )),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [secondaryActions, pending],
+  );
 
   return (
-    <div className="space-y-6">
-      <OpportunityDetailHero opportunity={initial} primaryAction={heroPrimaryAction} />
-
-      <MaxbuyLiveCard
-        variant="embedded"
-        vinReadOnly
-        initialValues={maxBuyInitial}
-        normalizedListingId={initial.normalizedListingId}
-        leadId={initial.leadId ?? undefined}
-      />
-
-      <OpportunityWorkflowStepper opportunity={initial} />
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Valuation
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <DetailRow label="Asking price" value={formatMoney(initial.price)} />
-            <DetailRow label="MMR" value={formatMoney(initial.mmrValue)} />
-            <DetailRow label="Spread vs MMR" value={formatMoney(initial.spread)} />
-            <DetailRow label="Score" value={formatNumber(initial.finalScore)} />
-            <DetailRow label="Grade" value={initial.grade ?? "—"} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Vehicle
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <DetailRow label="VIN" value={initial.vin ?? "—"} />
-            <DetailRow label="Mileage" value={formatNumber(initial.mileage)} />
-            <DetailRow label="Region" value={initial.region ?? "—"} />
-            <DetailRow label="Seen count" value={formatNumber(initial.seenCount)} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <OpportunityWorkflowPanelNew
+    <div className="space-y-4">
+      <OpportunityDetailHero
         opportunity={initial}
-        actions={initial.actions}
-        recordEvaluation
+        primaryAction={heroPrimaryAction}
+        secondaryActions={heroSecondaryActions}
       />
+
+      <CollapsibleBlock title="Workflow" description="Stepper, assignment, claim">
+        <div className="space-y-4">
+          <OpportunityWorkflowStepper opportunity={initial} />
+          <OpportunityWorkflowBlock
+            opportunity={initial as WorkflowTarget & { id: string }}
+            me={
+              me
+                ? { id: me.id, displayName: me.displayName, role: me.role }
+                : null
+            }
+            onAssign={(userId) => assignMutation.mutate(userId)}
+            assignPending={assignMutation.isPending}
+          />
+        </div>
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Vehicle" description="Identity fields">
+        <OpportunityVehicleBlock opportunity={initial} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Listing" description="Intake and provenance">
+        <OpportunityListingBlock opportunity={initial} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Valuation" description="MMR Lab + Max buy">
+        <OpportunityValuationBlock opportunity={initial} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Seller / listing notes" description="Raw listing text">
+        <OpportunitySellerNotesBlock initialNotes={null} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Notes" description="Closer-added context">
+        <OpportunityNotesBlock
+          opportunityId={initial.id}
+          actions={initial.actions}
+          canMutate={canMutate}
+        />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="History" description="Full audit trail" defaultOpen={false}>
+        <OpportunityActionHistory actions={initial.actions} />
+      </CollapsibleBlock>
     </div>
   );
 }
