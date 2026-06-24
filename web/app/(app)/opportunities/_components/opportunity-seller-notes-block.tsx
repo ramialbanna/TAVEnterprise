@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AlertCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -14,11 +15,13 @@ export function OpportunitySellerNotesBlock({
   onSave,
   pending,
   canMutate,
+  error,
 }: {
   initialNotes?: string | null;
   onSave: (notes: string | null) => void;
   pending: boolean;
   canMutate: boolean;
+  error?: string | null;
 }) {
   const initial = initialNotes ?? "";
   const [value, setValue] = useState(initial);
@@ -36,6 +39,12 @@ export function OpportunitySellerNotesBlock({
 
   return (
     <div className="space-y-3">
+      {error ? (
+        <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error-bg px-3 py-2 text-sm text-status-error">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{error}</span>
+        </div>
+      ) : null}
       <textarea
         className="min-h-[8rem] w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         value={value}

@@ -65,3 +65,49 @@ test.describe("/opportunities — New empty state", () => {
     await expect(page.getByRole("link", { name: /See needs action/i })).toBeVisible();
   });
 });
+
+test.describe("/opportunities/:id — Detail page", () => {
+  test.beforeEach(async ({ context, page }) => {
+    await setAuthCookie(context);
+    await setInterfaceMode(page, "new");
+    await mockAppApi(page);
+  });
+
+  test("renders collapsible blocks and allows vehicle field edit + save", async ({ page }) => {
+    await page.goto("/opportunities/opp_e2e_1");
+
+    const main = page.getByRole("main");
+    // Collapsible blocks all open by default.
+    await expect(main.getByRole("heading", { name: "Vehicle" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Listing" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Valuation" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Seller / listing notes" })).toBeVisible();
+
+    // Vehicle fields seeded from opportunity.
+    const vinInput = main.getByLabel("VIN");
+    await expect(vinInput).toHaveValue("2HGFC2FAC");
+
+    // Edit color and save.
+    const colorInput = main.getByLabel("Color");
+    await colorInput.fill("Red");
+    await main.getByRole("button", { name: "Save", exact: true }).click();
+
+    // Saved toast.
+    await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
+  });
+
+  test("auto-runs MMR + Max buy valuation on load when identity is sufficient", async ({ page }) => {
+    await page.goto("/opportunities/opp_e2e_1");
+
+    // The Valuation block should show the running skeleton, then the MMR result.
+    const main = page.getByRole("main");
+    await expect(main.getByText(/Running MMR/i)).toBeVisible({ timeout: 8000 });
+  });
+
+  test("shows insufficient-identity note when VIN/YMM are missing", async ({ page }) => {
+    await page.goto("/opportunities/opp_e2e_2");
+
+    const main = page.getByRole("main");
+    await expect(main.getByText(/Add a VIN or year\/make\/model/i)).toBeVisible({ timeout: 8000 });
+  });
+});

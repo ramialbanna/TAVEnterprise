@@ -16,6 +16,7 @@ import {
   e2eOpportunitiesPage,
   e2eOpportunityDetail,
 } from "../fixtures/opportunities";
+import { E2E_MAXBUY_EVALUATE_OK, E2E_MMR_VIN_OK } from "../fixtures/valuation";
 
 /**
  * Fixtures mirror `web/test/msw/fixtures.ts` shape — kept inline here so the e2e
@@ -233,16 +234,40 @@ export async function mockAppApi(page: Page, overrides: AppApiOverrides = {}): P
     const paginated = url.includes("offset=") || url.includes("view=");
     return respond(route, paginated ? opportunitiesPage : opportunitiesItems);
   });
-  await page.route("**/api/app/opportunities/*", (route) => {
-    const url = new URL(route.request().url());
+  await page.route("**/api/app/opportunities/*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
     const segments = url.pathname.split("/");
     const id = decodeURIComponent(segments[segments.length - 1] ?? "");
     const row = opportunitiesItems.find((r) => r.id === id);
     if (!row) {
       return route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ ok: false, error: "not_found" }) });
     }
+    if (request.method() === "PATCH") {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      const detail = e2eOpportunityDetail(row);
+      if ("vin" in body) detail.vin = (body.vin as string | null) ?? null;
+      if ("mileage" in body) detail.mileage = (body.mileage as number | null) ?? null;
+      if ("year" in body) detail.year = (body.year as number | null) ?? null;
+      if ("make" in body) detail.make = (body.make as string | null) ?? null;
+      if ("model" in body) detail.model = (body.model as string | null) ?? null;
+      if ("style" in body) detail.style = (body.style as string | null) ?? null;
+      if ("bodyType" in body) detail.bodyType = (body.bodyType as string | null) ?? null;
+      if ("engine" in body) detail.engine = (body.engine as string | null) ?? null;
+      if ("transmission" in body) detail.transmission = (body.transmission as string | null) ?? null;
+      if ("color" in body) detail.color = (body.color as string | null) ?? null;
+      if ("sellerNotes" in body) detail.sellerNotes = (body.sellerNotes as string | null) ?? null;
+      return respond(route, detail);
+    }
     return respond(route, e2eOpportunityDetail(row));
   });
+
+  // MMR + Max buy valuation endpoints (used by the Valuation block auto-run).
+  await page.route("**/api/app/mmr/vin", (route) => respond(route, E2E_MMR_VIN_OK));
+  await page.route("**/api/app/mmr/ymm", (route) => respond(route, E2E_MMR_VIN_OK));
+  await page.route("**/api/app/maxbuy/evaluate", (route) =>
+    respond(route, E2E_MAXBUY_EVALUATE_OK),
+  );
 }
 
 function respond(route: Route, value: unknown): Promise<void> {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -38,8 +39,10 @@ import { canMutateWorkflow } from "./workflow-helpers";
 
 function invalidateOpportunityQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  router: ReturnType<typeof useRouter>,
   opportunityId: string,
 ) {
+  router.refresh();
   void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(opportunityId) });
   void queryClient.invalidateQueries({ queryKey: ["opportunities"] });
   void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
@@ -52,6 +55,7 @@ export function OpportunityDetailClientNew({
   initial: OpportunityDetail;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
@@ -63,7 +67,7 @@ export function OpportunityDetailClientNew({
     mutationFn: () => evaluateOpportunity(initial.id),
     onSuccess: (result) => {
       if (result.ok) {
-        invalidateOpportunityQueries(queryClient, initial.id);
+        invalidateOpportunityQueries(queryClient, router, initial.id);
       }
     },
   });
@@ -80,7 +84,7 @@ export function OpportunityDetailClientNew({
     onSuccess: (result) => {
       if (result.ok) {
         toast.success(PAGE_COPY.claimAction);
-        invalidateOpportunityQueries(queryClient, initial.id);
+        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -93,7 +97,7 @@ export function OpportunityDetailClientNew({
     onSuccess: (result) => {
       if (result.ok) {
         toast.success("Assignment updated");
-        invalidateOpportunityQueries(queryClient, initial.id);
+        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -114,7 +118,7 @@ export function OpportunityDetailClientNew({
                 ? "Contacted"
                 : "Updated";
         toast.success(`Marked ${label.toLowerCase()}`);
-        invalidateOpportunityQueries(queryClient, initial.id);
+        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -127,12 +131,18 @@ export function OpportunityDetailClientNew({
     onSuccess: (result) => {
       if (result.ok) {
         toast.success("Saved");
-        invalidateOpportunityQueries(queryClient, initial.id);
+        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
     },
   });
+
+  const patchError = patchMutation.isError
+    ? "Save failed — please try again."
+    : patchMutation.data && !patchMutation.data.ok
+      ? codeMessage(patchMutation.data.error)
+      : null;
 
   const me = meQuery.data?.ok ? meQuery.data.data : null;
   const canClaim = me?.role === "admin" || me?.role === "closer";
@@ -245,6 +255,7 @@ export function OpportunityDetailClientNew({
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
           canMutate={canMutate}
+          error={patchError}
         />
       </CollapsibleBlock>
 
@@ -262,6 +273,7 @@ export function OpportunityDetailClientNew({
           onSave={(notes) => patchMutation.mutate({ sellerNotes: notes })}
           pending={patchMutation.isPending}
           canMutate={canMutate}
+          error={patchError}
         />
       </CollapsibleBlock>
 

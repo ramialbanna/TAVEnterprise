@@ -46,6 +46,11 @@ export const E2E_OPPORTUNITIES: OpportunityRow[] = [
     seenCount: 1,
     listingUrl: "https://www.facebook.com/marketplace/item/e2e-1/",
     estimateFlags: { mileage: false, style: false, mmr: false },
+    bodyType: "Sedan",
+    engine: "1.5L Turbo",
+    transmission: "CVT",
+    color: "Silver",
+    sellerNotes: "Original listing notes.",
   },
   {
     id: "opp_e2e_2",
@@ -82,6 +87,11 @@ export const E2E_OPPORTUNITIES: OpportunityRow[] = [
     seenCount: 1,
     listingUrl: "https://www.facebook.com/marketplace/item/e2e-2/",
     estimateFlags: { mileage: true, style: false, mmr: true },
+    bodyType: null,
+    engine: null,
+    transmission: null,
+    color: null,
+    sellerNotes: null,
   },
 ];
 

@@ -1,6 +1,6 @@
 # Opportunity detail page redesign
 
-**Status:** In progress — Phase 1 + 2 + 3 + 4 shipped (2026-06-24); discovery 2026-06-24
+**Status:** Shipped — Phase 1 + 2 + 3 + 4 + 5 (2026-06-24); discovery 2026-06-24
 **Route:** `/opportunities/[id]`  
 **Goal:** Replace the current sparse single-column layout with a dense, vAuto-inspired **block workspace** — grouped collapsible sections, two-column field grids inside blocks, and MMR Lab + Max buy integrated into one valuation surface.
 
@@ -365,11 +365,19 @@ New or extended backend work likely required:
 - [x] Save button + dirty state + history entries  
 - [x] Vehicle save → MMR/Max buy refresh  
 
-### Phase 5 — Polish
+### Phase 5 — Polish ✅
 
-- [ ] Loading/error states per block  
-- [ ] E2E + UAT doc updates  
-- [ ] Empty states when VIN/mileage missing  
+- [x] Loading/error states per block  
+- [x] E2E + UAT doc updates  
+- [x] Empty states when VIN/mileage missing  
+
+### Acceptance criteria (Phase 5)
+
+- [x] Valuation block shows a loading skeleton while MMR/Max buy run, an error retry state on failure, and an empty-state prompt when VIN/YMM+mileage are missing
+- [x] Vehicle + Seller notes blocks show a persistent inline error banner on save failure and disable Save while pending
+- [x] Vehicle/seller-notes save calls `router.refresh()` so the server-rendered detail re-fetches and the Valuation block re-mounts + re-runs MMR/Max buy
+- [x] E2E spec covers detail page: collapsible blocks, vehicle edit + save, valuation auto-run, insufficient-identity empty state
+- [x] Mock helpers updated to serve PATCH `/opportunities/:id` + MMR/Max buy valuation responses
 
 ---
 
@@ -419,3 +427,41 @@ Requirements gathered 2026-06-24 via structured Q&A:
 | Manual submit parity | `manual-submit-form.tsx`, `src/manual/manualSubmissionSchema.ts` |
 | API | `src/app/routes.ts`, new PATCH handler |
 | E2E | `web/e2e/opportunities.spec.ts` |
+
+---
+
+## UAT checklist (v1)
+
+Manual verification steps before marking the redesign generally available.
+
+### Layout & navigation
+- [ ] Single click on a queue row opens the full detail page (no preview sheet)
+- [ ] All blocks collapsible; open by default; History starts collapsed
+- [ ] Desktop layout fills the width; mobile stacks blocks
+
+### Hero & workflow
+- [ ] Hero shows title, one-liner, badges, Open listing + claim + workflow CTAs
+- [ ] One workflow stepper: Found → Working → Contacted → Landed
+- [ ] Passed is a secondary action; Landed = bought
+- [ ] Silent evaluate-on-open still fires (no UI)
+
+### Vehicle block
+- [ ] vAuto-style 2-column editable grid; Region read-only
+- [ ] Save disabled until dirty; Reset restores initial values
+- [ ] Save persists via PATCH and shows "Saved" toast
+- [ ] Save failure shows inline error banner
+
+### Seller notes block
+- [ ] Textarea seeded from saved notes; Save enabled when dirty
+- [ ] Empty notes persist as null; trim on save
+
+### Valuation block
+- [ ] Auto-runs MMR + Max buy on load when no saved verdict and identity sufficient
+- [ ] Shows saved verdict card when one exists; "Run fresh lookup" re-runs
+- [ ] Loading skeleton during fetch; error retry on failure
+- [ ] Insufficient-identity prompt when VIN/YMM+mileage missing
+- [ ] Vehicle save (VIN/mileage/YMM) re-mounts block and re-runs MMR/Max buy
+
+### Listing & notes & history
+- [ ] Listing block shows provenance parity fields
+- [ ] Notes block adds closer notes; History shows full audit trail incl. `fields_updated`

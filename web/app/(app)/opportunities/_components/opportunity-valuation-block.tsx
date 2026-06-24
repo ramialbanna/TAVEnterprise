@@ -212,6 +212,31 @@ function InsufficientIdentityNote() {
   );
 }
 
+function ValuationLoadingSkeleton() {
+  return (
+    <div className="space-y-3" aria-busy aria-live="polite">
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <RefreshCw className="size-3.5 animate-spin" aria-hidden />
+            Running MMR + Max buy…
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <SkeletonLine />
+            <SkeletonLine />
+            <SkeletonLine />
+            <SkeletonLine />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SkeletonLine() {
+  return <div className="h-6 w-full rounded-md bg-muted/50" />;
+}
+
 export function OpportunityValuationBlock({
   opportunity,
 }: {
@@ -478,7 +503,9 @@ export function OpportunityValuationBlock({
         <ErrorState error={view.error} onRetry={handleRunFresh} />
       ) : null}
 
-      {view.kind !== "empty" && view.kind !== "error" ? (
+      {view.kind === "loading" ? <ValuationLoadingSkeleton /> : null}
+
+      {view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading" ? (
         <>
           <div id="opportunity-mmr-result-band">
             <ResultBand
