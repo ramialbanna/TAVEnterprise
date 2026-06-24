@@ -9,6 +9,7 @@ import {
   claimOpportunity,
   evaluateOpportunity,
   getAppMe,
+  patchOpportunity,
   updateOpportunityStatus,
 } from "@/lib/app-api/client";
 import { codeMessage } from "@/lib/app-api";
@@ -120,6 +121,19 @@ export function OpportunityDetailClientNew({
     },
   });
 
+  const patchMutation = useMutation({
+    mutationFn: (body: Parameters<typeof patchOpportunity>[1]) =>
+      patchOpportunity(initial.id, body),
+    onSuccess: (result) => {
+      if (result.ok) {
+        toast.success("Saved");
+        invalidateOpportunityQueries(queryClient, initial.id);
+        return;
+      }
+      toast.error(codeMessage(result.error));
+    },
+  });
+
   const me = meQuery.data?.ok ? meQuery.data.data : null;
   const canClaim = me?.role === "admin" || me?.role === "closer";
   const canMutate = canMutateWorkflow(me, initial);
@@ -159,7 +173,10 @@ export function OpportunityDetailClientNew({
   });
 
   const pending =
-    claimMutation.isPending || statusMutation.isPending || assignMutation.isPending;
+    claimMutation.isPending ||
+    statusMutation.isPending ||
+    assignMutation.isPending ||
+    patchMutation.isPending;
 
   function runPrimaryAction() {
     if (primaryAction.kind === "claim") {
@@ -223,7 +240,12 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Vehicle" description="Identity fields">
-        <OpportunityVehicleBlock opportunity={initial} />
+        <OpportunityVehicleBlock
+          opportunity={initial}
+          onSave={(patch) => patchMutation.mutate(patch)}
+          pending={patchMutation.isPending}
+          canMutate={canMutate}
+        />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Listing" description="Intake and provenance">
@@ -235,7 +257,12 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Seller / listing notes" description="Raw listing text">
-        <OpportunitySellerNotesBlock initialNotes={null} />
+        <OpportunitySellerNotesBlock
+          initialNotes={initial.sellerNotes}
+          onSave={(notes) => patchMutation.mutate({ sellerNotes: notes })}
+          pending={patchMutation.isPending}
+          canMutate={canMutate}
+        />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Notes" description="Closer-added context">

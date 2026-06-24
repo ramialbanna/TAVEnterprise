@@ -35,6 +35,7 @@ import {
   type MmrVinRequest,
   type UpdateOpportunityStatusRequest,
   type AddOpportunityNoteRequest,
+  type PatchOpportunityRequest,
 } from "./client";
 import { fetchOpportunitiesPage } from "./opportunities-page-fetch";
 import type {
@@ -55,6 +56,7 @@ export type {
   MmrVinRequest,
   UpdateOpportunityStatusRequest,
   AddOpportunityNoteRequest,
+  PatchOpportunityRequest,
   OpportunitiesPageFilter,
 } from "./client";
 
@@ -202,6 +204,18 @@ export async function addOpportunityNote(
   body: AddOpportunityNoteRequest,
 ): Promise<ApiResult<OpportunityDetail>> {
   const { status, json } = await postJson(`opportunities/${encodeURIComponent(id)}/notes`, body);
+  return parseOpportunityDetail(status, json);
+}
+
+export async function patchOpportunity(
+  id: string,
+  body: PatchOpportunityRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const { status, json } = await requestJson(`opportunities/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
   return parseOpportunityDetail(status, json);
 }
 

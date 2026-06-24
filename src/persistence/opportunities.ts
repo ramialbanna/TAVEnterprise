@@ -1,7 +1,16 @@
 import type { SupabaseClient } from "./supabase";
 import { buildListingDiagnostics } from "./ingestRuns";
 import { computeDealScore } from "../scoring/deal";
-import { fetchWorkflowMap, isActiveClaim, listOpportunityActions, type OpportunityActionRecord, type WorkflowDisplayContext } from "./opportunityWorkflow";
+import type { AppUser } from "./users";
+import {
+  fetchWorkflowMap,
+  isActiveClaim,
+  listOpportunityActions,
+  writeOpportunityAction,
+  OpportunityWorkflowError,
+  type OpportunityActionRecord,
+  type WorkflowDisplayContext,
+} from "./opportunityWorkflow";
 
 /**
  * Read-only persistence for v2 Opportunities (`GET /app/opportunities[/:id]`).
@@ -63,6 +72,11 @@ export interface OpportunityRow {
   entryMethod: string | null;
   estimateFlags: OpportunityEstimateFlags;
   maxbuySummary: MaxbuySummary | null;
+  bodyType: string | null;
+  engine: string | null;
+  transmission: string | null;
+  color: string | null;
+  sellerNotes: string | null;
 }
 
 export interface OpportunityDetail extends OpportunityRow {
@@ -108,7 +122,7 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, seller_notes";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -327,6 +341,11 @@ function mapToOpportunityRow(
     entryMethod: asString(listing.entry_method),
     estimateFlags,
     maxbuySummary: maxbuySummary ?? null,
+    bodyType: asString(listing.body_type),
+    engine: asString(listing.engine),
+    transmission: asString(listing.transmission),
+    color: asString(listing.exterior_color),
+    sellerNotes: asString(listing.seller_notes),
   };
 }
 
@@ -767,3 +786,107 @@ export async function getOpportunityDetail(
 }
 
 const MAX_FETCH = 500;
+
+/**
+ * Patch input for vehicle-identity + seller-notes edits (Phase 4).
+ * All fields optional; only provided fields are persisted and audited.
+ * `style` maps to the DB `trim` column; `color` maps to `exterior_color`.
+ */
+export interface OpportunityFieldPatch {
+  vin?: string | null;
+  mileage?: number | null;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  style?: string | null;
+  bodyType?: string | null;
+  engine?: string | null;
+  transmission?: string | null;
+  color?: string | null;
+  sellerNotes?: string | null;
+}
+
+/** camelCase patch field → DB column on normalized_listings. */
+const FIELD_TO_COLUMN: Record<keyof OpportunityFieldPatch, string> = {
+  vin: "vin",
+  mileage: "mileage",
+  year: "year",
+  make: "make",
+  model: "model",
+  style: "trim",
+  bodyType: "body_type",
+  engine: "engine",
+  transmission: "transmission",
+  color: "exterior_color",
+  sellerNotes: "seller_notes",
+};
+
+function normalizePatchValue(value: string | number | null | undefined): string | number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === "number") return value;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * PATCH /app/opportunities/:id — persist vehicle-identity + seller-notes edits.
+ *
+ * Loads the existing listing row, diffs each provided field, writes only
+ * changed columns to `normalized_listings`, and records a single
+ * `fields_updated` action with a `{ changes: { field: { from, to } } }`
+ * metadata payload. Returns the refreshed `OpportunityDetail`.
+ */
+export async function patchOpportunityFields(
+  db: SupabaseClient,
+  normalizedListingId: string,
+  actor: AppUser,
+  patch: OpportunityFieldPatch,
+): Promise<OpportunityDetail> {
+  const { data: existingRow, error: loadErr } = await db
+    .from("normalized_listings")
+    .select(LISTING_COLUMNS)
+    .eq("id", normalizedListingId)
+    .maybeSingle();
+  if (loadErr) throw loadErr;
+  if (!existingRow) {
+    throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity listing not found");
+  }
+
+  const existing = existingRow as ListingRow;
+  const update: Record<string, unknown> = {};
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+
+  for (const [field, column] of Object.entries(FIELD_TO_COLUMN)) {
+    if (!(field in patch)) continue;
+    const next = normalizePatchValue(patch[field as keyof OpportunityFieldPatch]);
+    const prevRaw = existing[column];
+    const prev = prevRaw === undefined || prevRaw === null ? null : prevRaw;
+    const comparablePrev = typeof prev === "number" ? prev : prev === null ? null : String(prev);
+    const comparableNext = typeof next === "number" ? next : next === null ? null : String(next);
+    if (comparablePrev === comparableNext) continue;
+    update[column] = next;
+    changes[field] = { from: prev, to: next };
+  }
+
+  if (Object.keys(update).length > 0) {
+    const { error: updateErr } = await db
+      .from("normalized_listings")
+      .update({ ...update, updated_at: new Date().toISOString() })
+      .eq("id", normalizedListingId);
+    if (updateErr) throw updateErr;
+
+    await writeOpportunityAction(db, {
+      normalizedListingId,
+      actorUserId: actor.id,
+      action: "fields_updated",
+      metadata: { changes },
+    });
+  }
+
+  const refreshed = await getOpportunityDetail(db, normalizedListingId);
+  if (!refreshed) {
+    throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+  }
+  return refreshed;
+}

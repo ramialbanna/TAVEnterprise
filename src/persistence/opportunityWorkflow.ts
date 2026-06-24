@@ -14,7 +14,8 @@ export type OpportunityActionType =
   | "claimed"
   | "evaluated"
   | "status_changed"
-  | "note_added";
+  | "note_added"
+  | "fields_updated";
 
 /** Status values callers may set via POST /app/opportunities/:id/status. */
 export type MutatableWorkflowStatus =

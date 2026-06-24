@@ -7,7 +7,7 @@ import { getLastCronRun } from "../src/persistence/cronRuns";
 import { getMmrValueFromWorker } from "../src/valuation/workerClient";
 import type * as WorkerClientModule from "../src/valuation/workerClient";
 import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
-import { listOpportunities, getOpportunityDetail } from "../src/persistence/opportunities";
+import { listOpportunities, getOpportunityDetail, patchOpportunityFields } from "../src/persistence/opportunities";
 import { listActiveUsers } from "../src/persistence/users";
 import { resolveAppUser } from "../src/auth/resolveAppUser";
 import {
@@ -68,6 +68,7 @@ vi.mock("../src/persistence/ingestRuns", () => ({
 vi.mock("../src/persistence/opportunities", () => ({
   listOpportunities: vi.fn(),
   getOpportunityDetail: vi.fn(),
+  patchOpportunityFields: vi.fn(),
 }));
 
 vi.mock("../src/persistence/users", () => ({
@@ -146,6 +147,14 @@ function authedPost(path: string, body: unknown): Request {
   });
 }
 
+function authedPatch(path: string, body: unknown): Request {
+  return authedReq(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+}
+
 beforeEach(() => {
   dbState.throwOnInit = false;
   dbState.tables = {};
@@ -169,6 +178,7 @@ beforeEach(() => {
   vi.mocked(submitManualOpportunity).mockReset();
   vi.mocked(updateOpportunityStatus).mockReset();
   vi.mocked(addOpportunityNote).mockReset();
+  vi.mocked(patchOpportunityFields).mockReset();
 });
 
 describe("/app/* auth", () => {
@@ -1390,6 +1400,11 @@ const OPPORTUNITY_ROW = {
   entryMethod: null,
   estimateFlags: { mileage: false, style: false, mmr: false },
   maxbuySummary: null,
+  bodyType: null,
+  engine: null,
+  transmission: null,
+  color: null,
+  sellerNotes: null,
 };
 
 describe("GET /app/opportunities", () => {
@@ -1951,6 +1966,90 @@ describe("POST /app/opportunities/:id/notes", () => {
     vi.mocked(resolveAppUser).mockResolvedValue(closer);
     const res = await worker.fetch(
       authedPost("/app/opportunities/listing-1/notes", { note: "   " }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /app/opportunities/:id", () => {
+  const closer = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+  const viewer = { ...closer, role: "viewer" as const };
+
+  const refreshed = {
+    ...OPPORTUNITY_ROW,
+    reasonCodes: [],
+    valuationMissingReason: null,
+    scoreComponents: null,
+    candidateListingCount: null,
+    mileage: 45000,
+    actions: [],
+  };
+
+  it("persists vehicle field edits for an authenticated closer", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(patchOpportunityFields).mockResolvedValue(refreshed);
+
+    const res = await worker.fetch(
+      authedPatch("/app/opportunities/listing-1", { color: "Red", vin: "1HGBH41JXMN109999" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { id: string } };
+    expect(body.ok).toBe(true);
+    expect(body.data.id).toBe(OPPORTUNITY_ROW.id);
+    expect(vi.mocked(patchOpportunityFields)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      { color: "Red", vin: "1HGBH41JXMN109999" },
+    );
+  });
+
+  it("returns 401 when identity is missing", async () => {
+    const res = await worker.fetch(
+      authedPatch("/app/opportunities/listing-1", { color: "Red" }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 for viewer role", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(viewer);
+    const res = await worker.fetch(
+      authedPatch("/app/opportunities/listing-1", { color: "Red" }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 400 for an empty patch body", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPatch("/app/opportunities/listing-1", {}),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 for an invalid VIN length", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPatch("/app/opportunities/listing-1", { vin: "TOO_SHORT" }),
       makeEnv(),
       ctx,
     );

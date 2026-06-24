@@ -340,6 +340,23 @@ async function getJson(
   return { status: res.status, json: await readJson(res) };
 }
 
+async function patchJson(
+  path: string,
+  body: unknown,
+): Promise<{ status: number; json: unknown } | typeof FETCH_FAILED> {
+  let res: Response;
+  try {
+    res = await fetch(`${PROXY_PREFIX}/${path}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return FETCH_FAILED;
+  }
+  return { status: res.status, json: await readJson(res) };
+}
+
 export async function getSystemStatus(): Promise<ApiResult<SystemStatus>> {
   const r = await getJson("system-status");
   if (r === FETCH_FAILED) return clientTransportError();
@@ -476,6 +493,29 @@ export async function addOpportunityNote(
   body: AddOpportunityNoteRequest,
 ): Promise<ApiResult<OpportunityDetail>> {
   const r = await postJson(`opportunities/${encodeURIComponent(id)}/notes`, body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export type PatchOpportunityRequest = {
+  vin?: string | null;
+  mileage?: number | null;
+  year?: number | null;
+  make?: string | null;
+  model?: string | null;
+  style?: string | null;
+  bodyType?: string | null;
+  engine?: string | null;
+  transmission?: string | null;
+  color?: string | null;
+  sellerNotes?: string | null;
+};
+
+export async function patchOpportunity(
+  id: string,
+  body: PatchOpportunityRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const r = await patchJson(`opportunities/${encodeURIComponent(id)}`, body);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunityDetail(r.status, r.json);
 }

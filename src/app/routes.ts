@@ -19,6 +19,7 @@
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
  * POST /app/opportunities/:id/notes.
+ * PATCH /app/opportunities/:id (vehicle + seller notes edits — Phase 4).
  * POST /app/maxbuy/evaluate, POST /app/maxbuy/overrides, POST /app/maxbuy/passes,
  * GET /app/maxbuy/recommendations/:id.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
@@ -52,6 +53,7 @@ import {
   normalizeMutatableWorkflowStatus,
   OpportunityWorkflowError,
 } from "../persistence/opportunityWorkflow";
+import { patchOpportunityFields } from "../persistence/opportunities";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import { classifyIntelHttpError } from "../valuation/workerClient";
@@ -130,6 +132,24 @@ const UpdateOpportunityStatusSchema = z.object({
 const AddOpportunityNoteSchema = z.object({
   note: z.string().trim().min(1).max(2000),
   maxbuy_recommendation_id: z.string().uuid().optional(),
+});
+
+/**
+ * Body schema for PATCH /app/opportunities/:id — vehicle-identity + seller-notes
+ * edits (Phase 4). All fields optional; null clears the field.
+ */
+const PatchOpportunitySchema = z.object({
+  vin: z.string().trim().min(11).max(17).nullable().optional(),
+  mileage: z.number().int().nonnegative().max(2_000_000).nullable().optional(),
+  year: z.number().int().min(1900).max(2100).nullable().optional(),
+  make: z.string().trim().min(1).max(64).nullable().optional(),
+  model: z.string().trim().min(1).max(128).nullable().optional(),
+  style: z.string().trim().min(1).max(128).nullable().optional(),
+  bodyType: z.string().trim().min(1).max(64).nullable().optional(),
+  engine: z.string().trim().min(1).max(64).nullable().optional(),
+  transmission: z.string().trim().min(1).max(64).nullable().optional(),
+  color: z.string().trim().min(1).max(64).nullable().optional(),
+  sellerNotes: z.string().trim().max(2000).nullable().optional(),
 });
 
 const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|notes)$/;
@@ -263,6 +283,13 @@ export async function handleApp(request: Request, env: Env, ctx: ExecutionContex
         return await handleOpportunityNotes(request, env, decodeURIComponent(id));
       }
       return json({ ok: false, error: "not_found" }, 404);
+    }
+    if (request.method === "PATCH" && pathname.startsWith("/app/opportunities/")) {
+      const id = decodeURIComponent(pathname.slice("/app/opportunities/".length));
+      if (id.includes("/")) {
+        return json({ ok: false, error: "not_found" }, 404);
+      }
+      return await handleOpportunityPatch(request, env, id);
     }
     if (request.method === "GET" && pathname.startsWith("/app/opportunities/")) {
       const id = decodeURIComponent(pathname.slice("/app/opportunities/".length));
@@ -1590,6 +1617,62 @@ async function handleOpportunityNotes(
   } catch (err) {
     if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
     log("app.opportunity_notes.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * PATCH /app/opportunities/:id — persist vehicle-identity + seller-notes edits
+ * (Phase 4). Admin/closer only; writes a `fields_updated` action history entry.
+ */
+async function handleOpportunityPatch(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  if (userOrResponse.role !== "admin" && userOrResponse.role !== "closer") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = PatchOpportunitySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  const patch = parsed.data;
+  if (Object.keys(patch).length === 0) {
+    return json({ ok: false, error: "validation_error", issues: [{ message: "No fields provided" }] }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_patch.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await patchOpportunityFields(db, normalizedListingId, userOrResponse, patch);
+    log("app.opportunity_patch.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+      fields: Object.keys(patch),
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_patch.failed", { normalizedListingId, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

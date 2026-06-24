@@ -105,6 +105,11 @@ CREATE TABLE tav.normalized_listings (
   description_changed boolean     NOT NULL DEFAULT false,
   image_changed       boolean     NOT NULL DEFAULT false,
   raw_listing_id      uuid        REFERENCES tav.raw_listings (id),
+  body_type           text,
+  engine              text,
+  transmission        text,
+  exterior_color      text,
+  seller_notes        text,
   created_at          timestamptz NOT NULL DEFAULT now(),
   updated_at          timestamptz NOT NULL DEFAULT now()
 );
@@ -832,7 +837,7 @@ CREATE TABLE tav.opportunity_actions (
   action                text        NOT NULL
     CHECK (action IN (
       'submitted','assigned','unassigned','reassigned','claimed','evaluated',
-      'status_changed','note_added'
+      'status_changed','note_added','fields_updated'
     )),
   notes                 text,
   metadata              jsonb       NOT NULL DEFAULT '{}'::jsonb,

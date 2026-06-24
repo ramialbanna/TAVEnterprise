@@ -382,6 +382,11 @@ export const OpportunityRowSchema = z.object({
   entryMethod: z.enum(["manual", "scraper", "import"]).nullable().optional(),
   estimateFlags: OpportunityEstimateFlagsSchema,
   maxbuySummary: MaxbuySummarySchema.nullable().optional(),
+  bodyType: z.string().nullable().optional(),
+  engine: z.string().nullable().optional(),
+  transmission: z.string().nullable().optional(),
+  color: z.string().nullable().optional(),
+  sellerNotes: z.string().nullable().optional(),
 });
 export const OpportunityRowListSchema = z.array(OpportunityRowSchema);
 export type OpportunityRow = z.infer<typeof OpportunityRowSchema>;

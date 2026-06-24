@@ -1,6 +1,6 @@
 # Opportunity detail page redesign
 
-**Status:** Requirements confirmed (discovery 2026-06-24)  
+**Status:** In progress — Phase 1 + 2 + 3 + 4 shipped (2026-06-24); discovery 2026-06-24
 **Route:** `/opportunities/[id]`  
 **Goal:** Replace the current sparse single-column layout with a dense, vAuto-inspired **block workspace** — grouped collapsible sections, two-column field grids inside blocks, and MMR Lab + Max buy integrated into one valuation surface.
 
@@ -339,53 +339,53 @@ New or extended backend work likely required:
 
 ## Implementation phases (suggested)
 
-### Phase 1 — Shell & workflow
+### Phase 1 — Shell & workflow ✅
 
-- New page layout with collapsible block components  
-- Hero with consolidated actions  
-- Single workflow block (4-step stepper + assignment)  
-- Remove duplicate stepper + old Valuation/Vehicle cards  
-- Queue: row click → full page; remove preview sheet  
+- [x] New page layout with collapsible block components  
+- [x] Hero with consolidated actions  
+- [x] Single workflow block (4-step stepper + assignment)  
+- [x] Remove duplicate stepper + old Valuation/Vehicle cards  
+- [x] Queue: row click → full page; remove preview sheet  
 
-### Phase 2 — Vehicle & listing blocks
+### Phase 2 — Vehicle & listing blocks ✅
 
-- Vehicle block UI (2-col grid)  
-- Listing block (manual-entry parity, read-only v1 if PATCH not ready)  
-- Seller/listing notes block  
+- [x] Vehicle block UI (2-col grid)  
+- [x] Listing block (manual-entry parity, read-only v1 if PATCH not ready)  
+- [x] Seller/listing notes block (placeholder; editable in Phase 4)  
 
-### Phase 3 — Valuation block
+### Phase 3 — Valuation block ✅
 
-- Extract miniature MMR Lab embedded component  
-- Wire stored session + auto-run Max buy on load  
-- Remove standalone `MaxbuyLiveCard` from detail page  
+- [x] Extract miniature MMR Lab embedded component  
+- [x] Wire stored session + auto-run Max buy on load  
+- [x] Remove standalone `MaxbuyLiveCard` from detail page  
 
-### Phase 4 — Persist edits
+### Phase 4 — Persist edits ✅
 
-- PATCH API for vehicle + notes  
-- Save button + dirty state + history entries  
-- Vehicle save → MMR/Max buy refresh  
+- [x] PATCH API for vehicle + notes  
+- [x] Save button + dirty state + history entries  
+- [x] Vehicle save → MMR/Max buy refresh  
 
 ### Phase 5 — Polish
 
-- Loading/error states per block  
-- E2E + UAT doc updates  
-- Empty states when VIN/mileage missing  
+- [ ] Loading/error states per block  
+- [ ] E2E + UAT doc updates  
+- [ ] Empty states when VIN/mileage missing  
 
 ---
 
 ## Acceptance criteria (v1)
 
-- [ ] Single click on queue row opens full detail page (no preview sheet)  
-- [ ] One workflow stepper: Found → Working → Contacted → Landed  
-- [ ] Hero contains Open listing + claim + workflow CTAs  
-- [ ] All blocks collapsible, open by default  
-- [ ] Vehicle block shows vAuto-style fields in 2-column grid  
-- [ ] Listing block shows manual-submit parity fields (URL, source, region, provenance, sighting)  
-- [ ] Valuation block combines MMR Lab fields + Max buy; auto-runs Max buy when no saved verdict  
-- [ ] Notes block + collapsed History block  
-- [ ] No duplicate workflow steppers on page  
-- [ ] Silent evaluate-on-open still fires  
-- [ ] Desktop layout uses width; no empty twin cards for Valuation/Vehicle  
+- [x] Single click on queue row opens full detail page (no preview sheet)  
+- [x] One workflow stepper: Found → Working → Contacted → Landed  
+- [x] Hero contains Open listing + claim + workflow CTAs  
+- [x] All blocks collapsible, open by default  
+- [x] Vehicle block shows vAuto-style fields in 2-column grid  
+- [x] Listing block shows manual-submit parity fields (URL, source, region, provenance, sighting)  
+- [x] Valuation block combines MMR Lab fields + Max buy; auto-runs Max buy when no saved verdict  
+- [x] Notes block + collapsed History block  
+- [x] No duplicate workflow steppers on page  
+- [x] Silent evaluate-on-open still fires  
+- [x] Desktop layout uses width; no empty twin cards for Valuation/Vehicle  
 
 ---
 

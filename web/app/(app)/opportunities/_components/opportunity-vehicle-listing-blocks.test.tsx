@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 
@@ -49,46 +49,62 @@ function makeDetail(overrides: Partial<OpportunityDetail> = {}): OpportunityDeta
     candidateListingCount: null,
     mileage: 32000,
     actions: [],
+    bodyType: null,
+    engine: null,
+    transmission: null,
+    color: null,
+    sellerNotes: null,
+    ...overrides,
+  };
+}
+
+function props(overrides: Partial<Parameters<typeof OpportunityVehicleBlock>[0]> = {}) {
+  return {
+    opportunity: makeDetail(),
+    onSave: vi.fn(),
+    pending: false,
+    canMutate: true,
     ...overrides,
   };
 }
 
 describe("OpportunityVehicleBlock", () => {
-  it("renders all identity fields in the 2-col grid", () => {
-    render(<OpportunityVehicleBlock opportunity={makeDetail()} />);
+  it("renders editable inputs seeded from opportunity", () => {
+    render(<OpportunityVehicleBlock {...props()} />);
 
-    expect(screen.getByText("VIN")).toBeInTheDocument();
-    expect(screen.getByText("1HGBH41JXMN109123")).toBeInTheDocument();
-    expect(screen.getByText("Odometer")).toBeInTheDocument();
-    expect(screen.getByText(/32,000 mi/)).toBeInTheDocument();
-    expect(screen.getByText("Year")).toBeInTheDocument();
-    expect(screen.getByText("2019")).toBeInTheDocument();
-    expect(screen.getByText("Make")).toBeInTheDocument();
-    expect(screen.getByText("Honda")).toBeInTheDocument();
-    expect(screen.getByText("Model")).toBeInTheDocument();
-    expect(screen.getByText("Accord")).toBeInTheDocument();
-    expect(screen.getByText("Series")).toBeInTheDocument();
-    expect(screen.getByText("EX")).toBeInTheDocument();
-    expect(screen.getByText("Region")).toBeInTheDocument();
-    expect(screen.getByText("Dallas")).toBeInTheDocument();
-  });
-
-  it("renders em-dash for fields without a backend column yet", () => {
-    render(<OpportunityVehicleBlock opportunity={makeDetail()} />);
-    expect(screen.getByText("Body type")).toBeInTheDocument();
-    expect(screen.getByText("Engine")).toBeInTheDocument();
-    expect(screen.getByText("Transmission")).toBeInTheDocument();
-    expect(screen.getByText("Color")).toBeInTheDocument();
-  });
-
-  it("renders em-dash for null fields", () => {
-    render(
-      <OpportunityVehicleBlock
-        opportunity={makeDetail({ vin: null, mileage: null, year: null, style: null })}
-      />,
+    expect((screen.getByLabelText("VIN") as HTMLInputElement).value).toBe(
+      "1HGBH41JXMN109123",
     );
-    // Multiple em-dashes across missing fields — count at least the VIN one.
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect((screen.getByLabelText("Odometer (mi)") as HTMLInputElement).value).toBe("32000");
+    expect((screen.getByLabelText("Make") as HTMLInputElement).value).toBe("Honda");
+    expect((screen.getByLabelText("Body type") as HTMLInputElement).value).toBe("");
+  });
+
+  it("disables Save until dirty and fires patch on save", () => {
+    const onSave = vi.fn();
+    render(<OpportunityVehicleBlock {...props({ onSave })} />);
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
+    expect(saveButton).not.toBeDisabled();
+
+    fireEvent.click(saveButton);
+    expect(onSave).toHaveBeenCalledWith({ color: "Red" });
+  });
+
+  it("reset restores initial values", () => {
+    render(<OpportunityVehicleBlock {...props()} />);
+
+    fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect((screen.getByLabelText("Color") as HTMLInputElement).value).toBe("");
+  });
+
+  it("hides save controls when canMutate is false", () => {
+    render(<OpportunityVehicleBlock {...props({ canMutate: false })} />);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
 });
 
@@ -116,7 +132,6 @@ describe("OpportunityListingBlock", () => {
 
   it("renders em-dash when listing URL is missing", () => {
     render(<OpportunityListingBlock opportunity={makeDetail({ listingUrl: null })} />);
-    // The Listing URL row should show em-dash when URL absent.
     const urlRow = screen.getByText("Listing URL").closest("dl");
     expect(urlRow).toBeInTheDocument();
   });

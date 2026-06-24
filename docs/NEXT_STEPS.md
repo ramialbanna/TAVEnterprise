@@ -57,13 +57,13 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **21** | Odometer delta badge missing when Cox sends mileage-as-string | High | [~] |
-| **22** | Grade not applied — UI CR grade must convert to Cox 10× integer | High | [~] |
-| **23** | Grade & color deltas — exact Cox dollar amounts, no marginal / no Math.round | High | [ ] |
-| **17** | YMM parity vs Manheim â€” item selection + range source | High | [~] |
+| **21** | Odometer delta badge missing when Cox sends mileage-as-string | High | [x] |
+| **22** | Grade not applied — UI CR grade must convert to Cox 10× integer | High | [x] |
+| **23** | Grade & color deltas — exact Cox dollar amounts, no marginal / no Math.round | High | [x] |
+| **17** | YMM parity vs Manheim â€” item selection + range source | High | [x] |
 | **18** | MaxBuy `vehicle_context_missing` -- trust MMR result for VIN identity | High | [x] |
 | **19** | Avg Condition 10x display bug -- `averageGrade` integer not normalized | High | [x] |
-| **20** | Avg EV Battery Score -- identify correct Cox response field name | Medium | [~] |
+| **20** | Avg EV Battery Score -- identify correct Cox response field name | Medium | [x] |
 | **16** | MMR adjustment accuracy â€” deploy fixes + smoke-test grade/build deltas | High | [x] |
 | **15** | Retail value â€” enable Cox retail data (env var + entitlement check) | Medium | [x] |
 | **2** | Year dropdown â€” pin recent years at top | Medium | [x] |
@@ -146,12 +146,12 @@ Base MMR, MMR Range (low â€“ high), Avg Odometer, Avg Condition, Adjusted M
 
 ### Exit criteria
 
-- [ ] Test results from 5 YMMs + 3 VINs collected and compared
-- [ ] Root cause of Base MMR mismatch confirmed (wrong item index vs. trim name mismatch vs. other)
-- [ ] Decision made: fix item selection heuristic, enable ci on search, or both
-- [ ] YMM lookups produce Base MMR within  of Manheim for at least 4 of 5 test vehicles
-- [ ] MMR Range within  of Manheim on both ends for at least 4 of 5 test vehicles
-- [ ] No regression on VIN path
+- [x] Test results from 5 YMMs + 3 VINs collected and compared
+- [x] Root cause of Base MMR mismatch confirmed (wrong item index vs. trim name mismatch vs. other)
+- [x] Decision made: fix item selection heuristic, enable ci on search, or both
+- [x] YMM lookups produce Base MMR within  of Manheim for at least 4 of 5 test vehicles
+- [x] MMR Range within  of Manheim on both ends for at least 4 of 5 test vehicles
+- [x] No regression on VIN path
 
 ---
 
@@ -467,9 +467,9 @@ Do not error. Show the MaxBuy result with `data strength: low` and the existing 
 
 ### Exit criteria (confirm before marking [x])
 
-- [ ] F450 VIN at odometer 200 + grade 4.5 + Black: Adjusted MMR ≈ **$66,300** (matches Manheim)
-- [ ] Grade delta badge shows ≈ **+$710** (display fix may still be separate if Cox returns grade as string code)
-- [ ] Vercel deploy includes web `mapMmrAdjustmentsToApi` change
+- [x] F450 VIN at odometer 200 + grade 4.5 + Black: Adjusted MMR ≈ **$66,300** (matches Manheim)
+- [x] Grade delta badge shows ≈ **+$710** (display fix may still be separate if Cox returns grade as string code)
+- [x] Vercel deploy includes web `mapMmrAdjustmentsToApi` change
 
 ---
 
@@ -503,10 +503,10 @@ Color **may** already be a numeric Cox value (`adjustedBy.Color` = −500), whic
 
 ### Exit criteria
 
-- [ ] F450 VIN (odometer 200, grade 4.5, Black): grade badge **+$710**, color badge **−$480** (match Manheim)
-- [ ] Values sourced from Cox payload fields, not marginal tracking, when Cox provides them
-- [ ] No `Math.round` on grade/color adjustment dollars in the display pipeline
-- [ ] Adjusted MMR remains **$66,300** — no regression on hero price
+- [x] F450 VIN (odometer 200, grade 4.5, Black): grade badge **+$710**, color badge **−$480** (match Manheim)
+- [x] Values sourced from Cox payload fields, not marginal tracking, when Cox provides them
+- [x] No `Math.round` on grade/color adjustment dollars in the display pipeline
+- [x] Adjusted MMR remains **$66,300** — no regression on hero price
 
 ---
 
@@ -533,10 +533,10 @@ VIN `1FT8W4DT8JEB57132` (2018 Ford F450): odometer **200** mi (avg 99,606). Manh
 
 ### Exit criteria (confirm before marking [x])
 
-- [ ] VIN `1FT8W4DT8JEB57132` at odometer 200 shows odometer delta ≈ **+$15,400** (within ~$50 of Manheim +$15,430)
-- [ ] Adjusted MMR still **$66,100** — no regression on hero price
-- [ ] Grade + odometer + build combined case still does **not** show a bogus grade/odo split (regression test passes)
-- [ ] Deploy main worker + verify on https://tav-enterprise.vercel.app/mmr-lab
+- [x] VIN `1FT8W4DT8JEB57132` at odometer 200 shows odometer delta ≈ **+$15,400** (within ~$50 of Manheim +$15,430)
+- [x] Adjusted MMR still **$66,100** — no regression on hero price
+- [x] Grade + odometer + build combined case still does **not** show a bogus grade/odo split (regression test passes)
+- [x] Deploy main worker + verify on https://tav-enterprise.vercel.app/mmr-lab
 
 ---
 
@@ -591,6 +591,6 @@ esult-band.tsx -- renders the stat when non-null
 
 ### Exit criteria
 
-- [ ] Correct Cox field name identified by inspecting raw payload
-- [ ] Key added to parseEvBatteryScore fallback list
-- [ ] Escalade IQ VIN lookup shows Avg EV Battery Score = 100% (or whatever Cox returns)
+- [x] Correct Cox field name identified by inspecting raw payload
+- [x] Key added to parseEvBatteryScore fallback list
+- [x] Escalade IQ VIN lookup shows Avg EV Battery Score = 100% (or whatever Cox returns)
