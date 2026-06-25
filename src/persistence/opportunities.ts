@@ -76,7 +76,27 @@ export interface OpportunityRow {
   engine: string | null;
   transmission: string | null;
   color: string | null;
-  sellerNotes: string | null;
+  // Contact info (hero right column)
+  contactFirstName: string | null;
+  contactLastName: string | null;
+  contactHomePhone: string | null;
+  contactEmail: string | null;
+  contactAddress: string | null;
+  contactPostalCode: string | null;
+  // Salesperson / Appraisal Information (left column of renamed block)
+  salesperson: string | null;
+  appraiser: string | null;
+  // Title Information (right column of renamed block)
+  titleOwner: string | null;
+  titleStateRegion: string | null;
+  lienHolder: string | null;
+  lienAccountNumber: string | null;
+  lienPayoff: number | null;
+  tagOrPlate: string | null;
+  tagStateRegion: string | null;
+  tagExpiration: string | null;
+  certified: boolean;
+  extendedWarranty: boolean;
 }
 
 export interface OpportunityDetail extends OpportunityRow {
@@ -122,7 +142,7 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, seller_notes";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -172,6 +192,16 @@ function asString(v: unknown): string | null {
 function asNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   return null;
+}
+
+function asBoolean(v: unknown): boolean {
+  return v === true;
+}
+
+function asDate(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  // Postgres returns `date` columns as `YYYY-MM-DD` strings.
+  return /^\d{4}-\d{2}-\d{2}/.test(v) ? v : null;
 }
 
 function computeEstimateFlags(
@@ -345,7 +375,24 @@ function mapToOpportunityRow(
     engine: asString(listing.engine),
     transmission: asString(listing.transmission),
     color: asString(listing.exterior_color),
-    sellerNotes: asString(listing.seller_notes),
+    contactFirstName: asString(listing.contact_first_name),
+    contactLastName: asString(listing.contact_last_name),
+    contactHomePhone: asString(listing.contact_home_phone),
+    contactEmail: asString(listing.contact_email),
+    contactAddress: asString(listing.contact_address),
+    contactPostalCode: asString(listing.contact_postal_code),
+    salesperson: asString(listing.salesperson),
+    appraiser: asString(listing.appraiser),
+    titleOwner: asString(listing.title_owner),
+    titleStateRegion: asString(listing.title_state_region),
+    lienHolder: asString(listing.lien_holder),
+    lienAccountNumber: asString(listing.lien_account_number),
+    lienPayoff: asNumber(listing.lien_payoff),
+    tagOrPlate: asString(listing.tag_or_plate),
+    tagStateRegion: asString(listing.tag_state_region),
+    tagExpiration: asDate(listing.tag_expiration),
+    certified: asBoolean(listing.certified),
+    extendedWarranty: asBoolean(listing.extended_warranty),
   };
 }
 
@@ -788,11 +835,12 @@ export async function getOpportunityDetail(
 const MAX_FETCH = 500;
 
 /**
- * Patch input for vehicle-identity + seller-notes edits (Phase 4).
+ * Patch input for vehicle-identity + contact / salesperson / title edits.
  * All fields optional; only provided fields are persisted and audited.
  * `style` maps to the DB `trim` column; `color` maps to `exterior_color`.
  */
 export interface OpportunityFieldPatch {
+  // Vehicle identity
   vin?: string | null;
   mileage?: number | null;
   year?: number | null;
@@ -803,7 +851,27 @@ export interface OpportunityFieldPatch {
   engine?: string | null;
   transmission?: string | null;
   color?: string | null;
-  sellerNotes?: string | null;
+  // Contact info
+  contactFirstName?: string | null;
+  contactLastName?: string | null;
+  contactHomePhone?: string | null;
+  contactEmail?: string | null;
+  contactAddress?: string | null;
+  contactPostalCode?: string | null;
+  // Salesperson / Appraisal
+  salesperson?: string | null;
+  appraiser?: string | null;
+  // Title Information
+  titleOwner?: string | null;
+  titleStateRegion?: string | null;
+  lienHolder?: string | null;
+  lienAccountNumber?: string | null;
+  lienPayoff?: number | null;
+  tagOrPlate?: string | null;
+  tagStateRegion?: string | null;
+  tagExpiration?: string | null;
+  certified?: boolean;
+  extendedWarranty?: boolean;
 }
 
 /** camelCase patch field → DB column on normalized_listings. */
@@ -818,19 +886,38 @@ const FIELD_TO_COLUMN: Record<keyof OpportunityFieldPatch, string> = {
   engine: "engine",
   transmission: "transmission",
   color: "exterior_color",
-  sellerNotes: "seller_notes",
+  contactFirstName: "contact_first_name",
+  contactLastName: "contact_last_name",
+  contactHomePhone: "contact_home_phone",
+  contactEmail: "contact_email",
+  contactAddress: "contact_address",
+  contactPostalCode: "contact_postal_code",
+  salesperson: "salesperson",
+  appraiser: "appraiser",
+  titleOwner: "title_owner",
+  titleStateRegion: "title_state_region",
+  lienHolder: "lien_holder",
+  lienAccountNumber: "lien_account_number",
+  lienPayoff: "lien_payoff",
+  tagOrPlate: "tag_or_plate",
+  tagStateRegion: "tag_state_region",
+  tagExpiration: "tag_expiration",
+  certified: "certified",
+  extendedWarranty: "extended_warranty",
 };
 
-function normalizePatchValue(value: string | number | null | undefined): string | number | null | undefined {
+function normalizePatchValue(value: string | number | boolean | null | undefined): string | number | boolean | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
+  if (typeof value === "boolean") return value;
   if (typeof value === "number") return value;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 }
 
 /**
- * PATCH /app/opportunities/:id — persist vehicle-identity + seller-notes edits.
+ * PATCH /app/opportunities/:id — persist vehicle-identity + contact /
+ * salesperson / title edits.
  *
  * Loads the existing listing row, diffs each provided field, writes only
  * changed columns to `normalized_listings`, and records a single

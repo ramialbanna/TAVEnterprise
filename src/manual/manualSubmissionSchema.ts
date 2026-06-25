@@ -14,7 +14,6 @@ export const ManualOpportunitySubmissionSchema = z.object({
   style: z.string().trim().min(1).max(128).optional(),
   price: z.number().int().min(1).max(500_000),
   mileage: z.number().int().nonnegative().max(2_000_000).optional(),
-  sellerNotes: z.string().trim().max(2000).optional(),
   submitterNotes: z.string().trim().max(2000).optional(),
 });
 

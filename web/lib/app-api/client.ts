@@ -180,7 +180,6 @@ export type ManualSubmissionRequest = {
   source?: "facebook" | "craigslist" | "autotrader" | "cars_com" | "offerup";
   style?: string;
   mileage?: number;
-  sellerNotes?: string;
   submitterNotes?: string;
 };
 
@@ -508,7 +507,24 @@ export type PatchOpportunityRequest = {
   engine?: string | null;
   transmission?: string | null;
   color?: string | null;
-  sellerNotes?: string | null;
+  contactFirstName?: string | null;
+  contactLastName?: string | null;
+  contactHomePhone?: string | null;
+  contactEmail?: string | null;
+  contactAddress?: string | null;
+  contactPostalCode?: string | null;
+  salesperson?: string | null;
+  appraiser?: string | null;
+  titleOwner?: string | null;
+  titleStateRegion?: string | null;
+  lienHolder?: string | null;
+  lienAccountNumber?: string | null;
+  lienPayoff?: number | null;
+  tagOrPlate?: string | null;
+  tagStateRegion?: string | null;
+  tagExpiration?: string | null;
+  certified?: boolean;
+  extendedWarranty?: boolean;
 };
 
 export async function patchOpportunity(

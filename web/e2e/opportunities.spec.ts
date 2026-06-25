@@ -35,7 +35,7 @@ test.describe("/opportunities — New happy path", () => {
     await mockAppApi(page);
   });
 
-  test("renders queue tabs, summary, and opens preview on row click", async ({ page }) => {
+  test("renders queue tabs, summary, and opens detail page on row click", async ({ page }) => {
     await page.goto("/opportunities");
 
     const main = page.getByRole("main");
@@ -44,9 +44,10 @@ test.describe("/opportunities — New happy path", () => {
     await expect(main.getByText("2019 Honda Civic EX")).toBeVisible();
 
     await main.getByText("2019 Honda Civic EX").click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByRole("link", { name: /View listing/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Open full page/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/opportunities\/opp_e2e_1$/);
+    await expect(
+      page.getByRole("heading", { name: "2019 Honda Civic EX", level: 1 }),
+    ).toBeVisible();
   });
 
 });
@@ -81,7 +82,11 @@ test.describe("/opportunities/:id — Detail page", () => {
     await expect(main.getByRole("heading", { name: "Vehicle" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Listing" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Valuation" })).toBeVisible();
-    await expect(main.getByRole("heading", { name: "Seller / listing notes" })).toBeVisible();
+    await expect(
+      main.getByRole("heading", { name: "Salesperson / Appraisal Information" }),
+    ).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Title Information" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Contact Information" })).toBeVisible();
 
     // Vehicle fields seeded from opportunity.
     const vinInput = main.getByLabel("VIN");

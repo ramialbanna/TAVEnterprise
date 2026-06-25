@@ -149,7 +149,6 @@ export async function submitManualOpportunity(
       normalized_listing_id: upsert.id,
       submitted_by_user_id: submitter.id,
       assigned_to_user_id: fields.assignedToUserId ?? null,
-      seller_notes: normalizeOptionalText(fields.sellerNotes, 2000),
       submitter_notes: normalizeOptionalText(fields.submitterNotes, 2000),
     })
     .select("id")

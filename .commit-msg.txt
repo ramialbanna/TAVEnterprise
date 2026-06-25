@@ -1,0 +1,17 @@
+feat(opportunities): split hero + add contact/salesperson/title blocks, drop seller_notes
+
+- Split hero into 2-col layout with editable Contact Information block
+  (First Name, Last Name, Home Phone, Email, Address, Postal Code)
+- Replace Seller/listing notes block with Salesperson/Appraisal Information
+  (Salesperson, Appraiser) + Title Information block side-by-side
+  (Owner, State/Region, Lien Holder, Lien Account #, Lien Payoff,
+  Tag or Plate, Tag State/Region, Tag Expiration, Certified,
+  Extended Warranty checkboxes)
+- Drop seller_notes end-to-end (DB, manual submit form/schema, persistence,
+  opportunity schemas, PATCH, client types, fixtures)
+- Migration 0061 adds 22 columns to normalized_listings and drops
+  seller_notes from both normalized_listings and manual_opportunity_submissions
+- Fix fields_updated action rendering in History block (was returning
+  undefined; now lists updated field labels)
+- Update e2e queue test to assert navigation to detail page instead of
+  retired preview-sheet dialog

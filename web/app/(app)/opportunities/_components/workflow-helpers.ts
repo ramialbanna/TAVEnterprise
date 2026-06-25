@@ -82,5 +82,53 @@ export function describeOpportunityAction(action: OpportunityAction): string {
     }
     case "note_added":
       return "Note added";
+    case "fields_updated": {
+      const changes = action.metadata.changes;
+      if (changes && typeof changes === "object") {
+        const fields = Object.keys(changes as Record<string, unknown>);
+        if (fields.length > 0) {
+          const labels = fields.map(formatFieldLabel);
+          return `Updated ${labels.join(", ")}`;
+        }
+      }
+      return "Fields updated";
+    }
+    default:
+      return action.action.replace(/_/g, " ");
   }
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  vin: "VIN",
+  mileage: "odometer",
+  year: "year",
+  make: "make",
+  model: "model",
+  style: "series",
+  bodyType: "body type",
+  engine: "engine",
+  transmission: "transmission",
+  color: "color",
+  contactFirstName: "first name",
+  contactLastName: "last name",
+  contactHomePhone: "home phone",
+  contactEmail: "email",
+  contactAddress: "address",
+  contactPostalCode: "postal code",
+  salesperson: "salesperson",
+  appraiser: "appraiser",
+  titleOwner: "owner",
+  titleStateRegion: "title state/region",
+  lienHolder: "lien holder",
+  lienAccountNumber: "lien account #",
+  lienPayoff: "lien payoff",
+  tagOrPlate: "tag/plate",
+  tagStateRegion: "tag state/region",
+  tagExpiration: "tag expiration",
+  certified: "certified",
+  extendedWarranty: "extended warranty",
+};
+
+function formatFieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
 }

@@ -19,7 +19,7 @@
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
  * POST /app/opportunities/:id/notes.
- * PATCH /app/opportunities/:id (vehicle + seller notes edits — Phase 4).
+ * PATCH /app/opportunities/:id (vehicle + contact / salesperson / title edits).
  * POST /app/maxbuy/evaluate, POST /app/maxbuy/overrides, POST /app/maxbuy/passes,
  * GET /app/maxbuy/recommendations/:id.
  * (See docs/01-architecture/adr/0002-frontend-app-api-layer.md for the full contract.)
@@ -135,8 +135,8 @@ const AddOpportunityNoteSchema = z.object({
 });
 
 /**
- * Body schema for PATCH /app/opportunities/:id — vehicle-identity + seller-notes
- * edits (Phase 4). All fields optional; null clears the field.
+ * Body schema for PATCH /app/opportunities/:id — vehicle-identity + contact /
+ * salesperson / title edits. All fields optional; null clears the field.
  */
 const PatchOpportunitySchema = z.object({
   vin: z.string().trim().min(11).max(17).nullable().optional(),
@@ -149,7 +149,24 @@ const PatchOpportunitySchema = z.object({
   engine: z.string().trim().min(1).max(64).nullable().optional(),
   transmission: z.string().trim().min(1).max(64).nullable().optional(),
   color: z.string().trim().min(1).max(64).nullable().optional(),
-  sellerNotes: z.string().trim().max(2000).nullable().optional(),
+  contactFirstName: z.string().trim().max(64).nullable().optional(),
+  contactLastName: z.string().trim().max(64).nullable().optional(),
+  contactHomePhone: z.string().trim().max(32).nullable().optional(),
+  contactEmail: z.string().trim().max(254).nullable().optional(),
+  contactAddress: z.string().trim().max(256).nullable().optional(),
+  contactPostalCode: z.string().trim().max(16).nullable().optional(),
+  salesperson: z.string().trim().max(128).nullable().optional(),
+  appraiser: z.string().trim().max(128).nullable().optional(),
+  titleOwner: z.string().trim().max(128).nullable().optional(),
+  titleStateRegion: z.string().trim().max(64).nullable().optional(),
+  lienHolder: z.string().trim().max(128).nullable().optional(),
+  lienAccountNumber: z.string().trim().max(64).nullable().optional(),
+  lienPayoff: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
+  tagOrPlate: z.string().trim().max(32).nullable().optional(),
+  tagStateRegion: z.string().trim().max(64).nullable().optional(),
+  tagExpiration: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  certified: z.boolean().optional(),
+  extendedWarranty: z.boolean().optional(),
 });
 
 const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|notes)$/;
@@ -1622,8 +1639,9 @@ async function handleOpportunityNotes(
 }
 
 /**
- * PATCH /app/opportunities/:id — persist vehicle-identity + seller-notes edits
- * (Phase 4). Admin/closer only; writes a `fields_updated` action history entry.
+ * PATCH /app/opportunities/:id — persist vehicle-identity + contact /
+ * salesperson / title edits. Admin/closer only; writes a `fields_updated`
+ * action history entry.
  */
 async function handleOpportunityPatch(
   request: Request,

@@ -246,17 +246,21 @@ export async function mockAppApi(page: Page, overrides: AppApiOverrides = {}): P
     if (request.method() === "PATCH") {
       const body = request.postDataJSON() as Record<string, unknown>;
       const detail = e2eOpportunityDetail(row);
-      if ("vin" in body) detail.vin = (body.vin as string | null) ?? null;
+      const STRING_FIELDS = [
+        "vin", "make", "model", "style", "bodyType", "engine", "transmission",
+        "color", "contactFirstName", "contactLastName", "contactHomePhone",
+        "contactEmail", "contactAddress", "contactPostalCode", "salesperson",
+        "appraiser", "titleOwner", "titleStateRegion", "lienHolder",
+        "lienAccountNumber", "tagOrPlate", "tagStateRegion", "tagExpiration",
+      ] as const;
+      for (const key of STRING_FIELDS) {
+        if (key in body) detail[key] = (body[key] as string | null) ?? null;
+      }
       if ("mileage" in body) detail.mileage = (body.mileage as number | null) ?? null;
       if ("year" in body) detail.year = (body.year as number | null) ?? null;
-      if ("make" in body) detail.make = (body.make as string | null) ?? null;
-      if ("model" in body) detail.model = (body.model as string | null) ?? null;
-      if ("style" in body) detail.style = (body.style as string | null) ?? null;
-      if ("bodyType" in body) detail.bodyType = (body.bodyType as string | null) ?? null;
-      if ("engine" in body) detail.engine = (body.engine as string | null) ?? null;
-      if ("transmission" in body) detail.transmission = (body.transmission as string | null) ?? null;
-      if ("color" in body) detail.color = (body.color as string | null) ?? null;
-      if ("sellerNotes" in body) detail.sellerNotes = (body.sellerNotes as string | null) ?? null;
+      if ("lienPayoff" in body) detail.lienPayoff = (body.lienPayoff as number | null) ?? null;
+      if ("certified" in body) detail.certified = body.certified === true;
+      if ("extendedWarranty" in body) detail.extendedWarranty = body.extendedWarranty === true;
       return respond(route, detail);
     }
     return respond(route, e2eOpportunityDetail(row));

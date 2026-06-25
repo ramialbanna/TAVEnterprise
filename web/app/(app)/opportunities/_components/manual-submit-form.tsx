@@ -55,7 +55,6 @@ type FormState = {
   style: string;
   price: string;
   mileage: string;
-  sellerNotes: string;
   submitterNotes: string;
 };
 
@@ -70,7 +69,6 @@ const EMPTY_FORM: FormState = {
   style: "",
   price: "",
   mileage: "",
-  sellerNotes: "",
   submitterNotes: "",
 };
 
@@ -108,7 +106,6 @@ function buildRequest(form: FormState): ManualSubmissionRequest | null {
   const mileage = parseOptionalInt(form.mileage);
   if (mileage !== undefined) body.mileage = mileage;
 
-  if (form.sellerNotes.trim()) body.sellerNotes = form.sellerNotes.trim();
   if (form.submitterNotes.trim()) body.submitterNotes = form.submitterNotes.trim();
 
   return body;
@@ -652,17 +649,6 @@ export function ManualSubmitFormFields({
           placeholder="Why this one looks interesting, seller context, etc."
           value={form.submitterNotes}
           onChange={(e) => updateField("submitterNotes", e.target.value)}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={pid("sellerNotes")}>Seller notes (optional)</Label>
-        <textarea
-          id={pid("sellerNotes")}
-          className="min-h-16 w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
-          placeholder="Anything the seller mentioned in the post"
-          value={form.sellerNotes}
-          onChange={(e) => updateField("sellerNotes", e.target.value)}
         />
       </div>
         </>
