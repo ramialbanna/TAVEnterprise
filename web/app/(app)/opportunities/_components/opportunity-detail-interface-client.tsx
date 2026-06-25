@@ -12,19 +12,21 @@ export function OpportunityDetailInterfaceClient({
 }: {
   result: ApiResult<OpportunityDetail>;
 }) {
-  if (!result.ok) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          {result.kind === "unavailable" ? (
-            <UnavailableState code={result.error} title="Opportunity unavailable" />
-          ) : (
-            <ErrorState error={result} />
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return <OpportunityDetailClientNew initial={result.data} />;
+  return (
+    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+      {!result.ok ? (
+        <Card>
+          <CardContent className="pt-6">
+            {result.kind === "unavailable" ? (
+              <UnavailableState code={result.error} title="Opportunity unavailable" />
+            ) : (
+              <ErrorState error={result} />
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <OpportunityDetailClientNew initial={result.data} />
+      )}
+    </div>
+  );
 }
