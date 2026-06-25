@@ -1,0 +1,7 @@
+fix(opportunities): add fields_updated to action type enum, fix build
+
+Next.js build failed because the switch in describeOpportunityAction
+handled "fields_updated" but the zod enum OpportunityActionTypeSchema
+did not include it, making the case label a type error. The enum was
+missing this value even before (pre-existing bug from Phase 4). Also
+remove the now-unreachable default branch (switch is exhaustive).

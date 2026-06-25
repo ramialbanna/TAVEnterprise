@@ -424,6 +424,7 @@ export const OpportunityActionTypeSchema = z.enum([
   "evaluated",
   "status_changed",
   "note_added",
+  "fields_updated",
 ]);
 export type OpportunityActionType = z.infer<typeof OpportunityActionTypeSchema>;
 

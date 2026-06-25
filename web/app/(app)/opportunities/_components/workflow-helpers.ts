@@ -93,8 +93,6 @@ export function describeOpportunityAction(action: OpportunityAction): string {
       }
       return "Fields updated";
     }
-    default:
-      return action.action.replace(/_/g, " ");
   }
 }
 
