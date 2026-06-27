@@ -179,10 +179,8 @@ describe("OpportunityValuationBlock", () => {
     ).toBe(true);
   });
 
-  it("shows saved verdict and skips auto-run when maxbuySummary is present", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      ok({}),
-    );
+  it("auto-runs MMR on mount when saved verdict exists and shows MMR alongside saved Max buy", async () => {
+    const fetchSpy = mockFetchForVin();
     const detail = makeDetail({
       maxbuySummary: {
         recommendationId: "rec-1",
@@ -195,15 +193,55 @@ describe("OpportunityValuationBlock", () => {
     renderWithClient(<OpportunityValuationBlock opportunity={detail} />);
 
     expect(screen.getByText("Max buy (saved)")).toBeInTheDocument();
-    expect(screen.getByText("Buy")).toBeInTheDocument();
     expect(screen.getByText("$18,000")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /run fresh lookup/i })).toBeInTheDocument();
 
-    // Give the auto-run effect a chance to fire — it should not.
-    await new Promise((r) => setTimeout(r, 0));
+    await waitFor(() =>
+      expect(screen.getByText("Base MMR")).toBeInTheDocument(),
+    );
+
+    expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
     expect(
       fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/app/mmr/vin")),
+    ).toBe(true);
+    expect(
+      fetchSpy.mock.calls.some((c) =>
+        String(c[0]).includes("/api/app/maxbuy/evaluate"),
+      ),
     ).toBe(false);
+  });
+
+  it("runs fresh lookup for both MMR and Max buy when requested", async () => {
+    const fetchSpy = mockFetchForVin();
+    const detail = makeDetail({
+      maxbuySummary: {
+        recommendationId: "rec-1",
+        verdict: "BUY",
+        recommendedMaxBuy: 18000,
+        dataStrength: "medium",
+        evaluatedAt: "2026-06-01T10:00:00.000Z",
+      },
+    });
+    renderWithClient(<OpportunityValuationBlock opportunity={detail} />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Base MMR")).toBeInTheDocument(),
+    );
+
+    fetchSpy.mockClear();
+    screen.getByRole("button", { name: /run fresh lookup/i }).click();
+
+    await waitFor(() =>
+      expect(screen.getByText("Max buy evaluation")).toBeInTheDocument(),
+    );
+
+    expect(
+      fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/app/mmr/vin")),
+    ).toBe(true);
+    expect(
+      fetchSpy.mock.calls.some((c) =>
+        String(c[0]).includes("/api/app/maxbuy/evaluate"),
+      ),
+    ).toBe(true);
   });
 
   it("shows insufficient-identity note when VIN/YMM are missing and no saved verdict", () => {

@@ -328,14 +328,15 @@ export function OpportunityValuationBlock({
   );
 
   const runLookup = useCallback(
-    async (session: MmrLabLookupSession) => {
+    async (session: MmrLabLookupSession, opts?: { runMaxbuy?: boolean }) => {
+      const runMaxbuy = opts?.runMaxbuy ?? true;
       lookupSessionRef.current = session;
       setAdjustmentBaseline(null);
       setAdjustments(initialMmrAdjustments(opportunity));
       setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
       pendingMarginalChangesRef.current = [];
       setView({ kind: "loading" });
-      setMaxbuyView({ kind: "loading" });
+      setMaxbuyView(runMaxbuy ? { kind: "loading" } : { kind: "idle" });
 
       const mmrPromise =
         session.kind === "vin"
@@ -352,7 +353,7 @@ export function OpportunityValuationBlock({
         mmrRes = await mmrPromise;
       } catch {
         setView({ kind: "error", error: mmrTransportError() });
-        setMaxbuyView(MAXBUY_FETCH_FAILED);
+        setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
         return;
       }
 
@@ -362,11 +363,13 @@ export function OpportunityValuationBlock({
         } else {
           setView({ kind: "error", error: mmrRes });
         }
-        setMaxbuyView(MAXBUY_FETCH_FAILED);
+        setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
         return;
       }
 
       applyMmrResult(mmrRes.data, EMPTY_MMR_ADJUSTMENTS);
+
+      if (!runMaxbuy) return;
 
       // Enrich VIN session with Cox YMM before Max buy when Cox omitted identity.
       const maxbuySession =
@@ -393,16 +396,17 @@ export function OpportunityValuationBlock({
     [applyMmrResult, opportunity],
   );
 
-  // Auto-run on mount when no saved verdict and identity is sufficient (redesign §5).
+  // Auto-run MMR on mount when identity is sufficient. Skip live Max buy when a
+  // saved verdict exists — show SavedVerdictCard until the user runs fresh lookup
+  // or an adjustment triggers reEvaluateMaxbuy.
   useEffect(() => {
     if (hasAutoRunRef.current) return;
     hasAutoRunRef.current = true;
-    if (savedVerdict) return;
     if (!identitySufficientForAutoRun(opportunity)) return;
     const session = sessionFromOpportunity(opportunity);
     if (!session) return;
     const handle = setTimeout(() => {
-      void runLookup(session);
+      void runLookup(session, { runMaxbuy: !savedVerdict });
     }, 0);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,7 +445,7 @@ export function OpportunityValuationBlock({
 
   const handleRunFresh = useCallback(() => {
     const session = sessionFromOpportunity(opportunity);
-    if (session) void runLookup(session);
+    if (session) void runLookup(session, { runMaxbuy: true });
   }, [opportunity, runLookup]);
 
   const handleMaxbuyRetry = useCallback(() => {
@@ -486,16 +490,21 @@ export function OpportunityValuationBlock({
   const session = sessionFromOpportunity(opportunity);
   const canRunFresh = session !== null;
 
+  const showMmrSurface =
+    view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading";
+  const showLiveMaxbuy = maxbuyView.kind !== "idle";
+
   return (
     <div className="space-y-3">
-      {savedVerdict && view.kind === "empty" ? (
-        <div className="space-y-3">
-          <SavedVerdictCard summary={savedVerdict} onRunFresh={handleRunFresh} />
-          {canRunFresh ? null : <InsufficientIdentityNote />}
-        </div>
+      {savedVerdict ? (
+        <SavedVerdictCard summary={savedVerdict} onRunFresh={handleRunFresh} />
       ) : null}
 
       {!savedVerdict && view.kind === "empty" && !canRunFresh ? (
+        <InsufficientIdentityNote />
+      ) : null}
+
+      {savedVerdict && view.kind === "empty" && !canRunFresh ? (
         <InsufficientIdentityNote />
       ) : null}
 
@@ -505,7 +514,7 @@ export function OpportunityValuationBlock({
 
       {view.kind === "loading" ? <ValuationLoadingSkeleton /> : null}
 
-      {view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading" ? (
+      {showMmrSurface ? (
         <>
           <div id="opportunity-mmr-result-band">
             <ResultBand
@@ -533,17 +542,13 @@ export function OpportunityValuationBlock({
               retailRangeHigh={result?.retailRangeHigh ?? null}
             />
           </div>
-          <MaxbuyEvaluationSection
-            state={maxbuyView}
-            onRetry={handleMaxbuyRetry}
-          />
+          {showLiveMaxbuy ? (
+            <MaxbuyEvaluationSection
+              state={maxbuyView}
+              onRetry={handleMaxbuyRetry}
+            />
+          ) : null}
         </>
-      ) : null}
-
-      {view.kind === "empty" && savedVerdict && canRunFresh ? (
-        // When a saved verdict is showing but user hasn't run fresh, still
-        // surface the run-fresh affordance via the saved card (above).
-        null
       ) : null}
     </div>
   );

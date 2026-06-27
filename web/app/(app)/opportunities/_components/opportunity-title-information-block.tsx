@@ -5,10 +5,19 @@ import { AlertCircle } from "lucide-react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
+import {
+  isKnownUsStateCode,
+  normalizeStoredUsState,
+  US_STATES,
+} from "@/lib/us-states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+const selectClass =
+  "h-9 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 /**
  * Title Information block — right side of the Salesperson/Appraisal row.
@@ -34,7 +43,7 @@ export function OpportunityTitleInformationBlock({
   const initial = useMemo(
     () => ({
       titleOwner: opportunity.titleOwner ?? "",
-      titleStateRegion: opportunity.titleStateRegion ?? "",
+      titleStateRegion: normalizeStoredUsState(opportunity.titleStateRegion),
       lienHolder: opportunity.lienHolder ?? "",
       lienAccountNumber: opportunity.lienAccountNumber ?? "",
       lienPayoff:
@@ -42,7 +51,7 @@ export function OpportunityTitleInformationBlock({
           ? String(opportunity.lienPayoff)
           : "",
       tagOrPlate: opportunity.tagOrPlate ?? "",
-      tagStateRegion: opportunity.tagStateRegion ?? "",
+      tagStateRegion: normalizeStoredUsState(opportunity.tagStateRegion),
       tagExpiration: opportunity.tagExpiration ?? "",
       certified: opportunity.certified ?? false,
       extendedWarranty: opportunity.extendedWarranty ?? false,
@@ -91,9 +100,10 @@ export function OpportunityTitleInformationBlock({
   function field(
     key: keyof typeof values,
     label: string,
-    opts?: { type?: string; numeric?: boolean },
+    opts?: { type?: string; numeric?: boolean; disabled?: boolean },
   ) {
     const id = `title-${key}`;
+    const disabled = opts?.disabled || !canMutate || pending;
     return (
       <div className="space-y-1">
         <Label htmlFor={id} className="text-xs text-muted-foreground">
@@ -103,11 +113,86 @@ export function OpportunityTitleInformationBlock({
           id={id}
           value={String(values[key])}
           onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
-          disabled={!canMutate || pending}
+          disabled={disabled}
           type={opts?.type}
           inputMode={opts?.numeric ? "decimal" : undefined}
           className="h-9"
         />
+      </div>
+    );
+  }
+
+  function pairedCheckboxField({
+    checkboxKey,
+    checkboxLabel,
+    fieldKey,
+    fieldLabel,
+    numeric,
+  }: {
+    checkboxKey: "certified" | "extendedWarranty";
+    checkboxLabel: string;
+    fieldKey: "titleOwner" | "lienPayoff";
+    fieldLabel: string;
+    numeric?: boolean;
+  }) {
+    const checkboxId = `title-${checkboxKey}`;
+    const enabled = values[checkboxKey];
+
+    return (
+      <div className="flex items-end gap-3">
+        <div className="shrink-0 pb-2">
+          <label htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              id={checkboxId}
+              checked={values[checkboxKey]}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setValues((v) => ({
+                  ...v,
+                  [checkboxKey]: checked,
+                  [fieldKey]: checked ? v[fieldKey] : "",
+                }));
+              }}
+              disabled={!canMutate || pending}
+            />
+            <span>{checkboxLabel}</span>
+          </label>
+        </div>
+        <div className="min-w-0 flex-1">
+          {field(fieldKey, fieldLabel, { numeric, disabled: !enabled })}
+        </div>
+      </div>
+    );
+  }
+
+  function stateField(key: "titleStateRegion" | "tagStateRegion", label: string) {
+    const id = `title-${key}`;
+    const current = values[key];
+    const legacyValue =
+      current && !isKnownUsStateCode(current) ? current : null;
+
+    return (
+      <div className="space-y-1">
+        <Label htmlFor={id} className="text-xs text-muted-foreground">
+          {label}
+        </Label>
+        <select
+          id={id}
+          className={selectClass}
+          value={current}
+          onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+          disabled={!canMutate || pending}
+        >
+          <option value="">Select state</option>
+          {legacyValue ? (
+            <option value={legacyValue}>{legacyValue} (update selection)</option>
+          ) : null}
+          {US_STATES.map((state) => (
+            <option key={state.code} value={state.code}>
+              {state.name}
+            </option>
+          ))}
+        </select>
       </div>
     );
   }
@@ -121,40 +206,25 @@ export function OpportunityTitleInformationBlock({
         </div>
       ) : null}
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        {field("titleOwner", "Owner")}
-        {field("titleStateRegion", "State/Region")}
+        {pairedCheckboxField({
+          checkboxKey: "certified",
+          checkboxLabel: "Certified",
+          fieldKey: "titleOwner",
+          fieldLabel: "Owner",
+        })}
+        {stateField("titleStateRegion", "State/Region")}
         {field("lienHolder", "Lien Holder")}
         {field("lienAccountNumber", "Lien Account #")}
-        {field("lienPayoff", "Lien Payoff", { numeric: true })}
+        {pairedCheckboxField({
+          checkboxKey: "extendedWarranty",
+          checkboxLabel: "Extended Warranty",
+          fieldKey: "lienPayoff",
+          fieldLabel: "Lien Payoff",
+          numeric: true,
+        })}
         {field("tagOrPlate", "Tag or Plate")}
-        {field("tagStateRegion", "Tag State/Region")}
+        {stateField("tagStateRegion", "Tag State/Region")}
         {field("tagExpiration", "Tag Expiration", { type: "date" })}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-6 pt-1">
-        <label htmlFor="title-certified" className="flex items-center gap-2 text-sm">
-          <Checkbox
-            id="title-certified"
-            checked={values.certified}
-            onChange={(e) => setValues((v) => ({ ...v, certified: e.target.checked }))}
-            disabled={!canMutate || pending}
-          />
-          <span>Certified</span>
-        </label>
-        <label
-          htmlFor="title-extended-warranty"
-          className="flex items-center gap-2 text-sm"
-        >
-          <Checkbox
-            id="title-extended-warranty"
-            checked={values.extendedWarranty}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, extendedWarranty: e.target.checked }))
-            }
-            disabled={!canMutate || pending}
-          />
-          <span>Extended Warranty</span>
-        </label>
       </div>
 
       {canMutate ? (

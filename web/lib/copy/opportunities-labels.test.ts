@@ -5,6 +5,8 @@ import {
   formatOpportunityStatus,
   formatOpportunityType,
   formatRegion,
+  formatSource,
+  formatVehicleLocation,
 } from "./opportunities-labels";
 
 describe("formatRegion", () => {
@@ -52,5 +54,32 @@ describe("formatOpportunityType", () => {
 
   it("includes capitalized grade for leads", () => {
     expect(formatOpportunityType("lead", "excellent")).toBe("Lead · Excellent");
+  });
+});
+
+describe("formatSource", () => {
+  it("maps known listing sources", () => {
+    expect(formatSource("facebook")).toBe("Facebook");
+    expect(formatSource("cars_com")).toBe("Cars.com");
+  });
+
+  it("returns em dash for empty", () => {
+    expect(formatSource(null)).toBe("—");
+  });
+});
+
+describe("formatVehicleLocation", () => {
+  it("prefers contact address over region", () => {
+    expect(
+      formatVehicleLocation({
+        region: "dallas_tx",
+        contactAddress: "123 Main St",
+        contactPostalCode: "75201",
+      }),
+    ).toBe("123 Main St, 75201");
+  });
+
+  it("falls back to region when no address", () => {
+    expect(formatVehicleLocation({ region: "houston_tx" })).toBe("Houston");
   });
 });

@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
-import { formatRegion } from "@/lib/copy/opportunities-labels";
+import {
+  formatRegion,
+  formatSource,
+  formatVehicleLocation,
+} from "@/lib/copy/opportunities-labels";
 import { AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -98,6 +102,23 @@ export function OpportunityVehicleBlock({
     );
   }
 
+  function readOnlyField(id: string, label: string, value: string) {
+    return (
+      <div className="space-y-1">
+        <Label id={`${id}-label`} className="text-xs text-muted-foreground">
+          {label}
+        </Label>
+        <div
+          id={id}
+          aria-labelledby={`${id}-label`}
+          className="flex h-9 items-center text-sm text-muted-foreground"
+        >
+          {value}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -122,6 +143,18 @@ export function OpportunityVehicleBlock({
           <div className="flex h-9 items-center text-sm text-muted-foreground">
             {formatRegion(opportunity.region)}
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-foreground">Additional Information</h3>
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          {readOnlyField(
+            "vehicle-location",
+            "Location",
+            formatVehicleLocation(opportunity),
+          )}
+          {readOnlyField("vehicle-source", "Source", formatSource(opportunity.source))}
         </div>
       </div>
 

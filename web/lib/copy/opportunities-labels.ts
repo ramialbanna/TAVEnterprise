@@ -10,6 +10,15 @@ export const REGION_LABELS: Record<string, string> = {
   oklahoma_city_ok: "Oklahoma City",
 };
 
+/** Human-readable listing source names (facebook, craigslist, etc.). */
+export const SOURCE_LABELS: Record<string, string> = {
+  facebook: "Facebook",
+  craigslist: "Craigslist",
+  autotrader: "Autotrader",
+  cars_com: "Cars.com",
+  offerup: "OfferUp",
+};
+
 export const OPPORTUNITY_TYPE_LABELS = {
   lead: "Lead",
   near_miss: "Almost a deal",
@@ -94,6 +103,25 @@ export const PAGE_COPY = {
 export function formatRegion(region: string | null | undefined): string {
   if (!region) return "—";
   return REGION_LABELS[region] ?? region.replace(/_/g, " ");
+}
+
+export function formatSource(source: string | null | undefined): string {
+  if (!source) return "—";
+  return SOURCE_LABELS[source] ?? source.replace(/_/g, " ");
+}
+
+/** Vehicle/deal location for the detail page — contact address when present, else region. */
+export function formatVehicleLocation(opportunity: {
+  region?: string | null;
+  contactAddress?: string | null;
+  contactPostalCode?: string | null;
+}): string {
+  const address = opportunity.contactAddress?.trim();
+  if (address) {
+    const postal = opportunity.contactPostalCode?.trim();
+    return postal ? `${address}, ${postal}` : address;
+  }
+  return formatRegion(opportunity.region);
 }
 
 export function formatOpportunityStatus(status: string | null | undefined): string {

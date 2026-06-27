@@ -123,6 +123,40 @@ describe("OpportunityVehicleBlock", () => {
     render(<OpportunityVehicleBlock {...props({ canMutate: false })} />);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
   });
+
+  it("renders Additional Information with location and source", () => {
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          opportunity: makeDetail({
+            region: "dallas_tx",
+            source: "facebook",
+            contactAddress: null,
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Additional Information" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Location")).toHaveTextContent("Dallas");
+    expect(screen.getByLabelText("Source")).toHaveTextContent("Facebook");
+  });
+
+  it("prefers contact address for location when available", () => {
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          opportunity: makeDetail({
+            region: "dallas_tx",
+            contactAddress: "123 Main St",
+            contactPostalCode: "75201",
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByLabelText("Location")).toHaveTextContent("123 Main St, 75201");
+  });
 });
 
 describe("OpportunityListingBlock", () => {

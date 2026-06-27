@@ -77,12 +77,13 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **10** | Cleared-field highlight animation | Low | [x] |
 | **24** | Opportunity detail — reorder blocks (Workflow ↓, Salesperson/Appraisal ↑) | High | [x] |
 | **25** | Opportunity detail — remove Listing block | High | [x] |
-| **26** | Opportunity detail — Vehicle “Additional Information” (Location, Source) | Medium | [ ] |
-| **27** | Opportunity detail — Valuation block: full MMR Lab (not Max buy only) | High | [ ] |
-| **28** | Opportunity detail — Title Information checkbox ↔ field pairing | Medium | [ ] |
-| **29** | Opportunity detail — Title block US state dropdowns | Medium | [ ] |
+| **26** | Opportunity detail — Vehicle “Additional Information” (Location, Source) | Medium | [x] |
+| **27** | Opportunity detail — Valuation block: full MMR Lab (not Max buy only) | High | [x] |
+| **28** | Opportunity detail — Title Information checkbox ↔ field pairing | Medium | [x] |
+| **29** | Opportunity detail — Title block US state dropdowns | Medium | [x] |
 | **30** | Opportunity detail — Workflow stepper: Landed → **Appraised** | High | [x] |
 | **31** | Opportunity detail — Vehicle block: vAuto-style dropdown fields | High | [ ] |
+| **32** | Opportunity detail — auto-save on blur (no per-block Save buttons) | High | [ ] |
 
 ---
 
@@ -92,6 +93,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 **Status:** Requirements captured 2026-06-27 — **do not implement until explicitly requested.**
 
 First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in the hero; only collapsible block order and block contents change below.
+
+**Save UX (product direction — see item 32):** Do **not** keep explicit **Save / Reset** on every editable block long term. When a closer edits fields and **focuses out of the block** (clicks or tabs elsewhere on the page), that block should **auto-save** if dirty. Replaces the block-level Save pattern from the original redesign doc.
 
 ### Target block order (top → bottom)
 
@@ -162,9 +165,9 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] Subblock visible inside Vehicle collapsible panel
-- [ ] Location + Source displayed with consistent labels
-- [ ] Save persists if editable; read-only fields clearly styled if not PATCH-backed
+- [x] Subblock visible inside Vehicle collapsible panel
+- [x] Location + Source displayed with consistent labels
+- [x] Save persists if editable; read-only fields clearly styled if not PATCH-backed
 
 ---
 
@@ -189,10 +192,10 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] MMR adjustments + result band visible on detail page when lookup succeeds (not only after manual “Run fresh lookup”)
-- [ ] Saved Max buy verdict still shown when present, alongside MMR (not instead of it)
-- [ ] Auto-run MMR + Max buy on load when identity sufficient and no saved verdict
-- [ ] Existing valuation block tests updated/extended
+- [x] MMR adjustments + result band visible on detail page when lookup succeeds (not only after manual “Run fresh lookup”)
+- [x] Saved Max buy verdict still shown when present, alongside MMR (not instead of it)
+- [x] Auto-run MMR + Max buy on load when identity sufficient and no saved verdict
+- [x] Existing valuation block tests updated/extended
 
 ---
 
@@ -216,10 +219,10 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] Certified + Owner share one row; Extended Warranty + Lien Payoff share one row
-- [ ] Linked textbox disabled when its checkbox is unchecked
-- [ ] PATCH payload unchanged semantically (`certified`, `titleOwner`, `extendedWarranty`, `lienPayoff`)
-- [ ] Save/Reset/dirty state still correct
+- [x] Certified + Owner share one row; Extended Warranty + Lien Payoff share one row
+- [x] Linked textbox disabled when its checkbox is unchecked
+- [x] PATCH payload unchanged semantically (`certified`, `titleOwner`, `extendedWarranty`, `lienPayoff`)
+- [x] Save/Reset/dirty state still correct
 
 ---
 
@@ -244,10 +247,10 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] Both fields render as dropdowns, not text inputs
-- [ ] All US states available in each list
-- [ ] Save persists selected value via PATCH
-- [ ] Invalid legacy free-text values still display sensibly (fallback or prompt re-select)
+- [x] Both fields render as dropdowns, not text inputs
+- [x] All US states available in each list
+- [x] Save persists selected value via PATCH
+- [x] Invalid legacy free-text values still display sensibly (fallback or prompt re-select)
 
 ---
 
@@ -332,6 +335,61 @@ Found → Working → Contacted → Appraised
 - [ ] Body Type / Engine / Transmission / Color dropdowns populated (source documented in PR)
 - [ ] Save/Reset/PATCH unchanged semantically
 - [ ] Tests updated for dropdown interaction + catalog mocks
+
+---
+
+## 32 — Auto-save on blur (remove per-block Save buttons)
+
+**Goal:** Stop requiring a **Save** click on every editable block. When the user edits a block and **leaves that block** (focus moves to another part of the page — another block, hero, nav, etc.), **persist automatically** if there are unsaved changes.
+
+**Product intent (2026-06-27):** Closers should work fluidly across the appraisal workspace; saving should feel invisible, like vAuto-style forms that commit when you move on.
+
+**Applies to editable blocks on `/opportunities/[id]`:**
+
+- Hero — Contact Information  
+- Salesperson / Appraisal Information  
+- Vehicle (+ future Additional Information subblock)  
+- Title Information  
+- Notes — **exception TBD:** may keep explicit “Save note” or also blur-save; confirm at implementation  
+
+**Does not apply:**
+
+- Read-only blocks (Workflow metadata, History, Valuation MMR adjustments — those have their own recompute/save rules)  
+- Hero workflow action buttons (claim, mark contacted, etc.)
+
+**Behavior:**
+
+1. User edits fields inside a block → block is **dirty**.  
+2. User clicks/tabs **outside** that block’s container (blur / focus-out of the block root) → if dirty and `canMutate`, **PATCH** once (debounce ~300ms optional to avoid double-fire).  
+3. Remove **Save** and **Reset** buttons from blocks once blur-save is wired (or hide Save and keep Reset only if product wants revert — confirm).  
+4. **Valuation-affecting** vehicle/contact fields: same PATCH as today; parent still `router.refresh()` + MMR/Max buy re-run after successful save.  
+5. **Errors:** inline banner in the block; do not lose edits on failure.  
+6. **Pending:** disable duplicate saves while PATCH in flight.  
+7. **Navigate away** with dirty block: optional `beforeunload` / unsaved warning — align with original redesign §3 “warn on navigate away”.
+
+**Implementation sketch:**
+
+- Wrap each editable block in a container with `onBlur` using `relatedTarget` / `contains()` check so focus moving **within** the same block does not save.  
+- Or shared hook `useBlockAutoSave({ blockRef, isDirty, onSave })` used by Contact, Vehicle, Salesperson, Title blocks.  
+- Centralize PATCH in `OpportunityDetailClientNew` (already has `patchMutation`).
+
+**Supersedes:** Block-level Save in [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md) §3 Vehicle / §6 notes — update that doc when this ships.
+
+**Primary files:**
+
+- `opportunity-detail-client-new.tsx`  
+- `opportunity-contact-info-block.tsx`  
+- `opportunity-vehicle-block.tsx`  
+- `opportunity-salesperson-appraisal-block.tsx`  
+- `opportunity-title-information-block.tsx`  
+
+**Exit criteria:**
+
+- [ ] No Save button on Contact, Vehicle, Salesperson/Appraisal, Title blocks (unless product keeps Reset)  
+- [ ] Editing then clicking outside the block persists via PATCH without manual Save  
+- [ ] Focus moving between fields **inside** the same block does not trigger save  
+- [ ] Valuation refresh still runs after vehicle identity saves  
+- [ ] E2E updated: blur-to-save instead of Save button click  
 
 ---
 
