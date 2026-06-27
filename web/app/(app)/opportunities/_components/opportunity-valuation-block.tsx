@@ -133,6 +133,29 @@ function identitySufficientForAutoRun(opportunity: OpportunityDetail): boolean {
   );
 }
 
+function shouldAutoRunLookup(opportunity: OpportunityDetail): boolean {
+  const session = sessionFromOpportunity(opportunity);
+  return !!session && identitySufficientForAutoRun(opportunity);
+}
+
+async function fetchMmrForSession(
+  session: MmrLabLookupSession,
+): Promise<ApiResult<MmrVinOk>> {
+  try {
+    if (session.kind === "vin") {
+      return await postMmrVin({ vin: session.vin });
+    }
+    return await postMmrYmm({
+      year: Number(session.selection.year),
+      make: session.selection.make,
+      model: session.selection.model,
+      style: session.selection.style,
+    });
+  } catch {
+    return mmrTransportError();
+  }
+}
+
 function initialMmrAdjustments(opportunity: OpportunityDetail): MmrAdjustments {
   return {
     ...EMPTY_MMR_ADJUSTMENTS,
@@ -243,15 +266,17 @@ export function OpportunityValuationBlock({
   opportunity: OpportunityDetail;
 }) {
   const savedVerdict = opportunity.maxbuySummary ?? null;
-  const [view, setView] = useState<MmrView>({ kind: "empty" });
-  const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>({
-    kind: "idle",
-  });
+  const autoRunOnMount = shouldAutoRunLookup(opportunity);
+  const [view, setView] = useState<MmrView>(() =>
+    autoRunOnMount ? { kind: "loading" } : { kind: "empty" },
+  );
+  const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>(() =>
+    autoRunOnMount && !savedVerdict ? { kind: "loading" } : { kind: "idle" },
+  );
   const [adjustments, setAdjustments] = useState<MmrAdjustments>(() =>
     initialMmrAdjustments(opportunity),
   );
   const [mmrRecomputing, setMmrRecomputing] = useState(false);
-  const autoRunForIdRef = useRef<string | null>(null);
 
   const [adjustmentBaseline, setAdjustmentBaseline] =
     useState<MmrAdjustmentBaseline | null>(null);
@@ -338,24 +363,7 @@ export function OpportunityValuationBlock({
       setView({ kind: "loading" });
       setMaxbuyView(runMaxbuy ? { kind: "loading" } : { kind: "idle" });
 
-      const mmrPromise =
-        session.kind === "vin"
-          ? postMmrVin({ vin: session.vin })
-          : postMmrYmm({
-              year: Number(session.selection.year),
-              make: session.selection.make,
-              model: session.selection.model,
-              style: session.selection.style,
-            });
-
-      let mmrRes: ApiResult<MmrVinOk>;
-      try {
-        mmrRes = await mmrPromise;
-      } catch {
-        setView({ kind: "error", error: mmrTransportError() });
-        setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
-        return;
-      }
+      const mmrRes = await fetchMmrForSession(session);
 
       if (!mmrRes.ok) {
         if (mmrRes.kind === "unavailable") {
@@ -396,15 +404,63 @@ export function OpportunityValuationBlock({
     [applyMmrResult, opportunity],
   );
 
-  // Auto-run MMR when identity supports a lookup. Skip live Max buy when a saved
-  // verdict exists — SavedVerdictCard covers Max buy until fresh lookup/adjustment.
+  // Auto-run MMR when identity supports a lookup. Initial view is already
+  // "loading" from useState — this effect only performs async fetch + setState
+  // in await callbacks (react-hooks/set-state-in-effect compliant).
   useEffect(() => {
-    if (autoRunForIdRef.current === opportunity.id) return;
+    if (!autoRunOnMount) return;
     const session = sessionFromOpportunity(opportunity);
-    if (!session || !identitySufficientForAutoRun(opportunity)) return;
-    autoRunForIdRef.current = opportunity.id;
-    void runLookup(session, { runMaxbuy: !savedVerdict });
-  }, [opportunity, opportunity.id, runLookup, savedVerdict]);
+    if (!session) return;
+
+    lookupSessionRef.current = session;
+    const runMaxbuy = !savedVerdict;
+    let cancelled = false;
+
+    void (async () => {
+      const mmrRes = await fetchMmrForSession(session);
+      if (cancelled) return;
+
+      if (!mmrRes.ok) {
+        if (mmrRes.kind === "unavailable") {
+          setView({ kind: "unavailable", reason: mmrRes.error });
+        } else {
+          setView({ kind: "error", error: mmrRes });
+        }
+        setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
+        return;
+      }
+
+      applyMmrResult(mmrRes.data, EMPTY_MMR_ADJUSTMENTS);
+      if (!runMaxbuy) return;
+
+      const maxbuySession =
+        session.kind === "vin"
+          ? mmrVinSessionFromResult(session.vin, mmrRes.data)
+          : session;
+      lookupSessionRef.current = maxbuySession;
+
+      const built = buildMmrLabMaxbuyRequest(
+        maxbuySession,
+        laneAskPriceRef.current,
+      );
+      if ("error" in built) {
+        setMaxbuyView({ kind: "error", message: built.error });
+        return;
+      }
+      try {
+        const maxbuyRes = await postMaxbuyEvaluate(built.body);
+        if (!cancelled) {
+          setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
+        }
+      } catch {
+        if (!cancelled) setMaxbuyView(MAXBUY_FETCH_FAILED);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyMmrResult, autoRunOnMount, opportunity, savedVerdict]);
 
   const handleAdjustmentsChange = useCallback(
     (next: MmrAdjustments) => {
