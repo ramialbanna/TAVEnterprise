@@ -30,7 +30,6 @@ import { OpportunityDetailHero } from "./opportunity-detail-hero";
 import { OpportunityWorkflowStepper } from "./opportunity-workflow-stepper";
 import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
-import { OpportunityListingBlock } from "./opportunity-listing-block";
 import { OpportunityValuationBlock } from "./opportunity-valuation-block";
 import { OpportunitySalespersonAppraisalBlock } from "./opportunity-salesperson-appraisal-block";
 import { OpportunityTitleInformationBlock } from "./opportunity-title-information-block";
@@ -238,6 +237,51 @@ export function OpportunityDetailClientNew({
         patchError={patchError}
       />
 
+      <CollapsibleBlock
+        title="Salesperson / Appraisal Information"
+        description="Salesperson and appraiser"
+      >
+        <OpportunitySalespersonAppraisalBlock
+          opportunity={initial}
+          onSave={(patch) => patchMutation.mutate(patch)}
+          pending={patchMutation.isPending}
+          canMutate={canMutate}
+          error={patchError}
+        />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Vehicle" description="Identity fields">
+        <OpportunityVehicleBlock
+          opportunity={initial}
+          onSave={(patch) => patchMutation.mutate(patch)}
+          pending={patchMutation.isPending}
+          canMutate={canMutate}
+          error={patchError}
+        />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Valuation" description="MMR Lab + Max buy">
+        <OpportunityValuationBlock opportunity={initial} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
+        <OpportunityTitleInformationBlock
+          opportunity={initial}
+          onSave={(patch) => patchMutation.mutate(patch)}
+          pending={patchMutation.isPending}
+          canMutate={canMutate}
+          error={patchError}
+        />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock title="Notes" description="Closer-added context">
+        <OpportunityNotesBlock
+          opportunityId={initial.id}
+          actions={initial.actions}
+          canMutate={canMutate}
+        />
+      </CollapsibleBlock>
+
       <CollapsibleBlock title="Workflow" description="Stepper, assignment, claim">
         <div className="space-y-4">
           <OpportunityWorkflowStepper opportunity={initial} />
@@ -252,60 +296,6 @@ export function OpportunityDetailClientNew({
             assignPending={assignMutation.isPending}
           />
         </div>
-      </CollapsibleBlock>
-
-      <CollapsibleBlock title="Vehicle" description="Identity fields">
-        <OpportunityVehicleBlock
-          opportunity={initial}
-          onSave={(patch) => patchMutation.mutate(patch)}
-          pending={patchMutation.isPending}
-          canMutate={canMutate}
-          error={patchError}
-        />
-      </CollapsibleBlock>
-
-      <CollapsibleBlock title="Listing" description="Intake and provenance">
-        <OpportunityListingBlock opportunity={initial} />
-      </CollapsibleBlock>
-
-      <CollapsibleBlock title="Valuation" description="MMR Lab + Max buy">
-        <OpportunityValuationBlock opportunity={initial} />
-      </CollapsibleBlock>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <CollapsibleBlock
-          title="Salesperson / Appraisal Information"
-          description="Salesperson and appraiser"
-        >
-          <OpportunitySalespersonAppraisalBlock
-            opportunity={initial}
-            onSave={(patch) => patchMutation.mutate(patch)}
-            pending={patchMutation.isPending}
-            canMutate={canMutate}
-            error={patchError}
-          />
-        </CollapsibleBlock>
-
-        <CollapsibleBlock
-          title="Title Information"
-          description="Title, lien, and tag details"
-        >
-          <OpportunityTitleInformationBlock
-            opportunity={initial}
-            onSave={(patch) => patchMutation.mutate(patch)}
-            pending={patchMutation.isPending}
-            canMutate={canMutate}
-            error={patchError}
-          />
-        </CollapsibleBlock>
-      </div>
-
-      <CollapsibleBlock title="Notes" description="Closer-added context">
-        <OpportunityNotesBlock
-          opportunityId={initial.id}
-          actions={initial.actions}
-          canMutate={canMutate}
-        />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="History" description="Full audit trail" defaultOpen={false}>

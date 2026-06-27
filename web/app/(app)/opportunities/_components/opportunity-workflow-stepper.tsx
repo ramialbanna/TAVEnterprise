@@ -10,8 +10,8 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Single buyer-facing workflow strip per opportunity-detail-redesign.md §2.
- * Found → Working → Contacted → Landed. Passed is a secondary action, not a
+ * Single buyer-facing workflow strip for the appraisal workspace.
+ * Found → Working → Contacted → Appraised. Passed is a secondary action, not a
  * step; when status is `passed` the stepper stays at the last reached step
  * (TBD behavior per doc — no spec change yet).
  */
@@ -19,7 +19,7 @@ const DETAIL_WORKFLOW_STEPS = [
   { id: "found", label: "Found" },
   { id: "working", label: "Working" },
   { id: "contacted", label: "Contacted" },
-  { id: "landed", label: "Landed" },
+  { id: "appraised", label: "Appraised" },
 ] as const;
 
 type DetailStepId = (typeof DETAIL_WORKFLOW_STEPS)[number]["id"];
@@ -29,15 +29,15 @@ function mapToDetailStep(step: WorkflowStepId): DetailStepId {
   if (step === "working") return "working";
   if (step === "contacted") return "contacted";
   // `outcome` covers purchased / bought / passed. Only purchased/bought map to
-  // Landed; passed stays at Contacted until stepper-after-pass is specced.
-  return "landed";
+  // Appraised; passed stays at Contacted until stepper-after-pass is specced.
+  return "appraised";
 }
 
 function detailStepIndex(step: DetailStepId): number {
   return DETAIL_WORKFLOW_STEPS.findIndex((s) => s.id === step);
 }
 
-/** Resolve the detail step, treating `passed` as Contacted (not Landed). */
+/** Resolve the detail step, treating `passed` as Contacted (not Appraised). */
 function resolveDetailStep(opportunity: WorkflowStepInput): DetailStepId {
   const status = opportunity.status ?? "new";
   if (status === "passed") return "contacted";

@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-20 (Odometer cache bucket fix deployed; no-rounding rule added) · **Focus:** `/mmr-lab` buyer experience
+**Last updated:** 2026-06-27 · **Focus:** `/mmr-lab` buyer experience · **Also:** Opportunity detail page tweaks (pending explicit go-ahead)
 
 > **Fresh chat prompt:**
 > Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
@@ -75,6 +75,263 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **8** | Mileage â†” Adjustments odometer sync | Low | [x] |
 | **9** | Keyboard tab flow through disabled dropdowns | Low | [x] |
 | **10** | Cleared-field highlight animation | Low | [x] |
+| **24** | Opportunity detail — reorder blocks (Workflow ↓, Salesperson/Appraisal ↑) | High | [x] |
+| **25** | Opportunity detail — remove Listing block | High | [x] |
+| **26** | Opportunity detail — Vehicle “Additional Information” (Location, Source) | Medium | [ ] |
+| **27** | Opportunity detail — Valuation block: full MMR Lab (not Max buy only) | High | [ ] |
+| **28** | Opportunity detail — Title Information checkbox ↔ field pairing | Medium | [ ] |
+| **29** | Opportunity detail — Title block US state dropdowns | Medium | [ ] |
+| **30** | Opportunity detail — Workflow stepper: Landed → **Appraised** | High | [x] |
+| **31** | Opportunity detail — Vehicle block: vAuto-style dropdown fields | High | [ ] |
+
+---
+
+## Opportunity detail page — layout & valuation tweaks
+
+**Route:** `/opportunities/[id]` · **Spec:** [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md)  
+**Status:** Requirements captured 2026-06-27 — **do not implement until explicitly requested.**
+
+First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in the hero; only collapsible block order and block contents change below.
+
+### Target block order (top → bottom)
+
+| # | Block | Change |
+|---|--------|--------|
+| 1 | Hero | unchanged |
+| 2 | **Salesperson / Appraisal Information** | **move up** — replaces Workflow’s current slot (position 2) |
+| 3 | Vehicle | add subblock (see **26**) |
+| 4 | ~~Listing~~ | **remove** (see **25**) |
+| 5 | Valuation | full MMR Lab + Max buy (see **27**) |
+| 6 | Title Information | checkbox pairing (see **28**); full width after Valuation (no longer paired with Salesperson in 2-col grid) |
+| 7 | Notes | unchanged |
+| 8 | **Workflow** | **move down** — immediately **before** History |
+| 9 | History | unchanged (collapsed by default) |
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx`
+
+---
+
+## 24 — Reorder Workflow and Salesperson / Appraisal blocks
+
+**Goal:** Deprioritize workflow metadata on the page; elevate salesperson/appraisal fields for day-to-day closer work.
+
+**Changes:**
+
+- Move the **Workflow** collapsible block (stepper + `OpportunityWorkflowBlock`) from position 2 to **just above History**.
+- Move **Salesperson / Appraisal Information** from the lower 2-column grid into **position 2** (where Workflow is today).
+- **Title Information** stays as its own block; after this reorder it likely sits full-width between Valuation and Notes (confirm at implementation).
+
+**Exit criteria:**
+
+- [ ] Block order matches table above
+- [ ] Hero primary/secondary workflow actions unchanged
+- [ ] Workflow stepper + assignment/claim UI still works after move
+- [ ] No duplicate workflow UI introduced
+
+---
+
+## 25 — Remove Listing block
+
+**Goal:** Drop the Listing collapsible block entirely — provenance/intake fields duplicated elsewhere (hero one-liner, provenance line, Vehicle region) and the block adds clutter without buyer value.
+
+**Changes:**
+
+- Remove `<CollapsibleBlock title="Listing">` and `OpportunityListingBlock` from the detail page.
+- Optionally delete or retain `opportunity-listing-block.tsx` for reuse elsewhere (implementer’s call); page must not render it.
+
+**Exit criteria:**
+
+- [ ] Listing block not visible on `/opportunities/[id]`
+- [ ] Hero still shows listing URL, source, provenance as today
+- [ ] Update E2E/UAT if they assert Listing block presence
+
+---
+
+## 26 — Vehicle block: “Additional Information” subblock
+
+**Goal:** Add a labeled sub-section inside the Vehicle block with two fields buyers expect near identity, without duplicating the removed Listing block.
+
+**Fields (2-column grid inside subblock):**
+
+| Field | Notes |
+|-------|--------|
+| **Location** | Human-readable location for the vehicle/deal (source TBD: new PATCH field vs map from `region` / contact address — confirm data model at implementation) |
+| **Source** | Listing source (facebook, craigslist, etc.); likely read-only from `opportunity.source` with label formatting, or editable if product wants parity with manual submit |
+
+**UI:** Subheading **“Additional Information”** below the main vehicle identity grid (VIN, odometer, YMM, etc.), same Save/Reset behavior as the parent block (or inherit parent save — implementer choice; prefer single block-level Save).
+
+**Exit criteria:**
+
+- [ ] Subblock visible inside Vehicle collapsible panel
+- [ ] Location + Source displayed with consistent labels
+- [ ] Save persists if editable; read-only fields clearly styled if not PATCH-backed
+
+---
+
+## 27 — Valuation block: full MMR Lab (not Max buy only)
+
+**Goal:** Match redesign §5 — one combined **miniature MMR Lab + Max buy** surface. Today buyers often see **Max buy only** (especially when `maxbuySummary` exists): `SavedVerdictCard` renders while `view` stays `"empty"`, so `ResultBand` / MMR adjustments never appear until “Run fresh lookup.”
+
+**Changes:**
+
+- Always surface MMR Lab UI when identity is sufficient: `ResultBand` (base/adjusted MMR, ranges, retail, adjustment panel, deltas).
+- Keep Max buy below or beside MMR summary (`MaxbuyEvaluationSection`).
+- Reuse shared MMR Lab pieces — do **not** fork Cox call logic:
+  - `mmr-lab/_components/result-band.tsx`
+  - `mmr-adjustments.ts`, `build-mmr-recompute-request.ts`, `build-mmr-lab-maxbuy-request.ts`
+  - `maxbuy-evaluation-section.tsx`
+- Preserve: saved verdict display, auto-run on load when no verdict, loading/error/empty states, vehicle PATCH → re-run MMR/Max buy (`router.refresh()` remount).
+- Fix saved-verdict path so MMR is not hidden behind Max buy-only card (show both, or show MMR + saved Max buy summary together).
+
+**Reference:** [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md) §5 · [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md)
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx`
+
+**Exit criteria:**
+
+- [ ] MMR adjustments + result band visible on detail page when lookup succeeds (not only after manual “Run fresh lookup”)
+- [ ] Saved Max buy verdict still shown when present, alongside MMR (not instead of it)
+- [ ] Auto-run MMR + Max buy on load when identity sufficient and no saved verdict
+- [ ] Existing valuation block tests updated/extended
+
+---
+
+## 28 — Title Information: checkbox ↔ field pairing
+
+**Goal:** Pair each warranty/title flag with its related input on the **same row** (vAuto-style), instead of grouping both checkboxes at the bottom of the block.
+
+**Pairing:**
+
+| Checkbox | Linked field |
+|----------|----------------|
+| **Certified** | **Owner** (`titleOwner` text input) |
+| **Extended Warranty** | **Lien Payoff** (`lienPayoff` text input) |
+
+**Intended UX (confirm at implementation if behavior differs):**
+
+- **Layout:** Checkbox inline with or immediately adjacent to its linked textbox (same grid row).
+- **Behavior:** Checking the box **enables** the linked field; unchecking **disables** (and optionally clears) it. Unchecked + empty linked field on save persists `null` / false as today.
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-title-information-block.tsx`
+
+**Exit criteria:**
+
+- [ ] Certified + Owner share one row; Extended Warranty + Lien Payoff share one row
+- [ ] Linked textbox disabled when its checkbox is unchecked
+- [ ] PATCH payload unchanged semantically (`certified`, `titleOwner`, `extendedWarranty`, `lienPayoff`)
+- [ ] Save/Reset/dirty state still correct
+
+---
+
+## 29 — Title Information: US state dropdowns
+
+**Goal:** Replace free-text inputs with consistent **US state** pickers for both title and tag location fields in the Title Information block.
+
+**Fields:**
+
+| Label in UI | PATCH field | Control |
+|-------------|-------------|---------|
+| **State/Region** | `titleStateRegion` | `<select>` — all 50 US states (+ empty “Select state” option) |
+| **Tag State/Region** | `tagStateRegion` | Same dropdown list |
+
+**Implementation notes:**
+
+- Add or reuse a shared constant (e.g. `web/lib/us-states.ts`) with state codes and display names (e.g. `TX` / `Texas` — pick one storage format and use consistently; existing DB columns are `text`, max 64 chars).
+- Match styling to other selects on the page (e.g. Workflow assignee dropdown).
+- Pre-select saved value on load; blank option when null.
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-title-information-block.tsx`
+
+**Exit criteria:**
+
+- [ ] Both fields render as dropdowns, not text inputs
+- [ ] All US states available in each list
+- [ ] Save persists selected value via PATCH
+- [ ] Invalid legacy free-text values still display sensibly (fallback or prompt re-select)
+
+---
+
+## 30 — Workflow stepper: Landed → Appraised
+
+**Goal:** Rename the final buyer-facing workflow step from **Landed** to **Appraised**. The detail page is an **appraisal workspace** — the stepper should reflect completing an appraisal, not “landing” a deal.
+
+**Stepper (updated):**
+
+```
+Found → Working → Contacted → Appraised
+```
+
+**Changes:**
+
+- Update label in `opportunity-workflow-stepper.tsx` (`Landed` → `Appraised`; internal step id may stay `landed` or rename to `appraised` — prefer `appraised` for clarity if no breakage).
+- **Backend status mapping unchanged unless product says otherwise:** step still advances to this final step on `purchased` / `bought` (same as today’s Landed = bought). This is a **label/copy** change unless we later add a distinct `appraised` status.
+- Audit and update any other user-facing “Landed” copy on the detail page, E2E assertions, and UAT checklist in `opportunity-detail-redesign.md` when that doc is next edited.
+- **Out of scope unless requested:** renaming hero CTA “Mark bought” → “Mark appraised” (confirm with product at implementation).
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-workflow-stepper.tsx`
+
+**Exit criteria:**
+
+- [ ] Stepper shows Found → Working → Contacted → **Appraised**
+- [ ] Active step still resolves correctly for `purchased` / `bought` opportunities
+- [ ] Passed still maps to Contacted (not Appraised), same as today
+- [ ] Tests/E2E updated if they assert “Landed”
+
+---
+
+## 31 — Vehicle block: vAuto-style dropdown fields
+
+**Goal:** Match vAuto **Vehicle Information** UX — most identity fields are **dependent dropdowns**, not free text. Today `OpportunityVehicleBlock` renders **all 10 editable fields as `<Input>` text boxes**; only Region is read-only text.
+
+**Reference:** vAuto appraisal Vehicle Information panel (2026-06-27 screenshot). Compare to our block in `opportunity-vehicle-block.tsx`.
+
+### Field control types (target)
+
+| Field | vAuto control | Our app today | Target |
+|-------|---------------|---------------|--------|
+| **VIN** | Text + Go | Text | **Text** (keep; optional VIN-decode action later) |
+| **Odometer** | Text (required) | Text | **Text / numeric** (keep) |
+| **Year** | Catalog-driven (required) | Text | **Dropdown** — Cox/MMR catalog years |
+| **Make** | Dropdown (required) | Text | **Dropdown** — dependent on Year |
+| **Model** | Dropdown (required) | Text | **Dropdown** — dependent on Year + Make |
+| **Series** | Dropdown | Text (`style`) | **Dropdown** — dependent on Year + Make + Model |
+| **Body Type** | Dropdown | Text | **Dropdown** |
+| **Engine** | Dropdown | Text | **Dropdown** |
+| **Transmission** | Dropdown | Text | **Dropdown** |
+| **Color** | Dropdown | Text | **Dropdown** |
+| **Region** | — | Read-only text | Unchanged (provenance) |
+
+**Count:** **8 of 10** editable vehicle fields should be dropdowns (Year, Make, Model, Series, Body Type, Engine, Transmission, Color). **2 stay text:** VIN, Odometer.
+
+### Data sources (implementation)
+
+| Dropdown group | Likely source |
+|----------------|---------------|
+| Year → Make → Model → Series | Reuse **`useVehicleCatalogOptions`** (`web/app/(app)/opportunities/_components/use-vehicle-catalog.ts`) — same `/mmr/catalog/*` APIs as MMR Lab + manual submit |
+| Body Type, Engine, Transmission | TBD — VIN/MMR decode payload, Cox style metadata, or catalog extension; confirm at implementation |
+| Color | TBD — align with MMR Lab color list (`mmr-adjustments` / Cox color param) where possible |
+
+### UX rules (mirror MMR Lab / manual submit)
+
+- Dependent dropdowns: changing Year clears Make/Model/Series; changing Make clears Model/Series; etc.
+- Show loading state per dropdown while catalog fetches (see MMR Lab item **3** pattern).
+- Preserve block-level **Save / Reset / dirty** behavior; valuation-affecting changes still trigger MMR/Max buy refresh on save.
+- When saved values don’t match catalog options (scraper free-text), show current value and prompt re-select or allow fallback (match manual-submit parse-then-match behavior).
+
+**Primary files:**
+
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
+- `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts` (reuse)
+- Reference UI: `web/app/(app)/mmr-lab/_components/search-panel.tsx`, `manual-submit-form.tsx`
+
+**Exit criteria:**
+
+- [ ] 8 fields render as `<select>` (or shared Select component), not text inputs
+- [ ] VIN + Odometer remain text inputs
+- [ ] Y/M/M/S cascade works with MMR catalog
+- [ ] Body Type / Engine / Transmission / Color dropdowns populated (source documented in PR)
+- [ ] Save/Reset/PATCH unchanged semantically
+- [ ] Tests updated for dropdown interaction + catalog mocks
 
 ---
 

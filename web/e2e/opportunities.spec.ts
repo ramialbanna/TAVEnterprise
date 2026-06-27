@@ -79,12 +79,13 @@ test.describe("/opportunities/:id — Detail page", () => {
 
     const main = page.getByRole("main");
     // Collapsible blocks all open by default.
-    await expect(main.getByRole("heading", { name: "Vehicle" })).toBeVisible();
-    await expect(main.getByRole("heading", { name: "Listing" })).toBeVisible();
-    await expect(main.getByRole("heading", { name: "Valuation" })).toBeVisible();
     await expect(
       main.getByRole("heading", { name: "Salesperson / Appraisal Information" }),
     ).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Vehicle" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Valuation" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Workflow" })).toBeVisible();
+    await expect(main.getByText("Appraised")).toBeVisible();
     await expect(main.getByRole("heading", { name: "Title Information" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Contact Information" })).toBeVisible();
 
