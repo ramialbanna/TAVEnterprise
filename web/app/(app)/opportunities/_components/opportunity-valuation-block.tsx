@@ -251,7 +251,7 @@ export function OpportunityValuationBlock({
     initialMmrAdjustments(opportunity),
   );
   const [mmrRecomputing, setMmrRecomputing] = useState(false);
-  const hasAutoRunRef = useRef(false);
+  const autoRunForIdRef = useRef<string | null>(null);
 
   const [adjustmentBaseline, setAdjustmentBaseline] =
     useState<MmrAdjustmentBaseline | null>(null);
@@ -396,21 +396,15 @@ export function OpportunityValuationBlock({
     [applyMmrResult, opportunity],
   );
 
-  // Auto-run MMR on mount when identity is sufficient. Skip live Max buy when a
-  // saved verdict exists — show SavedVerdictCard until the user runs fresh lookup
-  // or an adjustment triggers reEvaluateMaxbuy.
+  // Auto-run MMR when identity supports a lookup. Skip live Max buy when a saved
+  // verdict exists — SavedVerdictCard covers Max buy until fresh lookup/adjustment.
   useEffect(() => {
-    if (hasAutoRunRef.current) return;
-    hasAutoRunRef.current = true;
-    if (!identitySufficientForAutoRun(opportunity)) return;
+    if (autoRunForIdRef.current === opportunity.id) return;
     const session = sessionFromOpportunity(opportunity);
-    if (!session) return;
-    const handle = setTimeout(() => {
-      void runLookup(session, { runMaxbuy: !savedVerdict });
-    }, 0);
-    return () => clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opportunity.id]);
+    if (!session || !identitySufficientForAutoRun(opportunity)) return;
+    autoRunForIdRef.current = opportunity.id;
+    void runLookup(session, { runMaxbuy: !savedVerdict });
+  }, [opportunity, opportunity.id, runLookup, savedVerdict]);
 
   const handleAdjustmentsChange = useCallback(
     (next: MmrAdjustments) => {

@@ -140,8 +140,12 @@ export function OpportunityTitleInformationBlock({
 
     return (
       <div className="flex items-end gap-3">
+        <div className="min-w-0 flex-1">
+          {field(fieldKey, fieldLabel, { numeric, disabled: !enabled })}
+        </div>
         <div className="shrink-0 pb-2">
           <label htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
+            <span>{checkboxLabel}</span>
             <Checkbox
               id={checkboxId}
               checked={values[checkboxKey]}
@@ -155,11 +159,7 @@ export function OpportunityTitleInformationBlock({
               }}
               disabled={!canMutate || pending}
             />
-            <span>{checkboxLabel}</span>
           </label>
-        </div>
-        <div className="min-w-0 flex-1">
-          {field(fieldKey, fieldLabel, { numeric, disabled: !enabled })}
         </div>
       </div>
     );

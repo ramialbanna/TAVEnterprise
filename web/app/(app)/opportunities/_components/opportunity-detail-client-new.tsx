@@ -261,7 +261,7 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Valuation" description="MMR Lab + Max buy">
-        <OpportunityValuationBlock opportunity={initial} />
+        <OpportunityValuationBlock key={initial.id} opportunity={initial} />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
