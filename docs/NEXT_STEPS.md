@@ -82,7 +82,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **28** | Opportunity detail — Title Information checkbox ↔ field pairing | Medium | [x] |
 | **29** | Opportunity detail — Title block US state dropdowns | Medium | [x] |
 | **30** | Opportunity detail — Workflow stepper: Landed → **Appraised** | High | [x] |
-| **31** | Opportunity detail — Vehicle block: vAuto-style dropdown fields | High | [ ] |
+| **31** | Opportunity detail — Vehicle block: vAuto-style dropdown fields | High | [x] |
 | **32** | Opportunity detail — auto-save on blur (no per-block Save buttons) | High | [ ] |
 
 ---
@@ -329,12 +329,12 @@ Found → Working → Contacted → Appraised
 
 **Exit criteria:**
 
-- [ ] 8 fields render as `<select>` (or shared Select component), not text inputs
-- [ ] VIN + Odometer remain text inputs
-- [ ] Y/M/M/S cascade works with MMR catalog
-- [ ] Body Type / Engine / Transmission / Color dropdowns populated (source documented in PR)
-- [ ] Save/Reset/PATCH unchanged semantically
-- [ ] Tests updated for dropdown interaction + catalog mocks
+- [x] 8 fields render as `<select>` (or shared Select component), not text inputs
+- [x] VIN + Odometer remain text inputs
+- [x] Y/M/M/S cascade works with MMR catalog
+- [x] Body Type / Engine / Transmission / Color dropdowns populated (source documented in PR)
+- [x] Save/Reset/PATCH unchanged semantically
+- [x] Tests updated for dropdown interaction + catalog mocks
 
 ---
 

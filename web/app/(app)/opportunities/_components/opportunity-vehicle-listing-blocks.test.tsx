@@ -1,10 +1,42 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import type { OpportunityDetail } from "@/lib/app-api/schemas";
+import type { ApiResult } from "@/lib/app-api";
+import type { MmrCatalog, OpportunityDetail } from "@/lib/app-api/schemas";
 
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
 import { OpportunityListingBlock } from "./opportunity-listing-block";
+
+vi.mock("@/lib/app-api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/app-api/client")>();
+  return {
+    ...actual,
+    getMmrCatalogYears: vi.fn(),
+    getMmrCatalogMakes: vi.fn(),
+    getMmrCatalogModels: vi.fn(),
+    getMmrCatalogStyles: vi.fn(),
+  };
+});
+
+import {
+  getMmrCatalogYears,
+  getMmrCatalogMakes,
+  getMmrCatalogModels,
+  getMmrCatalogStyles,
+} from "@/lib/app-api/client";
+
+const mockedYears = vi.mocked(getMmrCatalogYears);
+const mockedMakes = vi.mocked(getMmrCatalogMakes);
+const mockedModels = vi.mocked(getMmrCatalogModels);
+const mockedStyles = vi.mocked(getMmrCatalogStyles);
+
+function catalogOk(items: string[]): ApiResult<MmrCatalog> {
+  return {
+    ok: true,
+    status: 200,
+    data: { items, catalogState: "connected", reason: null, cached: false },
+  };
+}
 
 function makeDetail(overrides: Partial<OpportunityDetail> = {}): OpportunityDetail {
   return {
@@ -85,21 +117,40 @@ function props(overrides: Partial<Parameters<typeof OpportunityVehicleBlock>[0]>
   };
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockedYears.mockResolvedValue(
+    catalogOk(["2024", "2023", "2022", "2021", "2020", "2019", "2018"]),
+  );
+  mockedMakes.mockResolvedValue(catalogOk(["Honda", "Toyota"]));
+  mockedModels.mockResolvedValue(catalogOk(["Accord", "Civic"]));
+  mockedStyles.mockResolvedValue(catalogOk(["EX", "LX"]));
+});
+
 describe("OpportunityVehicleBlock", () => {
-  it("renders editable inputs seeded from opportunity", () => {
+  it("renders text inputs for VIN/odometer and selects for catalog fields", async () => {
     render(<OpportunityVehicleBlock {...props()} />);
 
     expect((screen.getByLabelText("VIN") as HTMLInputElement).value).toBe(
       "1HGBH41JXMN109123",
     );
     expect((screen.getByLabelText("Odometer (mi)") as HTMLInputElement).value).toBe("32000");
-    expect((screen.getByLabelText("Make") as HTMLInputElement).value).toBe("Honda");
-    expect((screen.getByLabelText("Body type") as HTMLInputElement).value).toBe("");
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    });
+    expect(screen.getByLabelText("Year")).toBeInstanceOf(HTMLSelectElement);
+    expect(screen.getByLabelText("Body type")).toBeInstanceOf(HTMLSelectElement);
+    expect(screen.getByLabelText("Color")).toBeInstanceOf(HTMLSelectElement);
   });
 
-  it("disables Save until dirty and fires patch on save", () => {
+  it("disables Save until dirty and fires patch on save", async () => {
     const onSave = vi.fn();
     render(<OpportunityVehicleBlock {...props({ onSave })} />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    });
 
     const saveButton = screen.getByRole("button", { name: "Save" });
     expect(saveButton).toBeDisabled();
@@ -111,12 +162,45 @@ describe("OpportunityVehicleBlock", () => {
     expect(onSave).toHaveBeenCalledWith({ color: "Red" });
   });
 
-  it("reset restores initial values", () => {
+  it("clears make/model/series when year changes", async () => {
     render(<OpportunityVehicleBlock {...props()} />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    });
+
+    fireEvent.change(screen.getByLabelText("Year"), { target: { value: "2020" } });
+
+    expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("Series") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("preserves legacy engine value not in the static list", async () => {
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          opportunity: makeDetail({ engine: "1.5L Turbo" }),
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Engine") as HTMLSelectElement).value).toBe("1.5L Turbo");
+    });
+    expect(screen.getByRole("option", { name: "1.5L Turbo" })).toBeInTheDocument();
+  });
+
+  it("reset restores initial values", async () => {
+    render(<OpportunityVehicleBlock {...props()} />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    });
 
     fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect((screen.getByLabelText("Color") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Color") as HTMLSelectElement).value).toBe("");
   });
 
   it("hides save controls when canMutate is false", () => {
