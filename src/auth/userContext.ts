@@ -17,6 +17,9 @@
 export const TAV_USER_EMAIL_HEADER = "X-TAV-Authenticated-User-Email";
 export const TAV_USER_NAME_HEADER = "X-TAV-Authenticated-User-Name";
 
+/** Service identity used when the app Worker calls intel via service binding. */
+export const TAV_SERVICE_USER_EMAIL = "service@tav-internal";
+
 export interface UserContext {
   userId: string | null;
   email:  string | null;
@@ -81,8 +84,8 @@ export function canForceRefresh(
     .map(e => e.trim().toLowerCase())
     .filter(e => e.length > 0);
 
-/** Service identity used when the app Worker calls intel via service binding. */
-export const TAV_SERVICE_USER_EMAIL = "service@tav-internal";
+  return allowlist.includes(ctx.email.toLowerCase());
+}
 
 /**
  * Whether this caller may request `force_refresh` on an MMR lookup.
@@ -95,6 +98,8 @@ export function canForceRefreshMmrLookup(
   if (ctx.email === TAV_SERVICE_USER_EMAIL) return true;
   return canForceRefresh(ctx, managerAllowlist);
 }
+
+function readHeader(headers: Headers, name: string): string | null {
   const v = headers.get(name);
   if (v === null) return null;
   const trimmed = v.trim();

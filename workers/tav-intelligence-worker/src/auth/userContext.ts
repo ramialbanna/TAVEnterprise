@@ -4,5 +4,10 @@
  * Do NOT duplicate the implementation — see /src/auth/userContext.ts. Any
  * behavioral change must happen at the root and propagates here automatically.
  */
-export { extractUserContext, canForceRefresh } from "../../../../src/auth/userContext";
+export {
+  extractUserContext,
+  canForceRefresh,
+  canForceRefreshMmrLookup,
+  TAV_SERVICE_USER_EMAIL,
+} from "../../../../src/auth/userContext";
 export type { UserContext } from "../../../../src/auth/userContext";
