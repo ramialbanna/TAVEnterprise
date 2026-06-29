@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 
 import {
   postMaxbuyEvaluate,
@@ -155,24 +155,13 @@ function shouldAutoRunMaxbuy(opportunity: OpportunityDetail): boolean {
   );
 }
 
-function buildMmrLabHref(opportunity: OpportunityDetail): string {
-  const vin = opportunity.vin?.trim();
-  if (vin) return `/mmr-lab?vin=${encodeURIComponent(vin)}`;
-  if (
-    opportunity.year != null &&
-    opportunity.make &&
-    opportunity.model &&
-    opportunity.style
-  ) {
-    const params = new URLSearchParams({
-      year: String(opportunity.year),
-      make: opportunity.make,
-      model: opportunity.model,
-      style: opportunity.style,
-    });
-    return `/mmr-lab?${params.toString()}`;
-  }
-  return "/mmr-lab";
+/** Explicit refresh runs Max buy whenever we can evaluate (VIN or full YMM identity). */
+function shouldRunMaxbuyOnFreshLookup(opportunity: OpportunityDetail): boolean {
+  const session = sessionFromOpportunity(opportunity);
+  if (!session) return false;
+  if (identitySufficientForMaxbuyAutoRun(opportunity)) return true;
+  if (session.kind === "vin") return true;
+  return false;
 }
 
 async function fetchMmrForSession(
@@ -205,6 +194,22 @@ function initialMmrAdjustments(opportunity: OpportunityDetail): MmrAdjustments {
 
 function laneAskPriceFromOpportunity(opportunity: OpportunityDetail): string {
   return opportunity.price != null ? String(opportunity.price) : "";
+}
+
+/** Placeholder copy when MMR can run but Max buy auto-run identity is insufficient. */
+function maxbuyPlaceholderMessage(opportunity: OpportunityDetail): string | null {
+  if (opportunity.maxbuySummary) return null;
+  if (identitySufficientForMaxbuyAutoRun(opportunity)) return null;
+  if (!identitySufficientForMmrAutoRun(opportunity)) return null;
+  if (opportunity.vin?.trim()) return null;
+
+  const missing: string[] = [];
+  if (opportunity.mileage == null) missing.push("mileage");
+  if (opportunity.price == null) missing.push("asking price");
+  if (missing.length === 0) {
+    return "Max buy needs sufficient vehicle identity.";
+  }
+  return `Add ${missing.join(" and ")} to run Max buy on this deal.`;
 }
 
 function InsufficientIdentityNote({ kind }: { kind: "mmr" | "maxbuy" | "both" }) {
@@ -461,7 +466,7 @@ export function OpportunityValuationBlock({
   const handleRunFresh = useCallback(() => {
     const session = sessionFromOpportunity(opportunity);
     if (session) {
-      void runLookup(session, { runMaxbuy: shouldAutoRunMaxbuy(opportunity) });
+      void runLookup(session, { runMaxbuy: shouldRunMaxbuyOnFreshLookup(opportunity) });
     }
   }, [opportunity, runLookup]);
 
@@ -511,7 +516,9 @@ export function OpportunityValuationBlock({
   const showMmrSurface =
     view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading";
   const showMmrLoading = view.kind === "loading";
-  const showMaxbuyCard = savedVerdict !== null || maxbuyView.kind !== "idle";
+  const maxbuyPlaceholder = maxbuyPlaceholderMessage(opportunity);
+  const showMaxbuyCard =
+    savedVerdict !== null || maxbuyView.kind !== "idle" || maxbuyPlaceholder !== null;
   const insufficientMmr = !canRunMmr && !savedVerdict && view.kind === "empty";
 
   const mmrCardPhase: ResultBandPhase = showMmrLoading
@@ -559,23 +566,16 @@ export function OpportunityValuationBlock({
               savedSummary={savedVerdict}
               liveState={maxbuyView}
               onRetry={handleMaxbuyRetry}
+              placeholderMessage={maxbuyPlaceholder}
             />
           ) : null}
         </div>
       ) : null}
 
-      {!insufficientMmr && (canRunFresh || session !== null) ? (
+      {!insufficientMmr && canRunFresh ? (
         <div className="flex flex-wrap items-center gap-2">
-          {canRunFresh ? (
-            <Button type="button" variant="outline" size="sm" onClick={handleRunFresh}>
-              <RefreshCw className="size-3.5" aria-hidden /> Run fresh lookup
-            </Button>
-          ) : null}
-          <Button type="button" variant="ghost" size="sm" asChild>
-            <a href={buildMmrLabHref(opportunity)}>
-              Open in MMR Lab
-              <ExternalLink className="size-3.5" aria-hidden />
-            </a>
+          <Button type="button" variant="outline" size="sm" onClick={handleRunFresh}>
+            <RefreshCw className="size-3.5" aria-hidden /> Refresh valuation
           </Button>
         </div>
       ) : null}

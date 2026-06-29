@@ -102,7 +102,7 @@ _All numbered items 2–33 complete. Items 34–35 close remaining exit criteria
 ## Opportunity detail page — layout & valuation tweaks
 
 **Route:** `/opportunities/[id]` · **Spec:** [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md)  
-**Status:** Items 24–31 shipped on `main`. **Item 33** (compact Valuation cards) is approved product direction from 2026-06-27 review — implement when picked from active work.
+**Status:** Items 24–33 shipped on `main` (compact Valuation cards, blur-save, MMR Lab prefill). See exit criteria in **§33** below.
 
 First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in the hero; only collapsible block order and block contents change below.
 
@@ -474,14 +474,14 @@ Item **27** exit criteria for “ResultBand visible on detail” remain met func
 
 **Exit criteria:**
 
-- [ ] Default Valuation view shows compact **MMR summary card** + compact **Max buy summary card** (no 3-column ResultBand)
-- [ ] MMR adjustments available via expand only; Cox recompute behavior unchanged
-- [ ] No duplicate Max buy UI (saved card + full evaluation section) in collapsed state
-- [ ] One **Run fresh lookup** at block level; **Open in MMR Lab** link with context
-- [ ] MMR auto-runs on saved VIN or saved Y/M/M/S **without** requiring odometer
-- [ ] Max buy live auto-run still respects mileage/price rules (or shows card-only until sufficient)
-- [ ] `/mmr-lab` ResultBand unchanged
-- [ ] Tests + E2E updated for compact layout and split auto-run gates
+- [x] Default Valuation view shows compact **MMR summary card** + compact **Max buy summary card** (no 3-column ResultBand)
+- [x] MMR adjustments available via expand only; Cox recompute behavior unchanged
+- [x] No duplicate Max buy UI (saved card + full evaluation section) in collapsed state
+- [x] One **Refresh valuation** at block level (MMR + Max buy together)
+- [x] MMR auto-runs on saved VIN or saved Y/M/M/S **without** requiring odometer
+- [x] Max buy live auto-run still respects mileage/price rules (placeholder card when MMR-only identity)
+- [x] `/mmr-lab` ResultBand unchanged
+- [x] Tests + E2E updated for compact layout and split auto-run gates
 
 ---
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
@@ -165,8 +166,8 @@ describe("OpportunityValuationBlock", () => {
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
 
-    expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("$21,749").length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByLabelText(/deal grade b/i)).toBeInTheDocument());
+    expect(screen.getByText("$21,749")).toBeInTheDocument();
     expect(screen.queryByText("Base MMR")).toBeNull();
     expect(screen.queryByText("Max buy evaluation")).toBeNull();
     expect(
@@ -192,7 +193,7 @@ describe("OpportunityValuationBlock", () => {
     });
     renderWithClient(<OpportunityValuationBlock opportunity={detail} />);
 
-    await waitFor(() => expect(screen.getByText("Max buy (saved)")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/deal grade b/i)).toBeInTheDocument());
     expect(screen.getByText("$18,000")).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
@@ -245,10 +246,8 @@ describe("OpportunityValuationBlock", () => {
     );
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
     expect(
-      fetchSpy.mock.calls.some((c) =>
-        String(c[0]).includes("/api/app/mmr/ymm"),
-      ),
-    ).toBe(true);
+      screen.getByText(/add mileage and asking price to run max buy on this deal/i),
+    ).toBeInTheDocument();
     expect(
       fetchSpy.mock.calls.some((c) =>
         String(c[0]).includes("/api/app/maxbuy/evaluate"),
@@ -256,7 +255,50 @@ describe("OpportunityValuationBlock", () => {
     ).toBe(false);
   });
 
-  it("runs fresh lookup for both MMR and Max buy when requested", async () => {
+  it("expands MMR adjustments on Adjust click", async () => {
+    mockFetchForVin();
+    const user = userEvent.setup();
+    renderWithClient(<OpportunityValuationBlock opportunity={makeDetail()} />);
+
+    await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
+    expect(screen.queryByLabelText("Enter ODO (mi)")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^adjust$/i }));
+
+    expect(screen.getByLabelText("Enter ODO (mi)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hide adjustments/i })).toBeInTheDocument();
+  });
+
+  it("shows max buy unavailable state in summary card", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/app/mmr/vin")) {
+        return ok({
+          mmrValue: 15000,
+          confidence: "high",
+          method: "vin",
+          adjustedMmr: 15000,
+          rangeLow: 14000,
+          rangeHigh: 16000,
+        });
+      }
+      if (url.includes("/api/app/maxbuy/evaluate")) {
+        return new Response(
+          JSON.stringify({ ok: false, error: "maxbuy_disabled" }),
+          { status: 503, headers: { "content-type": "application/json" } },
+        );
+      }
+      return ok({});
+    });
+
+    renderWithClient(<OpportunityValuationBlock opportunity={makeDetail()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/max buy evaluate is disabled in this environment/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("refresh valuation runs both MMR and Max buy when saved verdict exists", async () => {
     const fetchSpy = mockFetchForVin();
     const detail = makeDetail({
       maxbuySummary: {
@@ -272,9 +314,10 @@ describe("OpportunityValuationBlock", () => {
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
 
     fetchSpy.mockClear();
-    screen.getByRole("button", { name: /run fresh lookup/i }).click();
+    screen.getByRole("button", { name: /refresh valuation/i }).click();
 
-    await waitFor(() => expect(screen.getAllByText("$21,749").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByText("$21,749")).toBeInTheDocument());
+    expect(screen.queryByText(/as of/i)).toBeNull();
 
     expect(
       fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/app/mmr/vin")),
@@ -286,14 +329,24 @@ describe("OpportunityValuationBlock", () => {
     ).toBe(true);
   });
 
-  it("shows Open in MMR Lab link with VIN context", async () => {
+  it("shows F grade for saved pass with low segment data", async () => {
     mockFetchForVin();
-    renderWithClient(<OpportunityValuationBlock opportunity={makeDetail()} />);
+    renderWithClient(
+      <OpportunityValuationBlock
+        opportunity={makeDetail({
+          maxbuySummary: {
+            recommendationId: "rec-1",
+            verdict: "PASS",
+            recommendedMaxBuy: 28652,
+            dataStrength: "low",
+            evaluatedAt: "2026-06-26T20:25:00.000Z",
+          },
+        })}
+      />,
+    );
 
-    await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
-
-    const link = screen.getByRole("link", { name: /open in mmr lab/i });
-    expect(link.getAttribute("href")).toContain("vin=1HGBH41JXMN109123");
+    await waitFor(() => expect(screen.getByLabelText(/deal grade f/i)).toBeInTheDocument());
+    expect(screen.queryByText("Data strength")).toBeNull();
   });
 
   it("shows insufficient-identity note when VIN/YMM are missing and no saved verdict", () => {

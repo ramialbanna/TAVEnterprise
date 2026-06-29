@@ -111,7 +111,9 @@ test.describe("/opportunities/:id — Detail page", () => {
     await expect(main.getByText("$17,200")).toBeVisible();
     await expect(main.getByText("$16,500")).toBeVisible();
     await expect(main.getByText("Base MMR")).toHaveCount(0);
-    await expect(main.getByRole("link", { name: /Open in MMR Lab/i })).toBeVisible();
+    await expect(main.getByRole("button", { name: /Refresh valuation/i })).toBeVisible();
+    await expect(main.getByLabel(/Deal grade/i)).toBeVisible();
+    await expect(main.getByRole("link", { name: /Open in MMR Lab/i })).toHaveCount(0);
   });
 
   test("shows insufficient-identity note when VIN/YMM are missing", async ({ page }) => {

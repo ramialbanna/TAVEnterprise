@@ -204,48 +204,39 @@ Align labels with `manual-submit-form.tsx` and `ManualOpportunitySubmissionSchem
 
 ---
 
-### 5. Valuation (MMR Lab + Max buy)
+### 5. Valuation (MMR + Max buy summary)
 
-**Purpose:** Single combined block — miniature MMR Lab UI plus Max buy verdict. Replaces current `MaxbuyLiveCard` + empty Valuation card.
+**Purpose:** Combined valuation block with **compact summary cards** — adjusted MMR and Max buy verdict at a glance. Replaces the old `MaxbuyLiveCard`-only surface and the interim full embedded `ResultBand`. Full MMR Lab workbench stays on `/mmr-lab`.
 
-**MMR fields (match vAuto / MMR Lab `result-band.tsx`):**
+**Default (collapsed) — two side-by-side summary cards:**
 
-**Inputs / adjustments:**
+| Card | Content |
+|------|---------|
+| **MMR** | Adjusted MMR hero + wholesale range; secondary line (base, est. retail, avg odo, avg condition); confidence badge |
+| **Max buy** | Verdict badge, recommended max buy, data strength, evaluated-at (or dashed placeholder when MMR identity exists but mileage/price missing for YMM Max buy) |
 
-- Model  
-- Trim  
-- Odometer  
-- Region  
-- CR Grade  
-- Color  
-- Include build options (toggle)  
+**Progressive disclosure:**
 
-**Actions / links:**
+- **MMR → Adjust** — inline adjustment panel (odometer, region, grade, color, build options) with delta chips; Cox recompute via shared `MmrAdjustmentsPanel` / `mmr-adjustments.ts` (same path as MMR Lab — do not fork).
+- **Max buy → Details** — economics grid, TAV segment history, explanation math, Pass/Bid actions (`MaxbuyEvaluationSection`), only when live evaluation data exists.
 
-- Close Details (collapse adjustment sub-panel)  
-- View transactions (MMR Lab transactions table — compact or link to full MMR Lab with context)  
+**Block-level actions:**
 
-**Output metrics:**
+- **Refresh valuation** — refreshes MMR + Max buy together.
 
-- Base MMR  
-- Avg Odometer  
-- Avg CR Grade  
-- Adjusted MMR (+ range)  
-- Est retail value (+ range)  
-- Per-field adjustment deltas (odometer, grade, color, region, build options) where available  
+**Auto-run gates (split):**
 
-**Max buy (same block, below or beside MMR summary):**
+| Surface | Sufficient identity |
+|---------|---------------------|
+| MMR | VIN **or** saved Y/M/M/S (series); odometer not required |
+| Max buy | VIN **or** Y/M/M/S + mileage + asking price |
 
-- Show **stored verdict** from `maxbuySummary` / last evaluation when present  
-- If no verdict: **auto-run on page load** (when identity sufficient: VIN or YMM + mileage + asking price + region)  
-- “Adjust inputs” toggle reveals compact re-run form (optional v1.1 — can ship read-only auto-run first)  
+**Implementation:**
 
-**Implementation approach:**
-
-- Extract shared pieces from `mmr-lab-client.tsx`, `result-band.tsx`, `maxbuy-evaluation-section.tsx` into a **`OpportunityValuationBlock`** (or `MmrLabEmbedded`) used on detail page only  
-- Reuse: `mmr-adjustments.ts`, `build-mmr-recompute-request.ts`, `build-mmr-lab-maxbuy-request.ts`, debounced recompute  
-- Persist MMR session + adjustments on the opportunity (stored data — team confirmed MMR Lab data model is ready)  
-- Do **not** fork Cox call logic — same proxy → worker → intel worker chain as MMR Lab  
+- `OpportunityValuationBlock` orchestrates lookup + recompute.
+- `mmr-summary-card.tsx`, `maxbuy-summary-card.tsx` — compact cards on detail page only.
+- Reuse: `build-mmr-recompute-request.ts`, `build-mmr-lab-maxbuy-request.ts`, `apply-maxbuy-result.ts`.
+- Do **not** embed full `ResultBand` on detail page; do **not** remove `ResultBand` from `/mmr-lab`.
 
 **Also show (if not redundant with MMR):**
 

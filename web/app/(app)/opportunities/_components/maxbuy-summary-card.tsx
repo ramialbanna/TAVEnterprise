@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { AlertCircle, ChevronDown, Lock } from "lucide-react";
 
-import type { MaxBuyVerdict } from "@/components/maxbuy/types";
+import { computeMaxbuyDealGrade } from "@/components/maxbuy/maxbuy-deal-grade";
+import { MaxbuyGradeBadge } from "@/components/maxbuy/maxbuy-grade-badge";
 import type { MaxbuySummary } from "@/lib/app-api/schemas";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,43 +17,52 @@ import {
   type MaxbuyEvaluationState,
 } from "../../mmr-lab/_components/maxbuy-evaluation-section";
 
-const SAVED_VERDICT_LABELS: Record<NonNullable<MaxbuySummary["verdict"]>, string> = {
-  STRONG_BUY: "Strong buy",
-  BUY: "Buy",
-  REVIEW: "Review",
-  PASS: "Pass",
-};
-
-const LIVE_VERDICT_LABELS: Record<NonNullable<MaxBuyVerdict>, string> = {
-  strong_buy: "Strong buy",
-  buy: "Buy",
-  review: "Review",
-  pass: "Pass",
-};
-
 type Props = {
   savedSummary: MaxbuySummary | null;
   liveState: MaxbuyEvaluationState;
   onRetry?: () => void;
+  /** Shown when MMR can run but Max buy identity is insufficient (YMM without mileage/price). */
+  placeholderMessage?: string | null;
 };
 
-function liveVerdictLabel(state: MaxbuyEvaluationState): string | null {
-  if (state.kind !== "ready") return null;
-  const verdict = state.display.snapshot.verdict;
-  return verdict ? LIVE_VERDICT_LABELS[verdict] : null;
+function formatDeltaToAsk(delta: number): string {
+  if (delta >= 0) {
+    return `${formatMoney(delta)} under ask`;
+  }
+  return `${formatMoney(Math.abs(delta))} over recommended max`;
 }
 
-function liveRecommended(state: MaxbuyEvaluationState): number | null {
-  if (state.kind !== "ready") return null;
-  return state.display.snapshot.recommendedMaxBuy;
+function UnavailableBody({ reason }: { reason?: "api_off" | "coming_soon" }) {
+  const apiOff = reason === "api_off";
+  return (
+    <div className="space-y-2">
+      <p className="flex items-start gap-2 text-sm text-muted-foreground">
+        <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
+        {apiOff
+          ? "Max buy evaluate is disabled in this environment."
+          : "Evaluate API is not available. MMR lookup still works."}
+      </p>
+    </div>
+  );
 }
 
-function liveDataStrength(state: MaxbuyEvaluationState): string | null {
-  if (state.kind !== "ready") return null;
-  return state.display.snapshot.dataStrength;
+function HeroMoney({ value, loading }: { value: number | null; loading: boolean }) {
+  if (loading) {
+    return <Skeleton className="h-8 w-32" />;
+  }
+  return (
+    <div className="text-2xl font-semibold tabular-nums text-primary">
+      {value != null ? formatMoney(value) : "—"}
+    </div>
+  );
 }
 
-export function MaxbuySummaryCard({ savedSummary, liveState, onRetry }: Props) {
+export function MaxbuySummaryCard({
+  savedSummary,
+  liveState,
+  onRetry,
+  placeholderMessage = null,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const useLive =
@@ -62,62 +71,95 @@ export function MaxbuySummaryCard({ savedSummary, liveState, onRetry }: Props) {
     liveState.kind === "error" ||
     liveState.kind === "unavailable";
 
-  const summary = useLive ? null : savedSummary;
-  const verdictLabel = useLive
-    ? liveVerdictLabel(liveState)
-    : summary
-      ? SAVED_VERDICT_LABELS[summary.verdict]
-      : null;
-  const recommended = useLive ? liveRecommended(liveState) : summary?.recommendedMaxBuy ?? null;
-  const dataStrength = useLive ? liveDataStrength(liveState) : summary?.dataStrength ?? null;
-  const evaluatedAt = summary?.evaluatedAt ?? null;
-  const isSaved = !useLive && summary !== null;
-  const loading = liveState.kind === "loading";
+  const isPlaceholder =
+    !savedSummary && liveState.kind === "idle" && !!placeholderMessage;
 
-  if (!summary && liveState.kind === "idle") {
+  const summary = useLive ? null : savedSummary;
+  const loading = liveState.kind === "loading";
+  const isSaved = !useLive && summary !== null;
+
+  const recommended =
+    liveState.kind === "ready"
+      ? liveState.display.snapshot.recommendedMaxBuy
+      : summary?.recommendedMaxBuy ?? null;
+
+  const evaluatedAt =
+    liveState.kind === "ready"
+      ? null
+      : summary?.evaluatedAt ?? null;
+
+  const grade =
+    liveState.kind === "ready"
+      ? computeMaxbuyDealGrade({
+          verdict: liveState.display.snapshot.verdict,
+          dataStrength: liveState.display.snapshot.dataStrength,
+          deltaToAsk: liveState.display.snapshot.deltaToAsk,
+          displayState: liveState.display.snapshot.displayState,
+        })
+      : summary
+        ? computeMaxbuyDealGrade({
+            verdict: summary.verdict,
+            dataStrength: summary.dataStrength,
+            displayState: "deal_fit",
+          })
+        : null;
+
+  const deltaLine =
+    liveState.kind === "ready" &&
+    liveState.display.snapshot.displayState === "deal_fit" &&
+    liveState.display.snapshot.deltaToAsk != null
+      ? formatDeltaToAsk(liveState.display.snapshot.deltaToAsk)
+      : null;
+
+  const secondaryParts = [
+    deltaLine,
+    isSaved && evaluatedAt ? `As of ${formatDateTime(evaluatedAt)}` : null,
+    liveState.kind === "ready" ? "Live evaluation" : null,
+  ].filter(Boolean);
+
+  if (!summary && liveState.kind === "idle" && !isPlaceholder) {
     return null;
   }
 
   return (
-    <Card className="border-border bg-muted/30">
+    <Card
+      className={cn(
+        "border-border bg-muted/30",
+        isPlaceholder && "border-dashed bg-surface-sunken",
+      )}
+    >
       <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-start justify-between gap-3">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {isSaved ? "Max buy (saved)" : "Max buy"}
+            Max buy
           </span>
-          {verdictLabel ? <Badge variant="outline">{verdictLabel}</Badge> : null}
+          {!isPlaceholder && liveState.kind !== "error" && liveState.kind !== "unavailable" ? (
+            loading ? (
+              <Skeleton className="size-11 rounded-full" />
+            ) : (
+              <MaxbuyGradeBadge grade={grade} />
+            )
+          ) : null}
         </div>
 
-        {loading ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Skeleton className="h-6 w-full" />
-            <Skeleton className="h-6 w-full" />
-          </div>
+        {isPlaceholder ? (
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>{placeholderMessage}</span>
+          </p>
         ) : liveState.kind === "error" ? (
           <p className="text-sm text-status-error">{liveState.message}</p>
+        ) : liveState.kind === "unavailable" ? (
+          <UnavailableBody reason={liveState.reason} />
         ) : (
-          <dl className="grid gap-2 sm:grid-cols-2">
-            <div className="flex justify-between gap-4 border-b border-border/60 pb-2">
-              <dt className="text-sm text-muted-foreground">Recommended</dt>
-              <dd className="text-right text-sm font-medium tabular-nums">
-                {recommended != null ? formatMoney(recommended) : "—"}
-              </dd>
+          <>
+            <div className="space-y-1">
+              <HeroMoney value={recommended} loading={loading} />
+              {secondaryParts.length > 0 ? (
+                <p className="text-xs text-muted-foreground">{secondaryParts.join(" · ")}</p>
+              ) : null}
             </div>
-            <div className="flex justify-between gap-4 border-b border-border/60 pb-2">
-              <dt className="text-sm text-muted-foreground">Data strength</dt>
-              <dd className="text-right text-sm font-medium capitalize">
-                {dataStrength ?? "—"}
-              </dd>
-            </div>
-            {evaluatedAt ? (
-              <div className="flex justify-between gap-4 border-b border-border/60 pb-2 sm:col-span-2">
-                <dt className="text-sm text-muted-foreground">Evaluated</dt>
-                <dd className="text-right text-sm font-medium tabular-nums">
-                  {formatDateTime(evaluatedAt)}
-                </dd>
-              </div>
-            ) : null}
-          </dl>
+          </>
         )}
 
         {liveState.kind === "ready" || (isSaved && savedSummary) ? (
@@ -143,8 +185,9 @@ export function MaxbuySummaryCard({ savedSummary, liveState, onRetry }: Props) {
 
         {expanded && isSaved && liveState.kind === "idle" && savedSummary ? (
           <p className="text-sm text-muted-foreground">
-            Saved verdict from {formatDateTime(savedSummary.evaluatedAt)}. Run a fresh lookup
-            to refresh economics and segment history.
+            Saved evaluation from {formatDateTime(savedSummary.evaluatedAt)}. Use{" "}
+            <span className="font-medium text-foreground">Refresh valuation</span> to update
+            max buy and economics.
           </p>
         ) : null}
       </CardContent>
