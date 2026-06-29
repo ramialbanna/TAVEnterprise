@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -56,6 +56,7 @@ export function OpportunityDetailClientNew({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const [patchRevision, setPatchRevision] = useState(0);
 
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
@@ -131,6 +132,7 @@ export function OpportunityDetailClientNew({
     onSuccess: (result) => {
       if (result.ok) {
         toast.success("Saved");
+        setPatchRevision((revision) => revision + 1);
         invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
@@ -229,6 +231,7 @@ export function OpportunityDetailClientNew({
     <div className="space-y-4">
       <OpportunityDetailHero
         opportunity={initial}
+        contactBlockKey={`contact-${patchRevision}`}
         primaryAction={heroPrimaryAction}
         secondaryActions={heroSecondaryActions}
         onSaveContact={(patch) => patchMutation.mutate(patch)}
@@ -242,6 +245,7 @@ export function OpportunityDetailClientNew({
         description="Salesperson and appraiser"
       >
         <OpportunitySalespersonAppraisalBlock
+          key={`salesperson-${patchRevision}`}
           opportunity={initial}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
@@ -252,6 +256,7 @@ export function OpportunityDetailClientNew({
 
       <CollapsibleBlock title="Vehicle" description="Identity fields">
         <OpportunityVehicleBlock
+          key={`vehicle-${patchRevision}`}
           opportunity={initial}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
@@ -266,6 +271,7 @@ export function OpportunityDetailClientNew({
 
       <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
         <OpportunityTitleInformationBlock
+          key={`title-${patchRevision}`}
           opportunity={initial}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}

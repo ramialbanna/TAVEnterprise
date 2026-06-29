@@ -1,18 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { useBlockAutoSave } from "./use-block-auto-save";
+
 /**
- * Salesperson / Appraisal Information block — left side of the renamed
- * "Seller / listing notes" row. Replaces the old free-text sellerNotes
- * textarea with two editable fields. Persists via PATCH /app/opportunities/:id.
+ * Salesperson / Appraisal Information block. Auto-saves on blur (item 32).
  */
 export function OpportunitySalespersonAppraisalBlock({
   opportunity,
@@ -27,6 +26,8 @@ export function OpportunitySalespersonAppraisalBlock({
   canMutate: boolean;
   error?: string | null;
 }) {
+  const blockRef = useRef<HTMLDivElement>(null);
+
   const initial = useMemo(
     () => ({
       salesperson: opportunity.salesperson ?? "",
@@ -43,18 +44,27 @@ export function OpportunitySalespersonAppraisalBlock({
     );
   }, [initial, values]);
 
-  function handleReset() {
-    setValues(initial);
-  }
-
-  function handleSave() {
+  function buildPatch(): PatchOpportunityRequest {
     const patch: PatchOpportunityRequest = {};
     if (values.salesperson !== initial.salesperson)
       patch.salesperson = values.salesperson.trim() || null;
     if (values.appraiser !== initial.appraiser)
       patch.appraiser = values.appraiser.trim() || null;
-    onSave(patch);
+    return patch;
   }
+
+  function persistIfDirty() {
+    const patch = buildPatch();
+    if (Object.keys(patch).length > 0) onSave(patch);
+  }
+
+  const { handleBlur } = useBlockAutoSave({
+    blockRef,
+    isDirty,
+    canSave: canMutate,
+    pending,
+    onSave: persistIfDirty,
+  });
 
   function field(key: keyof typeof values, label: string) {
     const id = `appraisal-${key}`;
@@ -75,7 +85,7 @@ export function OpportunitySalespersonAppraisalBlock({
   }
 
   return (
-    <div className="space-y-4">
+    <div ref={blockRef} className="space-y-4" onBlur={handleBlur}>
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error-bg px-3 py-2 text-sm text-status-error">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -86,31 +96,6 @@ export function OpportunitySalespersonAppraisalBlock({
         {field("salesperson", "Salesperson")}
         {field("appraiser", "Appraiser")}
       </div>
-
-      {canMutate ? (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty || pending}
-          >
-            Save
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={handleReset}
-            disabled={!isDirty || pending}
-          >
-            Reset
-          </Button>
-          {isDirty ? (
-            <span className="text-xs text-muted-foreground">Unsaved changes</span>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

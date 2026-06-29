@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-27 · **Focus:** `/mmr-lab` buyer experience · **Also:** Opportunity detail page tweaks (pending explicit go-ahead)
+**Last updated:** 2026-06-29 · **Focus:** Items 34–35 shipped (E2E + MMR Lab URL prefill); active queue empty
 
 > **Fresh chat prompt:**
 > Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
@@ -57,6 +57,17 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
+| **34** | Opportunity detail E2E — blur-save + compact valuation assertions | Medium | [x] |
+| **35** | MMR Lab URL prefill from opportunity detail (`?vin=` / YMM params) | Medium | [x] |
+
+_All numbered items 2–33 complete. Items 34–35 close remaining exit criteria from 32/33._
+
+---
+
+## Previously active (complete)
+
+| # | Item | Priority | Status |
+|---|------|----------|--------|
 | **21** | Odometer delta badge missing when Cox sends mileage-as-string | High | [x] |
 | **22** | Grade not applied — UI CR grade must convert to Cox 10× integer | High | [x] |
 | **23** | Grade & color deltas — exact Cox dollar amounts, no marginal / no Math.round | High | [x] |
@@ -83,14 +94,15 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **29** | Opportunity detail — Title block US state dropdowns | Medium | [x] |
 | **30** | Opportunity detail — Workflow stepper: Landed → **Appraised** | High | [x] |
 | **31** | Opportunity detail — Vehicle block: vAuto-style dropdown fields | High | [x] |
-| **32** | Opportunity detail — auto-save on blur (no per-block Save buttons) | High | [ ] |
+| **32** | Opportunity detail — auto-save on blur (no per-block Save buttons) | High | [x] |
+| **33** | Opportunity detail — compact Valuation cards (MMR + Max buy summary, not full ResultBand) | High | [x] |
 
 ---
 
 ## Opportunity detail page — layout & valuation tweaks
 
 **Route:** `/opportunities/[id]` · **Spec:** [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md)  
-**Status:** Requirements captured 2026-06-27 — **do not implement until explicitly requested.**
+**Status:** Items 24–31 shipped on `main`. **Item 33** (compact Valuation cards) is approved product direction from 2026-06-27 review — implement when picked from active work.
 
 First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in the hero; only collapsible block order and block contents change below.
 
@@ -104,7 +116,7 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 | 2 | **Salesperson / Appraisal Information** | **move up** — replaces Workflow’s current slot (position 2) |
 | 3 | Vehicle | add subblock (see **26**) |
 | 4 | ~~Listing~~ | **remove** (see **25**) |
-| 5 | Valuation | full MMR Lab + Max buy (see **27**) |
+| 5 | Valuation | **compact MMR + Max buy summary cards** (see **33**); adjustments on expand; full workbench stays on `/mmr-lab` |
 | 6 | Title Information | checkbox pairing (see **28**); full width after Valuation (no longer paired with Salesperson in 2-col grid) |
 | 7 | Notes | unchanged |
 | 8 | **Workflow** | **move down** — immediately **before** History |
@@ -390,6 +402,86 @@ Found → Working → Contacted → Appraised
 - [ ] Focus moving between fields **inside** the same block does not trigger save  
 - [ ] Valuation refresh still runs after vehicle identity saves  
 - [ ] E2E updated: blur-to-save instead of Save button click  
+
+---
+
+## 33 — Compact Valuation cards (MMR + Max buy summary)
+
+**Goal:** Replace the embedded full MMR Lab `ResultBand` + live `MaxbuyEvaluationSection` stack on `/opportunities/[id]` with **two compact summary cards** — same visual density as the existing **Max buy (saved)** card. Closers get “what’s it worth?” and “what’s our max?” in two glances; heavy UI stays on `/mmr-lab`.
+
+**Product direction (2026-06-27):** Item **27** shipped Cox lookup + adjustments on the detail page, but dropping the full 3-column `/mmr-lab` layout into a collapsible block reads as three stacked products (saved Max buy + full ResultBand + full Max buy evaluation). vAuto/Manheim MMR inspiration: **summary first, adjustments on demand** (“Close Details”), inline delta badges next to adjustment fields.
+
+### Problem with current embedded UI
+
+- **Saved Max buy card** — compact; works well.
+- **Full `ResultBand`** — 3-column grid (Base MMR | adjustments form | blue summary panel); built for `/mmr-lab`, too tall for an appraisal block.
+- **Full `MaxbuyEvaluationSection`** — duplicates Max buy when a saved verdict exists; economics/history/math always visible.
+
+### Target UX (default / collapsed)
+
+**MMR summary card** (mirror `SavedVerdictCard` pattern):
+
+| Row | Content |
+|-----|---------|
+| Header | `MMR` + confidence badge (optional) |
+| Hero | **Adjusted MMR** + wholesale range (e.g. `$23,000` · `$21,900 – $24,100`) |
+| Secondary | Base MMR · Est. retail · Avg odometer · Avg condition (single line or small grid) |
+| Action | **Adjust** or **Expand** — not six adjustment fields visible by default |
+
+**Max buy summary card** (keep/enhance existing `SavedVerdictCard`):
+
+- One card only — live evaluate **updates this card**; do not render a second full `MaxbuyEvaluationSection` below when summary suffices.
+- Verdict badge, recommended max buy, data strength, evaluated-at.
+- Economics, segment history, explanation math, and action buttons → **expand / details** only.
+
+**Block-level action:** Single **Run fresh lookup** refreshes MMR + Max buy together (avoid duplicate refresh buttons).
+
+**Power users:** Link **Open in MMR Lab** (prefill VIN or YMM from opportunity) for transactions, historical/projected, full workbench.
+
+### Progressive disclosure (expanded)
+
+- **MMR adjustments** — vAuto-style inline panel: odometer / region / grade / color / build with delta chips (`+$710`, `−$480`); reuse Cox call path from `result-band.tsx` / `mmr-adjustments.ts` — **do not fork** lookup logic.
+- **Max buy details** — `<details>` or second expand: economics grid, TAV segment history, explanation, Pass/Bid lower actions.
+
+### What stays on `/mmr-lab` only
+
+- Full 3-column `ResultBand` layout (unchanged on canonical page).
+- Transactions table, historical/projected panels, sticky search panel.
+
+### Bug fix bundled with this item
+
+**MMR auto-run gate** in `opportunity-valuation-block.tsx` — `identitySufficientForAutoRun` currently requires **mileage + price** for YMM, which blocks MMR even though Cox and `/mmr-lab` do not require odometer for base/adjusted MMR at segment average.
+
+Split gates:
+
+| Surface | Sufficient identity |
+|---------|---------------------|
+| **MMR auto-run** | VIN **or** saved Y/M/M/S (series) |
+| **Max buy auto-run** | Stricter — mileage + asking price (or existing MaxBuy rules); OK to skip live Max buy when only MMR identity is present |
+
+Ref: `resolveLookupMileage` omits `?odometer=` when mileage undefined; MMR Lab `onYmmSubmit` sends Y/M/M/S only.
+
+### Refines item 27
+
+Item **27** exit criteria for “ResultBand visible on detail” remain met functionally; this item **replaces the embedded presentation** — summary cards + expand, not the full ResultBand grid. Update [`02-product/opportunity-detail-redesign.md`](02-product/opportunity-detail-redesign.md) §5 when this ships.
+
+**Primary files:**
+
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx`
+- New: `mmr-summary-card.tsx` (or inline in valuation block)
+- Reuse: `SavedVerdictCard` pattern, adjustment sub-panel extracted from `result-band.tsx`
+- **Do not remove** full `ResultBand` from `web/app/(app)/mmr-lab/`
+
+**Exit criteria:**
+
+- [ ] Default Valuation view shows compact **MMR summary card** + compact **Max buy summary card** (no 3-column ResultBand)
+- [ ] MMR adjustments available via expand only; Cox recompute behavior unchanged
+- [ ] No duplicate Max buy UI (saved card + full evaluation section) in collapsed state
+- [ ] One **Run fresh lookup** at block level; **Open in MMR Lab** link with context
+- [ ] MMR auto-runs on saved VIN or saved Y/M/M/S **without** requiring odometer
+- [ ] Max buy live auto-run still respects mileage/price rules (or shows card-only until sufficient)
+- [ ] `/mmr-lab` ResultBand unchanged
+- [ ] Tests + E2E updated for compact layout and split auto-run gates
 
 ---
 

@@ -131,7 +131,7 @@ function AdjustmentDelta({
   );
 }
 
-function MmrAdjustmentsPanel({
+export function MmrAdjustmentsPanel({
   interactive,
   adjustments,
   odometerAdjustment,

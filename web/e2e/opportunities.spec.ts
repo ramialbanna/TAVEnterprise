@@ -74,7 +74,7 @@ test.describe("/opportunities/:id — Detail page", () => {
     await mockAppApi(page);
   });
 
-  test("renders collapsible blocks and allows vehicle field edit + save", async ({ page }) => {
+  test("renders collapsible blocks and auto-saves vehicle edits on blur", async ({ page }) => {
     await page.goto("/opportunities/opp_e2e_1");
 
     const main = page.getByRole("main");
@@ -93,27 +93,33 @@ test.describe("/opportunities/:id — Detail page", () => {
     const vinInput = main.getByLabel("VIN");
     await expect(vinInput).toHaveValue("2HGFC2FAC");
 
-    // Edit color and save.
-    const colorInput = main.getByLabel("Color");
-    await colorInput.fill("Red");
-    await main.getByRole("button", { name: "Save", exact: true }).click();
+    // Edit color and blur out of the Vehicle block to auto-save.
+    await main.getByLabel("Color").selectOption("Red");
+    await main.getByRole("heading", { name: "Workflow" }).click();
 
-    // Saved toast.
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
+    await expect(main.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   });
 
-  test("auto-runs MMR + Max buy valuation on load when identity is sufficient", async ({ page }) => {
+  test("auto-runs MMR + Max buy valuation on load with compact summary cards", async ({
+    page,
+  }) => {
     await page.goto("/opportunities/opp_e2e_1");
 
-    // The Valuation block should show the running skeleton, then the MMR result.
     const main = page.getByRole("main");
-    await expect(main.getByText(/Running MMR/i)).toBeVisible({ timeout: 8000 });
+    await expect(main.getByText("MMR", { exact: true })).toBeVisible({ timeout: 8000 });
+    await expect(main.getByText("$17,200")).toBeVisible();
+    await expect(main.getByText("$16,500")).toBeVisible();
+    await expect(main.getByText("Base MMR")).toHaveCount(0);
+    await expect(main.getByRole("link", { name: /Open in MMR Lab/i })).toBeVisible();
   });
 
   test("shows insufficient-identity note when VIN/YMM are missing", async ({ page }) => {
-    await page.goto("/opportunities/opp_e2e_2");
+    await page.goto("/opportunities/opp_e2e_3");
 
     const main = page.getByRole("main");
-    await expect(main.getByText(/Add a VIN or year\/make\/model/i)).toBeVisible({ timeout: 8000 });
+    await expect(main.getByText(/Add vehicle identity to run MMR and Max buy/i)).toBeVisible({
+      timeout: 8000,
+    });
   });
 });

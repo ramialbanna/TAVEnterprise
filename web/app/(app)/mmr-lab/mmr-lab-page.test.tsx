@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MmrLabPage from "./page";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 function ok(data: unknown) {
   return new Response(JSON.stringify({ ok: true, data }), {
     status: 200,

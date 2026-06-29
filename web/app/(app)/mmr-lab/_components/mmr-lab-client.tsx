@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import {
   getMmrCatalogMakes,
@@ -55,6 +56,7 @@ import {
   type MmrAdjustmentBaseline,
   type MmrAttributeMarginals,
 } from "./mmr-adjustment-display";
+import { readMmrLabPrefill } from "./mmr-lab-prefill";
 
 type View =
   | { kind: "empty" }
@@ -127,13 +129,19 @@ function syncAdjustmentsFromMmrResult(
 }
 
 export function MmrLabClient() {
+  const searchParams = useSearchParams();
+  const initialPrefill = readMmrLabPrefill(searchParams);
   const [view, setView] = useState<View>({ kind: "empty" });
   const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>({ kind: "idle" });
   const [identity, setIdentity] = useState<Identity>(null);
-  const [vinInput, setVinInput] = useState("");
+  const [vinInput, setVinInput] = useState(() =>
+    initialPrefill?.kind === "vin" ? initialPrefill.vin : "",
+  );
   const [vinLocked, setVinLocked] = useState(false);
   const [styleNotice, setStyleNotice] = useState<string | null>(null);
-  const [selection, setSelection] = useState<MmrSelection>(emptySelection);
+  const [selection, setSelection] = useState<MmrSelection>(() =>
+    initialPrefill?.kind === "ymm" ? initialPrefill.selection : emptySelection,
+  );
   const [laneAskPrice, setLaneAskPrice] = useState("");
   const [adjustments, setAdjustments] = useState<MmrAdjustments>(EMPTY_MMR_ADJUSTMENTS);
   const [mmrRecomputing, setMmrRecomputing] = useState(false);

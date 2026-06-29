@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, ExternalLink, RefreshCw } from "lucide-react";
 
 import {
   postMaxbuyEvaluate,
@@ -10,22 +10,19 @@ import {
 } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type {
-  MaxbuySummary,
   MmrVinOk,
   OpportunityDetail,
 } from "@/lib/app-api/schemas";
 import { ErrorState, type ApiErrorResult } from "@/components/data-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatDateTime, formatMoney } from "@/lib/format";
 
+import { MaxbuySummaryCard } from "./maxbuy-summary-card";
+import { MmrSummaryCard } from "./mmr-summary-card";
 import {
-  ResultBand,
   type ResultBandPhase,
 } from "../../mmr-lab/_components/result-band";
 import {
-  MaxbuyEvaluationSection,
   type MaxbuyEvaluationState,
 } from "../../mmr-lab/_components/maxbuy-evaluation-section";
 import { applyMaxbuyResult } from "../../mmr-lab/_components/apply-maxbuy-result";
@@ -121,8 +118,19 @@ function sessionFromOpportunity(
   return null;
 }
 
-/** Identity sufficient for an auto-run per redesign §5 (VIN or YMM + mileage + asking + region). */
-function identitySufficientForAutoRun(opportunity: OpportunityDetail): boolean {
+/** MMR auto-run: VIN or saved Y/M/M/S (series). Odometer not required. */
+function identitySufficientForMmrAutoRun(opportunity: OpportunityDetail): boolean {
+  if (opportunity.vin?.trim()) return true;
+  return (
+    opportunity.year != null &&
+    !!opportunity.make &&
+    !!opportunity.model &&
+    !!opportunity.style
+  );
+}
+
+/** Max buy auto-run: stricter — YMM path needs mileage + asking price. */
+function identitySufficientForMaxbuyAutoRun(opportunity: OpportunityDetail): boolean {
   if (opportunity.vin?.trim()) return true;
   return (
     opportunity.year != null &&
@@ -133,9 +141,38 @@ function identitySufficientForAutoRun(opportunity: OpportunityDetail): boolean {
   );
 }
 
-function shouldAutoRunLookup(opportunity: OpportunityDetail): boolean {
-  const session = sessionFromOpportunity(opportunity);
-  return !!session && identitySufficientForAutoRun(opportunity);
+function shouldAutoRunMmr(opportunity: OpportunityDetail): boolean {
+  return (
+    sessionFromOpportunity(opportunity) !== null &&
+    identitySufficientForMmrAutoRun(opportunity)
+  );
+}
+
+function shouldAutoRunMaxbuy(opportunity: OpportunityDetail): boolean {
+  return (
+    sessionFromOpportunity(opportunity) !== null &&
+    identitySufficientForMaxbuyAutoRun(opportunity)
+  );
+}
+
+function buildMmrLabHref(opportunity: OpportunityDetail): string {
+  const vin = opportunity.vin?.trim();
+  if (vin) return `/mmr-lab?vin=${encodeURIComponent(vin)}`;
+  if (
+    opportunity.year != null &&
+    opportunity.make &&
+    opportunity.model &&
+    opportunity.style
+  ) {
+    const params = new URLSearchParams({
+      year: String(opportunity.year),
+      make: opportunity.make,
+      model: opportunity.model,
+      style: opportunity.style,
+    });
+    return `/mmr-lab?${params.toString()}`;
+  }
+  return "/mmr-lab";
 }
 
 async function fetchMmrForSession(
@@ -170,94 +207,21 @@ function laneAskPriceFromOpportunity(opportunity: OpportunityDetail): string {
   return opportunity.price != null ? String(opportunity.price) : "";
 }
 
-const VERDICT_LABELS: Record<NonNullable<MaxbuySummary["verdict"]>, string> = {
-  STRONG_BUY: "Strong buy",
-  BUY: "Buy",
-  REVIEW: "Review",
-  PASS: "Pass",
-};
-
-function SavedVerdictCard({
-  summary,
-  onRunFresh,
-}: {
-  summary: MaxbuySummary;
-  onRunFresh: () => void;
-}) {
-  return (
-    <Card className="border-border bg-muted/30">
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Max buy (saved)
-          </span>
-          <Badge variant="outline">{VERDICT_LABELS[summary.verdict]}</Badge>
-        </div>
-        <dl className="grid gap-2 sm:grid-cols-2">
-          <div className="flex justify-between gap-4 border-b border-border/60 pb-2">
-            <dt className="text-sm text-muted-foreground">Recommended</dt>
-            <dd className="text-right text-sm font-medium tabular-nums">
-              {formatMoney(summary.recommendedMaxBuy)}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-border/60 pb-2">
-            <dt className="text-sm text-muted-foreground">Data strength</dt>
-            <dd className="text-right text-sm font-medium capitalize">
-              {summary.dataStrength}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4 border-b border-border/60 pb-2">
-            <dt className="text-sm text-muted-foreground">Evaluated</dt>
-            <dd className="text-right text-sm font-medium tabular-nums">
-              {formatDateTime(summary.evaluatedAt)}
-            </dd>
-          </div>
-        </dl>
-        <Button type="button" variant="outline" size="sm" onClick={onRunFresh}>
-          <RefreshCw className="size-3.5" aria-hidden /> Run fresh lookup
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function InsufficientIdentityNote() {
+function InsufficientIdentityNote({ kind }: { kind: "mmr" | "maxbuy" | "both" }) {
+  const message =
+    kind === "mmr"
+      ? "Add a VIN or year/make/model/series to run MMR on this deal."
+      : kind === "maxbuy"
+        ? "Max buy needs a VIN, or year/make/model with mileage and asking price."
+        : "Add vehicle identity to run MMR and Max buy on this deal.";
   return (
     <Card className="border-dashed bg-surface-sunken">
       <CardContent className="flex items-start gap-2 py-6 text-sm text-muted-foreground">
         <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <span>
-          Add a VIN or year/make/model + mileage to run MMR and Max buy on this
-          deal.
-        </span>
+        <span>{message}</span>
       </CardContent>
     </Card>
   );
-}
-
-function ValuationLoadingSkeleton() {
-  return (
-    <div className="space-y-3" aria-busy aria-live="polite">
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <RefreshCw className="size-3.5 animate-spin" aria-hidden />
-            Running MMR + Max buy…
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <SkeletonLine />
-            <SkeletonLine />
-            <SkeletonLine />
-            <SkeletonLine />
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function SkeletonLine() {
-  return <div className="h-6 w-full rounded-md bg-muted/50" />;
 }
 
 export function OpportunityValuationBlock({
@@ -266,12 +230,13 @@ export function OpportunityValuationBlock({
   opportunity: OpportunityDetail;
 }) {
   const savedVerdict = opportunity.maxbuySummary ?? null;
-  const autoRunOnMount = shouldAutoRunLookup(opportunity);
+  const autoRunMmrOnMount = shouldAutoRunMmr(opportunity);
+  const autoRunMaxbuyOnMount = shouldAutoRunMaxbuy(opportunity) && !savedVerdict;
   const [view, setView] = useState<MmrView>(() =>
-    autoRunOnMount ? { kind: "loading" } : { kind: "empty" },
+    autoRunMmrOnMount ? { kind: "loading" } : { kind: "empty" },
   );
   const [maxbuyView, setMaxbuyView] = useState<MaxbuyEvaluationState>(() =>
-    autoRunOnMount && !savedVerdict ? { kind: "loading" } : { kind: "idle" },
+    autoRunMaxbuyOnMount ? { kind: "loading" } : { kind: "idle" },
   );
   const [adjustments, setAdjustments] = useState<MmrAdjustments>(() =>
     initialMmrAdjustments(opportunity),
@@ -408,12 +373,12 @@ export function OpportunityValuationBlock({
   // "loading" from useState — this effect only performs async fetch + setState
   // in await callbacks (react-hooks/set-state-in-effect compliant).
   useEffect(() => {
-    if (!autoRunOnMount) return;
+    if (!autoRunMmrOnMount) return;
     const session = sessionFromOpportunity(opportunity);
     if (!session) return;
 
     lookupSessionRef.current = session;
-    const runMaxbuy = !savedVerdict;
+    const runMaxbuy = autoRunMaxbuyOnMount;
     let cancelled = false;
 
     void (async () => {
@@ -460,7 +425,7 @@ export function OpportunityValuationBlock({
     return () => {
       cancelled = true;
     };
-  }, [applyMmrResult, autoRunOnMount, opportunity, savedVerdict]);
+  }, [applyMmrResult, autoRunMaxbuyOnMount, autoRunMmrOnMount, opportunity]);
 
   const handleAdjustmentsChange = useCallback(
     (next: MmrAdjustments) => {
@@ -495,7 +460,9 @@ export function OpportunityValuationBlock({
 
   const handleRunFresh = useCallback(() => {
     const session = sessionFromOpportunity(opportunity);
-    if (session) void runLookup(session, { runMaxbuy: true });
+    if (session) {
+      void runLookup(session, { runMaxbuy: shouldAutoRunMaxbuy(opportunity) });
+    }
   }, [opportunity, runLookup]);
 
   const handleMaxbuyRetry = useCallback(() => {
@@ -539,42 +506,36 @@ export function OpportunityValuationBlock({
 
   const session = sessionFromOpportunity(opportunity);
   const canRunFresh = session !== null;
+  const canRunMmr = identitySufficientForMmrAutoRun(opportunity) && session !== null;
 
   const showMmrSurface =
     view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading";
-  const showLiveMaxbuy = maxbuyView.kind !== "idle";
+  const showMmrLoading = view.kind === "loading";
+  const showMaxbuyCard = savedVerdict !== null || maxbuyView.kind !== "idle";
+  const insufficientMmr = !canRunMmr && !savedVerdict && view.kind === "empty";
+
+  const mmrCardPhase: ResultBandPhase = showMmrLoading
+    ? "loading"
+    : resultBandPhase;
 
   return (
     <div className="space-y-3">
-      {savedVerdict ? (
-        <SavedVerdictCard summary={savedVerdict} onRunFresh={handleRunFresh} />
-      ) : null}
-
-      {!savedVerdict && view.kind === "empty" && !canRunFresh ? (
-        <InsufficientIdentityNote />
-      ) : null}
-
-      {savedVerdict && view.kind === "empty" && !canRunFresh ? (
-        <InsufficientIdentityNote />
-      ) : null}
+      {insufficientMmr ? <InsufficientIdentityNote kind="both" /> : null}
 
       {view.kind === "error" ? (
         <ErrorState error={view.error} onRetry={handleRunFresh} />
       ) : null}
 
-      {view.kind === "loading" ? <ValuationLoadingSkeleton /> : null}
-
-      {showMmrSurface ? (
-        <>
-          <div id="opportunity-mmr-result-band">
-            <ResultBand
-              phase={resultBandPhase}
+      {!insufficientMmr && view.kind !== "error" && (showMmrSurface || showMmrLoading || showMaxbuyCard) ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {showMmrSurface || showMmrLoading ? (
+            <MmrSummaryCard
+              phase={mmrCardPhase}
               adjustments={adjustments}
               onAdjustmentsChange={handleAdjustmentsChange}
               onAdjustmentsClear={handleAdjustmentsClear}
               baseMmr={result?.mmrValue ?? null}
               confidence={result?.confidence ?? null}
-              method={result?.method ?? null}
               unavailableReason={view.kind === "unavailable" ? view.reason : null}
               avgOdometer={result?.avgOdometer ?? null}
               avgCondition={result?.avgCondition ?? null}
@@ -591,14 +552,32 @@ export function OpportunityValuationBlock({
               retailRangeLow={result?.retailRangeLow ?? null}
               retailRangeHigh={result?.retailRangeHigh ?? null}
             />
-          </div>
-          {showLiveMaxbuy ? (
-            <MaxbuyEvaluationSection
-              state={maxbuyView}
+          ) : null}
+
+          {showMaxbuyCard ? (
+            <MaxbuySummaryCard
+              savedSummary={savedVerdict}
+              liveState={maxbuyView}
               onRetry={handleMaxbuyRetry}
             />
           ) : null}
-        </>
+        </div>
+      ) : null}
+
+      {!insufficientMmr && (canRunFresh || session !== null) ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {canRunFresh ? (
+            <Button type="button" variant="outline" size="sm" onClick={handleRunFresh}>
+              <RefreshCw className="size-3.5" aria-hidden /> Run fresh lookup
+            </Button>
+          ) : null}
+          <Button type="button" variant="ghost" size="sm" asChild>
+            <a href={buildMmrLabHref(opportunity)}>
+              Open in MMR Lab
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          </Button>
+        </div>
       ) : null}
     </div>
   );

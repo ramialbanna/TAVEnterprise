@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 
@@ -123,7 +123,7 @@ describe("OpportunityTitleInformationBlock", () => {
     ).toBeInTheDocument();
   });
 
-  it("PATCHes selected state codes on save", () => {
+  it("PATCHes selected state codes on blur save", async () => {
     const onSave = vi.fn();
     render(
       <OpportunityTitleInformationBlock
@@ -136,12 +136,18 @@ describe("OpportunityTitleInformationBlock", () => {
 
     fireEvent.change(screen.getByLabelText("State/Region"), { target: { value: "TX" } });
     fireEvent.change(screen.getByLabelText("Tag State/Region"), { target: { value: "OK" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      titleStateRegion: "TX",
-      tagStateRegion: "OK",
-    });
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.blur(screen.getByLabelText("Tag State/Region"), { relatedTarget: outside });
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        titleStateRegion: "TX",
+        tagStateRegion: "OK",
+      }),
+    );
+    outside.remove();
   });
 
   it("disables Owner and Lien Payoff until their checkboxes are checked", () => {
@@ -194,7 +200,7 @@ describe("OpportunityTitleInformationBlock", () => {
     expect(screen.getByLabelText("Lien Payoff")).toHaveValue("");
   });
 
-  it("PATCHes paired checkbox and linked field values on save", () => {
+  it("PATCHes paired checkbox and linked field values on blur save", async () => {
     const onSave = vi.fn();
     render(
       <OpportunityTitleInformationBlock
@@ -209,13 +215,19 @@ describe("OpportunityTitleInformationBlock", () => {
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "Jane Doe" } });
     fireEvent.click(screen.getByLabelText("Extended Warranty"));
     fireEvent.change(screen.getByLabelText("Lien Payoff"), { target: { value: "1500" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      certified: true,
-      titleOwner: "Jane Doe",
-      extendedWarranty: true,
-      lienPayoff: 1500,
-    });
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.blur(screen.getByLabelText("Lien Payoff"), { relatedTarget: outside });
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        certified: true,
+        titleOwner: "Jane Doe",
+        extendedWarranty: true,
+        lienPayoff: 1500,
+      }),
+    );
+    outside.remove();
   });
 });

@@ -1,18 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { useBlockAutoSave } from "./use-block-auto-save";
+
 /**
  * Contact info block — right side of the hero row (redesign follow-up).
- * Editable 2-column grid of seller contact fields with block-level Save.
- * Persists via PATCH /app/opportunities/:id.
+ * Auto-saves on blur when focus leaves the block (item 32).
  */
 export function OpportunityContactInfoBlock({
   opportunity,
@@ -27,6 +27,8 @@ export function OpportunityContactInfoBlock({
   canMutate: boolean;
   error?: string | null;
 }) {
+  const blockRef = useRef<HTMLDivElement>(null);
+
   const initial = useMemo(
     () => ({
       contactFirstName: opportunity.contactFirstName ?? "",
@@ -47,11 +49,7 @@ export function OpportunityContactInfoBlock({
     );
   }, [initial, values]);
 
-  function handleReset() {
-    setValues(initial);
-  }
-
-  function handleSave() {
+  function buildPatch(): PatchOpportunityRequest {
     const patch: PatchOpportunityRequest = {};
     if (values.contactFirstName !== initial.contactFirstName)
       patch.contactFirstName = values.contactFirstName.trim() || null;
@@ -65,8 +63,21 @@ export function OpportunityContactInfoBlock({
       patch.contactAddress = values.contactAddress.trim() || null;
     if (values.contactPostalCode !== initial.contactPostalCode)
       patch.contactPostalCode = values.contactPostalCode.trim() || null;
-    onSave(patch);
+    return patch;
   }
+
+  function persistIfDirty() {
+    const patch = buildPatch();
+    if (Object.keys(patch).length > 0) onSave(patch);
+  }
+
+  const { handleBlur } = useBlockAutoSave({
+    blockRef,
+    isDirty,
+    canSave: canMutate,
+    pending,
+    onSave: persistIfDirty,
+  });
 
   function field(key: keyof typeof values, label: string, opts?: { type?: string }) {
     const id = `contact-${key}`;
@@ -88,7 +99,7 @@ export function OpportunityContactInfoBlock({
   }
 
   return (
-    <div className="space-y-4">
+    <div ref={blockRef} className="space-y-4" onBlur={handleBlur}>
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error-bg px-3 py-2 text-sm text-status-error">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -103,31 +114,6 @@ export function OpportunityContactInfoBlock({
         {field("contactAddress", "Address")}
         {field("contactPostalCode", "Postal Code")}
       </div>
-
-      {canMutate ? (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty || pending}
-          >
-            Save
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={handleReset}
-            disabled={!isDirty || pending}
-          >
-            Reset
-          </Button>
-          {isDirty ? (
-            <span className="text-xs text-muted-foreground">Unsaved changes</span>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

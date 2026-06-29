@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { MmrLabClient } from "./_components/mmr-lab-client";
 
 /**
@@ -7,5 +9,9 @@ import { MmrLabClient } from "./_components/mmr-lab-client";
  * Y/M/M/S uses live Manheim/Cox catalog when connected.
  */
 export default function MmrLabPage() {
-  return <MmrLabClient />;
+  return (
+    <Suspense fallback={null}>
+      <MmrLabClient />
+    </Suspense>
+  );
 }

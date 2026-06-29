@@ -31,6 +31,7 @@ function formatVehicleLine(opp: OpportunityDetail): string {
  */
 export function OpportunityDetailHero({
   opportunity,
+  contactBlockKey,
   primaryAction,
   secondaryActions,
   onSaveContact,
@@ -39,6 +40,7 @@ export function OpportunityDetailHero({
   patchError,
 }: {
   opportunity: OpportunityDetail;
+  contactBlockKey?: string;
   primaryAction?: ReactNode;
   secondaryActions?: ReactNode[];
   onSaveContact: (patch: PatchOpportunityRequest) => void;
@@ -84,6 +86,7 @@ export function OpportunityDetailHero({
         <CardContent className="p-5 sm:p-6">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Contact Information</h2>
           <OpportunityContactInfoBlock
+            key={contactBlockKey}
             opportunity={opportunity}
             onSave={onSaveContact}
             pending={patchPending}

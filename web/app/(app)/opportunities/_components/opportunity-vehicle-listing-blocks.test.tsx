@@ -144,7 +144,7 @@ describe("OpportunityVehicleBlock", () => {
     expect(screen.getByLabelText("Color")).toBeInstanceOf(HTMLSelectElement);
   });
 
-  it("disables Save until dirty and fires patch on save", async () => {
+  it("auto-saves on blur when a field changes", async () => {
     const onSave = vi.fn();
     render(<OpportunityVehicleBlock {...props({ onSave })} />);
 
@@ -152,14 +152,14 @@ describe("OpportunityVehicleBlock", () => {
       expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
     });
 
-    const saveButton = screen.getByRole("button", { name: "Save" });
-    expect(saveButton).toBeDisabled();
-
     fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
-    expect(saveButton).not.toBeDisabled();
 
-    fireEvent.click(saveButton);
-    expect(onSave).toHaveBeenCalledWith({ color: "Red" });
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    fireEvent.blur(screen.getByLabelText("Color"), { relatedTarget: outside });
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith({ color: "Red" }));
+    outside.remove();
   });
 
   it("clears make/model/series when year changes", async () => {
@@ -191,21 +191,21 @@ describe("OpportunityVehicleBlock", () => {
     expect(screen.getByRole("option", { name: "1.5L Turbo" })).toBeInTheDocument();
   });
 
-  it("reset restores initial values", async () => {
-    render(<OpportunityVehicleBlock {...props()} />);
+  it("does not auto-save when focus stays inside the block", async () => {
+    const onSave = vi.fn();
+    render(<OpportunityVehicleBlock {...props({ onSave })} />);
 
     await waitFor(() => {
       expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
     });
 
     fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
-    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
-    expect((screen.getByLabelText("Color") as HTMLSelectElement).value).toBe("");
-  });
+    fireEvent.blur(screen.getByLabelText("Color"), {
+      relatedTarget: screen.getByLabelText("VIN"),
+    });
 
-  it("hides save controls when canMutate is false", () => {
-    render(<OpportunityVehicleBlock {...props({ canMutate: false })} />);
-    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("renders Additional Information with location and source", () => {

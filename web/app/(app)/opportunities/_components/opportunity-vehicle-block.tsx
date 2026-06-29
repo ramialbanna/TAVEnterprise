@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
@@ -16,7 +16,6 @@ import {
   VEHICLE_TRANSMISSION_OPTIONS,
 } from "@/lib/vehicle-attribute-options";
 import { AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -27,6 +26,7 @@ import {
   useVehicleCatalogOptions,
   type VehicleSelection,
 } from "./use-vehicle-catalog";
+import { useBlockAutoSave } from "./use-block-auto-save";
 
 const selectClass =
   "h-9 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
@@ -63,6 +63,8 @@ export function OpportunityVehicleBlock({
   canMutate: boolean;
   error?: string | null;
 }) {
+  const blockRef = useRef<HTMLDivElement>(null);
+
   const initial = useMemo(
     (): VehicleValues => ({
       vin: opportunity.vin ?? "",
@@ -117,11 +119,7 @@ export function OpportunityVehicleBlock({
     });
   }
 
-  function handleReset() {
-    setValues(initial);
-  }
-
-  function handleSave() {
+  function buildPatch(): PatchOpportunityRequest {
     const patch: PatchOpportunityRequest = {};
     if (values.vin !== initial.vin) patch.vin = values.vin.trim() || null;
     if (values.mileage !== initial.mileage) {
@@ -140,8 +138,21 @@ export function OpportunityVehicleBlock({
     if (values.transmission !== initial.transmission)
       patch.transmission = values.transmission.trim() || null;
     if (values.color !== initial.color) patch.color = values.color.trim() || null;
-    onSave(patch);
+    return patch;
   }
+
+  function persistIfDirty() {
+    const patch = buildPatch();
+    if (Object.keys(patch).length > 0) onSave(patch);
+  }
+
+  const { handleBlur } = useBlockAutoSave({
+    blockRef,
+    isDirty,
+    canSave: canMutate,
+    pending,
+    onSave: persistIfDirty,
+  });
 
   function textField(
     key: "vin" | "mileage",
@@ -239,7 +250,7 @@ export function OpportunityVehicleBlock({
   const styleOptions = selectOptionsWithLegacy(catalog.styles, values.style);
 
   return (
-    <div className="space-y-4">
+    <div ref={blockRef} className="space-y-4" onBlur={handleBlur}>
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error-bg px-3 py-2 text-sm text-status-error">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -390,31 +401,6 @@ export function OpportunityVehicleBlock({
           {readOnlyField("vehicle-source", "Source", formatSource(opportunity.source))}
         </div>
       </div>
-
-      {canMutate ? (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSave}
-            disabled={!isDirty || pending}
-          >
-            Save
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={handleReset}
-            disabled={!isDirty || pending}
-          >
-            Reset
-          </Button>
-          {isDirty ? (
-            <span className="text-xs text-muted-foreground">Unsaved changes</span>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

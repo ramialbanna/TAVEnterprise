@@ -268,6 +268,12 @@ test.describe("/mmr-lab (authenticated, live Cox catalog)", () => {
     await expect(page.getByText(/\$\d/)).toHaveCount(0);
   });
 
+  test("prefills VIN from query string", async ({ page }) => {
+    await mockCatalog(page);
+    await page.goto(`/mmr-lab?vin=${VALID_VIN}`);
+    await expect(page.getByLabel("VIN", { exact: true })).toHaveValue(VALID_VIN);
+  });
+
   test("/maxbuy redirects to /mmr-lab", async ({ page }) => {
     await mockCatalog(page);
     await page.goto("/maxbuy");
