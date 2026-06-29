@@ -7,6 +7,8 @@ import {
   postMaxbuyEvaluate,
   postMmrVin,
   postMmrYmm,
+  type MmrVinRequest,
+  type MmrYmmRequest,
 } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type {
@@ -166,8 +168,27 @@ function shouldRunMaxbuyOnFreshLookup(opportunity: OpportunityDetail): boolean {
 
 async function fetchMmrForSession(
   session: MmrLabLookupSession,
+  opts?: { refresh?: boolean; adjustments?: MmrAdjustments },
 ): Promise<ApiResult<MmrVinOk>> {
+  const refresh = opts?.refresh === true;
+  const adj = opts?.adjustments ?? EMPTY_MMR_ADJUSTMENTS;
+
   try {
+    if (refresh) {
+      const request = buildMmrRecomputeRequest(session, adj);
+      const refreshFlag = { refresh_valuation: true as const };
+      if (session.kind === "vin") {
+        return await postMmrVin({
+          ...(request as MmrVinRequest),
+          ...refreshFlag,
+        });
+      }
+      return await postMmrYmm({
+        ...(request as MmrYmmRequest),
+        ...refreshFlag,
+      });
+    }
+
     if (session.kind === "vin") {
       return await postMmrVin({ vin: session.vin });
     }
@@ -262,6 +283,9 @@ export function OpportunityValuationBlock({
   useLayoutEffect(() => {
     adjustmentsRef.current = adjustments;
   });
+  useLayoutEffect(() => {
+    laneAskPriceRef.current = laneAskPriceFromOpportunity(opportunity);
+  });
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
     const pendingChanges = pendingMarginalChangesRef.current.slice();
@@ -323,17 +347,31 @@ export function OpportunityValuationBlock({
   );
 
   const runLookup = useCallback(
-    async (session: MmrLabLookupSession, opts?: { runMaxbuy?: boolean }) => {
+    async (
+      session: MmrLabLookupSession,
+      opts?: { runMaxbuy?: boolean; refresh?: boolean },
+    ) => {
       const runMaxbuy = opts?.runMaxbuy ?? true;
+      const refresh = opts?.refresh === true;
       lookupSessionRef.current = session;
       setAdjustmentBaseline(null);
-      setAdjustments(initialMmrAdjustments(opportunity));
       setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
       pendingMarginalChangesRef.current = [];
+
+      const adjForFetch = refresh
+        ? adjustmentsRef.current
+        : initialMmrAdjustments(opportunity);
+      if (!refresh) {
+        setAdjustments(adjForFetch);
+      }
+
       setView({ kind: "loading" });
       setMaxbuyView(runMaxbuy ? { kind: "loading" } : { kind: "idle" });
 
-      const mmrRes = await fetchMmrForSession(session);
+      const mmrRes = await fetchMmrForSession(session, {
+        refresh,
+        adjustments: adjForFetch,
+      });
 
       if (!mmrRes.ok) {
         if (mmrRes.kind === "unavailable") {
@@ -345,7 +383,7 @@ export function OpportunityValuationBlock({
         return;
       }
 
-      applyMmrResult(mmrRes.data, EMPTY_MMR_ADJUSTMENTS);
+      applyMmrResult(mmrRes.data, refresh ? adjForFetch : EMPTY_MMR_ADJUSTMENTS);
 
       if (!runMaxbuy) return;
 
@@ -466,7 +504,10 @@ export function OpportunityValuationBlock({
   const handleRunFresh = useCallback(() => {
     const session = sessionFromOpportunity(opportunity);
     if (session) {
-      void runLookup(session, { runMaxbuy: shouldRunMaxbuyOnFreshLookup(opportunity) });
+      void runLookup(session, {
+        runMaxbuy: shouldRunMaxbuyOnFreshLookup(opportunity),
+        refresh: true,
+      });
     }
   }, [opportunity, runLookup]);
 

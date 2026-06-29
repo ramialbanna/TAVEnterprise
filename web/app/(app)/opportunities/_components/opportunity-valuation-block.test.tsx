@@ -319,9 +319,14 @@ describe("OpportunityValuationBlock", () => {
     await waitFor(() => expect(screen.getByText("$21,749")).toBeInTheDocument());
     expect(screen.queryByText(/as of/i)).toBeNull();
 
-    expect(
-      fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/app/mmr/vin")),
-    ).toBe(true);
+    const mmrCall = fetchSpy.mock.calls.find((c) =>
+      String(c[0]).includes("/api/app/mmr/vin"),
+    );
+    expect(mmrCall).toBeTruthy();
+    expect(JSON.parse(String(mmrCall![1]?.body))).toMatchObject({
+      refresh_valuation: true,
+    });
+
     expect(
       fetchSpy.mock.calls.some((c) =>
         String(c[0]).includes("/api/app/maxbuy/evaluate"),

@@ -151,6 +151,8 @@ export type MmrVinRequest = {
   year?: number;
   mileage?: number;
   adjustments?: MmrAdjustmentsRequest;
+  /** Bypass intel MMR cache (Refresh valuation). */
+  refresh_valuation?: boolean;
 };
 
 export type MmrYmmRequest = {
@@ -160,6 +162,7 @@ export type MmrYmmRequest = {
   style: string;
   mileage?: number;
   adjustments?: MmrAdjustmentsRequest;
+  refresh_valuation?: boolean;
 };
 
 /** Request body for `POST /app/opportunities/manual` (WF-1 required fields). */

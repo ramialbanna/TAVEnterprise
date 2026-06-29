@@ -1,7 +1,7 @@
 import { okResponse } from "../types/api";
 import { AuthError, ValidationError } from "../errors";
 import { MmrVinLookupRequestSchema } from "../validate";
-import { canForceRefresh } from "../auth/userContext";
+import { canForceRefreshMmrLookup } from "../auth/userContext";
 import { performMmrLookup } from "../services/mmrLookup";
 import { buildMmrLookupDeps } from "../services/mmrLookupDeps";
 import type { HandlerArgs } from "./types";
@@ -27,7 +27,7 @@ export async function handleMmrVin(args: HandlerArgs): Promise<Response> {
     );
   }
 
-  if (parsed.data.force_refresh && !canForceRefresh(args.userContext, args.env.MANAGER_EMAIL_ALLOWLIST)) {
+  if (parsed.data.force_refresh && !canForceRefreshMmrLookup(args.userContext, args.env.MANAGER_EMAIL_ALLOWLIST)) {
     throw new AuthError("force_refresh requires manager role or allowlist membership");
   }
 

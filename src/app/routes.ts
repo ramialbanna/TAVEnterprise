@@ -94,6 +94,8 @@ const AppMmrVinRequestSchema = z.object({
   year: z.number().int().min(1900).max(2100).optional(),
   mileage: z.number().int().nonnegative().max(2_000_000).optional(),
   adjustments: MmrLookupAdjustmentsSchema.optional(),
+  /** When true, bypass intel MMR cache (Refresh valuation on opportunity detail). */
+  refresh_valuation: z.boolean().optional(),
 });
 const AppMmrYmmRequestSchema = z.object({
   year: z.number().int().min(1900).max(2100),
@@ -102,6 +104,7 @@ const AppMmrYmmRequestSchema = z.object({
   style: z.string().trim().min(1).max(128),
   mileage: z.number().int().nonnegative().max(2_000_000).optional(),
   adjustments: MmrLookupAdjustmentsSchema.optional(),
+  refresh_valuation: z.boolean().optional(),
 });
 const IntelCatalogEnvelopeSchema = z.object({
   success: z.literal(true),
@@ -828,13 +831,14 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
   }
 
-  const { vin, year, mileage, adjustments } = parsed.data;
+  const { vin, year, mileage, adjustments, refresh_valuation } = parsed.data;
   const body: Record<string, unknown> = { vin };
   if (year !== undefined) body.year = year;
   if (mileage !== undefined) body.mileage = mileage;
   if (adjustments !== undefined) {
     body.adjustments = normalizeMmrLookupAdjustments(adjustments);
   }
+  if (refresh_valuation) body.force_refresh = true;
 
   return fetchIntelMmrLookup(env, "/mmr/vin", body, "mmr_vin", "vin", "high");
 }
@@ -938,12 +942,13 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: "invalid_body", issues: parsed.error.issues.slice(0, 5) }, 400);
   }
 
-  const { year, make, model, style, mileage, adjustments } = parsed.data;
+  const { year, make, model, style, mileage, adjustments, refresh_valuation } = parsed.data;
   const body: Record<string, unknown> = { year, make, model, trim: style };
   if (mileage !== undefined) body.mileage = mileage;
   if (adjustments !== undefined) {
     body.adjustments = normalizeMmrLookupAdjustments(adjustments);
   }
+  if (refresh_valuation) body.force_refresh = true;
 
   return fetchIntelMmrLookup(
     env,

@@ -81,10 +81,20 @@ export function canForceRefresh(
     .map(e => e.trim().toLowerCase())
     .filter(e => e.length > 0);
 
-  return allowlist.includes(ctx.email.toLowerCase());
-}
+/** Service identity used when the app Worker calls intel via service binding. */
+export const TAV_SERVICE_USER_EMAIL = "service@tav-internal";
 
-function readHeader(headers: Headers, name: string): string | null {
+/**
+ * Whether this caller may request `force_refresh` on an MMR lookup.
+ * Includes the trusted app Worker service identity (Refresh valuation on detail).
+ */
+export function canForceRefreshMmrLookup(
+  ctx: UserContext,
+  managerAllowlist: string | undefined,
+): boolean {
+  if (ctx.email === TAV_SERVICE_USER_EMAIL) return true;
+  return canForceRefresh(ctx, managerAllowlist);
+}
   const v = headers.get(name);
   if (v === null) return null;
   const trimmed = v.trim();

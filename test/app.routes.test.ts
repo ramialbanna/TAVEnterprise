@@ -733,6 +733,18 @@ describe("POST /app/mmr/vin", () => {
     expect(String(intelFetch.mock.calls[0]?.[0])).toContain("/mmr/vin");
   });
 
+  it("forwards refresh_valuation as force_refresh to intel", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
+    const res = await worker.fetch(
+      authedPost("/app/mmr/vin", { vin: VIN, refresh_valuation: true }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const request = JSON.parse(String((intelFetch.mock.calls[0]?.[1] as RequestInit).body)) as Record<string, unknown>;
+    expect(request).toEqual({ vin: VIN, force_refresh: true });
+  });
+
   it("maps base wholesale to mmrValue when Cox returns separate base and adjusted tiers", async () => {
     const intelFetch = vi.fn().mockResolvedValue(intelOk({
       ...vinEnvelope,
