@@ -148,12 +148,11 @@ export function OpportunityTitleInformationBlock({
     numeric?: boolean;
   }) {
     const checkboxId = `title-${checkboxKey}`;
-    const enabled = values[checkboxKey];
 
     return (
       <div className="flex items-end gap-3">
         <div className="min-w-0 flex-1">
-          {field(fieldKey, fieldLabel, { numeric, disabled: !enabled })}
+          {field(fieldKey, fieldLabel, { numeric })}
         </div>
         <div className="shrink-0 pb-2">
           <label htmlFor={checkboxId} className="flex items-center gap-2 text-sm">
@@ -162,12 +161,7 @@ export function OpportunityTitleInformationBlock({
               id={checkboxId}
               checked={values[checkboxKey]}
               onChange={(e) => {
-                const checked = e.target.checked;
-                setValues((v) => ({
-                  ...v,
-                  [checkboxKey]: checked,
-                  [fieldKey]: checked ? v[fieldKey] : "",
-                }));
+                setValues((v) => ({ ...v, [checkboxKey]: e.target.checked }));
               }}
               disabled={!canMutate || pending}
             />

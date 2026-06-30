@@ -1,8 +1,8 @@
 # Opportunity detail page redesign
 
-**Status:** Shipped — Phase 1 + 2 + 3 + 4 + 5 (2026-06-24); discovery 2026-06-24
+**Status:** Shipped — items 24–35 on `main` (2026-06-29); compact valuation cards, blur-save, block reorder  
 **Route:** `/opportunities/[id]`  
-**Goal:** Replace the current sparse single-column layout with a dense, vAuto-inspired **block workspace** — grouped collapsible sections, two-column field grids inside blocks, and MMR Lab + Max buy integrated into one valuation surface.
+**Goal:** Dense, vAuto-inspired **block workspace** — grouped collapsible sections, two-column field grids, compact MMR + Max buy summary cards (full workbench on `/mmr-lab`).
 
 **Reference:** vAuto Appraisal UI (layout inspiration only — not a feature-for-feature copy).  
 **Companion:** [`NEXT_STEPS_LEAD_TO_DEAL.md`](../NEXT_STEPS_LEAD_TO_DEAL.md) · [`MMR-LAB-ARCHITECTURE.md`](../07-buybox/MMR-LAB-ARCHITECTURE.md) · [`v2-opportunities.md`](v2-opportunities.md)
@@ -16,12 +16,14 @@
 | Layout | Single main column; **two columns inside blocks** for field grids; **no sticky sidebar** |
 | Blocks | **Collapsible**, **all open by default** |
 | Queue entry | **Single click → full page**; **retire preview sheet** |
-| Workflow stepper | **One strip:** Found → Working → Contacted → **Landed** |
-| Landed | **Bought only** |
-| Passed | **Secondary action button** (not a step); stepper UX when passed — **TBD later** |
+| Workflow stepper | **One strip:** Found → Working → Contacted → **Appraised** |
+| Appraised | **Bought only** (formerly “Landed”) |
+| Passed | **Secondary action button** (not a step); maps to Contacted in stepper |
 | Primary actions | **Hero** (claim, listing, workflow CTAs) |
-| Valuation | **One block:** miniature **MMR Lab** + **Max buy** |
-| Max buy on open | Show **saved verdict** if present; otherwise **auto-run on page load** |
+| Valuation | **Compact MMR + Max buy summary cards**; adjustments on expand; `/mmr-lab` for full workbench |
+| Max buy card | **A–F deal grade** circle + recommended max buy; details on expand |
+| Save UX | **Auto-save on blur** per block (no per-block Save buttons) |
+| Listing block | **Removed** — provenance in hero + Vehicle additional info |
 | Badges | **Hero only** |
 | Evaluate on open | **Keep silent** audit (`POST …/evaluate`) — no UI |
 | Next deal shortcut | **Later** (not v1) |
@@ -213,7 +215,7 @@ Align labels with `manual-submit-form.tsx` and `ManualOpportunitySubmissionSchem
 | Card | Content |
 |------|---------|
 | **MMR** | Adjusted MMR hero + wholesale range; secondary line (base, est. retail, avg odo, avg condition); confidence badge |
-| **Max buy** | Verdict badge, recommended max buy, data strength, evaluated-at (or dashed placeholder when MMR identity exists but mileage/price missing for YMM Max buy) |
+| **Max buy** | A–F grade circle, recommended max buy hero, evaluated-at (or dashed placeholder when MMR identity exists but mileage/price missing for YMM Max buy) |
 
 **Progressive disclosure:**
 
@@ -222,7 +224,7 @@ Align labels with `manual-submit-form.tsx` and `ManualOpportunitySubmissionSchem
 
 **Block-level actions:**
 
-- **Refresh valuation** — refreshes MMR + Max buy together.
+- **Refresh valuation** — refreshes MMR + Max buy together. _Known gap (item 38): Max buy card may not always update — see [`NEXT_STEPS.md`](../NEXT_STEPS.md)._
 
 **Auto-run gates (split):**
 
@@ -375,16 +377,15 @@ New or extended backend work likely required:
 ## Acceptance criteria (v1)
 
 - [x] Single click on queue row opens full detail page (no preview sheet)  
-- [x] One workflow stepper: Found → Working → Contacted → Landed  
+- [x] One workflow stepper: Found → Working → Contacted → **Appraised**  
 - [x] Hero contains Open listing + claim + workflow CTAs  
-- [x] All blocks collapsible, open by default  
-- [x] Vehicle block shows vAuto-style fields in 2-column grid  
-- [x] Listing block shows manual-submit parity fields (URL, source, region, provenance, sighting)  
-- [x] Valuation block combines MMR Lab fields + Max buy; auto-runs Max buy when no saved verdict  
+- [x] All blocks collapsible, open by default; Listing block removed  
+- [x] Vehicle block: vAuto-style catalog dropdowns + blur-save  
+- [x] Valuation: compact MMR + Max buy summary cards; MMR auto-run without odometer  
+- [x] Blur-save on Contact, Vehicle, Salesperson/Appraisal, Title blocks  
 - [x] Notes block + collapsed History block  
 - [x] No duplicate workflow steppers on page  
 - [x] Silent evaluate-on-open still fires  
-- [x] Desktop layout uses width; no empty twin cards for Valuation/Vehicle  
 
 ---
 

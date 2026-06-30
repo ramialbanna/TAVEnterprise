@@ -150,24 +150,10 @@ describe("OpportunityTitleInformationBlock", () => {
     outside.remove();
   });
 
-  it("disables Owner and Lien Payoff until their checkboxes are checked", () => {
+  it("keeps Owner and Lien Payoff editable regardless of checkbox state", () => {
     render(
       <OpportunityTitleInformationBlock
         opportunity={makeDetail()}
-        onSave={vi.fn()}
-        pending={false}
-        canMutate
-      />,
-    );
-
-    expect(screen.getByLabelText("Owner")).toBeDisabled();
-    expect(screen.getByLabelText("Lien Payoff")).toBeDisabled();
-  });
-
-  it("enables linked fields when checkboxes are checked", () => {
-    render(
-      <OpportunityTitleInformationBlock
-        opportunity={makeDetail({ certified: true, extendedWarranty: true })}
         onSave={vi.fn()}
         pending={false}
         canMutate
@@ -178,7 +164,7 @@ describe("OpportunityTitleInformationBlock", () => {
     expect(screen.getByLabelText("Lien Payoff")).not.toBeDisabled();
   });
 
-  it("clears linked fields when checkboxes are unchecked", () => {
+  it("does not clear linked fields when checkboxes are unchecked", () => {
     render(
       <OpportunityTitleInformationBlock
         opportunity={makeDetail({
@@ -196,11 +182,11 @@ describe("OpportunityTitleInformationBlock", () => {
     fireEvent.click(screen.getByLabelText("Certified"));
     fireEvent.click(screen.getByLabelText("Extended Warranty"));
 
-    expect(screen.getByLabelText("Owner")).toHaveValue("");
-    expect(screen.getByLabelText("Lien Payoff")).toHaveValue("");
+    expect(screen.getByLabelText("Owner")).toHaveValue("Jane Doe");
+    expect(screen.getByLabelText("Lien Payoff")).toHaveValue("1200");
   });
 
-  it("PATCHes paired checkbox and linked field values on blur save", async () => {
+  it("PATCHes checkbox and field values independently on blur save", async () => {
     const onSave = vi.fn();
     render(
       <OpportunityTitleInformationBlock
@@ -211,10 +197,10 @@ describe("OpportunityTitleInformationBlock", () => {
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Certified"));
     fireEvent.change(screen.getByLabelText("Owner"), { target: { value: "Jane Doe" } });
-    fireEvent.click(screen.getByLabelText("Extended Warranty"));
     fireEvent.change(screen.getByLabelText("Lien Payoff"), { target: { value: "1500" } });
+    fireEvent.click(screen.getByLabelText("Certified"));
+    fireEvent.click(screen.getByLabelText("Extended Warranty"));
 
     const outside = document.createElement("button");
     document.body.appendChild(outside);

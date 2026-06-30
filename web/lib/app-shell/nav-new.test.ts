@@ -28,14 +28,15 @@ describe("nav-new", () => {
     expect(navTitleNew("/dashboard")).toBe("Home");
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
-    expect(navTitleNew("/mmr-lab")).toBe("MMR Lab");
-    expect(navTitleNew("/maxbuy")).toBe("MMR Lab");
+    expect(navTitleNew("/mmr-lab")).toBe("Value a vehicle");
+    expect(navTitleNew("/maxbuy")).toBe("Value a vehicle");
     expect(analyticsNavItem().label).toBe("Analytics");
   });
 
-  it("buyer nav includes MMR Lab only (Max buy redirects to /mmr-lab)", () => {
+  it("buyer nav includes value-a-vehicle link (Max buy redirects to /mmr-lab)", () => {
     const hrefs = buyerNavItems().map((i) => i.href);
     expect(hrefs).toContain("/mmr-lab");
     expect(hrefs).not.toContain("/maxbuy");
+    expect(buyerNavItems().find((i) => i.href === "/mmr-lab")?.label).toBe("Value a vehicle");
   });
 });

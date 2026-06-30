@@ -1,7 +1,7 @@
 # UI Improvements Backlog
 
-**Status:** In progress — Phases 0–3 shipped on Opportunities (New mode); see [NEXT_STEPS.md](../NEXT_STEPS.md)  
-**Last updated:** 2026-05-31  
+**Status:** In progress — Phases 0–3 + opportunity detail (items 24–35) shipped; Phase 6 nav labels done  
+**Last updated:** 2026-06-29  
 **Owner:** UX / product  
 **Related:** [V2 Opportunities](v2-opportunities.md) · [06-platform UX spec (pending)](../06-platform/README.md) · **[Implementation checklist → NEXT_STEPS.md](../NEXT_STEPS.md)**
 
@@ -104,8 +104,8 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 | Near miss | “Almost a deal” / “Worth reviewing” | [x] New mode |
 | MMR | “Wholesale value” (tooltip: MMR) | [x] New mode |
 | Spread | “Room to make” / “Under or over market” | [x] New mode |
-| Ingest Monitor | Hide from buyer nav; keep for admin/ops | [ ] Phase 6 |
-| VIN / MMR Lab | “Value a vehicle” or admin-only | [ ] Phase 6 |
+| Ingest Monitor | Hidden from buyer nav; admin **More tools** only | [x] New mode |
+| VIN / MMR Lab | **Value a vehicle** (route `/mmr-lab`) | [x] New mode |
 | Claim opportunity | “I’m working this” | [x] New mode |
 | Manual submission | “Submitted by team” | [x] New mode |
 | Region keys (`dallas_tx`) | “Dallas”, “Lubbock”, etc. | [x] New mode |
@@ -175,7 +175,7 @@ Highest impact for least backend work. Good first slice if we pick one UX milest
 | 5.1 | **Buyer nav:** Opportunities, Submit a listing, My work | [ ] |
 | 5.2 | **Admin / ops nav:** Ingest, MMR Lab, Historical, Admin under “More tools” or separate section | [ ] |
 | 5.3 | **Role-based landing** — closers → My queue; admins → lighter ops overview | [ ] |
-| 5.4 | Hide Ingest Monitor from non-admin roles | [ ] |
+| 5.4 | Hide Ingest Monitor from non-admin roles | [x] New mode — ops under More tools |
 | 5.5 | Hide or restrict Admin / Integrations by role | [ ] |
 | 5.6 | Rename **Dashboard** → **Home** with action-oriented tiles (see §7) | [ ] |
 
@@ -204,8 +204,8 @@ Lower effort, still noticeable across the shell.
 
 | Item | Description | Status |
 |------|-------------|--------|
-| 7.1 | Soften or hide loud **PRODUCTION** env badge for normal `@texasautovalue.com` users | [ ] |
-| 7.2 | Keep env badge for staging / local / admin | [ ] |
+| 7.1 | Soften or hide loud **PRODUCTION** env badge for normal `@texasautovalue.com` users | [x] New mode (`EnvBadgeNew` shows “Live”) |
+| 7.2 | Keep env badge for staging / local / admin | [x] New mode |
 | 7.3 | Replace uppercase micro-headers site-wide (`QUEUE SUMMARY`, etc.) with sentence case | [~] New Opportunities queue/table headers |
 | 7.4 | **Home** page: 3 tiles — “X deals need you”, “Submit a listing”, “Recent activity” | [ ] |
 | 7.5 | Move charts / KPIs behind **Analytics** or secondary section on Home | [ ] |
@@ -254,7 +254,8 @@ Lower effort, still noticeable across the shell.
 
 | Date | Item | PR / notes |
 |------|------|------------|
-| 2026-05-31 | §8 Classic/New toggle | Phase 0 — `InterfaceProvider`, top-bar toggle |
+| 2026-06-29 | §2 Phase 6 nav | “Value a vehicle” label; Ingest admin-only (already in More tools) |
+| 2026-06-29 | Opportunity detail items 24–35 | Compact valuation, blur-save, Appraised stepper — see NEXT_STEPS.md |
 | 2026-05-31 | §3 Table at scale | Phase 3 — New `OpportunitiesTableNew` |
 | 2026-05-31 | §2 Plain language | Phase 2 — `opportunities-labels.ts` |
 | 2026-05-31 | §1 API views | Phase 1 — Worker `view=` + pagination (UI tabs pending Phase 4) |

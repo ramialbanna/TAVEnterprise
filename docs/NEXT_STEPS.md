@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-29 · **Focus:** Items 34–35 shipped (E2E + MMR Lab URL prefill); active queue empty
+**Last updated:** 2026-06-29 · **Focus:** Phase 6 buyer nav labels; Max buy refresh on detail **deferred**
 
 > **Fresh chat prompt:**
-> Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md).
+> Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md). UX backlog: [`02-product/ui-improvements-backlog.md`](02-product/ui-improvements-backlog.md).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -57,14 +57,28 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **34** | Opportunity detail E2E — blur-save + compact valuation assertions | Medium | [x] |
-| **35** | MMR Lab URL prefill from opportunity detail (`?vin=` / YMM params) | Medium | [x] |
+| **36** | New-mode nav — rename MMR Lab → **Value a vehicle** (buyer label; route stays `/mmr-lab`) | Medium | [x] |
+| **37** | Doc sync — opportunity detail redesign + exit criteria for items 24–33 | Low | [x] |
+| **38** | Max buy refresh on opportunity detail — live card does not reliably update on **Refresh valuation** | Medium | [ ] deferred |
 
-_All numbered items 2–33 complete. Items 34–35 close remaining exit criteria from 32/33._
+_MMR Lab / opportunity detail items 2–35 complete._
+
+### Known issue (deferred — item 38)
+
+**Refresh valuation** on `/opportunities/[id]` may update the MMR summary card but not the Max buy summary card. MMR cache bypass (`refresh_valuation` → `force_refresh`) is wired; Max buy re-evaluate path still flaky. Workaround: expand Max buy **Details** and re-run from `/mmr-lab`, or edit mileage/price and blur-save Vehicle block. Do not block other UX work on this until a dedicated debugging pass.
 
 ---
 
-## Previously active (complete)
+## Previously active (complete — opportunity detail + MMR Lab)
+
+| # | Item | Priority | Status |
+|---|------|----------|--------|
+| **34** | Opportunity detail E2E — blur-save + compact valuation assertions | Medium | [x] |
+| **35** | MMR Lab URL prefill from opportunity detail (`?vin=` / YMM params) | Medium | [x] |
+
+---
+
+## Previously active (complete — MMR Lab polish)
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
@@ -138,10 +152,10 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] Block order matches table above
-- [ ] Hero primary/secondary workflow actions unchanged
-- [ ] Workflow stepper + assignment/claim UI still works after move
-- [ ] No duplicate workflow UI introduced
+- [x] Block order matches table above
+- [x] Hero primary/secondary workflow actions unchanged
+- [x] Workflow stepper + assignment/claim UI still works after move
+- [x] No duplicate workflow UI introduced
 
 ---
 
@@ -156,9 +170,9 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 
 **Exit criteria:**
 
-- [ ] Listing block not visible on `/opportunities/[id]`
-- [ ] Hero still shows listing URL, source, provenance as today
-- [ ] Update E2E/UAT if they assert Listing block presence
+- [x] Listing block not visible on `/opportunities/[id]`
+- [x] Hero still shows listing URL, source, provenance as today
+- [x] Update E2E/UAT if they assert Listing block presence
 
 ---
 
@@ -232,7 +246,7 @@ First shipped layout (Phases 1–5) is being refined. Hero workflow CTAs stay in
 **Exit criteria:**
 
 - [x] Certified + Owner share one row; Extended Warranty + Lien Payoff share one row
-- [x] Linked textbox disabled when its checkbox is unchecked
+- [x] Linked textbox sits on the same row as its checkbox (placement only — fields always editable)
 - [x] PATCH payload unchanged semantically (`certified`, `titleOwner`, `extendedWarranty`, `lienPayoff`)
 - [x] Save/Reset/dirty state still correct
 
@@ -287,10 +301,10 @@ Found → Working → Contacted → Appraised
 
 **Exit criteria:**
 
-- [ ] Stepper shows Found → Working → Contacted → **Appraised**
-- [ ] Active step still resolves correctly for `purchased` / `bought` opportunities
-- [ ] Passed still maps to Contacted (not Appraised), same as today
-- [ ] Tests/E2E updated if they assert “Landed”
+- [x] Stepper shows Found → Working → Contacted → **Appraised**
+- [x] Active step still resolves correctly for `purchased` / `bought` opportunities
+- [x] Passed still maps to Contacted (not Appraised), same as today
+- [x] Tests/E2E updated if they assert “Landed”
 
 ---
 
@@ -397,11 +411,11 @@ Found → Working → Contacted → Appraised
 
 **Exit criteria:**
 
-- [ ] No Save button on Contact, Vehicle, Salesperson/Appraisal, Title blocks (unless product keeps Reset)  
-- [ ] Editing then clicking outside the block persists via PATCH without manual Save  
-- [ ] Focus moving between fields **inside** the same block does not trigger save  
-- [ ] Valuation refresh still runs after vehicle identity saves  
-- [ ] E2E updated: blur-to-save instead of Save button click  
+- [x] No Save button on Contact, Vehicle, Salesperson/Appraisal, Title blocks (unless product keeps Reset)  
+- [x] Editing then clicking outside the block persists via PATCH without manual Save  
+- [x] Focus moving between fields **inside** the same block does not trigger save  
+- [x] Valuation refresh still runs after vehicle identity saves  
+- [x] E2E updated: blur-to-save instead of Save button click  
 
 ---
 
@@ -431,12 +445,13 @@ Found → Working → Contacted → Appraised
 **Max buy summary card** (keep/enhance existing `SavedVerdictCard`):
 
 - One card only — live evaluate **updates this card**; do not render a second full `MaxbuyEvaluationSection` below when summary suffices.
-- Verdict badge, recommended max buy, data strength, evaluated-at.
+- **A–F deal grade** circle (Provisioning-style) derived from verdict + data strength.
+- Recommended max buy hero, evaluated-at.
 - Economics, segment history, explanation math, and action buttons → **expand / details** only.
 
-**Block-level action:** Single **Run fresh lookup** refreshes MMR + Max buy together (avoid duplicate refresh buttons).
+**Block-level action:** Single **Refresh valuation** refreshes MMR + Max buy together (avoid duplicate refresh buttons). _Known gap: Max buy card may not update reliably — see item 38._
 
-**Power users:** Link **Open in MMR Lab** (prefill VIN or YMM from opportunity) for transactions, historical/projected, full workbench.
+**Power users:** Full workbench on `/mmr-lab` (URL prefill from opportunity query params when linked externally).
 
 ### Progressive disclosure (expanded)
 
