@@ -29,7 +29,7 @@ import {
 import { useBlockAutoSave } from "./use-block-auto-save";
 
 const selectClass =
-  "h-9 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 type VehicleValues = {

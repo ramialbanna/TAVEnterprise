@@ -51,7 +51,7 @@ const VIN_MIN = 11;
 const VIN_MAX = 17;
 
 const selectBase =
-  "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 /** Parses optional lane/list price for MaxBuy `asking_price` (MLB-5). */

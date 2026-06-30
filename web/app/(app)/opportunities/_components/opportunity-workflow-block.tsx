@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const selectClass =
-  "h-9 min-w-[12rem] rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "h-9 min-w-[12rem] rounded-md border border-border bg-background px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 export type OpportunityWorkflowBlockProps = {

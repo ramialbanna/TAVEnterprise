@@ -112,7 +112,7 @@ function buildRequest(form: FormState): ManualSubmissionRequest | null {
 }
 
 const selectClass =
-  "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 function parseOptionalInt(raw: string): number | undefined {
@@ -645,7 +645,7 @@ export function ManualSubmitFormFields({
         <Label htmlFor={pid("submitterNotes")}>Your notes (optional)</Label>
         <textarea
           id={pid("submitterNotes")}
-          className="min-h-20 w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+          className="min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           placeholder="Why this one looks interesting, seller context, etc."
           value={form.submitterNotes}
           onChange={(e) => updateField("submitterNotes", e.target.value)}

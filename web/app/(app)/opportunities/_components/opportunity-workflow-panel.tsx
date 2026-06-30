@@ -29,11 +29,11 @@ import {
 } from "./workflow-helpers";
 
 const selectClass =
-  "h-9 min-w-[12rem] rounded-md border border-border bg-card px-3 text-sm text-foreground " +
+  "h-9 min-w-[12rem] rounded-md border border-border bg-background px-3 text-sm text-foreground " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 const textareaClass =
-  "min-h-[5rem] w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground " +
+  "min-h-[5rem] w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground " +
   "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 " +
   "focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 

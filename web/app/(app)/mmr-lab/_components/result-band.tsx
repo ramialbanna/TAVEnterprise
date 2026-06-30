@@ -58,7 +58,7 @@ function Stat({ label, value }: { label: string; value?: number | null }) {
 }
 
 const adjSelectClass =
-  "h-10 w-full rounded-md border border-border bg-card px-3 text-sm " +
+  "h-10 w-full rounded-md border border-border bg-background px-3 text-sm " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 function ResultBandSkeleton() {
@@ -265,7 +265,7 @@ export function MmrAdjustmentsPanel({
 
         <div
           className={cn(
-            "flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm",
+            "flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm",
             !interactive && "opacity-50",
           )}
         >
