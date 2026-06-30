@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,7 +22,6 @@ type Props = {
   onAdjustmentsChange: (next: MmrAdjustments) => void;
   onAdjustmentsClear: () => void;
   baseMmr: number | null;
-  confidence?: "high" | "medium" | "low" | null;
   unavailableReason?: string | null;
   avgOdometer?: number | null;
   avgCondition?: number | null;
@@ -76,7 +74,6 @@ export function MmrSummaryCard(props: Props) {
     onAdjustmentsChange,
     onAdjustmentsClear,
     baseMmr,
-    confidence,
     unavailableReason,
     avgOdometer,
     avgCondition,
@@ -110,12 +107,9 @@ export function MmrSummaryCard(props: Props) {
   return (
     <Card className="border-border bg-muted/30">
       <CardContent className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            MMR
-          </span>
-          {confidence ? <Badge variant="neutral">{confidence}</Badge> : null}
-        </div>
+        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          MMR
+        </span>
 
         {unavailableReason ? (
           <UnavailableState code={unavailableReason} size="block" />

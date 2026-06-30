@@ -214,7 +214,7 @@ Align labels with `manual-submit-form.tsx` and `ManualOpportunitySubmissionSchem
 
 | Card | Content |
 |------|---------|
-| **MMR** | Adjusted MMR hero + wholesale range; secondary line (base, est. retail, avg odo, avg condition); confidence badge |
+| **MMR** | Adjusted MMR hero + wholesale range; secondary line (base, est. retail, avg odo, avg condition); **no confidence badge** on detail (item 39) |
 | **Max buy** | A–F grade circle, recommended max buy hero, evaluated-at (or dashed placeholder when MMR identity exists but mileage/price missing for YMM Max buy) |
 
 **Progressive disclosure:**
@@ -224,7 +224,7 @@ Align labels with `manual-submit-form.tsx` and `ManualOpportunitySubmissionSchem
 
 **Block-level actions:**
 
-- **Refresh valuation** — refreshes MMR + Max buy together. _Known gap (item 38): Max buy card may not always update — see [`NEXT_STEPS.md`](../NEXT_STEPS.md)._
+- **Refresh valuation** — refreshes MMR + Max buy together. _Known gap (item 38): Max buy card may keep showing **saved** `maxbuySummary` instead of a live re-evaluate — see [`NEXT_STEPS.md`](../NEXT_STEPS.md)._
 
 **Auto-run gates (split):**
 

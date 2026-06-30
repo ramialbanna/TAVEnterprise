@@ -166,6 +166,10 @@ describe("OpportunityValuationBlock", () => {
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
 
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
+
     await waitFor(() => expect(screen.getByLabelText(/deal grade b/i)).toBeInTheDocument());
     expect(screen.getByText("$21,749")).toBeInTheDocument();
     expect(screen.queryByText("Base MMR")).toBeNull();
@@ -197,6 +201,10 @@ describe("OpportunityValuationBlock", () => {
     expect(screen.getByText("$18,000")).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
+
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
 
     expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
     expect(
@@ -245,6 +253,10 @@ describe("OpportunityValuationBlock", () => {
       ).toBe(true),
     );
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
+
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
     expect(
       screen.getByText(/add mileage and asking price to run max buy on this deal/i),
     ).toBeInTheDocument();
@@ -261,6 +273,10 @@ describe("OpportunityValuationBlock", () => {
     renderWithClient(<OpportunityValuationBlock opportunity={makeDetail()} />);
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
+
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
     expect(screen.queryByLabelText("Enter ODO (mi)")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /^adjust$/i }));
@@ -313,11 +329,19 @@ describe("OpportunityValuationBlock", () => {
 
     await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
 
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
+
     fetchSpy.mockClear();
     screen.getByRole("button", { name: /refresh valuation/i }).click();
 
     await waitFor(() => expect(screen.getByText("$21,749")).toBeInTheDocument());
+    expect(screen.getByText(/live evaluation/i)).toBeInTheDocument();
     expect(screen.queryByText(/as of/i)).toBeNull();
+    expect(screen.queryByText(/^high$/i)).toBeNull();
+    expect(screen.queryByText(/^medium$/i)).toBeNull();
+    expect(screen.queryByText(/^low$/i)).toBeNull();
 
     const mmrCall = fetchSpy.mock.calls.find((c) =>
       String(c[0]).includes("/api/app/mmr/vin"),

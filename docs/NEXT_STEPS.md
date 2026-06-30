@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-29 · **Focus:** Phase 6 buyer nav labels; Max buy refresh on detail **deferred**
+**Last updated:** 2026-06-30 · **Focus:** Items 38–39 complete; UX backlog §4–7 next
 
 > **Fresh chat prompt:**
 > Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md). UX backlog: [`02-product/ui-improvements-backlog.md`](02-product/ui-improvements-backlog.md).
@@ -59,13 +59,20 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|----------|--------|
 | **36** | New-mode nav — rename MMR Lab → **Value a vehicle** (buyer label; route stays `/mmr-lab`) | Medium | [x] |
 | **37** | Doc sync — opportunity detail redesign + exit criteria for items 24–33 | Low | [x] |
-| **38** | Max buy refresh on opportunity detail — live card does not reliably update on **Refresh valuation** | Medium | [ ] deferred |
+| **38** | Max buy refresh on opportunity detail — **Refresh valuation** keeps showing last **saved** Max buy, not a live re-evaluate | Medium | [x] |
+| **39** | Remove MMR **confidence** badge (high/medium/low) from detail Valuation card | Low | [x] |
 
 _MMR Lab / opportunity detail items 2–35 complete._
 
-### Known issue (deferred — item 38)
+### Known issues (deferred)
 
-**Refresh valuation** on `/opportunities/[id]` may update the MMR summary card but not the Max buy summary card. MMR cache bypass (`refresh_valuation` → `force_refresh`) is wired; Max buy re-evaluate path still flaky. Workaround: expand Max buy **Details** and re-run from `/mmr-lab`, or edit mileage/price and blur-save Vehicle block. Do not block other UX work on this until a dedicated debugging pass.
+_None — items 38–39 resolved 2026-06-30._
+
+**Item 38 — Max buy refresh (resolved 2026-06-30)**  
+Refresh valuation now suppresses the saved `maxbuySummary` snapshot, re-runs live Max buy with current adjustments/mileage, and shows "Live evaluation" after success. Stale mount-effect MMR fetches are ignored when a refresh is in flight.
+
+**Item 39 — MMR confidence badge (resolved 2026-06-30)**  
+Removed the high/medium/low badge from the detail Valuation MMR summary card. Confidence remains in API responses and MMR Lab ResultBand.
 
 ---
 

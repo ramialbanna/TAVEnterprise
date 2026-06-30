@@ -258,6 +258,7 @@ export function OpportunityValuationBlock({
   const savedVerdict = opportunity.maxbuySummary ?? null;
   const autoRunMmrOnMount = shouldAutoRunMmr(opportunity);
   const autoRunMaxbuyOnMount = shouldAutoRunMaxbuy(opportunity) && !savedVerdict;
+  const [preferLiveMaxbuy, setPreferLiveMaxbuy] = useState(false);
   const [view, setView] = useState<MmrView>(() =>
     autoRunMmrOnMount ? { kind: "loading" } : { kind: "empty" },
   );
@@ -276,6 +277,7 @@ export function OpportunityValuationBlock({
   );
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
+  const lookupRequestIdRef = useRef(0);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
   const laneAskPriceRef = useRef<string>(laneAskPriceFromOpportunity(opportunity));
@@ -286,6 +288,18 @@ export function OpportunityValuationBlock({
   useLayoutEffect(() => {
     laneAskPriceRef.current = laneAskPriceFromOpportunity(opportunity);
   });
+
+  // Keep valuation inputs aligned when the parent passes refreshed opportunity data.
+  useEffect(() => {
+    setAdjustments((prev) => {
+      const nextOdometer =
+        opportunity.mileage != null && opportunity.mileage > 0
+          ? String(opportunity.mileage)
+          : prev.odometer;
+      if (nextOdometer === prev.odometer) return prev;
+      return { ...prev, odometer: nextOdometer };
+    });
+  }, [opportunity.mileage]);
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
     const pendingChanges = pendingMarginalChangesRef.current.slice();
@@ -310,6 +324,7 @@ export function OpportunityValuationBlock({
 
   const reEvaluateMaxbuy = useCallback(
     (session: MmrLabLookupSession, askPrice: string, adj?: MmrAdjustments) => {
+      setPreferLiveMaxbuy(true);
       const built = buildMmrLabMaxbuyRequest(session, askPrice, adj);
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });
@@ -349,10 +364,15 @@ export function OpportunityValuationBlock({
   const runLookup = useCallback(
     async (
       session: MmrLabLookupSession,
-      opts?: { runMaxbuy?: boolean; refresh?: boolean },
+      opts?: { runMaxbuy?: boolean; refresh?: boolean; requestId?: number },
     ) => {
       const runMaxbuy = opts?.runMaxbuy ?? true;
       const refresh = opts?.refresh === true;
+      const requestId = opts?.requestId ?? ++lookupRequestIdRef.current;
+      lookupRequestIdRef.current = requestId;
+
+      const isCurrentRequest = () => requestId === lookupRequestIdRef.current;
+
       lookupSessionRef.current = session;
       setAdjustmentBaseline(null);
       setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
@@ -372,6 +392,8 @@ export function OpportunityValuationBlock({
         refresh,
         adjustments: adjForFetch,
       });
+
+      if (!isCurrentRequest()) return;
 
       if (!mmrRes.ok) {
         if (mmrRes.kind === "unavailable") {
@@ -397,6 +419,7 @@ export function OpportunityValuationBlock({
       const built = buildMmrLabMaxbuyRequest(
         maxbuySession,
         laneAskPriceRef.current,
+        adjForFetch,
       );
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });
@@ -404,8 +427,10 @@ export function OpportunityValuationBlock({
       }
       try {
         const maxbuyRes = await postMaxbuyEvaluate(built.body);
+        if (!isCurrentRequest()) return;
         setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
       } catch {
+        if (!isCurrentRequest()) return;
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
@@ -422,11 +447,12 @@ export function OpportunityValuationBlock({
 
     lookupSessionRef.current = session;
     const runMaxbuy = autoRunMaxbuyOnMount;
+    const requestId = ++lookupRequestIdRef.current;
     let cancelled = false;
 
     void (async () => {
       const mmrRes = await fetchMmrForSession(session);
-      if (cancelled) return;
+      if (cancelled || requestId !== lookupRequestIdRef.current) return;
 
       if (!mmrRes.ok) {
         if (mmrRes.kind === "unavailable") {
@@ -447,9 +473,11 @@ export function OpportunityValuationBlock({
           : session;
       lookupSessionRef.current = maxbuySession;
 
+      const adj = initialMmrAdjustments(opportunity);
       const built = buildMmrLabMaxbuyRequest(
         maxbuySession,
         laneAskPriceRef.current,
+        adj,
       );
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });
@@ -457,11 +485,12 @@ export function OpportunityValuationBlock({
       }
       try {
         const maxbuyRes = await postMaxbuyEvaluate(built.body);
-        if (!cancelled) {
-          setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
-        }
+        if (cancelled || requestId !== lookupRequestIdRef.current) return;
+        setPreferLiveMaxbuy(true);
+        setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
       } catch {
-        if (!cancelled) setMaxbuyView(MAXBUY_FETCH_FAILED);
+        if (cancelled || requestId !== lookupRequestIdRef.current) return;
+        setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     })();
 
@@ -503,12 +532,18 @@ export function OpportunityValuationBlock({
 
   const handleRunFresh = useCallback(() => {
     const session = sessionFromOpportunity(opportunity);
-    if (session) {
-      void runLookup(session, {
-        runMaxbuy: shouldRunMaxbuyOnFreshLookup(opportunity),
-        refresh: true,
-      });
+    if (!session) return;
+    const runMaxbuy = shouldRunMaxbuyOnFreshLookup(opportunity);
+    if (runMaxbuy) {
+      setPreferLiveMaxbuy(true);
+      setMaxbuyView({ kind: "loading" });
     }
+    const requestId = ++lookupRequestIdRef.current;
+    void runLookup(session, {
+      runMaxbuy,
+      refresh: true,
+      requestId,
+    });
   }, [opportunity, runLookup]);
 
   const handleMaxbuyRetry = useCallback(() => {
@@ -559,7 +594,9 @@ export function OpportunityValuationBlock({
   const showMmrLoading = view.kind === "loading";
   const maxbuyPlaceholder = maxbuyPlaceholderMessage(opportunity);
   const showMaxbuyCard =
-    savedVerdict !== null || maxbuyView.kind !== "idle" || maxbuyPlaceholder !== null;
+    maxbuyView.kind !== "idle" ||
+    (!preferLiveMaxbuy && savedVerdict !== null) ||
+    maxbuyPlaceholder !== null;
   const insufficientMmr = !canRunMmr && !savedVerdict && view.kind === "empty";
 
   const mmrCardPhase: ResultBandPhase = showMmrLoading
@@ -583,7 +620,6 @@ export function OpportunityValuationBlock({
               onAdjustmentsChange={handleAdjustmentsChange}
               onAdjustmentsClear={handleAdjustmentsClear}
               baseMmr={result?.mmrValue ?? null}
-              confidence={result?.confidence ?? null}
               unavailableReason={view.kind === "unavailable" ? view.reason : null}
               avgOdometer={result?.avgOdometer ?? null}
               avgCondition={result?.avgCondition ?? null}
@@ -604,7 +640,7 @@ export function OpportunityValuationBlock({
 
           {showMaxbuyCard ? (
             <MaxbuySummaryCard
-              savedSummary={savedVerdict}
+              savedSummary={preferLiveMaxbuy ? null : savedVerdict}
               liveState={maxbuyView}
               onRetry={handleMaxbuyRetry}
               placeholderMessage={maxbuyPlaceholder}
