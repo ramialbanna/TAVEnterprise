@@ -144,7 +144,7 @@ describe("OpportunityVehicleBlock", () => {
     expect(screen.getByLabelText("Color")).toBeInstanceOf(HTMLSelectElement);
   });
 
-  it("auto-saves on blur when a field changes", async () => {
+  it("saves when Save is clicked", async () => {
     const onSave = vi.fn();
     render(<OpportunityVehicleBlock {...props({ onSave })} />);
 
@@ -153,13 +153,9 @@ describe("OpportunityVehicleBlock", () => {
     });
 
     fireEvent.change(screen.getByLabelText("Color"), { target: { value: "Red" } });
-
-    const outside = document.createElement("button");
-    document.body.appendChild(outside);
-    fireEvent.blur(screen.getByLabelText("Color"), { relatedTarget: outside });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledWith({ color: "Red" }));
-    outside.remove();
   });
 
   it("clears make/model/series when year changes", async () => {
@@ -191,7 +187,7 @@ describe("OpportunityVehicleBlock", () => {
     expect(screen.getByRole("option", { name: "1.5L Turbo" })).toBeInTheDocument();
   });
 
-  it("does not auto-save when focus stays inside the block", async () => {
+  it("does not save until Save is clicked", async () => {
     const onSave = vi.fn();
     render(<OpportunityVehicleBlock {...props({ onSave })} />);
 

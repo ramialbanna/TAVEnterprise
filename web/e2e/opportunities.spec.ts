@@ -74,7 +74,7 @@ test.describe("/opportunities/:id — Detail page", () => {
     await mockAppApi(page);
   });
 
-  test("renders collapsible blocks and auto-saves vehicle edits on blur", async ({ page }) => {
+  test("renders collapsible blocks and saves vehicle edits with Save button", async ({ page }) => {
     await page.goto("/opportunities/opp_e2e_1");
 
     const main = page.getByRole("main");
@@ -93,12 +93,12 @@ test.describe("/opportunities/:id — Detail page", () => {
     const vinInput = main.getByLabel("VIN");
     await expect(vinInput).toHaveValue("2HGFC2FAC");
 
-    // Edit color and blur out of the Vehicle block to auto-save.
+    // Edit color and save explicitly (Y/M/M/S cascade should not auto-persist).
     await main.getByLabel("Color").selectOption("Red");
-    await main.getByRole("heading", { name: "Workflow" }).click();
+    await main.getByRole("button", { name: "Save", exact: true }).click();
 
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 5000 });
-    await expect(main.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+    await expect(main.getByRole("button", { name: "Save", exact: true })).toHaveCount(1);
   });
 
   test("auto-runs MMR + Max buy valuation on load with compact summary cards", async ({
