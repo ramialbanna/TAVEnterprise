@@ -268,6 +268,9 @@ export function OpportunityValuationBlock({
   const [adjustments, setAdjustments] = useState<MmrAdjustments>(() =>
     initialMmrAdjustments(opportunity),
   );
+  const [syncedOpportunityMileage, setSyncedOpportunityMileage] = useState(
+    opportunity.mileage,
+  );
   const [mmrRecomputing, setMmrRecomputing] = useState(false);
 
   const [adjustmentBaseline, setAdjustmentBaseline] =
@@ -289,8 +292,10 @@ export function OpportunityValuationBlock({
     laneAskPriceRef.current = laneAskPriceFromOpportunity(opportunity);
   });
 
-  // Keep valuation inputs aligned when the parent passes refreshed opportunity data.
-  useEffect(() => {
+  // Keep valuation odometer aligned when the parent passes refreshed mileage
+  // (e.g. vehicle blur-save). During-render sync avoids setState in useEffect.
+  if (syncedOpportunityMileage !== opportunity.mileage) {
+    setSyncedOpportunityMileage(opportunity.mileage);
     setAdjustments((prev) => {
       const nextOdometer =
         opportunity.mileage != null && opportunity.mileage > 0
@@ -299,7 +304,7 @@ export function OpportunityValuationBlock({
       if (nextOdometer === prev.odometer) return prev;
       return { ...prev, odometer: nextOdometer };
     });
-  }, [opportunity.mileage]);
+  }
 
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
     const pendingChanges = pendingMarginalChangesRef.current.slice();
