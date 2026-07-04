@@ -13,14 +13,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import {
-  MaxbuyEvaluationSection,
+  MaxbuyDetailsPanel,
   type MaxbuyEvaluationState,
 } from "../../mmr-lab/_components/maxbuy-evaluation-section";
 
 type Props = {
   savedSummary: MaxbuySummary | null;
   liveState: MaxbuyEvaluationState;
-  onRetry?: () => void;
   /** Shown when MMR can run but Max buy identity is insufficient (YMM without mileage/price). */
   placeholderMessage?: string | null;
 };
@@ -60,7 +59,6 @@ function HeroMoney({ value, loading }: { value: number | null; loading: boolean 
 export function MaxbuySummaryCard({
   savedSummary,
   liveState,
-  onRetry,
   placeholderMessage = null,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -180,7 +178,7 @@ export function MaxbuySummaryCard({
         ) : null}
 
         {expanded && liveState.kind === "ready" ? (
-          <MaxbuyEvaluationSection state={liveState} onRetry={onRetry} />
+          <MaxbuyDetailsPanel display={liveState.display} />
         ) : null}
 
         {expanded && isSaved && liveState.kind === "idle" && savedSummary ? (

@@ -3,7 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildMockMaxbuyEvaluation } from "./maxbuy-evaluation-mock";
-import { MaxbuyEvaluationSection, type MaxbuyEvaluationState } from "./maxbuy-evaluation-section";
+import {
+  MaxbuyDetailsPanel,
+  MaxbuyEvaluationSection,
+  type MaxbuyEvaluationState,
+} from "./maxbuy-evaluation-section";
 
 function renderSection(state: MaxbuyEvaluationState) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -84,5 +88,34 @@ describe("MaxbuyEvaluationSection — Zone C1 states", () => {
     );
     expect(screen.getByText(/evaluate failed/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry max buy/i })).toBeInTheDocument();
+  });
+});
+
+describe("MaxbuyDetailsPanel — compact opportunity detail expand", () => {
+  function renderPanel(display: ReturnType<typeof buildMockMaxbuyEvaluation>) {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={client}>
+        <MaxbuyDetailsPanel display={display} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("shows economics and segment history without full MMR Lab chrome", () => {
+    const display = buildMockMaxbuyEvaluation(
+      { mmrValue: 23_900, adjustedMmr: 23_900 },
+      { askingPrice: 12_500 },
+    );
+    renderPanel(display);
+
+    expect(screen.queryByText(/max buy evaluation/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/recommended max buy/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/economics/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/expected sale/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/tav segment history/i)).toBeInTheDocument();
+    expect(screen.getByText(/lane ask/i)).toBeInTheDocument();
+    expect(screen.getByText(/math:/i)).toBeInTheDocument();
   });
 });

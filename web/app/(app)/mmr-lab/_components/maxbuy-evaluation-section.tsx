@@ -132,9 +132,11 @@ function MaxbuyExplanationBlock({ display }: { display: MaxbuyEvaluationDisplay 
 function EconomicsGrid({
   economics,
   hasValues,
+  compact = false,
 }: {
   economics: MaxbuyEvaluationDisplay["economics"];
   hasValues: boolean;
+  compact?: boolean;
 }) {
   const rows = [
     { label: "Expected sale", value: hasValues ? economics.expectedSalePrice : null },
@@ -144,9 +146,14 @@ function EconomicsGrid({
   ] as const;
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div
+      className={cn(
+        "grid min-w-0 gap-2",
+        compact ? "grid-cols-2" : "gap-3 sm:grid-cols-2 lg:grid-cols-4",
+      )}
+    >
       {rows.map(({ label, value }) => (
-        <div key={label} className="rounded-md border border-border bg-card px-3 py-2">
+        <div key={label} className="min-w-0 rounded-md border border-border bg-card px-3 py-2">
           <div className="text-xs text-muted-foreground">{label}</div>
           <div className="mt-0.5 text-sm font-semibold tabular-nums">
             {value !== null ? formatMoney(value) : "—"}
@@ -159,12 +166,14 @@ function EconomicsGrid({
 
 function TavHistoricalSnippet({
   historical,
+  compact = false,
 }: {
   historical: MaxbuyEvaluationDisplay["tavHistorical"];
+  compact?: boolean;
 }) {
   const hasUnits = historical.nUnits > 0;
   return (
-    <div className="rounded-md border border-border bg-surface-sunken px-4 py-3">
+    <div className="min-w-0 rounded-md border border-border bg-surface-sunken px-4 py-3">
       <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         TAV segment history
       </div>
@@ -173,7 +182,12 @@ function TavHistoricalSnippet({
           ? `${historical.nUnits.toLocaleString()} comparable outcomes in this segment`
           : "No segment history until MMR anchor is available."}
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
+      <dl
+        className={cn(
+          "mt-3 grid min-w-0 gap-x-4 gap-y-2 text-sm",
+          compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4",
+        )}
+      >
         <div>
           <dt className="text-muted-foreground">Avg buy</dt>
           <dd className="font-medium tabular-nums">
@@ -374,6 +388,74 @@ function ReadyShell({ display }: { display: MaxbuyEvaluationDisplay }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Compact expand panel for opportunity detail — no duplicate hero or full MMR Lab layout. */
+export function MaxbuyDetailsPanel({
+  display,
+  className,
+}: {
+  display: MaxbuyEvaluationDisplay;
+  className?: string;
+}) {
+  const { snapshot, economics, tavHistorical } = display;
+  const hasValues = snapshot.recommendedMaxBuy !== null;
+
+  return (
+    <div className={cn("min-w-0 space-y-3 border-t border-border pt-3", className)}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {snapshot.displayState === "deal_fit" && snapshot.askingPrice !== null ? (
+          <span>
+            Lane ask:{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {formatMoney(snapshot.askingPrice)}
+            </span>
+          </span>
+        ) : null}
+        {snapshot.dataStrength ? (
+          <span>
+            Data strength:{" "}
+            <span className="font-medium capitalize text-foreground">
+              {snapshot.dataStrength}
+            </span>
+          </span>
+        ) : null}
+        {snapshot.mmrWholesale !== null ? (
+          <span>
+            Wholesale anchor:{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {formatMoney(snapshot.mmrWholesale)}
+            </span>
+          </span>
+        ) : null}
+      </div>
+
+      <MaxbuyExplanationBlock display={display} />
+
+      <div className="min-w-0">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Economics
+        </p>
+        <div className="mt-2">
+          <EconomicsGrid economics={economics} hasValues={hasValues} compact />
+        </div>
+      </div>
+
+      <TavHistoricalSnippet historical={tavHistorical} compact />
+
+      <ReasonCodeDetails codes={snapshot.reasonCodes} />
+
+      {snapshot.recommendationId ? (
+        <MaxbuyCardActions
+          snapshot={snapshot}
+          actionContext={{
+            recommendationId: snapshot.recommendationId,
+            vin: snapshot.vin,
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 

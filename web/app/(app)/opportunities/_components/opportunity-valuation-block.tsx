@@ -551,11 +551,6 @@ export function OpportunityValuationBlock({
     });
   }, [opportunity, runLookup]);
 
-  const handleMaxbuyRetry = useCallback(() => {
-    const session = lookupSessionRef.current ?? sessionFromOpportunity(opportunity);
-    if (session) reEvaluateMaxbuy(session, laneAskPriceRef.current, adjustments);
-  }, [adjustments, opportunity, reEvaluateMaxbuy]);
-
   const result = view.kind === "ok" ? view.result : null;
   const adjustmentDeltas = result
     ? deriveMmrAdjustmentDeltas({
@@ -647,7 +642,6 @@ export function OpportunityValuationBlock({
             <MaxbuySummaryCard
               savedSummary={preferLiveMaxbuy ? null : savedVerdict}
               liveState={maxbuyView}
-              onRetry={handleMaxbuyRetry}
               placeholderMessage={maxbuyPlaceholder}
             />
           ) : null}
