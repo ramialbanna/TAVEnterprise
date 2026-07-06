@@ -67,6 +67,8 @@ export interface OpportunityRow {
   lastEvaluatedAt: string | null;
   firstSeenAt: string | null;
   lastSeenAt: string | null;
+  /** When the lead/submission became an opportunity (lead.created_at or manual submit). */
+  receivedAt: string | null;
   seenCount: number | null;
   listingUrl: string | null;
   entryMethod: string | null;
@@ -108,7 +110,7 @@ export interface OpportunityDetail extends OpportunityRow {
   actions: OpportunityActionRecord[];
 }
 
-export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc";
+export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
 
 export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
 
@@ -172,7 +174,7 @@ const VALUATION_COLUMNS =
   "normalized_listing_id, mmr_value, mileage, missing_reason, vehicle_candidate_id, lookup_trim, normalization_confidence, fetched_at";
 
 const LEAD_COLUMNS =
-  "id, normalized_listing_id, vehicle_candidate_id, status, grade, final_score, reason_codes, score_components, mmr_value, assigned_to, assigned_at, lock_expires_at";
+  "id, normalized_listing_id, vehicle_candidate_id, status, grade, final_score, reason_codes, score_components, mmr_value, assigned_to, assigned_at, lock_expires_at, created_at";
 
 type ListingRow = Record<string, unknown>;
 type ValuationRow = Record<string, unknown>;
@@ -181,6 +183,7 @@ type LeadRow = Record<string, unknown>;
 interface ManualSubmissionContext {
   submittedByUserId: string;
   submittedByName: string;
+  submittedAt: string;
   assignedToUserId: string | null;
   assignedCloserName: string | null;
 }
@@ -253,6 +256,17 @@ function resolveOpportunityType(
   if (isManualSubmission) return "manual_submission";
   if (hasMmr) return "near_miss";
   return null;
+}
+
+function resolveReceivedAt(
+  lead: LeadRow | null,
+  manual: ManualSubmissionContext | null,
+  listing: ListingRow,
+): string | null {
+  const leadCreated = lead ? asString(lead.created_at) : null;
+  if (leadCreated) return leadCreated;
+  if (manual?.submittedAt) return manual.submittedAt;
+  return asString(listing.first_seen_at);
 }
 
 function mapToOpportunityRow(
@@ -366,6 +380,7 @@ function mapToOpportunityRow(
     lastEvaluatedAt: workflow?.lastEvaluatedAt ?? null,
     firstSeenAt: asString(listing.first_seen_at),
     lastSeenAt: asString(listing.last_seen_at),
+    receivedAt: resolveReceivedAt(lead, manual, listing),
     seenCount: scrapeCount,
     listingUrl: asString(listing.listing_url),
     entryMethod: asString(listing.entry_method),
@@ -478,6 +493,9 @@ export function sortOpportunityRows(
         return diff !== 0 ? diff : (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
       }
       case "last_seen_desc":
+        return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
+      case "received_desc":
+        return (b.receivedAt ?? "").localeCompare(a.receivedAt ?? "");
       default:
         return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
     }
@@ -616,6 +634,7 @@ async function fetchManualSubmissionContext(
     out.set(listingId, {
       submittedByUserId: submitterId,
       submittedByName: userNames.get(submitterId) ?? submitterId,
+      submittedAt: row.created_at as string,
       assignedToUserId: assigneeId,
       assignedCloserName: assigneeId ? (userNames.get(assigneeId) ?? assigneeId) : null,
     });

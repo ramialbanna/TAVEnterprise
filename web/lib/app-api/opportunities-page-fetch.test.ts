@@ -115,6 +115,32 @@ describe("fetchOpportunitiesPage", () => {
     expect(result.data.items[0]?.id).toBe("opp-a");
   });
 
+  it("uses paginated parsing when the Worker returns a consistent page object", async () => {
+    const unassigned = { ...OPPORTUNITY_ROW, id: "opp-a", assignedTo: null };
+    const assigned = { ...OPPORTUNITY_ROW, id: "opp-b", assignedTo: "user-2" };
+
+    const getJson = vi.fn().mockResolvedValueOnce({
+      status: 200,
+      json: {
+        ok: true,
+        data: { items: [unassigned], total: 1, offset: 0 },
+      },
+    });
+
+    const result = await fetchOpportunitiesPage(getJson, {
+      limit: 25,
+      offset: 0,
+      sort: "spread_desc",
+      view: "needs_action",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.data.total).toBe(1);
+    expect(result.data.items).toHaveLength(1);
+    expect(result.data.items[0]?.id).toBe("opp-a");
+  });
+
   it("uses paginated parsing when the Worker returns a page object", async () => {
     const payload = {
       ok: true,

@@ -66,6 +66,10 @@ const sampleRow: OpportunityRow = {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10, 0, 0).toISOString();
   })(),
+  receivedAt: (() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10, 0, 0).toISOString();
+  })(),
   seenCount: 1,
   listingUrl: "https://example.com/listing",
   estimateFlags: { mmr: false, mileage: false, style: false },
@@ -112,7 +116,8 @@ describe("OpportunitiesClientNew", () => {
         return page([sampleRow], 1);
       }
       if (filter?.limit === 1) {
-        return page([], filter.view === "needs_action" ? 3 : 0);
+        const total = filter.view === "needs_action" ? 1 : 0;
+        return page([], total);
       }
       return page([sampleRow], 1);
     });
@@ -128,7 +133,7 @@ describe("OpportunitiesClientNew", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/3 need you/)).toBeInTheDocument();
+      expect(screen.getByText(/1 need you/)).toBeInTheDocument();
       expect(screen.getByText(/1 new today/)).toBeInTheDocument();
     });
 

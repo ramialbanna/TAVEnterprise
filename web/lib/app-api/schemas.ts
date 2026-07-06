@@ -377,6 +377,7 @@ export const OpportunityRowSchema = z.object({
   lastEvaluatedAt: z.string().nullable(),
   firstSeenAt: z.string().nullable(),
   lastSeenAt: z.string().nullable(),
+  receivedAt: z.string().nullable().optional(),
   seenCount: z.number().nullable(),
   listingUrl: z.string().nullable(),
   entryMethod: z.enum(["manual", "scraper", "import"]).nullable().optional(),

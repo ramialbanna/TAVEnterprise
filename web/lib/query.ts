@@ -46,7 +46,7 @@ export type OpportunitiesKeyFilter = {
 export type OpportunitiesPageKeyFilter = {
   limit?: number;
   offset?: number;
-  sort?: "spread_desc" | "score_desc" | "last_seen_desc";
+  sort?: "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
   view?: "needs_action" | "mine" | "worth_a_look" | "all";
   source?: string;
   region?: string;

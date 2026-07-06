@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-06-30 · **Focus:** Items 38–39 complete; UX backlog §4–7 next
+**Last updated:** 2026-07-06 · **Focus:** Items 40–42 shipped; UX backlog §4–7 next
 
 > **Fresh chat prompt:**
-> Read [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md) first for how MMR Lab works end-to-end (lookup flow, adjustments, cache/lock, invariants, file map). Then pick the next unchecked item below. Spec: [`07-buybox/MMR-LAB-MAXBUY-PAGE.md`](07-buybox/MMR-LAB-MAXBUY-PAGE.md). Completed work: [`completed-tasks.md`](completed-tasks.md). UX backlog: [`02-product/ui-improvements-backlog.md`](02-product/ui-improvements-backlog.md).
+> Fix items **40–42** first (New-mode `/opportunities` queue). Then resume UX backlog §4–7. MMR Lab architecture: [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md). Completed work: [`completed-tasks.md`](completed-tasks.md). UX backlog: [`02-product/ui-improvements-backlog.md`](02-product/ui-improvements-backlog.md).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -31,18 +31,19 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active work on **MMR Lab** â€” the combined Cox MMR lookup + MaxBuy evaluation page at `/mmr-lab`.
+**This doc:** Active work on **Opportunities queue** (New mode) — `/opportunities` tab filters, counts, and lead freshness. MMR Lab / opportunity detail items 2–39 are complete.
 
 | Area | Path |
 |------|------|
-| MMR Lab page | `web/app/(app)/mmr-lab/page.tsx` |
-| Client + zones | `web/app/(app)/mmr-lab/_components/*` |
-| MaxBuy evaluate UI | `web/app/(app)/mmr-lab/_components/maxbuy-evaluation-section.tsx` |
-| Transactions table | `web/app/(app)/mmr-lab/_components/transactions-table.tsx` |
-| Search panel | `web/app/(app)/mmr-lab/_components/search-panel.tsx` |
-| MMR + MaxBuy spec | `docs/07-buybox/MMR-LAB-MAXBUY-PAGE.md` |
-| Cox/Manheim integration | `docs/03-api/manheim-cox.md` |
-| MaxBuy scoring | `src/maxbuy/scoring/score.ts` |
+| Opportunities page | `web/app/(app)/opportunities/page.tsx` |
+| New-mode client | `web/app/(app)/opportunities/_components/opportunities-client-new.tsx` |
+| Queue tabs + summary | `web/app/(app)/opportunities/_components/opportunities-queue-tabs.tsx` |
+| Table + columns | `web/app/(app)/opportunities/_components/opportunities-table-new.tsx` |
+| Client view filter | `web/lib/opportunities/view-filter.ts` |
+| Page fetch + fallback | `web/lib/app-api/opportunities-page-fetch.ts` |
+| Worker list + view rules | `src/persistence/opportunities.ts` |
+| API route | `src/app/routes.ts` (`GET /app/opportunities`) |
+| Column prefs | `web/lib/opportunities/table-preferences.ts` |
 
 ### Verify (after each item)
 
@@ -57,22 +58,207 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **36** | New-mode nav — rename MMR Lab → **Value a vehicle** (buyer label; route stays `/mmr-lab`) | Medium | [x] |
-| **37** | Doc sync — opportunity detail redesign + exit criteria for items 24–33 | Low | [x] |
-| **38** | Max buy refresh on opportunity detail — **Refresh valuation** keeps showing last **saved** Max buy, not a live re-evaluate | Medium | [x] |
-| **39** | Remove MMR **confidence** badge (high/medium/low) from detail Valuation card | Low | [x] |
+| **40** | **Needs action** tab — badge/summary shows `(1)` but table lists many rows | **Critical** | [x] |
+| **41** | **Mine** tab — badge shows `(1)` but tab body is empty | **Critical** | [x] |
+| **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
 
-_MMR Lab / opportunity detail items 2–35 complete._
+_Paused until 40–42 ship:_ UX backlog §4–7 (workflow polish, role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete.
+
+---
+
+## 40 — Needs action tab: count does not match table
+
+**Reported:** 2026-07-06 (production New mode, `/opportunities`)
+
+**Symptom:**
+
+- Summary line: `1 need you · No new listings today`
+- **Needs action** tab badge: `(1)`
+- Clicking **Needs action** shows **many** rows (e.g. 7+ vehicles), not 1
+
+**Expected:** Tab badge, summary line, and visible table rows must use the **same** filter rules and the **same** total.
+
+### Likely root cause (code review 2026-07-06)
+
+Tab counts and table body use **different code paths**:
+
+| Surface | Source | File |
+|---------|--------|------|
+| Tab badge `(1)` | `extractTotal()` on count-only API response (`limit: 1`) | `opportunities-client-new.tsx` |
+| Table rows | `displayResult` re-filters `result.data.items` client-side, then paginates | `opportunities-client-new.tsx` + `view-filter.ts` |
+
+Comment in client already acknowledges drift: _"Always align table rows with the active tab (API count can differ from list body)."_
+
+Additional split-brain risk:
+
+- `fetchOpportunitiesPage` may **classic-fallback** to an unfiltered array and apply view rules in the browser (`opportunities-page-fetch.ts` + `shouldApplyClientViewFilter`).
+- Count requests and list requests can therefore disagree on which rows match `needs_action`.
+- Server view rules: `src/persistence/opportunities.ts` → `matchesNeedsAction` (uses workflow map).
+- Client view rules: `web/lib/opportunities/view-filter.ts` → `matchesNeedsAction` (uses row fields only). Rules are intended to mirror but are not guaranteed identical after fetch/fallback.
+
+`needs_action` definition (both tiers today): unassigned (`!assignedTo`), OR manual submission with `status` new/null, OR active claim expiring within 4h.
+
+### Investigation steps
+
+1. In browser devtools, compare network calls for tab load:
+   - Count: `GET /api/app/opportunities?limit=1&offset=0&sort=spread_desc&view=needs_action`
+   - List: same with `limit=25`
+   - Confirm `data.total` vs `data.items.length` and whether items actually match `needs_action`.
+2. Check whether list response is paginated `{ items, total, offset }` or legacy array (triggers client fallback).
+3. Log how many rows pass `matchesNeedsAction` client-side vs server `total`.
+
+### Fix direction
+
+- **Single source of truth:** tab count must be derived from the **same filtered set** as the table (prefer server-side `total` on the list query; do not maintain a separate count query with different fetch behavior).
+- Remove or narrow `displayResult` client re-filter if the Worker already applies `view=` correctly.
+- If client fallback stays, count queries must use the **same** fallback path so `total` matches.
+- Add regression tests: count === filtered row total for each view (`needs_action`, `mine`, `worth_a_look`).
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunities-client-new.tsx`
+- `web/lib/app-api/opportunities-page-fetch.ts`
+- `web/lib/opportunities/view-filter.ts`
+- `src/persistence/opportunities.ts`
+- `web/lib/app-api/opportunities-page-fetch.test.ts`
+- `web/app/(app)/opportunities/_components/opportunities-client-new.test.tsx`
+
+### Exit criteria
+
+- [ ] **Needs action** badge count equals number of rows on page 1 (and `data.total` from API)
+- [ ] Summary line `N need you` matches **Needs action** badge
+- [ ] Switching tabs does not show a full queue under a `(1)` badge
+- [ ] Unit + integration tests lock count/list parity per view
+
+---
+
+## 41 — Mine tab: count shows 1, list empty
+
+**Reported:** 2026-07-06 (production New mode, `/opportunities`)
+
+**Symptom:**
+
+- **Mine** tab badge: `(1)`
+- Clicking **Mine** shows empty state: _"Nothing assigned to you yet"_
+- User expects one assigned or claimed deal
+
+**Expected:** If badge is `(1)`, exactly one row visible (or clear empty state with badge `(0)`).
+
+### Likely root cause (code review 2026-07-06)
+
+Same count-vs-list split as item **40**, plus a **Mine-specific identity mismatch**:
+
+| Layer | `matchesMine` logic |
+|-------|---------------------|
+| Worker (`opportunities.ts`) | `row.assignedTo === viewerUserId` OR active claim where `workflow.claimedByUserId === viewerUserId` |
+| Web (`view-filter.ts`) | `row.assignedTo === viewerUserId` OR active claim where `row.claimedBy === viewerDisplayName` |
+
+Server count can match on **user id**; client list filter can drop the row if `claimedBy` on the row is a **user id string** (see `mapToOpportunityRow`: `claimedBy: claimedByName ?? claimedBy`) while the client compares **display name**.
+
+`displayResult` always re-applies client `matchesMine` after fetch — so API can return `total: 1` while client filter yields **0 rows**.
+
+`view=mine` also requires `GET /app/me` before fetch (`enabled: view !== "mine" || meQuery.isSuccess`) — verify `viewerUserId` / `viewerDisplayName` passed consistently to count and list queries via `viewerFetchOptions`.
+
+### Investigation steps
+
+1. Identify the row the server counts as "mine" (assigned vs claimed; user id vs display name).
+2. Compare `assignedTo`, `claimedBy`, `claimExpiresAt` on that row to signed-in `getAppMe` payload.
+3. Confirm count query and list query both pass the same `viewerUserId` / `viewerDisplayName` headers/options.
+
+### Fix direction
+
+- Align client `matchesMine` with server: match **user id** for claims (`claimedByUserId`), not display name only.
+- Ensure `claimedBy` on `OpportunityRow` is unambiguous (separate `claimedByUserId` + `claimedByName` if needed).
+- Derive tab badge from list `total` after unified filter (same as item 40).
+
+### Primary files
+
+- `web/lib/opportunities/view-filter.ts`
+- `src/persistence/opportunities.ts` (`matchesMine`, `mapToOpportunityRow`)
+- `web/app/(app)/opportunities/_components/opportunities-client-new.tsx`
+- `web/lib/opportunities/view-filter.test.ts`
+
+### Exit criteria
+
+- [ ] Assign deal to signed-in closer → **Mine** shows `(1)` and one row
+- [ ] Claim deal → **Mine** shows row for claim owner
+- [ ] Badge `(0)` when nothing assigned/claimed (no false `(1)`)
+- [ ] Tests cover assignee-by-id and claim-by-id (not display-name-only)
+
+---
+
+## 42 — Lead received timestamp (freshness)
+
+**Reported:** 2026-07-06 — **critical for buyer workflow**
+
+**Symptom:**
+
+- New-mode Opportunities table has no visible **when did this lead arrive?** column
+- Buyers cannot tell which leads are freshest; default sort is `spread_desc`, not arrival time
+- `lastSeenAt` exists but is **hidden by default** in column picker and reflects **last scrape**, not lead creation
+
+**Expected:** Buyers can see and sort by when the opportunity became actionable (lead received / first surfaced), newest first.
+
+### Data model notes
+
+| Field | Source today | Meaning |
+|-------|----------------|---------|
+| `firstSeenAt` | `normalized_listings.first_seen_at` | First time listing was ingested |
+| `lastSeenAt` | `normalized_listings.last_seen_at` | Last scrape (updates on re-ingest) |
+| `leads.created_at` | **Not exposed** on `OpportunityRow` | When lead record was created — closest to "lead came in" |
+
+Manual submissions have `manual_opportunity_submissions.created_at` — also not on queue row today.
+
+### Product decision (confirm at implementation)
+
+| Option | Label | Sort | Best for |
+|--------|-------|------|----------|
+| A (recommended) | **Received** | `leads.created_at` (or manual `created_at`) | "When we decided this is a lead" |
+| B | **First seen** | `first_seen_at` | When listing first hit the system |
+| C | Both | Two columns | Power users; may be noisy |
+
+Default queue sort for **Needs action** / **All** should likely be **newest received first**, not spread.
+
+### Implementation sketch
+
+1. Worker: add `receivedAt` (or `leadCreatedAt`) to `OpportunityRow` in `mapToOpportunityRow` from `lead.created_at`, else manual submission `created_at`, else `first_seen_at` fallback.
+2. Web schema: extend `OpportunityRow` in `web/lib/app-api/schemas.ts`.
+3. Table: add **Received** column — **visible by default** in `table-preferences.ts`.
+4. Sort: add `received_desc` (or `lead_created_desc`) to `OPPORTUNITY_SORTS` in Worker + sort dropdown in New table.
+5. Optional: show relative time in Vehicle cell ("2h ago") for scan speed.
+
+### Primary files
+
+- `src/persistence/opportunities.ts` (`LEAD_COLUMNS`, `mapToOpportunityRow`, `sortOpportunityRows`)
+- `src/app/routes.ts` (`OPPORTUNITY_SORTS`)
+- `web/lib/app-api/schemas.ts`
+- `web/lib/opportunities/table-preferences.ts`
+- `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`
+- `test/app.routes.test.ts` / `web/app/(app)/opportunities/_components/opportunities-table-new.test.tsx`
+
+### Exit criteria
+
+- [ ] **Received** (or agreed label) column visible by default on New-mode queue
+- [ ] Timestamp reflects lead creation for `type=lead` rows (verified against Supabase `tav.leads.created_at`)
+- [ ] Manual submissions show submission time
+- [ ] Sort **Newest first** available and documented; consider making it default for `needs_action`
+- [ ] Tooltip explains difference vs "Last seen" if both shown
+
+---
 
 ### Known issues (deferred)
 
-_None — items 38–39 resolved 2026-06-30._
+- UX backlog §4–7 — paused until items 40–42 ship
+- Ingest `created_leads = 0` on recent runs — ops; separate from queue UI bugs
+- `handoff.md` production deploy dates stale — refresh after queue fix deploy
 
-**Item 38 — Max buy refresh (resolved 2026-06-30)**  
-Refresh valuation now suppresses the saved `maxbuySummary` snapshot, re-runs live Max buy with current adjustments/mileage, and shows "Live evaluation" after success. Stale mount-effect MMR fetches are ignored when a refresh is in flight.
+### Recently resolved (reference)
 
-**Item 39 — MMR confidence badge (resolved 2026-06-30)**  
-Removed the high/medium/low badge from the detail Valuation MMR summary card. Confidence remains in API responses and MMR Lab ResultBand.
+**Item 38 — Max buy refresh (2026-06-30)**  
+Refresh valuation suppresses saved `maxbuySummary`, re-runs live Max buy, shows "Live evaluation".
+
+**Item 39 — MMR confidence badge (2026-06-30)**  
+Removed from detail Valuation card; remains in MMR Lab ResultBand.
 
 ---
 

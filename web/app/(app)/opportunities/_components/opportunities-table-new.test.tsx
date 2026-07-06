@@ -37,6 +37,7 @@ const baseRow: OpportunityRow = {
   lastEvaluatedAt: null,
   firstSeenAt: "2026-05-01T12:00:00Z",
   lastSeenAt: "2026-05-01T12:00:00Z",
+  receivedAt: "2026-05-01T11:00:00Z",
   seenCount: 1,
   listingUrl: "https://example.com/listing",
   estimateFlags: { mmr: false, mileage: false, style: false },

@@ -10,6 +10,15 @@ import type { OpportunityListPage, OpportunityRow } from "./schemas";
 import { paginateOpportunityRowsClient } from "@/lib/opportunities/list-page";
 import { filterOpportunityRowsByView, shouldApplyClientViewFilter } from "@/lib/opportunities/view-filter";
 
+function isOkJsonEnvelope(json: unknown): json is { ok: true; data: unknown } {
+  return typeof json === "object" && json !== null && (json as { ok?: unknown }).ok === true;
+}
+
+/** Classic Worker returns a plain array even when view/sort/offset query params are present. */
+function isLegacyArrayBody(json: unknown): boolean {
+  return isOkJsonEnvelope(json) && Array.isArray(json.data);
+}
+
 /** Max rows the Worker returns on the classic (non-paginated) list endpoint. */
 const CLASSIC_FALLBACK_LIMIT = 100;
 
@@ -60,7 +69,12 @@ export async function fetchOpportunitiesPage(
   const parsed = parseOpportunitiesPage(paginated.status, paginated.json);
   if (parsed.ok) {
     const { items, total, offset } = parsed.data;
-    if (shouldApplyClientViewFilter(filter, { items, total, offset })) {
+    const needsClientView =
+      filter.view &&
+      filter.view !== "all" &&
+      (isLegacyArrayBody(paginated.json) ||
+        shouldApplyClientViewFilter(filter, { items, total, offset }));
+    if (needsClientView) {
       return buildPageFromRows(items, filter, parsed.status, options);
     }
     return parsed;

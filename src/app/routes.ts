@@ -1073,7 +1073,7 @@ async function handleIngestRunDetail(env: Env, id: string): Promise<Response> {
   }
 }
 
-const OPPORTUNITY_SORTS = ["spread_desc", "score_desc", "last_seen_desc"] as const satisfies readonly OpportunitySort[];
+const OPPORTUNITY_SORTS = ["spread_desc", "score_desc", "last_seen_desc", "received_desc"] as const satisfies readonly OpportunitySort[];
 const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all"] as const satisfies readonly OpportunityView[];
 
 const OPPORTUNITY_TYPES = ["lead", "near_miss"] as const satisfies readonly OpportunityType[];

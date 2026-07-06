@@ -75,7 +75,7 @@ export type OpportunitiesFilter = {
   status?: string;
 };
 
-export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc";
+export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
 export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
 
 /** Paginated list filter — triggers `{ items, total, offset }` response from the Worker. */

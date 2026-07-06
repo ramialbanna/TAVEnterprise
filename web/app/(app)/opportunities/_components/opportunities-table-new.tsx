@@ -215,6 +215,8 @@ export function OpportunitiesTableNew({
         return <SpreadSignalCell spread={row.spread} />;
       case "finalScore":
         return formatNumber(row.finalScore);
+      case "receivedAt":
+        return formatDateTime(row.receivedAt);
       case "assignedCloserName":
         return row.assignedCloserName ?? "—";
       case "claimedBy":

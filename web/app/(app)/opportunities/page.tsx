@@ -28,7 +28,7 @@ export default async function OpportunitiesPage({
   const initialNew = await listOpportunitiesPage({
     limit: 25,
     offset: 0,
-    sort: "spread_desc",
+    sort: "received_desc",
     view: initialView,
   });
 

@@ -29,13 +29,10 @@ export function matchesMine(
   viewerDisplayName?: string | null,
 ): boolean {
   if (row.assignedTo === viewerUserId) return true;
-  if (
-    viewerDisplayName &&
-    row.claimedBy === viewerDisplayName &&
-    isClaimActive(row.claimExpiresAt, new Date())
-  ) {
-    return true;
-  }
+  if (!isClaimActive(row.claimExpiresAt, new Date())) return false;
+  // Worker exposes display name when known; otherwise `claimedBy` is the user id.
+  if (row.claimedBy === viewerUserId) return true;
+  if (viewerDisplayName && row.claimedBy === viewerDisplayName) return true;
   return false;
 }
 
@@ -79,8 +76,9 @@ export function isFullListPage(items: OpportunityRow[], total: number, offset: n
 }
 
 /**
- * When to re-apply view rules in the browser (Worker may return an unfiltered page
- * while still reporting a filtered `total` on count-only requests).
+ * Re-apply view rules only when the Worker page body is inconsistent with `total`
+ * (extra rows in `items` beyond the reported filtered count). Classic-array fallback
+ * is handled separately in `opportunities-page-fetch.ts`.
  */
 export function shouldApplyClientViewFilter(
   filter: { view?: OpportunityView; offset?: number },
@@ -88,9 +86,5 @@ export function shouldApplyClientViewFilter(
 ): boolean {
   if (!filter.view || filter.view === "all") return false;
   if (page.offset > 0 || (filter.offset ?? 0) > 0) return false;
-  const { items, total } = page;
-  if (isFullListPage(items, total, page.offset)) return true;
-  if (items.length > total) return true;
-  if (total > 0 && total <= 100 && items.length <= 100) return true;
-  return false;
+  return page.items.length > page.total;
 }

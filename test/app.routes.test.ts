@@ -1407,6 +1407,7 @@ const OPPORTUNITY_ROW = {
   lastEvaluatedAt: null,
   firstSeenAt: "2026-05-20T10:00:00.000Z",
   lastSeenAt: "2026-05-21T10:00:00.000Z",
+  receivedAt: "2026-05-21T09:00:00.000Z",
   seenCount: 1,
   listingUrl: "https://example.com/listing/1",
   entryMethod: null,

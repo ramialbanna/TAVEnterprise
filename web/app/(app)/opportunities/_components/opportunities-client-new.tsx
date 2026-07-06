@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,8 +23,6 @@ import {
   DEFAULT_QUEUE_VIEW,
   formatQueueSummaryLine,
 } from "@/lib/opportunities/queue-views";
-import { paginateOpportunityRowsClient } from "@/lib/opportunities/list-page";
-import { filterOpportunityRowsByView } from "@/lib/opportunities/view-filter";
 import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
@@ -61,7 +59,7 @@ function countFilter(
   return {
     limit: 1,
     offset: 0,
-    sort: filter.sort ?? "spread_desc",
+    sort: filter.sort ?? "received_desc",
     view: filter.view,
   };
 }
@@ -84,7 +82,7 @@ export function OpportunitiesClientNew({
   const [selected, setSelected] = useState<OpportunityRow | null>(null);
   const [offset, setOffset] = useState(0);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
-  const [sort, setSort] = useState<OpportunitySort>("spread_desc");
+  const [sort, setSort] = useState<OpportunitySort>("received_desc");
   const [claimFeedbackRow, setClaimFeedbackRow] = useState<OpportunityRow | null>(null);
 
   const viewParam = searchParams.get("view");
@@ -110,7 +108,7 @@ export function OpportunitiesClientNew({
     view === initialView &&
     offset === 0 &&
     limit === DEFAULT_PAGE_SIZE &&
-    sort === "spread_desc";
+    sort === "received_desc";
 
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
@@ -180,19 +178,6 @@ export function OpportunitiesClientNew({
   const result = query.data;
   const claimActor = meQuery.data?.ok ? meQuery.data.data : null;
 
-  /** Always align table rows with the active tab (API count can differ from list body). */
-  const displayResult = useMemo((): ApiResult<OpportunityListPage> | undefined => {
-    if (!result?.ok) return result;
-    if (view === "all") return result;
-
-    const filtered = filterOpportunityRowsByView(result.data.items, view, {
-      viewerUserId: viewerOpts?.viewerUserId,
-      viewerDisplayName: viewerOpts?.viewerDisplayName,
-    });
-    const page = paginateOpportunityRowsClient(filtered, { limit, offset, sort });
-    return { ok: true, status: result.status, data: page };
-  }, [result, view, viewerOpts, limit, offset, sort]);
-
   const tabCounts: Partial<Record<OpportunityView, number>> = {
     needs_action: extractTotal(summaryQueries[0].data),
     mine: extractTotal(summaryQueries[1].data),
@@ -226,8 +211,7 @@ export function OpportunitiesClientNew({
     );
   }
 
-  const pageData = displayResult?.ok === true ? displayResult.data : result.data;
-  const { items: rows, total } = pageData;
+  const { items: rows, total } = result.data;
 
   function handleViewChange(nextView: OpportunityView) {
     setOffset(0);
