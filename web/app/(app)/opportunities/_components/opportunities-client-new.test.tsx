@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
@@ -8,8 +9,10 @@ import type { OpportunityListPage, OpportunityRow } from "@/lib/app-api/schemas"
 
 import { OpportunitiesClientNew } from "./opportunities-client-new";
 
+const replace = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -142,5 +145,63 @@ describe("OpportunitiesClientNew", () => {
       "true",
     );
     expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
+  });
+
+  it("selects the clicked tab immediately and keeps the queue shell mounted (#43/#52)", async () => {
+    const user = userEvent.setup();
+    let resolveWorth: ((value: ApiResult<OpportunityListPage>) => void) | undefined;
+    const worthPromise = new Promise<ApiResult<OpportunityListPage>>((resolve) => {
+      resolveWorth = resolve;
+    });
+
+    mockedList.mockImplementation(async (filter) => {
+      if (filter?.view === "worth_a_look" && (filter.limit ?? 0) > 1) {
+        return worthPromise;
+      }
+      if (filter?.view === "worth_a_look") {
+        return page([], 0);
+      }
+      if (filter?.view === "mine") {
+        return page([], 0);
+      }
+      if (filter?.view === "all" && filter.limit === 100) {
+        return page([sampleRow], 1);
+      }
+      if (filter?.limit === 1) {
+        const total = filter.view === "needs_action" ? 1 : 0;
+        return page([], total);
+      }
+      return page([sampleRow], 1);
+    });
+
+    render(
+      <OpportunitiesClientNew
+        initial={page([sampleRow], 1)}
+        initialView="needs_action"
+      />,
+      { wrapper: TestWrapper },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("tab", { name: /Worth a look/i }));
+
+    // Optimistic selection — must not wait on network (#52).
+    expect(screen.getByRole("tab", { name: /Worth a look/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // Placeholder keeps prior rows / shell — no full-page "Loading opportunities…" (#43).
+    expect(screen.queryByText("Loading opportunities…")).not.toBeInTheDocument();
+    expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
+    expect(replace).toHaveBeenCalled();
+
+    resolveWorth?.(page([], 0));
+
+    await waitFor(() => {
+      expect(screen.queryByText("2019 Honda Accord")).not.toBeInTheDocument();
+    });
   });
 });

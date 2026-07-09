@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -38,6 +38,8 @@ import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
 const SUMMARY_FETCH_LIMIT = 100;
+/** List + tab revisit cache — NEXT_STEPS #43. */
+const LIST_STALE_TIME_MS = 60_000;
 
 const QUEUE_VIEWS = new Set<OpportunityView>(["needs_action", "mine", "worth_a_look", "all"]);
 
@@ -69,6 +71,18 @@ function extractTotal(result: ApiResult<OpportunityListPage> | undefined): numbe
   return result.data.total;
 }
 
+function listPageFilter(
+  view: OpportunityView,
+  opts: { limit: number; offset: number; sort: OpportunitySort },
+): OpportunitiesPageFilter {
+  return {
+    limit: opts.limit,
+    offset: opts.offset,
+    sort: opts.sort,
+    view,
+  };
+}
+
 export function OpportunitiesClientNew({
   initial,
   initialView = DEFAULT_QUEUE_VIEW,
@@ -87,22 +101,33 @@ export function OpportunitiesClientNew({
 
   const viewParam = searchParams.get("view");
   const viewKey = viewParam ?? "";
-  const view: OpportunityView =
+  const urlView: OpportunityView =
     viewParam === null ? initialView : parseViewParam(viewParam);
 
+  // Optimistic tab selection — highlight + fetch target immediately (#52).
+  // URL catches up via startTransition(router.replace) without blocking paint.
+  // `pendingViewKey` ignores stale in-flight URL updates when the user clicks
+  // another tab before the first replace lands (avoids snap-back).
+  const [view, setView] = useState(urlView);
+  const [pendingViewKey, setPendingViewKey] = useState<string | null>(null);
   const [syncedViewKey, setSyncedViewKey] = useState(viewKey);
+
   if (syncedViewKey !== viewKey) {
     setSyncedViewKey(viewKey);
-    setOffset(0);
-    setSelected(null);
+    if (pendingViewKey !== null) {
+      if (pendingViewKey === viewKey) {
+        setPendingViewKey(null);
+      }
+      // else: stale URL from an earlier click — keep optimistic `view`
+    } else if (urlView !== view) {
+      // Browser back/forward or external navigation
+      setView(urlView);
+      setOffset(0);
+      setSelected(null);
+    }
   }
 
-  const listFilter: OpportunitiesPageFilter = {
-    limit,
-    offset,
-    sort,
-    view,
-  };
+  const listFilter = listPageFilter(view, { limit, offset, sort });
 
   const matchesInitialFetch =
     view === initialView &&
@@ -116,34 +141,61 @@ export function OpportunitiesClientNew({
   });
 
   const viewerOpts = viewerFetchOptions(meQuery.data);
+  const viewerUserId = viewerOpts?.viewerUserId ?? null;
 
   const query = useQuery({
-    queryKey: [queryKeys.opportunitiesPage(listFilter), viewerOpts?.viewerUserId ?? null] as const,
+    queryKey: [queryKeys.opportunitiesPage(listFilter), viewerUserId] as const,
     queryFn: () => listOpportunitiesPage(listFilter, viewerOpts),
     initialData: matchesInitialFetch ? initial : undefined,
     enabled: view !== "mine" || meQuery.isSuccess,
+    staleTime: LIST_STALE_TIME_MS,
+    // Keep prior tab rows visible while the next view loads (#43) — avoids
+    // unmounting the queue shell (which felt like a "dead" double-click, #52).
+    // Do not reuse an error page or show another view's rows under Mine before /me.
+    placeholderData: (previousData) => {
+      if (view === "mine" && !viewerUserId) return undefined;
+      return previousData?.ok === true ? previousData : undefined;
+    },
   });
+
+  const prefetchView = useCallback(
+    (nextView: OpportunityView) => {
+      if (nextView === view) return;
+      if (nextView === "mine" && !meQuery.isSuccess) return;
+      const filter = listPageFilter(nextView, {
+        limit: DEFAULT_PAGE_SIZE,
+        offset: 0,
+        sort,
+      });
+      void queryClient.prefetchQuery({
+        queryKey: [queryKeys.opportunitiesPage(filter), viewerUserId] as const,
+        queryFn: () => listOpportunitiesPage(filter, viewerOpts),
+        staleTime: LIST_STALE_TIME_MS,
+      });
+    },
+    [meQuery.isSuccess, queryClient, sort, view, viewerOpts, viewerUserId],
+  );
 
   const summaryQueries = useQueries({
     queries: [
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })), viewerUserId] as const,
         queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" }), viewerOpts),
-        staleTime: 60_000,
+        staleTime: LIST_STALE_TIME_MS,
       },
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "mine" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "mine" })), viewerUserId] as const,
         queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" }), viewerOpts),
         enabled: meQuery.isSuccess,
-        staleTime: 60_000,
+        staleTime: LIST_STALE_TIME_MS,
       },
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })), viewerOpts?.viewerUserId ?? null] as const,
+        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })), viewerUserId] as const,
         queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" }), viewerOpts),
-        staleTime: 60_000,
+        staleTime: LIST_STALE_TIME_MS,
       },
       {
-        queryKey: ["opportunities-summary", "new-today", viewerOpts?.viewerUserId] as const,
+        queryKey: ["opportunities-summary", "new-today", viewerUserId] as const,
         queryFn: () =>
           listOpportunitiesPage(
             {
@@ -154,7 +206,7 @@ export function OpportunitiesClientNew({
             },
             viewerOpts,
           ),
-        staleTime: 60_000,
+        staleTime: LIST_STALE_TIME_MS,
       },
     ],
   });
@@ -176,6 +228,7 @@ export function OpportunitiesClientNew({
   });
 
   const result = query.data;
+  const showingPlaceholder = query.isPlaceholderData === true;
   const claimActor = meQuery.data?.ok ? meQuery.data.data : null;
 
   const tabCounts: Partial<Record<OpportunityView, number>> = {
@@ -193,8 +246,58 @@ export function OpportunitiesClientNew({
 
   const summaryLine = formatQueueSummaryLine({ needsYou, newToday });
 
+  function handleViewChange(nextView: OpportunityView) {
+    if (nextView === view) return;
+    setView(nextView);
+    setOffset(0);
+    setSelected(null);
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextView === DEFAULT_QUEUE_VIEW) {
+      params.delete("view");
+    } else {
+      params.set("view", nextView);
+    }
+    const qs = params.toString();
+    setPendingViewKey(nextView === DEFAULT_QUEUE_VIEW ? "" : nextView);
+    startTransition(() => {
+      router.replace(qs ? `/opportunities?${qs}` : "/opportunities", { scroll: false });
+    });
+  }
+
+  function handlePaginationChange(nextOffset: number, nextLimit: number) {
+    setOffset(nextOffset);
+    setLimit(nextLimit);
+  }
+
+  function handleSortChange(nextSort: OpportunitySort) {
+    setSort(nextSort);
+    setOffset(0);
+  }
+
+  // First paint only — never tear down tabs mid-switch (#52).
   if (result === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading opportunities…</p>;
+    return (
+      <div className="space-y-4">
+        <OpportunitiesTourNew />
+        <Card>
+          <CardHeader className="space-y-3 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {PAGE_COPY.queueSummaryTitle}
+            </CardTitle>
+            <p className="text-base font-medium text-foreground">{summaryLine}</p>
+            <OpportunitiesQueueTabs
+              view={view}
+              counts={tabCounts}
+              onViewChange={handleViewChange}
+              onPrefetchView={prefetchView}
+            />
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Loading opportunities…</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (!result.ok) {
@@ -212,29 +315,6 @@ export function OpportunitiesClientNew({
   }
 
   const { items: rows, total } = result.data;
-
-  function handleViewChange(nextView: OpportunityView) {
-    setOffset(0);
-    setSelected(null);
-    const params = new URLSearchParams(searchParams.toString());
-    if (nextView === DEFAULT_QUEUE_VIEW) {
-      params.delete("view");
-    } else {
-      params.set("view", nextView);
-    }
-    const qs = params.toString();
-    router.replace(qs ? `/opportunities?${qs}` : "/opportunities", { scroll: false });
-  }
-
-  function handlePaginationChange(nextOffset: number, nextLimit: number) {
-    setOffset(nextOffset);
-    setLimit(nextLimit);
-  }
-
-  function handleSortChange(nextSort: OpportunitySort) {
-    setSort(nextSort);
-    setOffset(0);
-  }
 
   return (
     <div className={cn("space-y-4", selected && "pb-28 md:pb-0")}>
@@ -254,16 +334,26 @@ export function OpportunitiesClientNew({
             {PAGE_COPY.queueSummaryTitle}
           </CardTitle>
           <p className="text-base font-medium text-foreground">{summaryLine}</p>
-          <OpportunitiesQueueTabs view={view} counts={tabCounts} onViewChange={handleViewChange} />
+          <OpportunitiesQueueTabs
+            view={view}
+            counts={tabCounts}
+            loading={query.isFetching && showingPlaceholder}
+            onViewChange={handleViewChange}
+            onPrefetchView={prefetchView}
+          />
         </CardHeader>
-        <CardContent>
+        <CardContent
+          className={cn(
+            showingPlaceholder && query.isFetching && "opacity-70 transition-opacity",
+          )}
+        >
           <OpportunitiesTableNew
             rows={rows}
             total={total}
             offset={offset}
             limit={limit}
             sort={sort}
-            loading={query.isFetching}
+            loading={query.isFetching && !showingPlaceholder}
             selectedId={selected?.id ?? null}
             claimActor={claimActor}
             claimPendingId={claimMutation.isPending ? (claimMutation.variables?.id ?? null) : null}

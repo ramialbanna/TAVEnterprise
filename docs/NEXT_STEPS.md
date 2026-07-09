@@ -1,11 +1,29 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-09 · **Focus:** Items **43/52** (tab latency + double-click); then **45/47** (bad-lead dismiss), **48** (VIN→YMM), **51** (workflow), **53** (salesperson/appraiser lookup)
+**Last updated:** 2026-07-09 · **Focus:** Item **48** (VIN→Y/M/M/S + fresh valuation); then **45/47**, **51**, **53**
 
 > **Fresh chat prompt:**
-> Items **40–42** + **49–50** shipped (2026-07-09). Buyer email items **47–53** remain. Next: **43/52** (tab/action latency + double-click), then **45/47** (flag bad lead), **48** (VIN decode → Y/M/M/S), **51** (workflow: Bad Lead + Purchased min), **53** (salesperson/appraiser dropdown + admin CRUD). Still queued: **44** (listed date), **46** (Cox catalog autofill from listing). MMR Lab: [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md).
+> Items **40–42** + **49–50** + **43/52** shipped (2026-07-09). Queue tabs: optimistic selection, 60s staleTime, placeholderData, hover prefetch. Next: **48** (VIN decode → catalog + live MMR/Max buy), then **45/47**, **51**, **53**. Queued: **44**, **46**. See **Product principle — identity + always-fresh valuation**.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
+
+---
+
+> ## Product principle — identity paths + always-fresh valuation
+>
+> **Confirmed 2026-07-09 (buyer screenshot + feedback):** Entering a VIN on opportunity detail (e.g. `7MUCAAAG7NV022177`) does **not** yet autofill Make/Model/Series or refresh MMR/Max buy. Year may already be present from the listing. Closers expect VIN entry to drive the rest of the workflow without hunting dropdowns.
+>
+> **Intuitive dual path (both must work):**
+> 1. **VIN-first** — enter/save a valid VIN → decode → fill Y/M/M/(S) from Cox → persist → run **fresh** MMR + Max buy (item **48**).
+> 2. **Y/M/M/S-first** — pick catalog year/make/model/series (no VIN or VIN later) → same fresh MMR + Max buy path (items **46**, valuation block).
+>
+> **Non-negotiable:** Whatever path the closer uses, the detail page must surface **current** MMR and Max buy — not stale saved cards when identity just changed, and not a blank valuation after VIN/YMM edits. Closers will not all work the same way; the app must not punish either path.
+>
+> **Rules for future identity/valuation work:**
+> 1. After a successful VIN decode or Y/M/M/S save that changes valuation identity, auto-run (or clearly offer) live MMR + Max buy — do not require a separate tribal-knowledge “Refresh valuation” as the only path.
+> 2. VIN decode must write Cox-catalog-compatible dropdown values (reuse `matchCatalogOption` / item **46** helpers) — orphan free-text in selects is a failure.
+> 3. Failed decode/lookup: keep user input, show an error, do not clear YMM or wipe a prior good valuation (see **49** / **50**).
+> 4. Prefer one shared “identity → valuation” pipeline for detail + MMR Lab so behavior stays consistent.
 
 ---
 
@@ -61,21 +79,21 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **40** | **Needs action** tab — badge/summary shows `(1)` but table lists many rows | **Critical** | [x] |
 | **41** | **Mine** tab — badge shows `(1)` but tab body is empty | **Critical** | [x] |
 | **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
-| **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [ ] |
+| **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
 | **44** | **Listing posted date** — show when the seller listed the vehicle on the marketplace (distinct from Received / first seen) | **High** | [ ] |
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [ ] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
-| **48** | **VIN → Y/M/M/S populate (buyer email #2)** — entering VIN should fill year/make/model/(series) | **Critical** | [ ] |
+| **48** | **VIN → Y/M/M/S + fresh MMR/Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [ ] |
 | **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
 | **50** | **Refresh valuation wipes results (buyer email #4)** — Refresh clears everything and returns nothing | **Critical** | [x] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
-| **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [ ] |
+| **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
-_Paused until critical bugs 49–50 + latency 43/52 ship:_ UX backlog §4–7 (role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete.
+_Paused until VIN workflow 48 ships:_ UX backlog §4–7 (role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete. See product principle (always-fresh valuation, VIN + YMM paths). Queue tab latency **43/52** shipped 2026-07-09 (web quick wins; Worker SQL push still optional).
 
 ---
 
@@ -321,11 +339,13 @@ Default queue sort for **Needs action** / **All** should likely be **newest rece
 
 ### Exit criteria
 
-- [ ] Tab switch keeps previous table visible during refetch (no empty flash)
-- [ ] Second visit to same tab within 60s renders from cache without waiting on network
-- [ ] Measured p95 tab-switch perceived latency &lt; 500ms on production (or documented baseline + improvement)
-- [ ] Prefetch or staleTime documented in PR; no regression on count/list parity (items 40–41)
-- [ ] Optional: hover prefetch makes first visit to Mine / Worth a look feel faster
+- [x] Tab switch keeps previous table visible during refetch (no empty flash) — `placeholderData` on list query
+- [x] Second visit to same tab within 60s renders from cache — `staleTime: 60_000`
+- [ ] Measured p95 tab-switch perceived latency &lt; 500ms on production (or documented baseline + improvement) — verify after deploy
+- [x] Prefetch or staleTime documented; no client double-filter regression (items 40–41)
+- [x] Hover/focus prefetch warms Mine / Worth a look / All
+
+**Fix (2026-07-09):** Optimistic `view` state + `startTransition(router.replace)`; list `staleTime` 60s + ok-only `placeholderData`; tab spinner while placeholder refetching; hover prefetch. Do not unmount queue shell when `query.data` is briefly undefined.
 
 ---
 
@@ -600,49 +620,57 @@ Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded re
 
 ---
 
-## 48 — VIN entry populates year / make / model / series
+## 48 — VIN entry populates Y/M/M/S + fresh MMR / Max buy
 
-**Reported:** 2026-07-09 (buyer email #2)
+**Reported:** 2026-07-09 (buyer email #2) · **Reconfirmed:** 2026-07-09 screenshot — VIN `7MUCAAAG7NV022177` entered; Year `2021` from listing; Make/Model/Series still “Select…”; no auto valuation refresh.
 
-**Symptom:**
+**Should it autofill + value today?** **No — not implemented yet.** VIN save only persists the VIN string (#49 fixed wipe). Autofill + live valuation is this item. Closers are right to expect it; see **Product principle — identity paths + always-fresh valuation** at top of this doc.
 
-- Closer opens a lead, enters a VIN, and expects **year, make, model, and sometimes series** to fill automatically
-- Today Vehicle block saves VIN as text only; Y/M/M/S stay empty or listing-parsed free text until manual catalog picks
-- Cox VIN MMR (`POST /app/mmr/vin`) already returns vehicle identity in the valuation path, but that does **not** write back into Vehicle block fields
+**Symptom (current prod):**
 
-**Expected:** After a valid VIN is entered (on blur/save or explicit “Decode”), Y/M/M/(S) dropdowns populate with **Cox-catalog-compatible** values when decode succeeds.
+- Closer enters VIN, expects **year, make, model, and sometimes series** to fill and **MMR + Max buy** to update
+- Vehicle block saves VIN as text only; Y/M/M/S stay empty or listing-only until manual catalog picks
+- Cox VIN MMR (`POST /app/mmr/vin`) already returns identity on the valuation path, but does **not** write back into Vehicle dropdowns or auto-trigger after VIN save
+
+**Expected:**
+
+1. Valid VIN on blur/save (or Decode) → Cox decode → Y/M/M/(S) filled with **catalog** values (“From VIN” badge when changed).
+2. Same action → **fresh** MMR + Max buy on the Valuation block (not only after tribal “Refresh valuation”).
+3. Y/M/M/S-only path still works without a VIN (product principle).
 
 ### Relationship to item 46
 
 | Path | Source of identity | Item |
 |------|--------------------|------|
 | Listing title / parser → catalog match | Facebook/scraper YMM | **46** |
-| VIN → Cox decode → catalog match | User-entered VIN | **48** |
+| VIN → Cox decode → catalog match + live valuation | User-entered VIN | **48** |
 
-Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFields` from **46** so both land on the same Cox tokens.
+Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFields` from **46** so both land on the same Cox tokens. Wire valuation remount/refresh after identity PATCH so Max buy/MMR stay current.
 
 ### Implementation sketch
 
-1. On VIN blur/save (17-char valid): call existing `POST /app/mmr/vin` (or a lighter decode if available) and read year/make/model/style from response/session.
+1. On VIN blur/save (17-char valid): call `POST /app/mmr/vin` and read year/make/model/style from response.
 2. Run catalog resolve; set Vehicle block fields; badge “From VIN” when filled.
-3. Persist via existing PATCH (same as manual edit) so refresh/remount keeps values.
-4. If decode fails: keep VIN, show inline error; do not clear other fields (see **49**).
+3. Persist via PATCH; then trigger Valuation block live lookup (same as successful identity change — not cache-only).
+4. If decode fails: keep VIN, show inline error; do not clear other fields; do not wipe prior valuation (#49 / #50).
 
 ### Primary files
 
 - `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
 - `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts`
 - `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx` (patch + refresh)
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx` (auto-run after identity change)
 - `web/lib/app-api/client.ts` (`lookupMmrByVin` / session helpers)
 - `src/app/routes.ts` (`POST /app/mmr/vin`)
 
 ### Exit criteria
 
-- [ ] Entering a known-good VIN fills Year/Make/Model; Series when Cox provides trim/style
-- [ ] Values match Cox catalog options (dropdowns show selected, not orphan free text)
-- [ ] Failed decode does not wipe VIN or existing YMM
-- [ ] Works with item **49** fix (VIN must persist)
-- [ ] Tests: mock VIN response → fields populated; invalid VIN → no silent clear
+- [ ] Known-good VIN fills Year/Make/Model; Series when Cox provides trim/style
+- [ ] Values match Cox catalog options (dropdowns selected, not orphan free text)
+- [ ] After VIN save/decode, MMR + Max buy refresh to current results without requiring a separate manual hunt
+- [ ] Y/M/M/S-only edits still produce fresh valuation when identity is sufficient
+- [ ] Failed decode does not wipe VIN, existing YMM, or last good valuation
+- [ ] Tests: mock VIN → fields + valuation triggered; invalid VIN → no silent clear
 
 ---
 
@@ -827,10 +855,12 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 
 ### Exit criteria
 
-- [ ] Single click switches tab selection immediately (item **43** exit criteria)
-- [ ] No systematic double-click required on queue tabs
-- [ ] Document whether remaining lag is Opportunities-only or app-wide; file follow-ups if shell-level
+- [x] Single click switches tab selection immediately (optimistic `view` + item **43**)
+- [x] No systematic double-click required on queue tabs (shell stays mounted via placeholderData)
+- [x] Queue lag addressed on Opportunities; app-wide shell follow-up only if buyers still report after deploy
 - [ ] Optional: global “pending” style on async buttons (disabled + spinner after first click)
+
+**Fix (2026-07-09):** Same change set as **43** — root cause was unmounting the whole client (including tabs) when `query.data` went `undefined` on view change.
 
 ---
 
