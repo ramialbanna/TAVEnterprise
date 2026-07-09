@@ -1,61 +1,81 @@
 ---
-description: Before commit/push on web/ — run lint; never setState synchronously inside useEffect (react-hooks/set-state-in-effect)
+description: Before commit/push on web/ — run lint + typecheck; avoid setState-in-effect and ApiResult narrowing mistakes that fail web-ci ~70% of the time
 alwaysApply: true
 ---
 
-# Web CI — `react-hooks/set-state-in-effect`
+# Web CI gate (mandatory before push)
 
-Pushes that touch `web/**` run **web-ci**: `lint` → `build` → `typecheck` → `test`.  
-**Lint errors block merge** — especially `react-hooks/set-state-in-effect`.
+Pushes that touch `web/**` run **web-ci**: `lint` → `build` (includes `tsc`) → `typecheck` → `test`.  
+**Most failed pushes** are either ESLint `react-hooks/set-state-in-effect` or TypeScript errors that only show up in `next build` / `tsc` — not in the editor alone.
 
-## Before commit or push (mandatory when `web/` changed)
+## Before commit or push (when `web/` changed)
 
 ```bash
 cd web
-pnpm lint        # must exit 0 — errors block CI
-pnpm typecheck   # run after build if typedRoutes fails; see IMPLEMENTATION-PLAN §0
-pnpm test        # when you changed components or tests
+npm run lint
+npm run typecheck
+# or: npm run build   # catches the same tsc errors CI hits
+npm test             # when you changed components or tests
 ```
 
-Do **not** commit or push web changes until `pnpm lint` is clean.
+Do **not** commit/push web changes until lint + typecheck are clean.
 
-## The anti-pattern
+---
 
-Do **not** call `setState` synchronously inside `useEffect` to mirror other React state or props.
+## Failure pattern 1 — `react-hooks/set-state-in-effect`
+
+Do **not** call `setState` synchronously inside `useEffect` to mirror props/state.
 
 ```tsx
-// ❌ BAD — fails eslint react-hooks/set-state-in-effect
+// ❌ BAD
 useEffect(() => {
-  setFormState(initial);
-}, [open, data]);
-
-useEffect(() => {
-  setChildView(deriveFrom(parent));
-}, [parent, askPrice]);
+  setOpportunity(initial);
+}, [initial]);
 ```
-
-## Approved fixes
 
 | Situation | Fix |
 |-----------|-----|
-| Display derived from props/state | `useMemo` during render — no effect |
-| Reset local UI when session opens | Reset in `onOpenChange` / handler when `open` becomes true |
-| Reset child when parent identity changes | `key={sessionId}` on child to remount |
-| Seed local state once per session | `useState(() => seed)` + `key` when session changes |
+| Sync prop → local state | During-render: `if (prop !== synced) { setSynced(prop); setLocal(prop); }` |
+| Derived display | `useMemo` — no effect |
+| Reset on identity change | `key={id}` remount |
+
+---
+
+## Failure pattern 2 — `ApiResult` `.error` after a boolean helper
+
+`ApiResult<T>` is a discriminated union. `.error` exists only on `{ ok: false }`.  
+A helper that returns `boolean` (e.g. `applyDetailResult(result)`) does **not** narrow `result` for TypeScript — even after an early return on success.
 
 ```tsx
-// ✅ GOOD — derive
-const maxbuyView = useMemo(() => buildView(view, laneAskPrice), [view, laneAskPrice]);
+// ❌ BAD — fails next build / tsc
+if (applyDetailResult(result)) {
+  toast.success("Saved");
+  return;
+}
+toast.error(codeMessage(result.error)); // Property 'error' does not exist on ok:true
 
-// ✅ GOOD — remount resets adjustments
-<ResultBandAdjustments key={`${phase}-${odometer}`} defaultOdometer={odometer} />
+// ✅ GOOD — narrow explicitly
+if (applyDetailResult(result)) {
+  toast.success("Saved");
+  return;
+}
+if (!result.ok) toast.error(codeMessage(result.error));
+
+// ✅ ALSO GOOD — check ok first (narrows naturally)
+if (result.ok) {
+  /* use result.data */
+  return;
+}
+toast.error(codeMessage(result.error));
 ```
+
+Same rule for `patchMutation.data.error` — guard with `!data.ok` first.
+
+---
 
 ## Agent checklist
 
-1. After editing any `web/**/*.tsx`, scan new/changed `useEffect` bodies for `setX(` calls.
-2. Refactor to derive, key, or event-handler reset **before** staging.
-3. Run `cd web && pnpm lint` — fix all **errors** (not just warnings).
+1. After editing `web/**`, run **lint and typecheck** (not lint alone).
+2. Scan new `useEffect` bodies for synchronous `setX(`.
+3. Scan `codeMessage(….error)` / `result.error` — ensure `!result.ok` (or `if (result.ok)` early return) is in scope.
 4. Only then commit/push.
-
-More context: `docs/IMPLEMENTATION-PLAN.md` §0 (Pre-push CI gate).

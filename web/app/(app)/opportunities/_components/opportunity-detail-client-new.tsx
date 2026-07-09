@@ -111,7 +111,8 @@ export function OpportunityDetailClientNew({
         toast.success(PAGE_COPY.claimAction);
         return;
       }
-      toast.error(codeMessage(result.error));
+      // Narrow ApiResult before .error — boolean helpers do not narrow the union.
+      if (!result.ok) toast.error(codeMessage(result.error));
     },
   });
 
@@ -123,7 +124,7 @@ export function OpportunityDetailClientNew({
         toast.success("Assignment updated");
         return;
       }
-      toast.error(codeMessage(result.error));
+      if (!result.ok) toast.error(codeMessage(result.error));
     },
   });
 
@@ -143,7 +144,7 @@ export function OpportunityDetailClientNew({
         toast.success(`Marked ${label.toLowerCase()}`);
         return;
       }
-      toast.error(codeMessage(result.error));
+      if (!result.ok) toast.error(codeMessage(result.error));
     },
   });
 
@@ -155,7 +156,7 @@ export function OpportunityDetailClientNew({
         toast.success("Saved");
         return;
       }
-      toast.error(codeMessage(result.error));
+      if (!result.ok) toast.error(codeMessage(result.error));
     },
   });
 
