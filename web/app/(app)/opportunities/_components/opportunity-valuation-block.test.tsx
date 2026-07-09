@@ -358,6 +358,55 @@ describe("OpportunityValuationBlock", () => {
     ).toBe(true);
   });
 
+  it("failed refresh keeps prior MMR result instead of wiping to empty (#50)", async () => {
+    let mmrCalls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/app/mmr/vin")) {
+        mmrCalls += 1;
+        if (mmrCalls === 1) {
+          return ok({
+            mmrValue: 15000,
+            confidence: "high",
+            method: "vin",
+            year: 2019,
+            make: "Honda",
+            model: "Accord",
+            trim: "EX",
+            mileageUsed: 32000,
+            avgOdometer: 32000,
+            avgCondition: 3.9,
+            rangeLow: 14000,
+            rangeHigh: 16000,
+            adjustedMmr: 15000,
+            buildOptionsIncluded: true,
+            buildOptionsAdjustment: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({ ok: false, error: "upstream_error" }),
+          { status: 502, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/app/maxbuy/evaluate")) {
+        return ok(maxbuyPayload(12000));
+      }
+      return ok({});
+    });
+
+    renderWithClient(<OpportunityValuationBlock opportunity={makeDetail()} />);
+
+    await waitFor(() => expect(screen.getByText("MMR")).toBeInTheDocument());
+    expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
+
+    screen.getByRole("button", { name: /refresh valuation/i }).click();
+
+    await waitFor(() => expect(mmrCalls).toBeGreaterThanOrEqual(2));
+    // Prior MMR hero must remain — not blank / error wipe.
+    expect(screen.getByText("MMR")).toBeInTheDocument();
+    expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
+  });
+
   it("shows F grade for saved pass with low segment data", async () => {
     mockFetchForVin();
     renderWithClient(

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   postMaxbuyEvaluate,
@@ -285,11 +286,19 @@ export function OpportunityValuationBlock({
   const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
   const laneAskPriceRef = useRef<string>(laneAskPriceFromOpportunity(opportunity));
   const adjustmentsRef = useRef(adjustments);
+  const viewRef = useRef(view);
+  const maxbuyViewRef = useRef(maxbuyView);
   useLayoutEffect(() => {
     adjustmentsRef.current = adjustments;
   });
   useLayoutEffect(() => {
     laneAskPriceRef.current = laneAskPriceFromOpportunity(opportunity);
+  });
+  useLayoutEffect(() => {
+    viewRef.current = view;
+  });
+  useLayoutEffect(() => {
+    maxbuyViewRef.current = maxbuyView;
   });
 
   // Keep valuation odometer aligned when the parent passes refreshed mileage
@@ -378,9 +387,17 @@ export function OpportunityValuationBlock({
 
       const isCurrentRequest = () => requestId === lookupRequestIdRef.current;
 
+      // Snapshot prior UI so a failed refresh does not wipe a good valuation
+      // (NEXT_STEPS #50 — Refresh cleared cards to empty/error with no recovery).
+      const priorMmrView = viewRef.current;
+      const priorMaxbuyView = maxbuyViewRef.current;
+      const keepPriorOnRefresh = refresh && priorMmrView.kind === "ok";
+
       lookupSessionRef.current = session;
-      setAdjustmentBaseline(null);
-      setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
+      if (!keepPriorOnRefresh) {
+        setAdjustmentBaseline(null);
+        setAttributeMarginals(EMPTY_MMR_ATTRIBUTE_MARGINALS);
+      }
       pendingMarginalChangesRef.current = [];
 
       const adjForFetch = refresh
@@ -390,53 +407,99 @@ export function OpportunityValuationBlock({
         setAdjustments(adjForFetch);
       }
 
-      setView({ kind: "loading" });
-      setMaxbuyView(runMaxbuy ? { kind: "loading" } : { kind: "idle" });
-
-      const mmrRes = await fetchMmrForSession(session, {
-        refresh,
-        adjustments: adjForFetch,
-      });
-
-      if (!isCurrentRequest()) return;
-
-      if (!mmrRes.ok) {
-        if (mmrRes.kind === "unavailable") {
-          setView({ kind: "unavailable", reason: mmrRes.error });
-        } else {
-          setView({ kind: "error", error: mmrRes });
-        }
-        setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
-        return;
+      if (keepPriorOnRefresh) {
+        // Keep summary cards mounted; show recomputing affordance instead of blank skeletons.
+        setMmrRecomputing(true);
+      } else {
+        setView({ kind: "loading" });
+        setMaxbuyView(runMaxbuy ? { kind: "loading" } : { kind: "idle" });
       }
 
-      applyMmrResult(mmrRes.data, refresh ? adjForFetch : EMPTY_MMR_ADJUSTMENTS);
-
-      if (!runMaxbuy) return;
-
-      // Enrich VIN session with Cox YMM before Max buy when Cox omitted identity.
-      const maxbuySession =
-        session.kind === "vin"
-          ? mmrVinSessionFromResult(session.vin, mmrRes.data)
-          : session;
-      lookupSessionRef.current = maxbuySession;
-
-      const built = buildMmrLabMaxbuyRequest(
-        maxbuySession,
-        laneAskPriceRef.current,
-        adjForFetch,
-      );
-      if ("error" in built) {
-        setMaxbuyView({ kind: "error", message: built.error });
-        return;
-      }
       try {
-        const maxbuyRes = await postMaxbuyEvaluate(built.body);
+        const mmrRes = await fetchMmrForSession(session, {
+          refresh,
+          adjustments: adjForFetch,
+        });
+
         if (!isCurrentRequest()) return;
-        setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
-      } catch {
-        if (!isCurrentRequest()) return;
-        setMaxbuyView(MAXBUY_FETCH_FAILED);
+
+        if (!mmrRes.ok) {
+          if (keepPriorOnRefresh) {
+            setView(priorMmrView);
+            setMaxbuyView(priorMaxbuyView);
+            toast.error(
+              mmrRes.kind === "unavailable"
+                ? "Valuation refresh unavailable — showing last result."
+                : "Valuation refresh failed — showing last result.",
+            );
+            return;
+          }
+          if (mmrRes.kind === "unavailable") {
+            setView({ kind: "unavailable", reason: mmrRes.error });
+          } else {
+            setView({ kind: "error", error: mmrRes });
+          }
+          setMaxbuyView(runMaxbuy ? MAXBUY_FETCH_FAILED : { kind: "idle" });
+          return;
+        }
+
+        applyMmrResult(mmrRes.data, refresh ? adjForFetch : EMPTY_MMR_ADJUSTMENTS);
+
+        if (!runMaxbuy) return;
+
+        // Enrich VIN session with Cox YMM before Max buy when Cox omitted identity.
+        const maxbuySession =
+          session.kind === "vin"
+            ? mmrVinSessionFromResult(session.vin, mmrRes.data)
+            : session;
+        lookupSessionRef.current = maxbuySession;
+
+        const built = buildMmrLabMaxbuyRequest(
+          maxbuySession,
+          laneAskPriceRef.current,
+          adjForFetch,
+        );
+        if ("error" in built) {
+          if (keepPriorOnRefresh) {
+            setMaxbuyView(priorMaxbuyView);
+            toast.error(built.error);
+            return;
+          }
+          setPreferLiveMaxbuy(true);
+          setMaxbuyView({ kind: "error", message: built.error });
+          return;
+        }
+
+        // Switch to live Max buy only once we are about to fetch — keeps saved
+        // card visible through the MMR portion of a refresh.
+        setPreferLiveMaxbuy(true);
+        if (!keepPriorOnRefresh || priorMaxbuyView.kind !== "ready") {
+          setMaxbuyView({ kind: "loading" });
+        }
+        try {
+          const maxbuyRes = await postMaxbuyEvaluate(built.body);
+          if (!isCurrentRequest()) return;
+          setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
+        } catch {
+          if (!isCurrentRequest()) return;
+          if (keepPriorOnRefresh && priorMaxbuyView.kind === "ready") {
+            setMaxbuyView(priorMaxbuyView);
+            toast.error("Max buy refresh failed — showing last result.");
+            return;
+          }
+          if (keepPriorOnRefresh && priorMaxbuyView.kind === "idle") {
+            // Restore saved-card path when live fetch fails after a refresh.
+            setPreferLiveMaxbuy(false);
+            setMaxbuyView({ kind: "idle" });
+            toast.error("Max buy refresh failed — showing last result.");
+            return;
+          }
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+        }
+      } finally {
+        if (isCurrentRequest()) {
+          setMmrRecomputing(false);
+        }
       }
     },
     [applyMmrResult, opportunity],
@@ -539,10 +602,6 @@ export function OpportunityValuationBlock({
     const session = sessionFromOpportunity(opportunity);
     if (!session) return;
     const runMaxbuy = shouldRunMaxbuyOnFreshLookup(opportunity);
-    if (runMaxbuy) {
-      setPreferLiveMaxbuy(true);
-      setMaxbuyView({ kind: "loading" });
-    }
     const requestId = ++lookupRequestIdRef.current;
     void runLookup(session, {
       runMaxbuy,

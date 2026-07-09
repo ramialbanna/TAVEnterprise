@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-06 · **Focus:** Items 40–42 shipped; UX backlog §4–7 next
+**Last updated:** 2026-07-09 · **Focus:** Items **43/52** (tab latency + double-click); then **45/47** (bad-lead dismiss), **48** (VIN→YMM), **51** (workflow), **53** (salesperson/appraiser lookup)
 
 > **Fresh chat prompt:**
-> Fix items **40–42** first (New-mode `/opportunities` queue). Then resume UX backlog §4–7. MMR Lab architecture: [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md). Completed work: [`completed-tasks.md`](completed-tasks.md). UX backlog: [`02-product/ui-improvements-backlog.md`](02-product/ui-improvements-backlog.md).
+> Items **40–42** + **49–50** shipped (2026-07-09). Buyer email items **47–53** remain. Next: **43/52** (tab/action latency + double-click), then **45/47** (flag bad lead), **48** (VIN decode → Y/M/M/S), **51** (workflow: Bad Lead + Purchased min), **53** (salesperson/appraiser dropdown + admin CRUD). Still queued: **44** (listed date), **46** (Cox catalog autofill from listing). MMR Lab: [`07-buybox/MMR-LAB-ARCHITECTURE.md`](07-buybox/MMR-LAB-ARCHITECTURE.md).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -61,8 +61,21 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **40** | **Needs action** tab — badge/summary shows `(1)` but table lists many rows | **Critical** | [x] |
 | **41** | **Mine** tab — badge shows `(1)` but tab body is empty | **Critical** | [x] |
 | **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
+| **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [ ] |
+| **44** | **Listing posted date** — show when the seller listed the vehicle on the marketplace (distinct from Received / first seen) | **High** | [ ] |
+| **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
+| **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [ ] |
+| **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
+| **48** | **VIN → Y/M/M/S populate (buyer email #2)** — entering VIN should fill year/make/model/(series) | **Critical** | [ ] |
+| **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
+| **50** | **Refresh valuation wipes results (buyer email #4)** — Refresh clears everything and returns nothing | **Critical** | [x] |
+| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
+| **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [ ] |
+| **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
 
-_Paused until 40–42 ship:_ UX backlog §4–7 (workflow polish, role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete.
+**Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
+
+_Paused until critical bugs 49–50 + latency 43/52 ship:_ UX backlog §4–7 (role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete.
 
 ---
 
@@ -242,15 +255,628 @@ Default queue sort for **Needs action** / **All** should likely be **newest rece
 - [ ] Timestamp reflects lead creation for `type=lead` rows (verified against Supabase `tav.leads.created_at`)
 - [ ] Manual submissions show submission time
 - [ ] Sort **Newest first** available and documented; consider making it default for `needs_action`
-- [ ] Tooltip explains difference vs "Last seen" if both shown
+- [x] Tooltip explains difference vs "Last seen" if both shown
+
+---
+
+## 43 — Tab switch latency (queue feels slow)
+
+**Reported:** 2026-07-06 (production New mode, `/opportunities`) — **no code change yet**
+
+**Symptom:**
+
+- Clicking **Needs action**, **Mine**, **Worth a look**, or **All** waits ~1–3 seconds before the table updates
+- UI feels unresponsive during the gap (no instant feedback or stale rows held in place)
+- Buyers switching tabs frequently notice the pause on every click
+
+**Expected:** Tab switch feels **instant** — previous rows stay visible with a light loading state, or cached data shows immediately while revalidating in the background. Target: perceived switch **&lt; 200ms**; network refresh can complete asynchronously.
+
+### Likely contributors (code review 2026-07-06)
+
+| Layer | What happens today | File |
+|-------|-------------------|------|
+| **Tab click** | `router.replace` updates `?view=` → new React Query key → **fresh fetch** every switch | `opportunities-client-new.tsx` |
+| **List query** | No `staleTime` / `placeholderData` on main list query (unlike summary queries at 60s) | `opportunities-client-new.tsx` |
+| **Network path** | Browser → Next `/api/app/opportunities` → Cloudflare Worker → Supabase (full round trip per tab) | `web/app/api/app/*`, `src/app/routes.ts` |
+| **Worker assembly** | `listOpportunities` with `view=` fetches up to **500** listings, then joins valuations, leads, manual submissions, workflow, maxbuy summaries, filters in memory, sorts, paginates | `src/persistence/opportunities.ts` |
+| **Parallel load on mount** | Four extra summary queries (tab counts + new-today) compete for Worker/DB on first paint | `opportunities-client-new.tsx` (`useQueries`) |
+| **No prefetch** | Hovering a tab does not warm the cache for that view | — |
+
+### Investigation steps
+
+1. DevTools **Network**: measure `GET /api/app/opportunities?view=…` duration per tab switch (TTFB + total). Compare views.
+2. DevTools **Performance**: confirm table unmounts or shows blank vs keeps previous rows during fetch.
+3. Worker logs / Supabase: check whether latency is DB-bound (large `normalized_listings` scan + N joins) or Worker CPU (in-memory filter on 500 rows × 4 views).
+4. Repeat after cache warm (second click on same tab) — if still slow, caching is not helping.
+
+### Fix direction (pick smallest wins first)
+
+**Web (quick wins):**
+
+- `placeholderData: keepPreviousData` (TanStack Query v5: `placeholderData: (prev) => prev`) on the list query so rows don't disappear while refetching
+- Add `staleTime` (e.g. 30–60s) on list queries so revisiting a tab serves cache immediately
+- **Prefetch** adjacent tabs on hover/focus (`queryClient.prefetchQuery` with each `view`)
+- Show subtle **tab-level loading** indicator (spinner on active tab or table overlay) so the wait is visible, not a dead UI
+- Consider `router.replace` + `startTransition` to avoid blocking paint
+
+**API / Worker (if network is the bottleneck):**
+
+- Reduce `MAX_FETCH` work for view-filtered requests or push `view` filters closer to SQL (assigned_to, claim expiry) instead of assembling 500 rows then filtering in memory
+- Dedicated **count-only** endpoint or `?countOnly=true` so summary badges don't each trigger full assembly
+- Index / query plan review on `normalized_listings.last_seen_at`, `leads.assigned_to`, workflow tables
+- Optional short-lived **edge cache** for paginated queue responses (careful with auth + mine view)
+
+**Do not:**
+
+- Re-introduce client-side double-filtering (items 40–41 regression risk)
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunities-client-new.tsx`
+- `web/app/(app)/opportunities/_components/opportunities-queue-tabs.tsx`
+- `web/lib/app-api/opportunities-page-fetch.ts`
+- `web/lib/query.ts` (`queryKeys.opportunitiesPage`)
+- `src/persistence/opportunities.ts` (`listOpportunities`, `MAX_FETCH`)
+- `src/app/routes.ts`
+
+### Exit criteria
+
+- [ ] Tab switch keeps previous table visible during refetch (no empty flash)
+- [ ] Second visit to same tab within 60s renders from cache without waiting on network
+- [ ] Measured p95 tab-switch perceived latency &lt; 500ms on production (or documented baseline + improvement)
+- [ ] Prefetch or staleTime documented in PR; no regression on count/list parity (items 40–41)
+- [ ] Optional: hover prefetch makes first visit to Mine / Worth a look feel faster
+
+---
+
+## 44 — Listing posted date (when seller listed on marketplace)
+
+**Reported:** 2026-07-08 (production New mode, `/opportunities`) — **no code change yet**
+
+**Symptom:**
+
+- Queue shows **Received** (when TAV surfaced the lead) but not **when the seller originally posted** the Facebook listing
+- Buyers reviewing fresh scraper leads cannot tell if a vehicle was listed 2 hours ago vs 3 days ago on the marketplace itself
+- `lastSeenAt` is hidden by default and reflects last scrape, not seller post time
+
+**Expected:** Buyers can see **Listed** (or **Posted**) — the marketplace listing creation/post time — on the queue row and/or opportunity detail, distinct from **Received**.
+
+### Data model notes
+
+| Field | Source today | Meaning | Exposed on queue? |
+|-------|----------------|---------|-------------------|
+| `receivedAt` | `leads.created_at` / manual submission / `first_seen_at` fallback | When TAV made this actionable | ✅ Yes (item 42) |
+| `firstSeenAt` | `normalized_listings.first_seen_at` | First ingest into TAV | Hidden by default |
+| `lastSeenAt` | `normalized_listings.last_seen_at` | Last scrape | Hidden by default |
+| `posted_at` | `normalized_listings.posted_at` | **Seller listing post time** (from source) | ❌ **Not exposed** |
+
+**Ingest gap (code review 2026-07-08):** Apify `custom-vehicle-scraper` already emits `postedAt` on dataset items (and `payloadAdapter.ts` preserves/maps it from `listing_date_ms`). `NormalizedListingInput` and `normalized_listings.posted_at` exist, but `parseFacebookItem` (`src/sources/facebook.ts`) does **not** copy `postedAt` / `posted_at` / `listedAt` into the normalized listing today — so `posted_at` is likely **NULL** for most Facebook rows even though the raw payload has the timestamp. **Verify in Supabase** before UI work: `SELECT posted_at, first_seen_at, title FROM tav.normalized_listings WHERE source = 'facebook' ORDER BY created_at DESC LIMIT 20`.
+
+### Product decision (confirm at implementation)
+
+| Option | Label | Sort | Notes |
+|--------|-------|------|-------|
+| A (recommended) | **Listed** | `posted_at DESC` | Marketplace post time — what buyers asked for |
+| B | **Listed** + **Received** | Both columns | Clearer but wider table |
+| C | Relative in Vehicle cell | — | e.g. "Listed 3h ago · Received 10m ago" |
+
+Tooltip must explain: **Listed** = seller post time on Facebook; **Received** = when TAV created/surfaced the opportunity.
+
+### Implementation sketch
+
+1. **Ingest fix (if `posted_at` is null):** extend `parseFacebookItem` to extract `postedAt` / `posted_at` / `listedAt` from the mapped item into `NormalizedListingInput.postedAt`.
+2. **Worker:** add `postedAt` to `OpportunityRow` / `OpportunityDetail` in `mapToOpportunityRow` from `normalized_listings.posted_at`.
+3. **Web schema:** extend `OpportunityRow` in `web/lib/app-api/schemas.ts`.
+4. **Table:** add **Listed** column in `table-preferences.ts` (visible by default or one click away in column picker).
+5. **Sort:** add `posted_desc` / `listed_desc` to `OPPORTUNITY_SORTS` in Worker + sort dropdown.
+6. **Detail:** show Listed timestamp in Vehicle block "Additional Information" or a metadata strip near Received.
+
+### Primary files
+
+- `src/sources/facebook.ts` (`parseFacebookItem` — extract posted time)
+- `src/persistence/opportunities.ts` (`LISTING_COLUMNS`, `mapToOpportunityRow`, `sortOpportunityRows`)
+- `src/app/routes.ts` (`OPPORTUNITY_SORTS`)
+- `web/lib/app-api/schemas.ts`
+- `web/lib/opportunities/table-preferences.ts`
+- `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx` (detail)
+
+### Exit criteria
+
+- [ ] `posted_at` populated on new Facebook ingests (verified in Supabase after ingest fix)
+- [ ] **Listed** column visible on New-mode queue with correct timestamps for scraper leads
+- [ ] Distinct from **Received** — tooltip documents both
+- [ ] Sort by newest listed first available
+- [ ] Manual submissions without source post time show honest empty/estimate badge (no fake timestamp)
+
+---
+
+## 45 — Dismiss opportunity with reason (queue right-side action)
+
+**Reported:** 2026-07-08 (production New mode, `/opportunities`) — **no code change yet**
+
+**Symptom:**
+
+- No quick way to **pass/dismiss** a row from the queue without opening detail
+- Right-side row actions today are only **View listing** (external link) and **Claim** (`opportunity-row-actions-new.tsx`)
+- Workflow supports `passed` via `POST /app/opportunities/:id/status` on the **detail** page, but there is no reason capture and no one-click dismiss from the table
+
+**Expected:** A **Dismiss** control on the right side of each queue row. Clicking opens a lightweight prompt (modal or popover) requiring the user to pick **why** before the row leaves the active queue.
+
+### Product decisions (confirm at implementation)
+
+**Dismiss behavior:**
+
+- Row moves to a terminal/suppressed workflow state (likely `passed` or new `dismissed` — see below)
+- Default queue views (`needs_action`, `mine`, `worth_a_look`, `all`) **exclude** dismissed rows
+- Action is **audited** in `tav.opportunity_actions` with actor, timestamp, and selected reason
+
+**Reason vocabulary (starter set — confirm with buyers):**
+
+| Reason code | Label | Example use |
+|-------------|-------|-------------|
+| `wrong_vehicle` | Wrong vehicle type | Motorcycle, commercial, parts car |
+| `bad_price` | Price out of range | Above ceiling / unrealistic |
+| `bad_condition` | Condition concerns | Salvage, obvious issues in photos |
+| `too_far` | Too far / wrong market | Outside buy radius |
+| `duplicate` | Duplicate | Already working same VIN/listing |
+| `not_interested` | Not interested | Generic pass |
+| `other` | Other | Requires free-text note (min length?) |
+
+**Status mapping options:**
+
+| Option | Pros | Cons |
+|--------|------|------|
+| A (recommended) | Reuse `passed` + store `dismiss_reason` in action `metadata` | "Passed" may conflate buyer-contacted-pass vs queue-dismiss |
+| B | Add `dismissed` to `MUTATABLE_WORKFLOW_STATUSES` + DB enum | Migration + filter updates |
+| C | `archived` with reason metadata | Semantically muddy |
+
+Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs "never looked" distinction in reporting.
+
+### Implementation sketch
+
+1. **UI — queue row:** add Dismiss button to `OpportunityRowActionsNew` (icon + label; stop row click propagation).
+2. **UI — reason picker:** `DismissOpportunityDialog` — radio list of reasons; optional note for `other`; Confirm disabled until reason selected.
+3. **API:** either extend `POST /app/opportunities/:id/status` body with optional `reason` + `notes`, or add `POST /app/opportunities/:id/dismiss` that sets status + writes action atomically.
+4. **Worker:** `opportunityWorkflow.ts` — validate reason code; write `OpportunityActionRecord` with `action: "status_changed"`, `metadata: { reason, previousStatus }`; enforce `canMutateWorkflow` (claim owner, assignee, or admin).
+5. **List filters:** ensure `matchesNeedsAction` / default views exclude terminal statuses (`passed` already in `TERMINAL_WORKFLOW_STATUSES`).
+6. **Optimistic UI:** remove row from table on success; invalidate tab counts.
+7. **Admin/reporting (later):** filter by dismiss reason in a suppressed/closed view.
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunity-row-actions-new.tsx`
+- `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`
+- `web/app/(app)/opportunities/_components/opportunities-client-new.tsx` (mutation + cache invalidation)
+- `web/lib/app-api/client.ts` (`updateOpportunityStatus` or new dismiss endpoint)
+- `src/app/routes.ts` (`POST /app/opportunities/:id/status` or `/dismiss`)
+- `src/persistence/opportunityWorkflow.ts`
+- `docs/02-product/v2-opportunities.md` (closed/suppressed states §6)
+
+### Exit criteria
+
+- [ ] Dismiss button visible on queue rows for users with mutate permission
+- [ ] Cannot dismiss without selecting a reason
+- [ ] Dismissed row disappears from **Needs action** / **All** default views immediately
+- [ ] `tav.opportunity_actions` row records reason + actor + timestamp
+- [ ] Detail page action history shows dismiss event
+- [ ] Tests: API validation (missing reason → 400), filter exclusion, permission gates
+
+---
+
+## 46 — Cox Y/M/M autofill for MMR evaluation
+
+**Reported:** 2026-07-08 (production opportunity detail + MMR Lab) — **no code change yet**
+
+**Symptom:**
+
+- Listing-parsed year/make/model from Facebook titles (e.g. `2018 Kia Sportage FE` → make `kia`, model `sportage fe`) does not always match **Cox/Manheim catalog tokens** required for `POST /app/mmr/ymm`
+- Buyers must manually hunt Y/M/M/S dropdowns on the Vehicle block or MMR Lab even when the listing already has usable identity
+- MMR lookup fails or returns wrong trim when free-text model strings are not Cox-canonical (known pain: verbose trim in title, non-catalog makes)
+
+**Expected:** On opportunity detail (and optionally MMR Lab prefill), **autofill** year/make/model/style inputs with the closest **Cox-ingestible** values so one click (or auto on load) can run MMR and return wholesale adjustments.
+
+### What exists today (code review 2026-07-08)
+
+| Piece | Status | File |
+|-------|--------|------|
+| Cox catalog dropdowns (Y/M/M/S) | ✅ Shipped on Vehicle block | `opportunity-vehicle-block.tsx`, `use-vehicle-catalog.ts` |
+| Catalog API | ✅ `GET /app/mmr/catalog/years\|makes\|models\|styles` | `src/app/routes.ts` |
+| `matchCatalogOption()` | ✅ Case-insensitive catalog match helper | `use-vehicle-catalog.ts` |
+| Listing → Vehicle block initial values | ⚠️ Raw `opportunity.year/make/model/style` — **no catalog resolution** | `opportunity-vehicle-block.tsx` |
+| MMR recompute from detail | ✅ `buildMmrRecomputeRequest` / `opportunity-valuation-block.tsx` | Uses saved vehicle fields |
+| Title → Cox mapping | ❌ Not automated end-to-end | Parser in `src/sources/facebook.ts` ≠ Cox vocab |
+
+### Implementation sketch
+
+**Phase A — Catalog match on load (smallest win):**
+
+1. When Vehicle block mounts (and catalog connected), for each of make/model/style:
+   - Fetch catalog options for current year/make/model cascade
+   - Run `matchCatalogOption(catalogMakes, opportunity.make)` etc.
+   - If match found, pre-select canonical catalog value; badge "Auto-matched from listing" when different from raw parser output
+2. If no catalog match, leave fields empty and show inline hint ("Pick make from Cox catalog — listing said 'sportage fe'")
+
+**Phase B — Trim/style inference:**
+
+1. Use `opportunity.trim` / title remainder + `cleanTrim` logic (already in `payloadAdapter.ts` for Apify detail mode) to suggest style
+2. Optional: call `GET /app/mmr/catalog/styles?year&make&model` and fuzzy-match title tokens against style list (same pattern as MMR Lab item #17 approximate style)
+
+**Phase C — One-click "Apply listing → Cox" + MMR:**
+
+1. Button: **Use listing identity** — runs catalog match cascade, saves patch via existing `PATCH /app/opportunities/:id`, triggers MMR recompute
+2. Wire into `opportunity-valuation-block.tsx` so MMR card can run immediately after autofill without separate save
+
+**Phase D — MMR Lab prefill parity:**
+
+1. Extend existing URL prefill (item 35) so `?year=&make=&model=` params use catalog-resolved tokens, not raw parser strings
+2. Queue row action: "Open in MMR Lab" passes resolved Cox values when available
+
+### Constraints (do not violate)
+
+- Never round MMR adjustment dollars (see critical banner at top of this doc)
+- Autofill is **best-effort** — badge when style/mileage/grade are inferred (`estimateFlags` pattern already exists)
+- Failed catalog match must not block manual override
+- Autofill must not silently save wrong Cox identity — show diff when canonical ≠ parsed (e.g. `sportage fe` → `Sportage`)
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts` (`matchCatalogOption`, new `resolveListingToCatalog()`)
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx`
+- `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.ts`
+- `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` (prefill)
+- `src/apify/payloadAdapter.ts` (`cleanTrim` — consider shared export for title trim cleanup)
+- `docs/07-buybox/MMR-LAB-ARCHITECTURE.md`
+
+### Exit criteria
+
+- [ ] Opening a lead with `2018 Kia Sportage FE` pre-fills Cox make/model dropdowns to catalog values without manual search
+- [ ] MMR YMM lookup succeeds (or fails with clear "no catalog match") from autofill — not silent wrong trim
+- [ ] User sees when autofill changed parser output vs Cox canonical (badge or inline diff)
+- [ ] Manual override still works; autofill never locks fields
+- [ ] Tests: `matchCatalogOption` edge cases + Vehicle block mount with mocked catalog responses
+
+---
+
+## Buyer feedback — 2026-07-09
+
+Email from buyer (paraphrased). Map to items **47–53**. Overlaps with **43**, **45**, **46** called out per item.
+
+| Email # | Ask | Item | Overlaps |
+|---------|-----|------|----------|
+| 1 | Flag deal: not a good lead, Title Issues, Dealer, etc. — filter out for everyone | **47** | **45** (dismiss w/ reason) |
+| 2 | Enter VIN → year/make/model/(series) populate | **48** | **46** (listing→Cox catalog) |
+| 3 | VIN cleared on save | **49** | — |
+| 4 | Refresh valuation clears everything / returns nothing | **50** | item 38 refresh path |
+| 5 | Expand workflow (Bad Lead, Purchased min; fuller list TBD) | **51** | **45/47** status mapping |
+| 6 | Slow + double-click to execute (tabs + whole app) | **52** | **43** (tab latency) |
+| 7 | Salesperson / Appraiser dropdown + admin CRUD | **53** | — |
+
+---
+
+## 47 — Flag bad lead / not a good lead (shared filter)
+
+**Reported:** 2026-07-09 (buyer email #1)
+
+**Symptom:**
+
+- No way to mark a deal as a bad lead (not a good lead, Title Issues, Dealer, etc.) so **other buyers stop seeing it**
+- Today closers can only pass/dismiss from detail workflow (limited statuses); queue has no shared “filter out for everyone” action with a reason vocabulary buyers asked for
+
+**Expected:** One-click (or short dialog) to flag a lead with a required reason. Flagged leads leave default queue views for **all** users and remain auditable.
+
+### Relationship to item 45
+
+Item **45** already scopes “Dismiss with reason” on the queue row. **47** is the product vocabulary + shared-filter confirmation from buyers:
+
+| Reason (buyer language) | Suggested code | Notes |
+|-------------------------|----------------|-------|
+| Not a good lead | `not_a_good_lead` | Generic pass |
+| Title Issues | `title_issues` | Title/lien/brand problems |
+| Dealer | `dealer` | Dealer listing / wholesale flip |
+| _(from 45 starter set)_ | `wrong_vehicle`, `bad_price`, `bad_condition`, `too_far`, `duplicate`, `other` | Keep unless buyers reject |
+
+Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded reason list, same “exclude from active views for everyone” behavior.
+
+### Product decisions (confirm)
+
+- Status: reuse `passed` + reason in `opportunity_actions.metadata` (item 45 option A), **or** add `bad_lead` as first-class status (aligns with item **51**)
+- Queue views: `needs_action` / `mine` / `worth_a_look` / `all` exclude flagged rows; optional later “Suppressed / Bad leads” admin view
+- Who can flag: claim owner, assignee, or admin (same as `canMutateWorkflow`)
+
+### Primary files
+
+- Same as item **45** (`opportunity-row-actions-new.tsx`, dismiss dialog, `opportunityWorkflow.ts`, list filters)
+- `docs/02-product/v2-opportunities.md` — closed/suppressed states
+
+### Exit criteria
+
+- [ ] Buyer can flag with at least: Not a good lead, Title Issues, Dealer (+ other agreed reasons)
+- [ ] Flagged row disappears from default queue views for **all** users (not just actor)
+- [ ] Action audited with reason + actor + timestamp
+- [ ] Cannot submit without a reason
+- [ ] Tests: filter exclusion + permission + missing reason → 400
+
+---
+
+## 48 — VIN entry populates year / make / model / series
+
+**Reported:** 2026-07-09 (buyer email #2)
+
+**Symptom:**
+
+- Closer opens a lead, enters a VIN, and expects **year, make, model, and sometimes series** to fill automatically
+- Today Vehicle block saves VIN as text only; Y/M/M/S stay empty or listing-parsed free text until manual catalog picks
+- Cox VIN MMR (`POST /app/mmr/vin`) already returns vehicle identity in the valuation path, but that does **not** write back into Vehicle block fields
+
+**Expected:** After a valid VIN is entered (on blur/save or explicit “Decode”), Y/M/M/(S) dropdowns populate with **Cox-catalog-compatible** values when decode succeeds.
+
+### Relationship to item 46
+
+| Path | Source of identity | Item |
+|------|--------------------|------|
+| Listing title / parser → catalog match | Facebook/scraper YMM | **46** |
+| VIN → Cox decode → catalog match | User-entered VIN | **48** |
+
+Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFields` from **46** so both land on the same Cox tokens.
+
+### Implementation sketch
+
+1. On VIN blur/save (17-char valid): call existing `POST /app/mmr/vin` (or a lighter decode if available) and read year/make/model/style from response/session.
+2. Run catalog resolve; set Vehicle block fields; badge “From VIN” when filled.
+3. Persist via existing PATCH (same as manual edit) so refresh/remount keeps values.
+4. If decode fails: keep VIN, show inline error; do not clear other fields (see **49**).
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
+- `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts`
+- `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx` (patch + refresh)
+- `web/lib/app-api/client.ts` (`lookupMmrByVin` / session helpers)
+- `src/app/routes.ts` (`POST /app/mmr/vin`)
+
+### Exit criteria
+
+- [ ] Entering a known-good VIN fills Year/Make/Model; Series when Cox provides trim/style
+- [ ] Values match Cox catalog options (dropdowns show selected, not orphan free text)
+- [ ] Failed decode does not wipe VIN or existing YMM
+- [ ] Works with item **49** fix (VIN must persist)
+- [ ] Tests: mock VIN response → fields populated; invalid VIN → no silent clear
+
+---
+
+## 49 — VIN cleared on save (bug)
+
+**Reported:** 2026-07-09 (buyer email #3) — **no investigation yet**
+
+**Symptom:**
+
+- User enters VIN on opportunity detail Vehicle block
+- On **Save** (Vehicle block still has explicit Save — commit `4828361`), the VIN field **clears**
+
+**Expected:** VIN remains visible and persisted after save; reload shows same VIN.
+
+### Likely investigation areas (code review 2026-07-09)
+
+| Layer | Check |
+|-------|--------|
+| PATCH body | `opportunity-vehicle-block.tsx` — `patch.vin = values.vin.trim() \|\| null` |
+| Worker PATCH | `src/app/routes.ts` / opportunity patch handler — does VIN write to `normalized_listings`? |
+| Response mapping | Detail remount / `patchRevision` — does GET omit `vin` or map null? |
+| Catalog cascade | Y/M/M/S Save path (`4828361`) — does cascade reset wipe `values.vin`? |
+| Controlled input | Local state reset from `opportunity.vin` after parent refresh with stale/null VIN |
+
+### Fix direction
+
+1. Reproduce with network tab: confirm PATCH includes `vin`, response/detail refetch returns `vin`.
+2. If API drops VIN → fix persistence mapping.
+3. If API OK but UI clears → fix local state / `key={patchRevision}` remount using stale props; preserve VIN across catalog clears.
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
+- `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx`
+- Worker opportunity PATCH + `mapToOpportunityDetail` / listing columns
+- Tests: vehicle block save round-trip keeps VIN
+
+### Exit criteria
+
+- [x] Enter VIN → Save → field still shows VIN
+- [x] Hard refresh still shows VIN _(persisted via PATCH; client applies response before remount)_
+- [x] Regression test: PATCH + remount does not clear VIN
+- [x] No interaction with empty-string → null that re-seeds input as blank incorrectly
+
+**Fix (2026-07-09):** `OpportunityDetailClientNew` keeps local `opportunity` state from PATCH responses and remounts form blocks from that copy — not stale SSR `initial`. Evaluate-on-open no longer overwrites local vehicle fields.
+
+---
+
+## 50 — Refresh valuation clears everything / returns nothing (bug)
+
+**Reported:** 2026-07-09 (buyer email #4) — **no investigation yet**
+
+**Symptom:**
+
+- On opportunity detail Valuation block, **Refresh valuation** clears MMR / Max buy UI and ends with **empty / nothing** instead of refreshed numbers
+- Related history: item **38** (Max buy refresh) and compact cards (item **33**); commit `ffbb88d` / `4e8281f` touched refresh + cache bypass
+
+**Expected:** Refresh keeps prior summary visible (or loading overlay), then replaces with new MMR + Max buy results. On failure, show error and **retain last good result** (do not wipe to blank).
+
+### Likely investigation areas
+
+| Layer | Check |
+|-------|--------|
+| Loading state | `opportunity-valuation-block.tsx` — `setView({ kind: "loading" })` may unmount cards with no placeholder |
+| Identity gate | Refresh runs but `identitySufficientForMmrAutoRun` fails after vehicle remount (VIN cleared — **49**) |
+| `refresh_valuation` | VIN/YMM request flag + intel cache bypass; empty/error envelope handling |
+| Max buy | Live evaluate fails → both cards blanked together |
+| Session | `session === null` after refresh path resets MMR session |
+
+### Fix direction
+
+1. Reproduce with VIN present and with VIN missing (isolate **49** coupling).
+2. Keep previous `view` / summary as `placeholderData` while refresh in flight; only replace on success.
+3. On error: toast + restore last ok view; never leave permanent empty.
+4. Ensure Refresh sends same identity (VIN or Y/M/M/S) that auto-run would use.
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx`
+- `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.ts`
+- `web/lib/app-api/client.ts` (MMR + maxbuy evaluate)
+- `opportunity-valuation-block.test.tsx` (extend: refresh failure keeps prior; refresh success updates)
+
+### Exit criteria
+
+- [x] Refresh with valid identity returns MMR + Max buy (not blank)
+- [x] During refresh, UI does not flash to empty with no recovery _(recomputing keeps prior cards)_
+- [x] Failed refresh shows error and keeps last successful valuation
+- [x] Still works when only VIN or only Y/M/M/S identity is present
+- [x] Tests cover success + failure paths
+
+**Fix (2026-07-09):** Refresh with a prior ok MMR result uses recomputing (not blank loading skeletons). On MMR/Max buy failure, restore prior view + toast instead of wiping.
+
+---
+
+## 51 — Expand workflow statuses (Bad Lead, Purchased, …)
+
+**Reported:** 2026-07-09 (buyer email #5) — **full list TBD from buyer**
+
+**Symptom:**
+
+- Stepper today is roughly **Found → Working → Contacted → Appraised** (item **30**); mutatable statuses in Worker are limited (`contacted`, `purchased`/`bought`, `passed`, etc. — see `MUTATABLE_WORKFLOW_STATUSES`)
+- Buyers want a richer pipeline. Off-the-cuff list:
+
+```
+Found → Working → Bad Lead → Contacted → Appraised →
+Not Negotiable/Overpriced → Purchased → In Scheduling →
+Delivered → @Auction → Sold
+```
+
+**Minimum for v1 (buyer):** **Bad Lead** + **Purchased** (Purchased may already exist as `purchased` / UI “Mark bought” — confirm label + visibility on queue/detail).
+
+**Expected:** Workflow can represent at least Bad Lead and Purchased clearly; fuller enum after buyer provides final list.
+
+### Product decisions (confirm before coding)
+
+| Topic | Options |
+|-------|---------|
+| Bad Lead vs Passed | New status `bad_lead` **or** `passed` + reason (**45/47**). Prefer one model — don’t ship both without mapping. |
+| Stepper vs status | Linear stepper may not fit branches (Bad Lead / Overpriced). Consider status dropdown + reason for terminal branches; keep stepper for happy path only. |
+| Wait for final list? | Implement **Bad Lead + Purchased** now; add remaining statuses in a follow-up when buyer sends the real list. |
+
+### Implementation sketch (minimum)
+
+1. Confirm `purchased` is reachable from detail hero/workflow and labeled clearly (“Purchased” vs “Mark bought”).
+2. Add `bad_lead` (or wire dismiss→`passed` with badge “Bad lead”) to Worker enum + DB check constraint / text column docs.
+3. Exclude `bad_lead` / terminal from default queue views (same as **47**).
+4. Update stepper/copy only for statuses we ship; don’t pretend full list exists in UI until confirmed.
+
+### Primary files
+
+- `src/persistence/opportunityWorkflow.ts` (`MutatableWorkflowStatus`, terminal set)
+- `web/app/(app)/opportunities/_components/opportunity-workflow-stepper.tsx`
+- `web/app/(app)/opportunities/_components/opportunity-workflow-block.tsx` / hero CTAs
+- Supabase migration if DB constraint lists statuses
+- `docs/02-product/v2-opportunities.md`
+
+### Exit criteria
+
+- [ ] **Bad Lead** settable + excluded from default queues
+- [ ] **Purchased** clearly available and labeled
+- [ ] Buyer’s fuller list documented as follow-up (do not invent statuses beyond minimum without confirmation)
+- [ ] Tests for new status transitions + terminal filter
+
+---
+
+## 52 — Double-click / whole-app action lag
+
+**Reported:** 2026-07-09 (buyer email #6)
+
+**Symptom:**
+
+- Queue tabs (Needs action → Mine → Worth a look → All) feel **very slow**
+- Actions often seem to need **two clicks** before they “execute”
+- Buyer reports this pattern on the **entire app**, not only Opportunities
+
+**Expected:** First click registers immediately (active tab / pressed state); data can load async. No double-click required.
+
+### Relationship to item 43
+
+Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `placeholderData` / prefetch). **52** widens scope:
+
+| Layer | Hypothesis |
+|-------|------------|
+| Perceived lag | Same as **43** — blank table while waiting → user clicks again |
+| Double-click | `router.replace` + slow re-render; click target unmounts; first click “eaten” |
+| App-wide | Shared shell / Next navigation / Auth session refetch / lack of optimistic UI on buttons |
+| Overlay | Full-page loading states blocking pointer events |
+
+### Fix direction
+
+1. Ship **43** quick wins first (keepPreviousData, staleTime, tab loading indicator, prefetch).
+2. Audit click handlers: ensure `onClick` sets local selected state **before** await/navigation.
+3. Check app shell links (Next `<Link>` vs buttons) for full remounts.
+4. If still app-wide: profile with Chrome Performance on tab switch + one detail action; document baseline.
+
+### Primary files
+
+- Item **43** files (`opportunities-client-new.tsx`, queue tabs, query keys)
+- `web/components/app-shell/*` (nav click behavior)
+- Any shared Button that waits on network before visual feedback
+
+### Exit criteria
+
+- [ ] Single click switches tab selection immediately (item **43** exit criteria)
+- [ ] No systematic double-click required on queue tabs
+- [ ] Document whether remaining lag is Opportunities-only or app-wide; file follow-ups if shell-level
+- [ ] Optional: global “pending” style on async buttons (disabled + spinner after first click)
+
+---
+
+## 53 — Salesperson / Appraiser dropdown + admin CRUD
+
+**Reported:** 2026-07-09 (buyer email #7)
+
+**Symptom:**
+
+- Salesperson and Appraiser on opportunity detail are **free-text** inputs (`opportunity-salesperson-appraisal-block.tsx`)
+- Buyers will enter inconsistent names (“mess”) if left as text
+- Need an **admin tool** to add/remove people from the lists
+
+**Expected:** Both fields are dropdowns (or searchable combobox) fed from a managed directory. Admins can add/remove entries. Closers pick from the list only (or “Other” if product allows — default **list-only**).
+
+### Implementation sketch
+
+1. **Schema:** `tav.staff_directory` (or `salesperson_roster` / shared `directory_people` with `role` in `salesperson` \| `appraiser` \| both).
+2. **API:** `GET /app/directory?type=salesperson|appraiser`; admin `POST/DELETE` under `/app/admin/...` or existing admin routes.
+3. **UI — detail:** Replace text inputs with Select/Combobox bound to directory.
+4. **UI — admin:** Simple list on `/admin` (or ops page) — add name, remove, maybe deactivate instead of hard delete for historical rows.
+5. **Migration:** Existing free-text values — show as legacy option or require re-pick on next edit.
+
+### Primary files
+
+- `web/app/(app)/opportunities/_components/opportunity-salesperson-appraisal-block.tsx`
+- `web/app/(app)/admin/` (new section or page)
+- `src/app/routes.ts` + admin routes
+- New Supabase migration for directory table
+- PATCH opportunity still stores selected **name string** (or FK — prefer stable id + display name)
+
+### Exit criteria
+
+- [ ] Salesperson and Appraiser are dropdowns populated from directory
+- [ ] Admin can add and remove (or deactivate) entries
+- [ ] Closer cannot free-type arbitrary strings (unless explicit Other is approved)
+- [ ] Historical opportunities with old free-text still display sensibly
+- [ ] Tests: API CRUD + block renders options
 
 ---
 
 ### Known issues (deferred)
 
-- UX backlog §4–7 — paused until items 40–42 ship
-- Ingest `created_leads = 0` on recent runs — ops; separate from queue UI bugs
-- `handoff.md` production deploy dates stale — refresh after queue fix deploy
+- Apify `payloadAdapter` price/location fix — **deployed 2026-07-08** (`51db82eb`); monitor `tav.source_runs` for `processed > 0`
+- UX backlog §4–7 — resume after items 43–46 or in parallel if perf is quick
+- `handoff.md` production deploy dates stale — refresh after queue fixes
 
 ### Recently resolved (reference)
 

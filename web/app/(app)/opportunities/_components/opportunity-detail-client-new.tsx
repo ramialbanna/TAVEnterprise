@@ -13,7 +13,7 @@ import {
   patchOpportunity,
   updateOpportunityStatus,
 } from "@/lib/app-api/client";
-import { codeMessage } from "@/lib/app-api";
+import { codeMessage, type ApiResult } from "@/lib/app-api";
 import type { MutatableWorkflowStatus, OpportunityDetail } from "@/lib/app-api/schemas";
 import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import {
@@ -56,7 +56,25 @@ export function OpportunityDetailClientNew({
 }) {
   const queryClient = useQueryClient();
   const router = useRouter();
+  // Keep a client copy so PATCH/claim/status responses update the form immediately.
+  // Remounting editable blocks with stale `initial` (before router.refresh) was
+  // clearing fields like VIN after save (NEXT_STEPS #49).
+  const [opportunity, setOpportunity] = useState(initial);
   const [patchRevision, setPatchRevision] = useState(0);
+
+  useEffect(() => {
+    setOpportunity(initial);
+  }, [initial]);
+
+  function applyDetailResult(result: ApiResult<OpportunityDetail>, opts?: { bumpForms?: boolean }) {
+    if (!result.ok) return false;
+    setOpportunity(result.data);
+    if (opts?.bumpForms !== false) {
+      setPatchRevision((revision) => revision + 1);
+    }
+    invalidateOpportunityQueries(queryClient, router, result.data.id);
+    return true;
+  }
 
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
@@ -64,11 +82,13 @@ export function OpportunityDetailClientNew({
   });
 
   // Silent evaluate-on-open — no UI feedback (redesign §2).
+  // Do not replace local `opportunity` from this response: it can race a VIN/YMM
+  // PATCH and wipe fields the user just saved (#49). Queue/detail refresh still runs.
   const evaluateMutation = useMutation({
-    mutationFn: () => evaluateOpportunity(initial.id),
+    mutationFn: () => evaluateOpportunity(opportunity.id),
     onSuccess: (result) => {
       if (result.ok) {
-        invalidateOpportunityQueries(queryClient, router, initial.id);
+        invalidateOpportunityQueries(queryClient, router, opportunity.id);
       }
     },
   });
@@ -78,14 +98,13 @@ export function OpportunityDetailClientNew({
       evaluateMutation.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initial.id, meQuery.data?.ok]);
+  }, [opportunity.id, meQuery.data?.ok]);
 
   const claimMutation = useMutation({
-    mutationFn: () => claimOpportunity(initial.id),
+    mutationFn: () => claimOpportunity(opportunity.id),
     onSuccess: (result) => {
-      if (result.ok) {
+      if (applyDetailResult(result, { bumpForms: false })) {
         toast.success(PAGE_COPY.claimAction);
-        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -94,11 +113,10 @@ export function OpportunityDetailClientNew({
 
   const assignMutation = useMutation({
     mutationFn: (assignedToUserId: string | null) =>
-      assignOpportunity(initial.id, { assignedToUserId }),
+      assignOpportunity(opportunity.id, { assignedToUserId }),
     onSuccess: (result) => {
-      if (result.ok) {
+      if (applyDetailResult(result, { bumpForms: false })) {
         toast.success("Assignment updated");
-        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -107,9 +125,9 @@ export function OpportunityDetailClientNew({
 
   const statusMutation = useMutation({
     mutationFn: (status: MutatableWorkflowStatus) =>
-      updateOpportunityStatus(initial.id, { status }),
+      updateOpportunityStatus(opportunity.id, { status }),
     onSuccess: (result, status) => {
-      if (result.ok) {
+      if (applyDetailResult(result, { bumpForms: false })) {
         const label =
           status === "purchased"
             ? "Bought"
@@ -119,7 +137,6 @@ export function OpportunityDetailClientNew({
                 ? "Contacted"
                 : "Updated";
         toast.success(`Marked ${label.toLowerCase()}`);
-        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -128,12 +145,10 @@ export function OpportunityDetailClientNew({
 
   const patchMutation = useMutation({
     mutationFn: (body: Parameters<typeof patchOpportunity>[1]) =>
-      patchOpportunity(initial.id, body),
+      patchOpportunity(opportunity.id, body),
     onSuccess: (result) => {
-      if (result.ok) {
+      if (applyDetailResult(result, { bumpForms: true })) {
         toast.success("Saved");
-        setPatchRevision((revision) => revision + 1);
-        invalidateOpportunityQueries(queryClient, router, initial.id);
         return;
       }
       toast.error(codeMessage(result.error));
@@ -148,29 +163,29 @@ export function OpportunityDetailClientNew({
 
   const me = meQuery.data?.ok ? meQuery.data.data : null;
   const canClaim = me?.role === "admin" || me?.role === "closer";
-  const canMutate = canMutateWorkflow(me, initial);
-  const claimActive = isClaimActive(initial.claimExpiresAt);
+  const canMutate = canMutateWorkflow(me, opportunity);
+  const claimActive = isClaimActive(opportunity.claimExpiresAt);
   const claimOwnerIsMe =
-    initial.claimedBy === me?.displayName || initial.claimedBy === me?.id;
+    opportunity.claimedBy === me?.displayName || opportunity.claimedBy === me?.id;
 
   // Collision detection reused from the workflow block logic.
   const collision = useMemo(() => {
     if (!me) return null;
     if (
-      initial.claimedBy &&
+      opportunity.claimedBy &&
       claimActive &&
-      initial.claimedBy !== me.displayName &&
-      initial.claimedBy !== me.id
+      opportunity.claimedBy !== me.displayName &&
+      opportunity.claimedBy !== me.id
     ) {
-      return `${initial.claimedBy} is working this deal.`;
+      return `${opportunity.claimedBy} is working this deal.`;
     }
     return null;
-  }, [me, initial.claimedBy, claimActive]);
+  }, [me, opportunity.claimedBy, claimActive]);
 
   const hasCollision = collision !== null;
 
   const primaryAction = getPrimaryWorkflowAction({
-    opportunity: initial,
+    opportunity,
     canClaim,
     canMutate,
     claimActive,
@@ -179,7 +194,7 @@ export function OpportunityDetailClientNew({
   });
 
   const secondaryActions = getSecondaryWorkflowActions({
-    opportunity: initial,
+    opportunity,
     canMutate,
     hasCollision,
   });
@@ -230,7 +245,7 @@ export function OpportunityDetailClientNew({
   return (
     <div className="space-y-4">
       <OpportunityDetailHero
-        opportunity={initial}
+        opportunity={opportunity}
         contactBlockKey={`contact-${patchRevision}`}
         primaryAction={heroPrimaryAction}
         secondaryActions={heroSecondaryActions}
@@ -246,7 +261,7 @@ export function OpportunityDetailClientNew({
       >
         <OpportunitySalespersonAppraisalBlock
           key={`salesperson-${patchRevision}`}
-          opportunity={initial}
+          opportunity={opportunity}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
           canMutate={canMutate}
@@ -257,7 +272,7 @@ export function OpportunityDetailClientNew({
       <CollapsibleBlock title="Vehicle" description="Identity fields">
         <OpportunityVehicleBlock
           key={`vehicle-${patchRevision}`}
-          opportunity={initial}
+          opportunity={opportunity}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
           canMutate={canMutate}
@@ -266,13 +281,13 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Valuation" description="MMR + Max buy summary">
-        <OpportunityValuationBlock key={initial.id} opportunity={initial} />
+        <OpportunityValuationBlock key={opportunity.id} opportunity={opportunity} />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
         <OpportunityTitleInformationBlock
           key={`title-${patchRevision}`}
-          opportunity={initial}
+          opportunity={opportunity}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
           canMutate={canMutate}
@@ -282,17 +297,17 @@ export function OpportunityDetailClientNew({
 
       <CollapsibleBlock title="Notes" description="Closer-added context">
         <OpportunityNotesBlock
-          opportunityId={initial.id}
-          actions={initial.actions}
+          opportunityId={opportunity.id}
+          actions={opportunity.actions}
           canMutate={canMutate}
         />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Workflow" description="Stepper, assignment, claim">
         <div className="space-y-4">
-          <OpportunityWorkflowStepper opportunity={initial} />
+          <OpportunityWorkflowStepper opportunity={opportunity} />
           <OpportunityWorkflowBlock
-            opportunity={initial as WorkflowTarget & { id: string }}
+            opportunity={opportunity as WorkflowTarget & { id: string }}
             me={
               me
                 ? { id: me.id, displayName: me.displayName, role: me.role }
@@ -305,7 +320,7 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="History" description="Full audit trail" defaultOpen={false}>
-        <OpportunityActionHistory actions={initial.actions} />
+        <OpportunityActionHistory actions={opportunity.actions} />
       </CollapsibleBlock>
     </div>
   );
