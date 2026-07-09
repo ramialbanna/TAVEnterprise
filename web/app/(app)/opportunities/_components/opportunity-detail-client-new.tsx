@@ -59,12 +59,16 @@ export function OpportunityDetailClientNew({
   // Keep a client copy so PATCH/claim/status responses update the form immediately.
   // Remounting editable blocks with stale `initial` (before router.refresh) was
   // clearing fields like VIN after save (NEXT_STEPS #49).
+  // Sync from props during render (not in an effect) when router.refresh delivers
+  // a new `initial` — avoids react-hooks/set-state-in-effect.
+  const [syncedInitial, setSyncedInitial] = useState(initial);
   const [opportunity, setOpportunity] = useState(initial);
   const [patchRevision, setPatchRevision] = useState(0);
 
-  useEffect(() => {
+  if (initial !== syncedInitial) {
+    setSyncedInitial(initial);
     setOpportunity(initial);
-  }, [initial]);
+  }
 
   function applyDetailResult(result: ApiResult<OpportunityDetail>, opts?: { bumpForms?: boolean }) {
     if (!result.ok) return false;

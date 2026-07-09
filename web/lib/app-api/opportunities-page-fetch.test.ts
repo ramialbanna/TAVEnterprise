@@ -117,7 +117,6 @@ describe("fetchOpportunitiesPage", () => {
 
   it("uses paginated parsing when the Worker returns a consistent page object", async () => {
     const unassigned = { ...OPPORTUNITY_ROW, id: "opp-a", assignedTo: null };
-    const assigned = { ...OPPORTUNITY_ROW, id: "opp-b", assignedTo: "user-2" };
 
     const getJson = vi.fn().mockResolvedValueOnce({
       status: 200,
