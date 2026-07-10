@@ -87,7 +87,15 @@ export async function decodeVinToVehicleSelection(
     years = yearsRes.data.items;
   }
 
-  const autofill = await hydrateVinAutofill(mmrRes.data, years);
+  let autofill;
+  try {
+    autofill = await hydrateVinAutofill(mmrRes.data, years);
+  } catch {
+    return {
+      ok: false,
+      error: "VIN decode failed while matching the catalog. Year/make/model were left unchanged.",
+    };
+  }
   if (!autofill) {
     return {
       ok: false,

@@ -28,11 +28,57 @@ vi.mock("@/lib/app-api/client", () => ({
   claimOpportunity: vi.fn(),
   assignOpportunity: vi.fn(),
   updateOpportunityStatus: vi.fn(),
+  // VIN decode on Save (#48) — must resolve or the vehicle block never PATCHes.
+  postMmrVin: vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: {
+      mmrValue: 15000,
+      confidence: "high",
+      method: "vin",
+      year: 2019,
+      make: "Honda",
+      model: "Accord",
+      trim: "EX",
+    },
+  })),
+  getMmrCatalogYears: vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: { items: ["2019", "2020"], catalogState: "connected", reason: null, cached: false },
+  })),
+  getMmrCatalogMakes: vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: { items: ["Honda"], catalogState: "connected", reason: null, cached: false },
+  })),
+  getMmrCatalogModels: vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: { items: ["Accord"], catalogState: "connected", reason: null, cached: false },
+  })),
+  getMmrCatalogStyles: vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    data: { items: ["EX"], catalogState: "connected", reason: null, cached: false },
+  })),
 }));
 
 vi.mock("./opportunity-valuation-block", () => ({
   OpportunityValuationBlock: () => <div data-testid="valuation-block" />,
 }));
+
+// #49 test only needs VIN PATCH round-trip; stub decode so Save never waits on Cox.
+vi.mock("./decode-vin-to-vehicle", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./decode-vin-to-vehicle")>();
+  return {
+    ...actual,
+    decodeVinToVehicleSelection: vi.fn(async () => ({
+      ok: false as const,
+      error: "decode stubbed in detail-client test",
+    })),
+  };
+});
 
 vi.mock("./use-vehicle-catalog", () => ({
   useVehicleCatalogOptions: () => ({

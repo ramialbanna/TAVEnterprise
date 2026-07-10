@@ -102,6 +102,7 @@ export function OpportunityVehicleBlock({
 
   const [values, setValues] = useState(initial);
   const [decoding, setDecoding] = useState(false);
+  const [saveInFlight, setSaveInFlight] = useState(false);
   const [decodeError, setDecodeError] = useState<string | null>(null);
   const [fromVin, setFromVin] = useState(false);
 
@@ -114,7 +115,9 @@ export function OpportunityVehicleBlock({
   const catalog = useVehicleCatalogOptions(vehicleSelection);
   const { recent: recentYears, older: olderYears } = partitionYears(catalog.years);
   const catalogConnected = catalog.catalogState !== "not_connected";
-  const disabled = !canMutate || pending || decoding;
+  // Do not disable Save while blur-decode runs — userEvent/closer click-after-blur
+  // would hit a disabled button and never PATCH (#49 regression with #48).
+  const disabled = !canMutate || pending || saveInFlight;
 
   const isDirty = useMemo(() => {
     return (Object.keys(initial) as (keyof VehicleValues)[]).some(
@@ -206,6 +209,14 @@ export function OpportunityVehicleBlock({
         model: result.selection.model,
         style: result.selection.style,
       };
+    } catch {
+      // Never block VIN PATCH on an unexpected decode failure (#49 / #48).
+      setDecodeError("VIN decode failed — VIN will still be saved.");
+      setFromVin(false);
+      const normalized = normalizeOpportunityVin(nextValues.vin);
+      return normalized === nextValues.vin
+        ? nextValues
+        : { ...nextValues, vin: normalized };
     } finally {
       setDecoding(false);
     }
@@ -218,16 +229,22 @@ export function OpportunityVehicleBlock({
   }
 
   async function handleSave() {
-    const decoded = await applyVinDecode(values);
-    if (decoded !== values) {
-      setValues(decoded);
+    if (saveInFlight || pending || !canMutate) return;
+    setSaveInFlight(true);
+    try {
+      const decoded = await applyVinDecode(values);
+      if (decoded !== values) {
+        setValues(decoded);
+      }
+      const patch = buildPatchFrom(decoded);
+      if (Object.keys(patch).length > 0) onSave(patch);
+    } finally {
+      setSaveInFlight(false);
     }
-    const patch = buildPatchFrom(decoded);
-    if (Object.keys(patch).length > 0) onSave(patch);
   }
 
   async function handleVinBlur() {
-    if (!canMutate || pending || decoding) return;
+    if (!canMutate || pending || saveInFlight || decoding) return;
     if (!shouldAttemptVinDecode(values, initial)) return;
 
     const decoded = await applyVinDecode(values);
@@ -512,16 +529,16 @@ export function OpportunityVehicleBlock({
             type="button"
             size="sm"
             onClick={() => void handleSave()}
-            disabled={!isDirty || pending || decoding}
+            disabled={!isDirty || pending || saveInFlight}
           >
-            {decoding ? "Decoding…" : "Save"}
+            {saveInFlight || decoding ? "Decoding…" : "Save"}
           </Button>
           <Button
             type="button"
             size="sm"
             variant="ghost"
             onClick={handleReset}
-            disabled={!isDirty || pending || decoding}
+            disabled={!isDirty || pending || saveInFlight}
           >
             Reset
           </Button>

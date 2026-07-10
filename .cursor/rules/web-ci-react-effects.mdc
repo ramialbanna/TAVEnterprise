@@ -1,5 +1,5 @@
 ---
-description: Before commit/push on web/ — run lint + typecheck; avoid setState-in-effect and ApiResult narrowing mistakes that fail web-ci ~70% of the time
+description: Before commit/push on web/ — run lint + typecheck + full test suite; avoid setState-in-effect and ApiResult narrowing mistakes that fail web-ci
 alwaysApply: true
 ---
 
@@ -18,7 +18,7 @@ npm run typecheck
 npm test             # when you changed components or tests
 ```
 
-Do **not** commit/push web changes until lint + typecheck are clean.
+Do **not** commit/push web changes until lint + typecheck **and the full test suite** are clean (`pnpm test` / `npm test` — not only the files you touched). A green subset still fails web-ci.
 
 ---
 
@@ -75,7 +75,8 @@ Same rule for `patchMutation.data.error` — guard with `!data.ok` first.
 
 ## Agent checklist
 
-1. After editing `web/**`, run **lint and typecheck** (not lint alone).
+1. After editing `web/**`, run **lint**, **typecheck**, and **full `npm test` / `pnpm test`** (not lint alone; not a single test file alone).
 2. Scan new `useEffect` bodies for synchronous `setX(`.
 3. Scan `codeMessage(….error)` / `result.error` — ensure `!result.ok` (or `if (result.ok)` early return) is in scope.
-4. Only then commit/push.
+4. If you change Save/blur/async flows, update any detail-client tests that mock `@/lib/app-api/client` so new client calls (`postMmrVin`, etc.) resolve.
+5. Only then commit/push.
