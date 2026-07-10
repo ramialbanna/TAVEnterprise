@@ -69,6 +69,8 @@ export const queryKeys = {
   opportunity: (id: string) => ["opportunity", id] as const,
   appUsers: ["app-users"] as const,
   appMe: ["app-me"] as const,
+  staffDirectory: (filter?: { type?: string; includeInactive?: boolean }) =>
+    ["staff-directory", filter ?? {}] as const,
 } as const;
 
 function looksLikeApiError(error: unknown): error is { ok: false; kind: string } {

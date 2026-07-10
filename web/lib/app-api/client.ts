@@ -21,6 +21,8 @@ import {
   parseManualSubmission,
   parseAppUsers,
   parseAppMe,
+  parseStaffDirectory,
+  parseStaffDirectoryEntry,
   parseKpis,
   parseMmrCatalog,
   parseMmrYmm,
@@ -48,6 +50,8 @@ import type {
   AppUser,
   MutatableWorkflowStatus,
   DismissReasonCode,
+  StaffDirectoryEntry,
+  StaffDirectoryRole,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -449,6 +453,48 @@ export async function getAppMe(): Promise<ApiResult<AppUser>> {
   const r = await getJson("me");
   if (r === FETCH_FAILED) return clientTransportError();
   return parseAppMe(r.status, r.json);
+}
+
+export type ListStaffDirectoryFilter = {
+  type?: "salesperson" | "appraiser";
+  includeInactive?: boolean;
+};
+
+export async function listStaffDirectory(
+  filter: ListStaffDirectoryFilter = {},
+): Promise<ApiResult<StaffDirectoryEntry[]>> {
+  const params = new URLSearchParams();
+  if (filter.type) params.set("type", filter.type);
+  if (filter.includeInactive) params.set("includeInactive", "1");
+  const qs = params.toString();
+  const r = await getJson(qs ? `directory?${qs}` : "directory");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseStaffDirectory(r.status, r.json);
+}
+
+export async function createStaffDirectoryEntry(body: {
+  displayName: string;
+  role: StaffDirectoryRole;
+}): Promise<ApiResult<StaffDirectoryEntry>> {
+  const r = await postJson("directory", body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseStaffDirectoryEntry(r.status, r.json);
+}
+
+export async function deactivateStaffDirectoryEntry(
+  id: string,
+): Promise<ApiResult<StaffDirectoryEntry>> {
+  const r = await postJson(`directory/${encodeURIComponent(id)}/deactivate`, {});
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseStaffDirectoryEntry(r.status, r.json);
+}
+
+export async function reactivateStaffDirectoryEntry(
+  id: string,
+): Promise<ApiResult<StaffDirectoryEntry>> {
+  const r = await postJson(`directory/${encodeURIComponent(id)}/reactivate`, {});
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseStaffDirectoryEntry(r.status, r.json);
 }
 
 export async function parseListingUrl(

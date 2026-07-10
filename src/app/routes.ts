@@ -14,7 +14,10 @@
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
  * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
- * GET /app/me, GET /app/users, POST /app/opportunities/parse,
+ * GET /app/me, GET /app/users, GET /app/directory,
+ * POST /app/directory, POST /app/directory/:id/deactivate,
+ * POST /app/directory/:id/reactivate,
+ * POST /app/opportunities/parse,
  * POST /app/opportunities/manual,
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
@@ -56,6 +59,14 @@ import {
   OpportunityWorkflowError,
 } from "../persistence/opportunityWorkflow";
 import { patchOpportunityFields } from "../persistence/opportunities";
+import {
+  listStaffDirectory,
+  createStaffDirectoryEntry,
+  deactivateStaffDirectoryEntry,
+  reactivateStaffDirectoryEntry,
+  StaffDirectoryError,
+  type StaffDirectoryRole,
+} from "../persistence/staffDirectory";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import { classifyIntelHttpError } from "../valuation/workerClient";
@@ -283,6 +294,24 @@ export async function handleApp(request: Request, env: Env, ctx: ExecutionContex
     }
     if (request.method === "GET" && pathname === "/app/users") {
       return await handleUsersList(env);
+    }
+    if (request.method === "GET" && pathname === "/app/directory") {
+      return await handleDirectoryList(request, env, url);
+    }
+    if (request.method === "POST" && pathname === "/app/directory") {
+      return await handleDirectoryCreate(request, env);
+    }
+    const directoryActionMatch = pathname.match(
+      /^\/app\/directory\/([^/]+)\/(deactivate|reactivate)$/,
+    );
+    if (request.method === "POST" && directoryActionMatch) {
+      const id = directoryActionMatch[1];
+      const action = directoryActionMatch[2];
+      if (!id || !action) return json({ ok: false, error: "not_found" }, 404);
+      if (action === "deactivate") {
+        return await handleDirectoryDeactivate(request, env, decodeURIComponent(id));
+      }
+      return await handleDirectoryReactivate(request, env, decodeURIComponent(id));
     }
     if (request.method === "GET" && pathname === "/app/opportunities") {
       return await handleOpportunitiesList(request, env, url);
@@ -1271,6 +1300,164 @@ async function handleUsersList(env: Env): Promise<Response> {
     return json({ ok: true, data });
   } catch (err) {
     log("app.users.query_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+const CreateDirectoryEntrySchema = z.object({
+  displayName: z.string().trim().min(1).max(128),
+  role: z.enum(["salesperson", "appraiser", "both"]),
+});
+
+function mapStaffDirectoryError(err: StaffDirectoryError): Response {
+  const status =
+    err.code === "not_found" ? 404 : err.code === "duplicate_name" ? 409 : 400;
+  return json({ ok: false, error: err.code }, status);
+}
+
+/**
+ * GET /app/directory?type=salesperson|appraiser&includeInactive=1 — roster for pickers / admin.
+ */
+async function handleDirectoryList(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  const typeParam = url.searchParams.get("type");
+  const type =
+    typeParam === "salesperson" || typeParam === "appraiser" ? typeParam : undefined;
+  const includeInactive =
+    url.searchParams.get("includeInactive") === "1" ||
+    url.searchParams.get("includeInactive") === "true";
+
+  if (includeInactive && userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.directory.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await listStaffDirectory(db, { type, includeInactive });
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.directory.query_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/directory — admin adds a salesperson / appraiser entry.
+ */
+async function handleDirectoryCreate(request: Request, env: Env): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+  if (userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = CreateDirectoryEntrySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.directory.create.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await createStaffDirectoryEntry(db, {
+      displayName: parsed.data.displayName,
+      role: parsed.data.role as StaffDirectoryRole,
+    });
+    log("app.directory.create.ok", {
+      actorId: userOrResponse.id,
+      entryId: data.id,
+      role: data.role,
+    });
+    return json({ ok: true, data }, 201);
+  } catch (err) {
+    if (err instanceof StaffDirectoryError) return mapStaffDirectoryError(err);
+    log("app.directory.create.failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+async function handleDirectoryDeactivate(
+  request: Request,
+  env: Env,
+  id: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+  if (userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.directory.deactivate.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await deactivateStaffDirectoryEntry(db, id);
+    log("app.directory.deactivate.ok", { actorId: userOrResponse.id, entryId: id });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof StaffDirectoryError) return mapStaffDirectoryError(err);
+    log("app.directory.deactivate.failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+async function handleDirectoryReactivate(
+  request: Request,
+  env: Env,
+  id: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+  if (userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.directory.reactivate.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await reactivateStaffDirectoryEntry(db, id);
+    log("app.directory.reactivate.ok", { actorId: userOrResponse.id, entryId: id });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof StaffDirectoryError) return mapStaffDirectoryError(err);
+    log("app.directory.reactivate.failed", { error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

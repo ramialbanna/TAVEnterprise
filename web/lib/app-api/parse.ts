@@ -13,6 +13,8 @@ import {
   ManualSubmissionResultSchema,
   AppUserSummaryListSchema,
   AppUserSchema,
+  StaffDirectoryListSchema,
+  StaffDirectoryEntrySchema,
   KpisSchema,
   MmrCatalogSchema,
   MmrVinOkSchema,
@@ -30,6 +32,7 @@ import {
   type ManualSubmissionResult,
   type AppUserSummary,
   type AppUser,
+  type StaffDirectoryEntry,
   type Kpis,
   type MmrCatalog,
   type MmrVinOk,
@@ -285,6 +288,20 @@ export function parseAppUsers(status: number, json: unknown): ApiResult<AppUserS
 
 export function parseAppMe(status: number, json: unknown): ApiResult<AppUser> {
   return interpret(status, json, AppUserSchema);
+}
+
+export function parseStaffDirectory(
+  status: number,
+  json: unknown,
+): ApiResult<StaffDirectoryEntry[]> {
+  return interpret(status, json, StaffDirectoryListSchema);
+}
+
+export function parseStaffDirectoryEntry(
+  status: number,
+  json: unknown,
+): ApiResult<StaffDirectoryEntry> {
+  return interpret(status, json, StaffDirectoryEntrySchema);
 }
 
 /**

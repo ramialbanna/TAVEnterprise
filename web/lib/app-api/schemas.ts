@@ -520,3 +520,18 @@ export const AppUserSchema = z.object({
   updatedAt: z.string(),
 });
 export type AppUser = z.infer<typeof AppUserSchema>;
+
+export const StaffDirectoryRoleSchema = z.enum(["salesperson", "appraiser", "both"]);
+export type StaffDirectoryRole = z.infer<typeof StaffDirectoryRoleSchema>;
+
+export const StaffDirectoryEntrySchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  role: StaffDirectoryRoleSchema,
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deactivatedAt: z.string().nullable(),
+});
+export const StaffDirectoryListSchema = z.array(StaffDirectoryEntrySchema);
+export type StaffDirectoryEntry = z.infer<typeof StaffDirectoryEntrySchema>;

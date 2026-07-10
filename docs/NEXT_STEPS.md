@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-10 · **Focus:** Items **51** (Bad Lead labels / fuller list TBD), **53**, **44**, **46**
+**Last updated:** 2026-07-10 · **Focus:** Items **44** (listed date), **46** (listing→Cox autofill); **51** fuller list TBD
 
 > **Fresh chat prompt:**
 > Sprint so far (through 2026-07-10): **40–43**, **45/47**, **48–50**, **52** shipped on `main`. Queue counts/Received (`6486776`); VIN save + valuation refresh (`fe50370`); **VIN → Y/M/M/S + live valuation** (`#48`); **flag/dismiss bad lead** (`#45/47` — `POST …/dismiss` → `bad_lead` + reason; excluded from default queues); web-ci lint/typecheck guards (`c374bf3`, `5ead1cd`); snappy queue tabs (`e55015b`). Next: **51** (workflow labels / fuller list TBD), **53** (salesperson/appraiser directory). Queued: **44** (listed date), **46** (listing→Cox autofill). See **Product principle** + active table below.
@@ -97,7 +97,6 @@ cd .. && npm run lint && npm run typecheck && npm test
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
-| **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
 | **44** | **Listing posted date** — marketplace post time (distinct from Received); ingest may need `posted_at` | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill from listing** — map parser identity to Cox catalog tokens | **High** | [ ] |
 
@@ -118,7 +117,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **50** | **Refresh valuation wipes results (buyer email #4)** — Refresh clears everything and returns nothing | **Critical** | [x] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [~] |
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
-| **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
+| **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -927,11 +926,11 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 
 ### Exit criteria
 
-- [ ] Salesperson and Appraiser are dropdowns populated from directory
-- [ ] Admin can add and remove (or deactivate) entries
-- [ ] Closer cannot free-type arbitrary strings (unless explicit Other is approved)
-- [ ] Historical opportunities with old free-text still display sensibly
-- [ ] Tests: API CRUD + block renders options
+- [x] Salesperson and Appraiser are dropdowns populated from directory
+- [x] Admin can add and remove (or deactivate) entries
+- [x] Closer cannot free-type arbitrary strings (unless explicit Other is approved)
+- [x] Historical opportunities with old free-text still display sensibly
+- [x] Tests: API CRUD + block renders options
 
 ---
 
@@ -945,6 +944,9 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 53 — Salesperson / Appraiser directory (2026-07-10)**  
+`tav.staff_directory` seeded with buyer roster; detail dropdowns; Admin CRUD (deactivate/reactivate). Queue rows use real detail links for middle-click / open-in-new-tab.
 
 **Item 45/47 — Flag/dismiss bad lead (2026-07-10)**  
 Queue Flag action → reason dialog → `POST /app/opportunities/:id/dismiss` sets `bad_lead` with reason metadata; default views exclude suppressed statuses. Migration `0062_bad_lead_status`.

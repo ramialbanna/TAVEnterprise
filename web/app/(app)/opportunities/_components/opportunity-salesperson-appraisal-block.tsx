@@ -1,17 +1,24 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
+import { listStaffDirectory } from "@/lib/app-api/client";
+import { queryKeys } from "@/lib/query";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { useBlockAutoSave } from "./use-block-auto-save";
 
+const selectClass =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+
 /**
- * Salesperson / Appraisal Information block. Auto-saves on blur (item 32).
+ * Salesperson / Appraisal Information block. Directory dropdowns (item 53); auto-save on blur.
  */
 export function OpportunitySalespersonAppraisalBlock({
   opportunity,
@@ -37,6 +44,30 @@ export function OpportunitySalespersonAppraisalBlock({
   );
 
   const [values, setValues] = useState(initial);
+  const [salespersonFilter, setSalespersonFilter] = useState("");
+  const [appraiserFilter, setAppraiserFilter] = useState("");
+
+  const salespeopleQuery = useQuery({
+    queryKey: queryKeys.staffDirectory({ type: "salesperson" }),
+    queryFn: () => listStaffDirectory({ type: "salesperson" }),
+    staleTime: 60_000,
+  });
+
+  const appraisersQuery = useQuery({
+    queryKey: queryKeys.staffDirectory({ type: "appraiser" }),
+    queryFn: () => listStaffDirectory({ type: "appraiser" }),
+    staleTime: 60_000,
+  });
+
+  const salespersonNames = useMemo(() => {
+    const rows = salespeopleQuery.data?.ok ? salespeopleQuery.data.data : [];
+    return rows.map((r) => r.displayName);
+  }, [salespeopleQuery.data]);
+
+  const appraiserNames = useMemo(() => {
+    const rows = appraisersQuery.data?.ok ? appraisersQuery.data.data : [];
+    return rows.map((r) => r.displayName);
+  }, [appraisersQuery.data]);
 
   const isDirty = useMemo(() => {
     return (Object.keys(initial) as (keyof typeof initial)[]).some(
@@ -66,20 +97,63 @@ export function OpportunitySalespersonAppraisalBlock({
     onSave: persistIfDirty,
   });
 
-  function field(key: keyof typeof values, label: string) {
-    const id = `appraisal-${key}`;
+  function directoryField(opts: {
+    key: "salesperson" | "appraiser";
+    label: string;
+    names: string[];
+    filter: string;
+    onFilterChange: (v: string) => void;
+    loading: boolean;
+  }) {
+    const id = `appraisal-${opts.key}`;
+    const filterId = `${id}-filter`;
+    const current = values[opts.key];
+    const filterLower = opts.filter.trim().toLowerCase();
+    const filtered = filterLower
+      ? opts.names.filter((n) => n.toLowerCase().includes(filterLower))
+      : opts.names;
+    const legacy =
+      current && !opts.names.includes(current) ? current : null;
+
     return (
       <div className="space-y-1">
         <Label htmlFor={id} className="text-xs text-muted-foreground">
-          {label}
+          {opts.label}
         </Label>
         <Input
-          id={id}
-          value={values[key]}
-          onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+          id={filterId}
+          value={opts.filter}
+          onChange={(e) => opts.onFilterChange(e.target.value)}
           disabled={!canMutate || pending}
-          className="h-9"
+          placeholder="Filter list…"
+          className="h-8 text-xs"
+          aria-label={`Filter ${opts.label.toLowerCase()} list`}
         />
+        <select
+          id={id}
+          className={selectClass}
+          value={current}
+          disabled={!canMutate || pending || opts.loading}
+          onChange={(e) => setValues((v) => ({ ...v, [opts.key]: e.target.value }))}
+        >
+          <option value="">—</option>
+          {legacy ? (
+            <option value={legacy}>
+              {legacy} (legacy)
+            </option>
+          ) : null}
+          {filtered.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        {opts.names.length === 0 && !opts.loading ? (
+          <p className="text-xs text-muted-foreground">
+            No {opts.label.toLowerCase()}s in the directory yet.
+            {opts.key === "appraiser" ? " Ask an admin to add appraisers." : null}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -93,8 +167,22 @@ export function OpportunitySalespersonAppraisalBlock({
         </div>
       ) : null}
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        {field("salesperson", "Salesperson")}
-        {field("appraiser", "Appraiser")}
+        {directoryField({
+          key: "salesperson",
+          label: "Salesperson",
+          names: salespersonNames,
+          filter: salespersonFilter,
+          onFilterChange: setSalespersonFilter,
+          loading: salespeopleQuery.isLoading,
+        })}
+        {directoryField({
+          key: "appraiser",
+          label: "Appraiser",
+          names: appraiserNames,
+          filter: appraiserFilter,
+          onFilterChange: setAppraiserFilter,
+          loading: appraisersQuery.isLoading,
+        })}
       </div>
     </div>
   );

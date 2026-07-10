@@ -21,6 +21,7 @@ import { SourceHealthTable } from "./source-health-table";
 import { StaleSweep } from "./stale-sweep";
 import { SecretsChecklist } from "./secrets-checklist";
 import { FeatureFlags } from "./feature-flags";
+import { StaffDirectoryAdmin } from "./staff-directory-admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 /**
@@ -118,6 +119,8 @@ export function AdminClient({ initial }: { initial: ApiResult<SystemStatus> }) {
             </Card>
           </div>
         ))}
+
+      <StaffDirectoryAdmin />
     </div>
   );
 }

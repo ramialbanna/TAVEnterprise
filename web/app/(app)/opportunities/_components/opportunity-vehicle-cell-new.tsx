@@ -32,17 +32,40 @@ function MaxBuyBadge({ summary }: { summary: MaxbuySummary }) {
   );
 }
 
-export function OpportunityVehicleCellNew({ row }: { row: OpportunityRow }) {
+export function OpportunityVehicleCellNew({
+  row,
+  detailHref,
+}: {
+  row: OpportunityRow;
+  /** When set, the vehicle title is a real link (middle-click / open in new tab). */
+  detailHref?: string;
+}) {
   const ymm = [row.year, row.make, row.model].filter(Boolean).join(" ");
   const primary = ymm || row.title || "—";
 
   const showAddVinHint =
     row.entryMethod === "manual" && !row.vin && !row.maxbuySummary;
 
+  const title = detailHref ? (
+    <a
+      href={detailHref}
+      className="min-w-0 truncate text-foreground hover:underline"
+      onClick={(event) => {
+        if (!event.metaKey && !event.ctrlKey && event.button === 0) {
+          event.preventDefault();
+        }
+      }}
+    >
+      {primary}
+    </a>
+  ) : (
+    <span className="min-w-0 truncate">{primary}</span>
+  );
+
   return (
     <div className="min-w-[10rem] space-y-1">
       <div className="flex items-center gap-1.5 font-medium leading-snug">
-        <span className="min-w-0 truncate">{primary}</span>
+        {title}
         {row.listingUrl ? (
           <a
             href={row.listingUrl}

@@ -116,4 +116,28 @@ describe("OpportunitiesTableNew", () => {
     fireEvent.click(screen.getByText("2019 Honda Accord"));
     expect(onOpenDetail).toHaveBeenCalledWith(baseRow);
   });
+
+  it("exposes a real detail href for middle-click / open-in-new-tab", () => {
+    render(
+      <OpportunitiesTableNew
+        rows={[baseRow]}
+        total={1}
+        offset={0}
+        limit={25}
+        sort="spread_desc"
+        claimActor={null}
+        onSelect={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onPaginationChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onClaim={vi.fn()}
+        onDismiss={vi.fn()}
+        queueView="needs_action"
+      />,
+    );
+
+    const link = document.querySelector('a[href="/opportunities/listing-1"]');
+    expect(link).not.toBeNull();
+    expect(link).toHaveAttribute("href", "/opportunities/listing-1");
+  });
 });

@@ -208,10 +208,10 @@ export function OpportunitiesTableNew({
     return <OpportunitiesEmptyStateNew state={emptyStateForView(queueView)} />;
   }
 
-  function renderCell(columnId: TableColumnId, row: OpportunityRow) {
+  function renderCell(columnId: TableColumnId, row: OpportunityRow, detailHref?: string) {
     switch (columnId) {
       case "vehicle":
-        return <OpportunityVehicleCellNew row={row} />;
+        return <OpportunityVehicleCellNew row={row} detailHref={detailHref} />;
       case "price":
         return formatMoney(row.price);
       case "mmrValue":
@@ -339,16 +339,42 @@ export function OpportunitiesTableNew({
             <tbody>
               {rows.map((row) => {
                 const selected = selectedId === row.id;
+                const detailHref = `/opportunities/${row.id}`;
+
+                function openDetail(event?: {
+                  metaKey?: boolean;
+                  ctrlKey?: boolean;
+                  button?: number;
+                }) {
+                  if (
+                    event &&
+                    (event.metaKey || event.ctrlKey || event.button === 1)
+                  ) {
+                    window.open(detailHref, "_blank", "noopener,noreferrer");
+                    return;
+                  }
+                  onOpenDetail(row);
+                }
+
                 return (
                   <tr
                     key={row.id}
-                    role="button"
+                    role="link"
                     tabIndex={0}
-                    onClick={() => onOpenDetail(row)}
+                    onClick={(event) => {
+                      if (event.button !== 0) return;
+                      openDetail(event);
+                    }}
+                    onAuxClick={(event) => {
+                      if (event.button === 1) {
+                        event.preventDefault();
+                        openDetail({ button: 1 });
+                      }
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        onOpenDetail(row);
+                        openDetail();
                       }
                     }}
                     data-selected={selected ? "true" : undefined}
@@ -359,7 +385,7 @@ export function OpportunitiesTableNew({
                   >
                     {visibleColumns.map((col) => (
                       <td key={col.id} className={cn("align-middle", cellPad)}>
-                        {renderCell(col.id, row)}
+                        {renderCell(col.id, row, detailHref)}
                       </td>
                     ))}
                   </tr>
