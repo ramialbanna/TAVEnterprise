@@ -24,7 +24,7 @@ import {
   resolveVehicleContext,
   type VehicleContext,
 } from "./persistence/vehicleContext";
-import { estimateMileage, mileageBand, resolveBenchmarks, scoreMaxBuy } from "./scoring";
+import { mileageBand, resolveBenchmarks, scoreMaxBuy } from "./scoring";
 import type { ScoreMaxBuyResult, SegmentKey } from "./scoring/types";
 import type { MaxbuyWorkerEnv } from "./types/env";
 import { decodeVinModelYear, isValidVinCheckDigit, normalizeVin } from "./vin";
@@ -45,7 +45,7 @@ export type MaxbuyEvaluateResponse = {
     make: string | null;
     model: string | null;
     trim: string | null;
-    mileage: number;
+    mileage: number | null;
     mileage_estimated: boolean;
   };
   mmr: {
@@ -121,7 +121,7 @@ export function buildEvaluateResponse(
     make: string | null;
     model: string | null;
     trim: string | null;
-    mileage: number;
+    mileage: number | null;
     mileageEstimated: boolean;
   },
   mmr: ReturnType<typeof mmrEnvelopeToProvenance>,
@@ -278,12 +278,10 @@ export async function runEvaluate(
     vehicleCtx = baseCtx;
   }
 
-  let mileage = request.mileage ?? null;
-  let mileageEstimated = false;
-  if (mileage == null) {
-    mileage = estimateMileage(vehicleCtx.year);
-    mileageEstimated = true;
-  }
+  // Item 54: never invent odometer. Null miles → band "unknown"; omit odometer on MMR.
+  const mileage = request.mileage ?? null;
+  const mileageEstimated = false;
+  const mileageUnknown = mileage == null;
 
   const segment: SegmentKey = {
     year: vehicleCtx.year,
@@ -295,8 +293,9 @@ export async function runEvaluate(
   };
 
   // ── MMR lookup ───────────────────────────────────────────────────────────────
+  const mmrMileage = mileage ?? undefined;
   let mmrLookup = hasVin && vin
-    ? await lookupMmrByVin(env, { vin, mileage, year: vehicleCtx.year })
+    ? await lookupMmrByVin(env, { vin, mileage: mmrMileage, year: vehicleCtx.year })
     : { ok: false as const, missingReason: "vin_absent", method: null as null };
 
   if (!hasVin || !mmrLookup.ok || (mmrLookup.ok && mmrLookup.envelope.mmr_value == null)) {
@@ -305,7 +304,7 @@ export async function runEvaluate(
       make: vehicleCtx.make,
       model: vehicleCtx.model,
       trim: vehicleCtx.trim === "base" ? undefined : vehicleCtx.trim,
-      mileage,
+      mileage: mmrMileage,
     });
   }
 
@@ -346,6 +345,7 @@ export async function runEvaluate(
     mmr,
     askingPrice: request.asking_price ?? null,
     mileageEstimated,
+    mileageUnknown,
     benchmarks,
     targetNetGross: policy.targetNetGross,
     hardGate,

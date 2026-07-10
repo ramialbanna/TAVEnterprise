@@ -24,6 +24,34 @@ describe("maxbuy scoring", () => {
     expect(mileageBand(null)).toBe("unknown");
   });
 
+  it("badges MILEAGE_UNKNOWN when odometer was omitted (item 54)", () => {
+    const result = scoreMaxBuy({
+      segment: { ...SEGMENT, mileageBand: "unknown" },
+      mmr: {
+        value: 20_000,
+        method: "ymm",
+        source: "manheim",
+        cacheAgeSeconds: 0,
+        missingReason: null,
+        observedAt: "2026-07-10T00:00:00.000Z",
+      },
+      askingPrice: 17_000,
+      mileageEstimated: false,
+      mileageUnknown: true,
+      targetNetGross: 800,
+      hardGate: null,
+      benchmarks: resolveBenchmarks(
+        [{ resolution: "ymm", effectiveN: 40, weightedSalePrice: 19_000, weightedSalePctMmr: null }],
+        [{ resolution: "global", effectiveN: 100, weightedTransportCost: 450 }],
+        [{ resolution: "global", effectiveN: 100, weightedExpenseTotal: 700 }],
+        { ...SEGMENT, mileageBand: "unknown" },
+      ),
+    });
+
+    expect(result.estimatedBadges).toContain("MILEAGE_UNKNOWN");
+    expect(result.estimatedBadges).not.toContain("ESTIMATED_MILES");
+  });
+
   it("computes expected sale from sale_pct_mmr × MMR", () => {
     const sale = expectedSalePrice(20_000, {
       resolution: "exact",

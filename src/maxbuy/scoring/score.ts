@@ -23,7 +23,9 @@ export function scoreMaxBuy(input: ScoreMaxBuyInput): ScoreMaxBuyResult {
   const { mmr, askingPrice, benchmarks, targetNetGross, hardGate } = input;
   const vinAbsent = input.vinAbsent === true;
   const reasonCodes: string[] = [];
-  const estimatedBadges: string[] = input.mileageEstimated ? ["ESTIMATED_MILES"] : [];
+  const estimatedBadges: string[] = [];
+  if (input.mileageEstimated) estimatedBadges.push("ESTIMATED_MILES");
+  if (input.mileageUnknown) estimatedBadges.push("MILEAGE_UNKNOWN");
 
   if (vinAbsent) {
     estimatedBadges.push("NO_VIN");

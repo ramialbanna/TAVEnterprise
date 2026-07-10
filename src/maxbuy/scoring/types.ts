@@ -52,6 +52,8 @@ export type ScoreMaxBuyInput = {
   mmr: MmrProvenance;
   askingPrice: number | null;
   mileageEstimated: boolean;
+  /** True when odometer was omitted (item 54) — not the same as year-estimated invent. */
+  mileageUnknown?: boolean;
   benchmarks: ResolvedBenchmarks;
   targetNetGross: number;
   hardGate: string | null;

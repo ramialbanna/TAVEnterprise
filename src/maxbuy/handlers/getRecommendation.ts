@@ -65,7 +65,7 @@ export async function handleGetRecommendation(
       make: segment?.make ?? null,
       model: segment?.model ?? null,
       trim: segment?.trim ?? null,
-      mileage: Number(lookup.mileage ?? 0),
+      mileage: lookup.mileage != null ? Number(lookup.mileage) : null,
       mileageEstimated: Boolean(lookup.is_estimated_miles),
     },
     {
@@ -83,16 +83,10 @@ export async function handleGetRecommendation(
   );
 
   if (!segment) {
-    data.vehicle.mileage = Number(lookup.mileage ?? 0);
+    data.vehicle.mileage = lookup.mileage != null ? Number(lookup.mileage) : null;
     data.vehicle.mileage_estimated = Boolean(lookup.is_estimated_miles);
     data.vehicle.trim = data.vehicle.trim ?? "base";
-    data.vehicle.mileage = Number(lookup.mileage ?? estimateFallbackMileage(data.vehicle.year));
   }
 
   return json({ ok: true, data });
-}
-
-function estimateFallbackMileage(year: number | null): number {
-  if (year == null) return 0;
-  return Math.max(0, (new Date().getUTCFullYear() - year) * 15_000);
 }

@@ -57,7 +57,7 @@ export const MaxbuyEvaluateOkSchema = z.object({
     make: z.string().nullable(),
     model: z.string().nullable(),
     trim: z.string().nullable(),
-    mileage: z.number(),
+    mileage: z.number().nullable(),
     mileage_estimated: z.boolean(),
   }),
   mmr: z.object({

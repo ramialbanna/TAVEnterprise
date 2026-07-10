@@ -79,7 +79,7 @@ export async function lookupMmrByVin(
 
 export async function lookupMmrByYmm(
   env: MaxbuyWorkerEnv,
-  input: { year: number; make: string; model: string; trim?: string; mileage: number },
+  input: { year: number; make: string; model: string; trim?: string; mileage?: number },
 ): Promise<MmrLookupResult> {
   const hasBinding = env.INTEL_WORKER !== undefined;
   const baseUrl =
@@ -88,13 +88,13 @@ export async function lookupMmrByYmm(
     return { ok: false, missingReason: "not_configured", method: null };
   }
 
-  const body = {
+  const body: Record<string, unknown> = {
     year: input.year,
     make: input.make,
     model: input.model,
     trim: input.trim ?? undefined,
-    mileage: input.mileage,
   };
+  if (input.mileage !== undefined) body.mileage = input.mileage;
 
   const headers = new Headers({
     "Content-Type": "application/json",
