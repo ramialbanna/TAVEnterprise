@@ -810,7 +810,7 @@ Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFie
 ```
 Found → Working → Bad Lead → Contacted → Appraised →
 Not Negotiable/Overpriced → Purchased → In Scheduling →
-Delivered → @Auction → Sold
+Delivered → At Auction → Sold
 ```
 
 **Minimum for v1 (buyer):** **Bad Lead** + **Purchased** (Purchased may already exist as `purchased` / UI “Mark bought” — confirm label + visibility on queue/detail).
@@ -821,22 +821,45 @@ Delivered → @Auction → Sold
 
 | Topic | Options |
 |-------|---------|
-| Bad Lead vs Passed | New status `bad_lead` **or** `passed` + reason (**45/47**). Prefer one model — don’t ship both without mapping. |
-| Stepper vs status | Linear stepper may not fit branches (Bad Lead / Overpriced). Consider status dropdown + reason for terminal branches; keep stepper for happy path only. |
-| Wait for final list? | Implement **Bad Lead + Purchased** now; add remaining statuses in a follow-up when buyer sends the real list. |
+| Bad Lead vs Passed | **Resolved:** first-class `bad_lead` + dismiss reasons (**45/47**). Keep `passed` as separate “Passed” for now. |
+| Stepper vs status | Linear stepper may not fit branches (Bad Lead / Overpriced). Prefer **happy-path stepper** + **status dropdown** for branches/terminals. |
+| Wait for final list? | **Minimum done.** Fuller enum blocked on buyer checklist below — do not invent statuses. |
 
-### Implementation sketch (minimum)
+### Buyer checklist (send before coding fuller enum) — drafted 2026-07-10
 
-1. Confirm `purchased` is reachable from detail hero/workflow and labeled clearly (“Purchased” vs “Mark bought”).
-2. Add `bad_lead` (or wire dismiss→`passed` with badge “Bad lead”) to Worker enum + DB check constraint / text column docs.
-3. Exclude `bad_lead` / terminal from default queue views (same as **47**).
-4. Update stepper/copy only for statuses we ship; don’t pretend full list exists in UI until confirmed.
+For each proposed status, buyer confirms: **keep?** · **exact label** · **active in queue** vs **drop out of default queues** · **needs reason?**
+
+| Proposed label | Keep? | Queue | Reason? | Notes / map to existing |
+|----------------|-------|-------|---------|-------------------------|
+| Found | | active / drop | | Likely = new / unworked |
+| Working | | active / drop | | Likely = reviewed / claimed |
+| Bad Lead | Y (shipped) | drop | Y (shipped) | `bad_lead` |
+| Contacted | | active / drop | | exists as `contacted` |
+| Appraised | | active / drop | | may need new code vs stepper-only |
+| Not Negotiable / Overpriced | | active / drop | | new? or dismiss reason? |
+| Purchased | Y (shipped) | drop | | `purchased` — UI still says “Bought” in places |
+| In Scheduling | | active / drop | | new |
+| Delivered | | active / drop | | new |
+| At Auction | | active / drop | | new |
+| Sold | | active / drop | | exists in DB as `sold`; not in mutatable picker yet |
+| Passed (current) | | drop | | keep alongside Bad Lead? |
+| Negotiating (current) | | active | | keep? |
+
+Also confirm: rename UI **Bought → Purchased** everywhere?
+
+### Implementation sketch (fuller list — after checklist returns)
+
+1. Single status registry: Worker enum + Zod + labels + terminal/suppressed sets.
+2. Migration only for truly new codes; map buyer labels onto existing codes where possible.
+3. Happy-path stepper steps only; branches via status dropdown (+ reason when required).
+4. Thin slices: (a) Bought→Purchased labels, (b) mid-pipeline active statuses, (c) post-purchase + queue rules.
 
 ### Primary files
 
 - `src/persistence/opportunityWorkflow.ts` (`MutatableWorkflowStatus`, terminal set)
 - `web/app/(app)/opportunities/_components/opportunity-workflow-stepper.tsx`
 - `web/app/(app)/opportunities/_components/opportunity-workflow-block.tsx` / hero CTAs
+- `web/app/(app)/opportunities/_components/workflow-helpers.ts` (labels)
 - Supabase migration if DB constraint lists statuses
 - `docs/02-product/v2-opportunities.md`
 
@@ -844,7 +867,7 @@ Delivered → @Auction → Sold
 
 - [x] **Bad Lead** settable + excluded from default queues
 - [x] **Purchased** clearly available and labeled
-- [ ] Buyer’s fuller list documented as follow-up (do not invent statuses beyond minimum without confirmation)
+- [ ] Buyer’s fuller list confirmed via checklist (do not invent statuses beyond minimum without confirmation)
 - [x] Tests for new status transitions + terminal filter
 
 ---
