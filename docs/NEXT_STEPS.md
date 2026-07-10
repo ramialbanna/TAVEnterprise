@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-10 · **Focus:** Item **54** (no guessed miles; persist YMM; optional miles for MMR/Max buy); **44**, **46**; **51** fuller list TBD
+**Last updated:** 2026-07-10 · **Focus:** Item **54** remaining (ingest stop inventing miles; app/MMR Lab gates); **44**, **46**; **51** fuller list TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-10): **40–43**, **45/47**, **48–50**, **52–53** shipped on `main`. Next focus: **54** — stop inventing odometer at ingest/Max buy; persist + display listing Y/M/M/S on detail; show saved MMR; re-run MMR/Max buy on identity change; miles optional everywhere. Also queued: **44** (listed date), **46** (listing→Cox autofill; overlaps **54** catalog match), **51** (workflow list TBD). See **Product principle** + active table below.
+> Sprint so far (through 2026-07-10): **40–43**, **45/47**, **48–50**, **52–53** shipped; **54** slices 1–2 on `main` (`af362d7`, `9bc8bd3`) — Max buy no longer invents odometer; detail shows saved ingest MMR + catalog-matches listing YMM casing; Max buy UI gate does not require miles. **Next on 54:** stop inventing miles at **ingest** (`workerClient`); relax app/MMR Lab YMM mileage gates; update `manheim-cox.md`. Also queued: **44** (listed date), **46** (fuller Cox autofill — Phase A case-match partly via **54**), **51** (workflow list TBD). See **Product principle** + active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–43**, **45/47–50**, **52–53** are done. **Next critical:** **54** (no guessed miles; persist YMM; optional miles for MMR/Max buy). Also open: **44**, **46**, **51**. MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–43**, **45/47–50**, **52–53** are done. **54** in progress (slices 1–2 shipped; ingest invent + app/MMR Lab gates remain). Also open: **44**, **46**, **51**. MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -91,7 +91,9 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **43** | Tab switch latency | `e55015b` | `staleTime` 60s, `placeholderData`, hover prefetch, tab spinner |
 | **52** | Double-click / dead UI on tabs | `e55015b` | Optimistic tab selection; shell stays mounted |
 | **48** | VIN → Y/M/M/S + fresh MMR/Max buy | `3dfd38a` | Decode on VIN blur/save → catalog fill + valuation remount |
-| **45/47** | Flag/dismiss bad lead | _(pending commit)_ | Queue Flag → reason dialog → `bad_lead`; excluded from default views |
+| **45/47** | Flag/dismiss bad lead | `3ed1c8f` | Queue Flag → reason dialog → `bad_lead`; excluded from default views |
+| **53** | Salesperson / Appraiser directory | `24db7a7`, `d557463` | Dropdowns + admin CRUD; roster `role = both` |
+| **54** slices 1–2 | Max buy no invent + detail UX | `af362d7`, `9bc8bd3` | Null mileage / unknown band; saved ingest MMR; catalog case-match |
 
 **Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
 
@@ -99,10 +101,10 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **54** | **No guessed miles + persist YMM + optional miles for MMR/Max buy** — stop inventing odometer; show listing identity + saved MMR on detail; re-run on change | **Critical** | [~] |
+| **54** | **No guessed miles…** — slices 1–2 done; **remaining:** ingest invent stop, app/MMR Lab mileage gates, docs | **Critical** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **44** | **Listing posted date** — marketplace post time (distinct from Received); ingest may need `posted_at` | **High** | [ ] |
-| **46** | **Cox Y/M/M autofill from listing** — map parser identity to Cox catalog tokens (overlaps **54** display) | **High** | [ ] |
+| **46** | **Cox Y/M/M autofill from listing** — Phase A case-match partly via **54** `9bc8bd3`; fuller fuzzy/title→Cox still open | **High** | [~] |
 
 **Full status board (incl. shipped):**
 
@@ -114,7 +116,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
 | **44** | **Listing posted date** — show when the seller listed the vehicle on the marketplace (distinct from Received / first seen) | **High** | [ ] |
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [x] |
-| **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [ ] |
+| **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [~] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [x] |
 | **48** | **VIN → Y/M/M/S + fresh MMR / Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [x] |
 | **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
@@ -126,7 +128,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
-_Paused until flag/dismiss **45/47** ships (or in parallel):_ UX backlog §4–7 (role nav, shell polish). Queue latency **43/52** done (web quick wins; Worker SQL push still optional if network remains slow).
+_Paused / parallel:_ UX backlog §4–7 (role nav, shell polish). Queue latency **43/52** done (web quick wins; Worker SQL push still optional if network remains slow).
 
 ---
 
@@ -519,9 +521,11 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 ## 46 — Cox Y/M/M autofill for MMR evaluation
 
-**Reported:** 2026-07-08 (production opportunity detail + MMR Lab) — **no code change yet**
+**Reported:** 2026-07-08 (production opportunity detail + MMR Lab)
 
-**Symptom:**
+**Status:** **[~]** Phase A case-match on Vehicle block **shipped via item 54 slice 2** (`9bc8bd3`) — listing `honda`/`odyssey` select as Cox `Honda`/`Odyssey`. Remaining: fuzzy/title→style inference, one-click apply, MMR Lab prefill parity (Phases B–D below).
+
+**Symptom (original):**
 
 - Listing-parsed year/make/model from Facebook titles (e.g. `2018 Kia Sportage FE` → make `kia`, model `sportage fe`) does not always match **Cox/Manheim catalog tokens** required for `POST /app/mmr/ymm`
 - Buyers must manually hunt Y/M/M/S dropdowns on the Vehicle block or MMR Lab even when the listing already has usable identity
@@ -529,16 +533,16 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 **Expected:** On opportunity detail (and optionally MMR Lab prefill), **autofill** year/make/model/style inputs with the closest **Cox-ingestible** values so one click (or auto on load) can run MMR and return wholesale adjustments.
 
-### What exists today (code review 2026-07-08)
+### What exists today
 
 | Piece | Status | File |
 |-------|--------|------|
 | Cox catalog dropdowns (Y/M/M/S) | ✅ Shipped on Vehicle block | `opportunity-vehicle-block.tsx`, `use-vehicle-catalog.ts` |
 | Catalog API | ✅ `GET /app/mmr/catalog/years\|makes\|models\|styles` | `src/app/routes.ts` |
 | `matchCatalogOption()` | ✅ Case-insensitive catalog match helper | `use-vehicle-catalog.ts` |
-| Listing → Vehicle block initial values | ⚠️ Raw `opportunity.year/make/model/style` — **no catalog resolution** | `opportunity-vehicle-block.tsx` |
+| Listing → Vehicle block catalog resolution | ✅ **Case-match on load** (54 / `9bc8bd3`) | `opportunity-vehicle-block.tsx` |
 | MMR recompute from detail | ✅ `buildMmrRecomputeRequest` / `opportunity-valuation-block.tsx` | Uses saved vehicle fields |
-| Title → Cox mapping | ❌ Not automated end-to-end | Parser in `src/sources/facebook.ts` ≠ Cox vocab |
+| Title → Cox fuzzy / style inference | ❌ Not automated end-to-end | Parser in `src/sources/facebook.ts` ≠ Cox vocab |
 
 ### Implementation sketch
 
@@ -584,11 +588,13 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 ### Exit criteria
 
-- [ ] Opening a lead with `2018 Kia Sportage FE` pre-fills Cox make/model dropdowns to catalog values without manual search
+- [x] Opening a lead with exact case-insensitive make/model (e.g. `honda` / `odyssey`) pre-selects Cox catalog tokens on Vehicle block (**54** / `9bc8bd3`)
+- [ ] Opening a lead with `2018 Kia Sportage FE` (verbose model/trim) pre-fills Cox make/model/style without manual search (Phases B–C)
 - [ ] MMR YMM lookup succeeds (or fails with clear "no catalog match") from autofill — not silent wrong trim
 - [ ] User sees when autofill changed parser output vs Cox canonical (badge or inline diff)
 - [ ] Manual override still works; autofill never locks fields
 - [ ] Tests: `matchCatalogOption` edge cases + Vehicle block mount with mocked catalog responses
+- [ ] MMR Lab prefill parity (Phase D)
 
 ---
 
@@ -968,13 +974,15 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 
 **Status:** Spec + **slices 1–2 shipped 2026-07-10** — Max buy no invent; detail gates/UX (saved ingest MMR + catalog case match). Remaining: ingest invent stop, app/MMR Lab mileage gates, docs.
 
-### Symptom (what we saw)
+### Symptom (what we saw — before slices 1–2)
 
 | Surface | What closer sees | What’s actually true |
 |---------|------------------|----------------------|
 | Queue | Wholesale **$33,500**, badges Estimated miles / style / MMR | Ingest called Manheim with title-parsed `2023` / `honda` / `odyssey`, **invented ~54k miles**, estimated style `MINIVAN ELITE` |
-| Detail Vehicle | Year `2023`; Make/Model show **Select…**; VIN/odometer empty | DB has `make=honda`, `model=odyssey`, `mileage=null`, `trim=null` — Cox dropdowns don’t select because case/catalog tokens don’t match (`honda` vs `Honda`) |
-| Detail Valuation | “Add vehicle identity to run MMR and Max buy” | Block ignores saved `valuation_snapshots.mmr_value`; requires VIN **or** year+make+model+**series** to auto-run |
+| Detail Vehicle | Year `2023`; Make/Model show **Select…**; VIN/odometer empty | DB has `make=honda`, `model=odyssey` — Cox dropdowns didn’t select (`honda` vs `Honda`) — **fixed slice 2** |
+| Detail Valuation | “Add vehicle identity to run MMR and Max buy” | Block ignored saved `mmr_value` — **fixed slice 2** (shows saved ingest MMR) |
+
+**Still true after slices 1–2:** Queue wholesale can still be from **invented ingest miles** until remaining ingest work ships.
 
 **Why this is dangerous:** Guessed Y/M/M/S from a title is imperfect but acceptable as a screen. **Guessed miles move MMR a lot** and can make a deal look like a huge winner (or loser) when we never had odometer. Closers treat queue wholesale as real.
 
@@ -1005,40 +1013,40 @@ Default plan for **54**: ship **A** (and light **B** copy). Do not schedule **C*
 
 ### How Max buy changes if miles are optional
 
-Today Max buy **pretends** miles exist:
+**Slices 1–2 shipped** (`af362d7`, `9bc8bd3`): invent path removed; detail gate no longer requires miles.
 
-| Layer | Today | After **54** |
-|-------|--------|----------------|
-| Detail gate `identitySufficientForMaxbuyAutoRun` | YMM path requires `opportunity.mileage != null` (+ ask) | YMM path: year+make+model (+ style if we keep series rule) + **ask**; **mileage not required** |
-| `evaluateRun.ts` | If `request.mileage == null` → `estimateMileage(year)` (15k/yr) and `mileageEstimated = true` | **Delete that fallback.** Keep `mileage = null`, `mileageEstimated = false` (or a distinct `mileageUnknown` flag — do not set estimated-from-year) |
-| Segment / benchmarks | `mileageBand(inventedMiles)` → e.g. `30-60k` | `mileageBand(null)` already returns **`"unknown"`** — use that band for pricing/transport/expense lookups; accept thinner benchmark coverage |
-| MMR inside Max buy | Passes invented miles into `lookupMmrByYmm` / VIN lookup | Pass **null / omit odometer**; same “unknown” contract as ingest MMR |
-| Scoring badges | `ESTIMATED_MILES` when year-estimated | Prefer **`MILEAGE_UNKNOWN`** (or keep Estimated only when a human/tool truly estimated — never for 15k/yr invent) |
-| Persistence | `is_estimated_miles` true on invented runs | Store null mileage + unknown band; do not mark as estimated-from-year |
-| Asking price | Required for a meaningful Max buy | **Still required** (product: miles optional, ask not optional) |
+| Layer | Before (buggy) | Now / remaining |
+|-------|----------------|-----------------|
+| Detail gate `identitySufficientForMaxbuyAutoRun` | Required `mileage != null` (+ ask) | ✅ Ask required; **miles not required** |
+| `evaluateRun.ts` | `estimateMileage(year)` when null | ✅ Null mileage; band `unknown`; `MILEAGE_UNKNOWN` badge |
+| Segment / benchmarks | Fake band e.g. `30-60k` | ✅ `mileageBand(null)` → `"unknown"` |
+| MMR inside Max buy | Passed invented miles | ✅ Omit odometer when null |
+| Scoring badges | `ESTIMATED_MILES` from invent | ✅ `MILEAGE_UNKNOWN` when omitted |
+| Persistence | `is_estimated_miles` on invent | ✅ Null mileage; not year-estimated |
+| Asking price | Required | ✅ Still required |
 
-`mileageBand()` already supports null → `"unknown"` (`src/maxbuy/scoring/mileageBand.ts`). The main code delete is the `estimateMileage` call in `evaluateRun.ts` (~lines 281–286) plus relaxing the detail auto-run gate.
+`mileageBand()` already supports null → `"unknown"`. Remaining Max buy work is mostly copy/headline (**scope B**) if desired — not invent.
 
-### Ingest / MMR path changes (same rule)
+### Ingest / MMR path changes (same rule) — **still open**
 
-| Layer | Today | After **54** |
-|-------|--------|----------------|
+| Layer | Today (still open) | After remaining **54** |
+|-------|--------------------|-------------------------|
 | `workerClient` YMM | `getMmrMileageData` invents miles when listing mileage null; badges Estimated miles / Estimated MMR | No invent; call Cox with unknown/omit odometer; listing `mileage` stays null |
-| `estimateFlags.mmr` | True when mileage or style estimated | Style-only estimate may still badge **Estimated style**; **do not** set Estimated miles from invent; reconsider whether “Estimated MMR” means style-only vs miles |
-| Snapshot | Stores invented `valuation_snapshots.mileage` (e.g. 54000) | Store null mileage used; never write a fake odometer onto the listing |
+| `estimateFlags.mmr` | True when mileage or style estimated | Style-only estimate may still badge **Estimated style**; **do not** set Estimated miles from invent |
+| Snapshot | May store invented `valuation_snapshots.mileage` (e.g. 54000) | Store null mileage used; never write a fake odometer onto the listing |
 
 **Cox / odometer:** Intel worker already supports **omitting** `?odometer=` on VIN and YMM calls (`mmrLookup.ts`: “When omitted, Cox prices at the segment average odometer”). Unit tests cover VIN/YMM without mileage. **Do not invent miles.** Product: treat no-odometer MMR as **average-miles wholesale**, badge honestly (not “Estimated miles” from 15k×age). If a live Cox environment ever rejects omit, escalate — never silently reintroduce invent.
 
-**App-layer mileage gates to relax (same rule):**
+**App-layer mileage gates to relax (same rule) — still open:**
 
-| Gate | Today | After **54** |
-|------|--------|----------------|
+| Gate | Today | After remaining **54** |
+|------|--------|------------------------|
 | `docs/03-api/manheim-cox.md` | “YMM valuation requires finite odometer before vendor call” | Update docs: odometer **optional**; omit → Cox average |
 | App `POST /app/mmr/ymm` (and any pre-call validation) | May require mileage | Allow null/omit; pass through to worker |
 | MMR Lab search / Value button | May treat mileage as required for YMM | Miles optional; same omit contract |
-| Detail `identitySufficientForMmrAutoRun` | VIN **or** year+make+model+**series** | Saved ingest MMR always showable without series. **Live re-run:** prefer year+make+model (+ series when known); **do not block** live MMR solely for missing miles. Series: if missing, still allow live YMM when make/model catalog-matched, or keep showing saved snapshot until series chosen — implementer picks one path and tests; inventing style is still OK as ingest best-effort, inventing miles is not |
+| Detail `identitySufficientForMmrAutoRun` | VIN **or** year+make+model+**series** | Saved ingest MMR always showable without series (**done** slice 2). **Live re-run:** prefer year+make+model (+ series when known); **do not block** live MMR solely for missing miles. Series: if missing, still allow live YMM when make/model catalog-matched, or keep showing saved snapshot until series chosen — implementer picks one path and tests; inventing style is still OK as ingest best-effort, inventing miles is not |
 
-### MMR Lab parity
+### MMR Lab parity — still open
 
 Same no-invent / optional-miles rules as Opportunities. MMR Lab must not require odometer to run a YMM valuation, must not call `estimateMileage`, and must label average-odometer / unknown-miles results clearly.
 
@@ -1048,10 +1056,10 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ### Detail UX changes
 
-1. **Catalog-match listing make/model/style on load** (item **46** Phase A) so `honda`/`odyssey` select as `Honda`/`Odyssey` — fixes blank dropdowns. Also fix / avoid `selectOptionsWithLegacy` case trap: case-insensitive “exists in catalog” must **select the catalog token** as the control value, not leave `honda` against options that only list `Honda`.
-2. **Valuation block:** if `opportunity.mmrValue` (or latest snapshot) exists and live identity is insufficient / not yet re-run, **show saved wholesale** with provenance (“From listing ingest · mileage unknown · style estimated”) instead of only “Add vehicle identity…”.
-3. **Identity change → remount/re-run** MMR + Max buy (extend **48** / valuation remount key). Clearing miles back to empty must not re-invent.
-4. **Series vs live MMR:** missing series must not hide a saved ingest MMR. Live re-run without series: see app-layer gate table above.
+1. **Catalog-match listing make/model/style on load** — ✅ **54 slice 2** (`9bc8bd3`).
+2. **Valuation block saved ingest MMR** — ✅ **54 slice 2**.
+3. **Identity change → remount/re-run** MMR + Max buy — ✅ largely from **48**; clearing miles must not re-invent.
+4. **Series vs live MMR:** missing series must not hide a saved ingest MMR — ✅ slice 2. Live re-run without series: see app-layer gate table above.
 
 ### Overlaps
 
@@ -1061,18 +1069,17 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 | **48** | VIN path already fills catalog Y/M/M/S; keep; ensure no invent when VIN decode has no odometer |
 | **49** / **50** | Don’t wipe saved valuation when identity incomplete; **54** makes saved ingest MMR first-class on detail |
 
-### Primary files (when implementing)
+### Primary files (when implementing remaining work)
 
-- `src/valuation/workerClient.ts` — stop inventing mileage for YMM (`getMmrMileageData` invent path)
-- `src/ingest/handleIngest.ts` — snapshot / flags honesty
-- `src/maxbuy/evaluateRun.ts` — remove `estimateMileage` fallback; allow null mileage
-- `src/maxbuy/scoring/mileageBand.ts` — already OK (`unknown`)
-- `web/.../opportunity-valuation-block.tsx` — Max buy / MMR gates; show saved MMR; optional miles; series vs live
-- `web/.../opportunity-vehicle-block.tsx` + `use-vehicle-catalog.ts` — catalog match (**46**); case-correct select value
-- `web/.../mmr-lab/` — optional miles / no invent parity
-- `src/app/routes.ts` (and app MMR request validation) — relax YMM mileage-required gates
-- `docs/03-api/manheim-cox.md` — odometer optional; omit → Cox average
-- `src/persistence/opportunities.ts` — `computeEstimateFlags` / badges
+- `src/valuation/workerClient.ts` — stop inventing mileage for YMM (`getMmrMileageData` invent path) — **open**
+- `src/ingest/handleIngest.ts` — snapshot / flags honesty — **open**
+- `src/maxbuy/evaluateRun.ts` — ✅ slice 1
+- `web/.../opportunity-valuation-block.tsx` — ✅ slice 2 (gates + saved MMR)
+- `web/.../opportunity-vehicle-block.tsx` + `use-vehicle-catalog.ts` — ✅ slice 2 case-match
+- `web/.../mmr-lab/` — optional miles / no invent parity — **open**
+- `src/app/routes.ts` (and app MMR request validation) — relax YMM mileage-required gates — **open**
+- `docs/03-api/manheim-cox.md` — odometer optional; omit → Cox average — **open**
+- `src/persistence/opportunities.ts` — `computeEstimateFlags` / badges — **open** (with ingest)
 
 ### Exit criteria
 
