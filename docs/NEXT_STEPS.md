@@ -966,7 +966,7 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 
 **Reported:** 2026-07-10 (prod investigation — e.g. 2023 Honda Odyssey @ $21,995)
 
-**Status:** Spec + **slice 1 shipped 2026-07-10** — Max buy no longer invents odometer (`evaluateRun` / `getRecommendation`). Remaining slices (ingest invent, detail gates/UX, catalog match) still open.
+**Status:** Spec + **slices 1–2 shipped 2026-07-10** — Max buy no invent; detail gates/UX (saved ingest MMR + catalog case match). Remaining: ingest invent stop, app/MMR Lab mileage gates, docs.
 
 ### Symptom (what we saw)
 
@@ -1077,15 +1077,16 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 ### Exit criteria
 
 - [x] **Slice 1 (2026-07-10):** Max buy `evaluateRun` does not call `estimateMileage`; null mileage → band `unknown`; YMM MMR omits odometer; response `vehicle.mileage` nullable; `MILEAGE_UNKNOWN` badge; `getRecommendation` no invent fallback
+- [x] **Slice 2 (2026-07-10):** Detail Max buy gate no longer requires miles (ask still required); Vehicle block catalog-matches listing make/model/style casing; Valuation shows saved ingest MMR with provenance when live identity cannot auto-run
 - [ ] No remaining production path invents 15k×age for MMR ingest (workerClient) or UI “fill for me”
 - [ ] Listing with null mileage stays null on listing + snapshot; queue/detail show **Mileage unknown** (not Estimated miles from invent)
 - [ ] Cox calls omit `odometer` when miles unknown on **ingest** path too (worker already supports omit; stop invent before call)
 - [ ] App `POST /app/mmr/ymm` + MMR Lab YMM path do not require mileage
-- [ ] Max buy **detail auto-run gate** allows Y/M/M + ask without miles (UI still may block — slice 2)
-- [ ] Detail Vehicle shows catalog-matched listing Y/M/M (not blank Select) when parser values exist; control value is Cox token casing
-- [ ] Detail Valuation shows saved ingest MMR when present (even without series); re-runs MMR + Max buy when identity fields change
+- [x] Max buy **detail auto-run gate** allows Y/M/M + ask without miles
+- [x] Detail Vehicle shows catalog-matched listing Y/M/M (not blank Select) when parser values exist; control value is Cox token casing
+- [x] Detail Valuation shows saved ingest MMR when present (even without series); re-runs MMR + Max buy when identity fields change *(re-run on change already from #48; saved ingest display added)*
 - [ ] Historical invented-miles snapshots left as-is unless a follow-up cleanup is scheduled
-- [ ] Tests: evaluateRun with null mileage; worker YMM without invent; valuation block saved-vs-live; catalog case match `honda`→`Honda`; app/MMR Lab ymm without mileage
+- [ ] Tests: worker YMM without invent; app/MMR Lab ymm without mileage
 - [ ] Docs: `manheim-cox.md` mileage gating updated to match omit/average behavior
 
 ---
@@ -1101,8 +1102,8 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ### Recently resolved (reference)
 
-**Item 54 slice 1 — Max buy stop inventing miles (2026-07-10)**  
-`evaluateRun` keeps null mileage (band `unknown`), omits odometer on MMR lookups, badges `MILEAGE_UNKNOWN`. `getRecommendation` no longer fabricates 15k×age. Ingest invent + detail UX still open under **54**.
+**Item 54 slices 1–2 — Max buy no invent + detail UX (2026-07-10)**  
+Slice 1: `evaluateRun` / `getRecommendation` keep null mileage. Slice 2: detail Max buy gate drops mileage requirement; Vehicle catalog-matches `honda`→`Honda`; Valuation shows saved ingest MMR with provenance when live YMM/series incomplete. Ingest invent still open.
 
 **Item 53 — Salesperson / Appraiser directory (2026-07-10)**  
 `tav.staff_directory` seeded with buyer roster (`role = both` so the same names appear in Salesperson and Appraiser); detail dropdowns; Admin CRUD (deactivate/reactivate). Queue rows use real detail links for middle-click / open-in-new-tab.

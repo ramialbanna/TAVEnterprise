@@ -132,14 +132,13 @@ function identitySufficientForMmrAutoRun(opportunity: OpportunityDetail): boolea
   );
 }
 
-/** Max buy auto-run: stricter — YMM path needs mileage + asking price. */
+/** Max buy auto-run: YMM needs ask; miles optional (item 54). */
 function identitySufficientForMaxbuyAutoRun(opportunity: OpportunityDetail): boolean {
   if (opportunity.vin?.trim()) return true;
   return (
     opportunity.year != null &&
     !!opportunity.make &&
     !!opportunity.model &&
-    opportunity.mileage != null &&
     opportunity.price != null
   );
 }
@@ -225,13 +224,10 @@ function maxbuyPlaceholderMessage(opportunity: OpportunityDetail): string | null
   if (!identitySufficientForMmrAutoRun(opportunity)) return null;
   if (opportunity.vin?.trim()) return null;
 
-  const missing: string[] = [];
-  if (opportunity.mileage == null) missing.push("mileage");
-  if (opportunity.price == null) missing.push("asking price");
-  if (missing.length === 0) {
-    return "Max buy needs sufficient vehicle identity.";
+  if (opportunity.price == null) {
+    return "Add asking price to run Max buy on this deal.";
   }
-  return `Add ${missing.join(" and ")} to run Max buy on this deal.`;
+  return "Max buy needs sufficient vehicle identity.";
 }
 
 function InsufficientIdentityNote({ kind }: { kind: "mmr" | "maxbuy" | "both" }) {
@@ -239,7 +235,7 @@ function InsufficientIdentityNote({ kind }: { kind: "mmr" | "maxbuy" | "both" })
     kind === "mmr"
       ? "Add a VIN or year/make/model/series to run MMR on this deal."
       : kind === "maxbuy"
-        ? "Max buy needs a VIN, or year/make/model with mileage and asking price."
+        ? "Max buy needs a VIN, or year/make/model with asking price."
         : "Add vehicle identity to run MMR and Max buy on this deal.";
   return (
     <Card className="border-dashed bg-surface-sunken">
@@ -249,6 +245,16 @@ function InsufficientIdentityNote({ kind }: { kind: "mmr" | "maxbuy" | "both" })
       </CardContent>
     </Card>
   );
+}
+
+function ingestMmrProvenance(opportunity: OpportunityDetail): string {
+  const bits: string[] = ["From listing ingest"];
+  if (opportunity.estimateFlags.mileage || opportunity.mileage == null) {
+    bits.push("mileage unknown");
+  }
+  if (opportunity.estimateFlags.style) bits.push("style estimated");
+  if (opportunity.estimateFlags.mmr) bits.push("estimated MMR");
+  return bits.join(" · ");
 }
 
 export function OpportunityValuationBlock({
@@ -647,6 +653,12 @@ export function OpportunityValuationBlock({
   const session = sessionFromOpportunity(opportunity);
   const canRunFresh = session !== null;
   const canRunMmr = identitySufficientForMmrAutoRun(opportunity) && session !== null;
+  const savedIngestMmr =
+    opportunity.mmrValue != null && opportunity.mmrValue > 0
+      ? opportunity.mmrValue
+      : null;
+  const showSavedIngestMmr =
+    view.kind === "empty" && savedIngestMmr != null && !canRunMmr;
 
   const showMmrSurface =
     view.kind !== "empty" && view.kind !== "error" && view.kind !== "loading";
@@ -656,7 +668,11 @@ export function OpportunityValuationBlock({
     maxbuyView.kind !== "idle" ||
     (!preferLiveMaxbuy && savedVerdict !== null) ||
     maxbuyPlaceholder !== null;
-  const insufficientMmr = !canRunMmr && !savedVerdict && view.kind === "empty";
+  const insufficientMmr =
+    !canRunMmr &&
+    !savedVerdict &&
+    view.kind === "empty" &&
+    savedIngestMmr == null;
 
   const mmrCardPhase: ResultBandPhase = showMmrLoading
     ? "loading"
@@ -670,9 +686,25 @@ export function OpportunityValuationBlock({
         <ErrorState error={view.error} onRetry={handleRunFresh} />
       ) : null}
 
-      {!insufficientMmr && view.kind !== "error" && (showMmrSurface || showMmrLoading || showMaxbuyCard) ? (
+      {!insufficientMmr &&
+      view.kind !== "error" &&
+      (showMmrSurface || showMmrLoading || showMaxbuyCard || showSavedIngestMmr) ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          {showMmrSurface || showMmrLoading ? (
+          {showSavedIngestMmr ? (
+            <MmrSummaryCard
+              phase="ready"
+              adjustments={adjustments}
+              onAdjustmentsChange={handleAdjustmentsChange}
+              onAdjustmentsClear={handleAdjustmentsClear}
+              allowAdjustments={false}
+              provenanceNote={ingestMmrProvenance(opportunity)}
+              baseMmr={savedIngestMmr}
+              adjustedMmr={savedIngestMmr}
+              unavailableReason={null}
+            />
+          ) : null}
+
+          {!showSavedIngestMmr && (showMmrSurface || showMmrLoading) ? (
             <MmrSummaryCard
               phase={mmrCardPhase}
               adjustments={adjustments}

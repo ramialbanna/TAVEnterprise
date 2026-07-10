@@ -28,6 +28,7 @@ import {
 } from "./decode-vin-to-vehicle";
 import {
   applyVehicleCascadeChange,
+  matchCatalogOption,
   partitionYears,
   useVehicleCatalogOptions,
   type VehicleSelection,
@@ -115,6 +116,26 @@ export function OpportunityVehicleBlock({
   const catalog = useVehicleCatalogOptions(vehicleSelection);
   const { recent: recentYears, older: olderYears } = partitionYears(catalog.years);
   const catalogConnected = catalog.catalogState !== "not_connected";
+
+  // Item 54 / 46: map listing free-text (honda) onto Cox catalog tokens (Honda)
+  // so <select> values match options. Do not run cascade — casing-only updates
+  // must not clear model/style.
+  const matchedMake = matchCatalogOption(catalog.makes, values.make);
+  const matchedModel = matchCatalogOption(catalog.models, values.model);
+  const matchedStyle = matchCatalogOption(catalog.styles, values.style);
+  if (
+    (matchedMake != null && matchedMake !== values.make) ||
+    (matchedModel != null && matchedModel !== values.model) ||
+    (matchedStyle != null && matchedStyle !== values.style)
+  ) {
+    setValues((prev) => ({
+      ...prev,
+      make: matchCatalogOption(catalog.makes, prev.make) ?? prev.make,
+      model: matchCatalogOption(catalog.models, prev.model) ?? prev.model,
+      style: matchCatalogOption(catalog.styles, prev.style) ?? prev.style,
+    }));
+  }
+
   // Do not disable Save while blur-decode runs — userEvent/closer click-after-blur
   // would hit a disabled button and never PATCH (#49 regression with #48).
   const disabled = !canMutate || pending || saveInFlight;

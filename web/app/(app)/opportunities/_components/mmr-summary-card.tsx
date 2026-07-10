@@ -21,6 +21,10 @@ type Props = {
   adjustments: MmrAdjustments;
   onAdjustmentsChange: (next: MmrAdjustments) => void;
   onAdjustmentsClear: () => void;
+  /** When false, hide Adjust (e.g. saved ingest MMR without a live session). */
+  allowAdjustments?: boolean;
+  /** Short provenance line under the value (item 54). */
+  provenanceNote?: string | null;
   baseMmr: number | null;
   unavailableReason?: string | null;
   avgOdometer?: number | null;
@@ -73,6 +77,8 @@ export function MmrSummaryCard(props: Props) {
     adjustments,
     onAdjustmentsChange,
     onAdjustmentsClear,
+    allowAdjustments = true,
+    provenanceNote = null,
     baseMmr,
     unavailableReason,
     avgOdometer,
@@ -89,7 +95,7 @@ export function MmrSummaryCard(props: Props) {
     regionAdjustment = null,
   } = props;
 
-  const interactive = phase === "ready" || phase === "recomputing";
+  const interactive = allowAdjustments && (phase === "ready" || phase === "recomputing");
   const busy = phase === "loading" || phase === "recomputing";
 
   if (phase === "loading") {
@@ -135,6 +141,10 @@ export function MmrSummaryCard(props: Props) {
               avgCondition={avgCondition}
               avgEvBatteryScore={avgEvBatteryScore}
             />
+
+            {provenanceNote ? (
+              <p className="text-xs text-muted-foreground">{provenanceNote}</p>
+            ) : null}
           </>
         )}
 

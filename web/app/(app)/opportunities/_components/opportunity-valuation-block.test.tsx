@@ -258,13 +258,36 @@ describe("OpportunityValuationBlock", () => {
     expect(screen.queryByText(/^medium$/i)).toBeNull();
     expect(screen.queryByText(/^low$/i)).toBeNull();
     expect(
-      screen.getByText(/add mileage and asking price to run max buy on this deal/i),
+      screen.getByText(/add asking price to run max buy on this deal/i),
     ).toBeInTheDocument();
     expect(
       fetchSpy.mock.calls.some((c) =>
         String(c[0]).includes("/api/app/maxbuy/evaluate"),
       ),
     ).toBe(false);
+  });
+
+  it("shows saved ingest MMR when live identity cannot auto-run (item 54)", () => {
+    renderWithClient(
+      <OpportunityValuationBlock
+        opportunity={makeDetail({
+          vin: null,
+          make: "honda",
+          model: "odyssey",
+          style: null,
+          mileage: null,
+          mmrValue: 33500,
+          estimateFlags: { mmr: true, mileage: true, style: true },
+        })}
+      />,
+    );
+
+    expect(screen.getByText("MMR")).toBeInTheDocument();
+    expect(screen.getByText("$33,500")).toBeInTheDocument();
+    expect(
+      screen.getByText(/from listing ingest · mileage unknown · style estimated/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/add vehicle identity/i)).toBeNull();
   });
 
   it("expands MMR adjustments on Adjust click", async () => {
@@ -437,6 +460,7 @@ describe("OpportunityValuationBlock", () => {
       style: null,
       mileage: null,
       price: null,
+      mmrValue: null,
       maxbuySummary: undefined,
     });
     renderWithClient(<OpportunityValuationBlock opportunity={detail} />);

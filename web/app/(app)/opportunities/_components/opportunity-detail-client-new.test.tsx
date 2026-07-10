@@ -91,6 +91,11 @@ vi.mock("./use-vehicle-catalog", () => ({
     loading: null,
   }),
   partitionYears: (years: string[]) => ({ recent: years, older: [] as string[] }),
+  matchCatalogOption: (options: string[], rawValue: string | undefined) => {
+    if (!rawValue?.trim()) return null;
+    const needle = rawValue.trim().toLowerCase();
+    return options.find((o) => o.toLowerCase() === needle) ?? null;
+  },
   applyVehicleCascadeChange: (
     prev: { year: string; make: string; model: string; style: string },
     next: { year: string; make: string; model: string; style: string },
