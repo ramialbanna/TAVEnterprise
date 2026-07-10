@@ -87,7 +87,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **50** | Refresh valuation wipe | `fe50370` | Keep prior cards; restore on failure |
 | **43** | Tab switch latency | `e55015b` | `staleTime` 60s, `placeholderData`, hover prefetch, tab spinner |
 | **52** | Double-click / dead UI on tabs | `e55015b` | Optimistic tab selection; shell stays mounted |
-| **48** | VIN → Y/M/M/S + fresh MMR/Max buy | (local) | Decode on VIN blur/save → catalog fill + valuation remount |
+| **48** | VIN → Y/M/M/S + fresh MMR/Max buy | `3dfd38a` | Decode on VIN blur/save → catalog fill + valuation remount |
 
 **Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
 
