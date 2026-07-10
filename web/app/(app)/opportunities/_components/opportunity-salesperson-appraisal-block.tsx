@@ -8,7 +8,6 @@ import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import type { PatchOpportunityRequest } from "@/lib/app-api/client";
 import { listStaffDirectory } from "@/lib/app-api/client";
 import { queryKeys } from "@/lib/query";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { useBlockAutoSave } from "./use-block-auto-save";
@@ -44,8 +43,6 @@ export function OpportunitySalespersonAppraisalBlock({
   );
 
   const [values, setValues] = useState(initial);
-  const [salespersonFilter, setSalespersonFilter] = useState("");
-  const [appraiserFilter, setAppraiserFilter] = useState("");
 
   const salespeopleQuery = useQuery({
     queryKey: queryKeys.staffDirectory({ type: "salesperson" }),
@@ -101,17 +98,10 @@ export function OpportunitySalespersonAppraisalBlock({
     key: "salesperson" | "appraiser";
     label: string;
     names: string[];
-    filter: string;
-    onFilterChange: (v: string) => void;
     loading: boolean;
   }) {
     const id = `appraisal-${opts.key}`;
-    const filterId = `${id}-filter`;
     const current = values[opts.key];
-    const filterLower = opts.filter.trim().toLowerCase();
-    const filtered = filterLower
-      ? opts.names.filter((n) => n.toLowerCase().includes(filterLower))
-      : opts.names;
     const legacy =
       current && !opts.names.includes(current) ? current : null;
 
@@ -120,15 +110,6 @@ export function OpportunitySalespersonAppraisalBlock({
         <Label htmlFor={id} className="text-xs text-muted-foreground">
           {opts.label}
         </Label>
-        <Input
-          id={filterId}
-          value={opts.filter}
-          onChange={(e) => opts.onFilterChange(e.target.value)}
-          disabled={!canMutate || pending}
-          placeholder="Filter list…"
-          className="h-8 text-xs"
-          aria-label={`Filter ${opts.label.toLowerCase()} list`}
-        />
         <select
           id={id}
           className={selectClass}
@@ -142,7 +123,7 @@ export function OpportunitySalespersonAppraisalBlock({
               {legacy} (legacy)
             </option>
           ) : null}
-          {filtered.map((name) => (
+          {opts.names.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -171,16 +152,12 @@ export function OpportunitySalespersonAppraisalBlock({
           key: "salesperson",
           label: "Salesperson",
           names: salespersonNames,
-          filter: salespersonFilter,
-          onFilterChange: setSalespersonFilter,
           loading: salespeopleQuery.isLoading,
         })}
         {directoryField({
           key: "appraiser",
           label: "Appraiser",
           names: appraiserNames,
-          filter: appraiserFilter,
-          onFilterChange: setAppraiserFilter,
           loading: appraisersQuery.isLoading,
         })}
       </div>

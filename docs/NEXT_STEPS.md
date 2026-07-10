@@ -946,7 +946,7 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 ### Recently resolved (reference)
 
 **Item 53 — Salesperson / Appraiser directory (2026-07-10)**  
-`tav.staff_directory` seeded with buyer roster; detail dropdowns; Admin CRUD (deactivate/reactivate). Queue rows use real detail links for middle-click / open-in-new-tab.
+`tav.staff_directory` seeded with buyer roster (`role = both` so the same names appear in Salesperson and Appraiser); detail dropdowns; Admin CRUD (deactivate/reactivate). Queue rows use real detail links for middle-click / open-in-new-tab.
 
 **Item 45/47 — Flag/dismiss bad lead (2026-07-10)**  
 Queue Flag action → reason dialog → `POST /app/opportunities/:id/dismiss` sets `bad_lead` with reason metadata; default views exclude suppressed statuses. Migration `0062_bad_lead_status`.
