@@ -23,6 +23,7 @@ vi.mock("@/lib/app-api/client", async (importOriginal) => {
     listOpportunitiesPage: vi.fn(),
     getAppMe: vi.fn(),
     claimOpportunity: vi.fn(),
+    dismissOpportunity: vi.fn(),
   };
 });
 

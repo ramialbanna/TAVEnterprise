@@ -9,6 +9,7 @@ export const WORKFLOW_STATUS_OPTIONS: readonly {
   { value: "negotiating", label: "Negotiating" },
   { value: "purchased", label: "Bought" },
   { value: "passed", label: "Passed" },
+  { value: "bad_lead", label: "Bad lead" },
 ] as const;
 
 type WorkflowActor = {
@@ -52,6 +53,7 @@ export function formatWorkflowStatus(status: string | null): string {
   const match = WORKFLOW_STATUS_OPTIONS.find((option) => option.value === status);
   if (match) return match.label;
   if (status === "purchased") return "Bought";
+  if (status === "bad_lead") return "Bad lead";
   if (status === "new") return "New";
   if (status === "assigned") return "Assigned";
   if (status === "claimed") return "Claimed";
@@ -75,8 +77,17 @@ export function describeOpportunityAction(action: OpportunityAction): string {
     case "status_changed": {
       const previous = action.metadata.previousStatus;
       const next = action.metadata.newStatus;
+      const reasonLabel = action.metadata.reasonLabel;
+      const reason = action.metadata.reason;
       if (typeof previous === "string" && typeof next === "string") {
-        return `Status: ${formatWorkflowStatus(previous)} → ${formatWorkflowStatus(next)}`;
+        const base = `Status: ${formatWorkflowStatus(previous)} → ${formatWorkflowStatus(next)}`;
+        if (typeof reasonLabel === "string" && reasonLabel.length > 0) {
+          return `${base} (${reasonLabel})`;
+        }
+        if (typeof reason === "string" && reason.length > 0) {
+          return `${base} (${reason.replace(/_/g, " ")})`;
+        }
+        return base;
       }
       return "Status updated";
     }

@@ -34,6 +34,7 @@ import {
   type OpportunitiesPageFilter,
   type MmrVinRequest,
   type UpdateOpportunityStatusRequest,
+  type DismissOpportunityRequest,
   type AddOpportunityNoteRequest,
   type PatchOpportunityRequest,
 } from "./client";
@@ -55,6 +56,7 @@ export type {
   HistoricalSalesFilter,
   MmrVinRequest,
   UpdateOpportunityStatusRequest,
+  DismissOpportunityRequest,
   AddOpportunityNoteRequest,
   PatchOpportunityRequest,
   OpportunitiesPageFilter,
@@ -196,6 +198,14 @@ export async function updateOpportunityStatus(
   body: UpdateOpportunityStatusRequest,
 ): Promise<ApiResult<OpportunityDetail>> {
   const { status, json } = await postJson(`opportunities/${encodeURIComponent(id)}/status`, body);
+  return parseOpportunityDetail(status, json);
+}
+
+export async function dismissOpportunity(
+  id: string,
+  body: DismissOpportunityRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const { status, json } = await postJson(`opportunities/${encodeURIComponent(id)}/dismiss`, body);
   return parseOpportunityDetail(status, json);
 }
 

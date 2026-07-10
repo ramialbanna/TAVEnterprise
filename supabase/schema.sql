@@ -240,8 +240,8 @@ CREATE TABLE tav.leads (
   title                   text,
   status                  text        NOT NULL DEFAULT 'new'
     CHECK (status IN (
-      'new','assigned','claimed','contacted','negotiating',
-      'passed','duplicate','stale','sold','purchased','archived'
+      'new','assigned','claimed','reviewed','contacted','negotiating',
+      'passed','duplicate','stale','sold','purchased','archived','bad_lead'
     )),
   grade                   text        NOT NULL
     CHECK (grade IN ('excellent','good','fair','pass')),
@@ -799,7 +799,7 @@ CREATE TABLE tav.opportunity_workflow (
   status                    text        NOT NULL DEFAULT 'new'
     CHECK (status IN (
       'new','assigned','claimed','reviewed','contacted','negotiating',
-      'passed','duplicate','stale','sold','purchased','archived'
+      'passed','duplicate','stale','sold','purchased','archived','bad_lead'
     )),
   assigned_to_user_id       uuid        REFERENCES tav.users (id),
   assigned_at               timestamptz,

@@ -58,6 +58,14 @@ describe("view-filter", () => {
     expect(filtered[0]?.assignedTo).toBeNull();
   });
 
+  it("excludes bad_lead and other suppressed statuses from all default views", () => {
+    const active = row({ id: "a", assignedTo: null, status: "new" });
+    const bad = row({ id: "b", assignedTo: null, status: "bad_lead" });
+    const passed = row({ id: "c", assignedTo: null, status: "passed" });
+    expect(filterOpportunityRowsByView([active, bad, passed], "all")).toEqual([active]);
+    expect(filterOpportunityRowsByView([active, bad, passed], "needs_action")).toEqual([active]);
+  });
+
   it("filters mine by assignee user id", () => {
     expect(matchesMine(row({ assignedTo: "user-1" }), "user-1")).toBe(true);
     expect(matchesMine(row({ assignedTo: "user-2" }), "user-1")).toBe(false);

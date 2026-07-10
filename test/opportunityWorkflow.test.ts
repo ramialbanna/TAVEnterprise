@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   assignOpportunity,
   claimOpportunity,
+  dismissOpportunity,
   isActiveClaim,
   normalizeMutatableWorkflowStatus,
   OpportunityWorkflowError,
@@ -418,6 +419,43 @@ describe("updateOpportunityStatus", () => {
     await expect(
       updateOpportunityStatus(db as never, "listing-1", closer, "contacted"),
     ).rejects.toMatchObject({ code: "invalid_status_transition" });
+  });
+});
+
+describe("dismissOpportunity", () => {
+  it("rejects viewers", async () => {
+    await expect(
+      dismissOpportunity(makeWorkflowDb() as never, "listing-1", viewer, {
+        reason: "dealer",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("allows any closer to flag an unassigned lead with a reason", async () => {
+    const db = makeWorkflowDb();
+    vi.mocked(getOpportunityDetail).mockResolvedValue({
+      ...baseOpportunity,
+      status: "bad_lead",
+    });
+
+    const result = await dismissOpportunity(db as never, "listing-1", closer, {
+      reason: "title_issues",
+    });
+
+    expect(result.status).toBe("bad_lead");
+    const action = db.actions.find((a) => a.action === "status_changed");
+    expect(action?.metadata).toMatchObject({
+      newStatus: "bad_lead",
+      reason: "title_issues",
+    });
+  });
+
+  it("requires notes when reason is other", async () => {
+    await expect(
+      dismissOpportunity(makeWorkflowDb() as never, "listing-1", closer, {
+        reason: "other",
+      }),
+    ).rejects.toMatchObject({ code: "validation_error" });
   });
 });
 

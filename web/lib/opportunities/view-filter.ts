@@ -1,6 +1,8 @@
 import type { OpportunityView } from "@/lib/app-api/client";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
+import { isSuppressedFromActiveQueue } from "./dismiss-reasons";
+
 /** Mirrors Worker `src/persistence/opportunities.ts` view rules for client-side fallback. */
 export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
 export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
@@ -12,6 +14,7 @@ function isClaimActive(claimExpiresAt: string | null, now: Date): boolean {
 }
 
 export function matchesNeedsAction(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (!row.assignedTo) return true;
   if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
     return true;
@@ -28,6 +31,7 @@ export function matchesMine(
   viewerUserId: string,
   viewerDisplayName?: string | null,
 ): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.assignedTo === viewerUserId) return true;
   if (!isClaimActive(row.claimExpiresAt, new Date())) return false;
   // Worker exposes display name when known; otherwise `claimedBy` is the user id.
@@ -37,6 +41,7 @@ export function matchesMine(
 }
 
 export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.spread === null || row.spread < WORTH_A_LOOK_MIN_SPREAD) return false;
   if (row.mmrValue === null || row.mmrValue <= 0) return false;
   if (row.lastSeenAt) {
@@ -51,12 +56,15 @@ export function filterOpportunityRowsByView(
   view: OpportunityView | undefined,
   options?: { viewerUserId?: string; viewerDisplayName?: string | null; now?: Date },
 ): OpportunityRow[] {
-  if (!view || view === "all") return rows;
   const now = options?.now ?? new Date();
   const viewerUserId = options?.viewerUserId;
   const viewerDisplayName = options?.viewerDisplayName;
 
-  return rows.filter((row) => {
+  // Default queue views exclude dismissed / terminal statuses (items 45/47).
+  const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));
+  if (!view || view === "all") return active;
+
+  return active.filter((row) => {
     switch (view) {
       case "needs_action":
         return matchesNeedsAction(row, now);

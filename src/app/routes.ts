@@ -18,7 +18,7 @@
  * POST /app/opportunities/manual,
  * POST /app/opportunities/:id/assign, POST /app/opportunities/:id/claim,
  * POST /app/opportunities/:id/evaluate, POST /app/opportunities/:id/status,
- * POST /app/opportunities/:id/notes.
+ * POST /app/opportunities/:id/dismiss, POST /app/opportunities/:id/notes.
  * PATCH /app/opportunities/:id (vehicle + contact / salesperson / title edits).
  * POST /app/maxbuy/evaluate, POST /app/maxbuy/overrides, POST /app/maxbuy/passes,
  * GET /app/maxbuy/recommendations/:id.
@@ -49,8 +49,10 @@ import {
   claimOpportunity,
   recordOpportunityEvaluation,
   updateOpportunityStatus,
+  dismissOpportunity,
   addOpportunityNote,
   normalizeMutatableWorkflowStatus,
+  isDismissReasonCode,
   OpportunityWorkflowError,
 } from "../persistence/opportunityWorkflow";
 import { patchOpportunityFields } from "../persistence/opportunities";
@@ -132,6 +134,11 @@ const UpdateOpportunityStatusSchema = z.object({
   status: z.string().trim().min(1).max(32),
 });
 
+const DismissOpportunitySchema = z.object({
+  reason: z.string().trim().min(1).max(64),
+  notes: z.string().trim().max(2000).optional(),
+});
+
 const AddOpportunityNoteSchema = z.object({
   note: z.string().trim().min(1).max(2000),
   maxbuy_recommendation_id: z.string().uuid().optional(),
@@ -172,7 +179,7 @@ const PatchOpportunitySchema = z.object({
   extendedWarranty: z.boolean().optional(),
 });
 
-const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|notes)$/;
+const OPPORTUNITY_ACTION_RE = /^\/app\/opportunities\/([^/]+)\/(assign|claim|evaluate|status|dismiss|notes)$/;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -298,6 +305,9 @@ export async function handleApp(request: Request, env: Env, ctx: ExecutionContex
       }
       if (action === "status") {
         return await handleOpportunityStatus(request, env, decodeURIComponent(id));
+      }
+      if (action === "dismiss") {
+        return await handleOpportunityDismiss(request, env, decodeURIComponent(id));
       }
       if (action === "notes") {
         return await handleOpportunityNotes(request, env, decodeURIComponent(id));
@@ -1585,6 +1595,59 @@ async function handleOpportunityStatus(
   } catch (err) {
     if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
     log("app.opportunity_status.failed", { normalizedListingId, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/opportunities/:id/dismiss — flag bad lead with required reason (items 45/47).
+ */
+async function handleOpportunityDismiss(
+  request: Request,
+  env: Env,
+  normalizedListingId: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ ok: false, error: "invalid_json" }, 400);
+  }
+
+  const parsed = DismissOpportunitySchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ ok: false, error: "validation_error", issues: parsed.error.issues }, 400);
+  }
+
+  if (!isDismissReasonCode(parsed.data.reason)) {
+    return json({ ok: false, error: "invalid_reason" }, 400);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_dismiss.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await dismissOpportunity(db, normalizedListingId, userOrResponse, {
+      reason: parsed.data.reason,
+      notes: parsed.data.notes,
+    });
+    log("app.opportunity_dismiss.ok", {
+      normalizedListingId,
+      actorId: userOrResponse.id,
+      reason: parsed.data.reason,
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    if (err instanceof OpportunityWorkflowError) return mapWorkflowError(err);
+    log("app.opportunity_dismiss.failed", { normalizedListingId, error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

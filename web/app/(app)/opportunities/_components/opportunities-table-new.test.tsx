@@ -58,6 +58,7 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        onDismiss={vi.fn()}
         queueView="needs_action"
       />,
     );
@@ -66,6 +67,7 @@ describe("OpportunitiesTableNew", () => {
     expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
     expect(screen.getAllByLabelText("View listing").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText("I'm working this")).toBeInTheDocument();
+    expect(screen.getByLabelText("Flag bad lead")).toBeInTheDocument();
   });
 
   it("highlights the selected row", () => {
@@ -83,6 +85,7 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        onDismiss={vi.fn()}
         queueView="needs_action"
       />,
     );
@@ -105,6 +108,7 @@ describe("OpportunitiesTableNew", () => {
         onPaginationChange={vi.fn()}
         onSortChange={vi.fn()}
         onClaim={vi.fn()}
+        onDismiss={vi.fn()}
         queueView="needs_action"
       />,
     );

@@ -23,7 +23,8 @@ export type MutatableWorkflowStatus =
   | "contacted"
   | "negotiating"
   | "purchased"
-  | "passed";
+  | "passed"
+  | "bad_lead";
 
 export const MUTATABLE_WORKFLOW_STATUSES: readonly MutatableWorkflowStatus[] = [
   "reviewed",
@@ -31,7 +32,35 @@ export const MUTATABLE_WORKFLOW_STATUSES: readonly MutatableWorkflowStatus[] = [
   "negotiating",
   "purchased",
   "passed",
+  "bad_lead",
 ] as const;
+
+/** Reason codes for POST /app/opportunities/:id/dismiss (items 45/47). */
+export const DISMISS_REASON_CODES = [
+  "not_a_good_lead",
+  "title_issues",
+  "dealer",
+  "wrong_vehicle",
+  "bad_price",
+  "bad_condition",
+  "too_far",
+  "duplicate",
+  "other",
+] as const;
+
+export type DismissReasonCode = (typeof DISMISS_REASON_CODES)[number];
+
+export const DISMISS_REASON_LABELS: Record<DismissReasonCode, string> = {
+  not_a_good_lead: "Not a good lead",
+  title_issues: "Title Issues",
+  dealer: "Dealer",
+  wrong_vehicle: "Wrong vehicle type",
+  bad_price: "Price out of range",
+  bad_condition: "Condition concerns",
+  too_far: "Too far / wrong market",
+  duplicate: "Duplicate",
+  other: "Other",
+};
 
 const TERMINAL_WORKFLOW_STATUSES = new Set([
   "passed",
@@ -40,8 +69,28 @@ const TERMINAL_WORKFLOW_STATUSES = new Set([
   "stale",
   "sold",
   "archived",
+  "bad_lead",
 ]);
 
+/** Statuses excluded from default Opportunities queue views (Needs action / Mine / Worth a look / All). */
+export const SUPPRESSED_QUEUE_STATUSES = new Set([
+  "bad_lead",
+  "passed",
+  "purchased",
+  "duplicate",
+  "stale",
+  "sold",
+  "archived",
+]);
+
+export function isSuppressedFromActiveQueue(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return SUPPRESSED_QUEUE_STATUSES.has(status);
+}
+
+export function isDismissReasonCode(raw: string): raw is DismissReasonCode {
+  return (DISMISS_REASON_CODES as readonly string[]).includes(raw);
+}
 export interface OpportunityActionRecord {
   id: string;
   normalizedListingId: string;
@@ -592,6 +641,7 @@ export async function updateOpportunityStatus(
   normalizedListingId: string,
   actor: AppUser,
   nextStatus: MutatableWorkflowStatus,
+  options?: { reason?: DismissReasonCode; notes?: string | null },
 ): Promise<OpportunityDetail> {
   await assertListingExists(db, normalizedListingId);
   await assertReviewableOpportunity(db, normalizedListingId);
@@ -612,14 +662,20 @@ export async function updateOpportunityStatus(
 
   const workflow = await upsertWorkflowRow(db, normalizedListingId, { status: nextStatus });
   await syncLeadFromWorkflow(db, normalizedListingId, workflow);
+
+  const metadata: Record<string, unknown> = {
+    previousStatus: currentStatus,
+    newStatus: nextStatus,
+  };
+  if (options?.reason) metadata.reason = options.reason;
+  const notes = options?.notes?.trim() || null;
+
   await writeOpportunityAction(db, {
     normalizedListingId,
     actorUserId: actor.id,
     action: "status_changed",
-    metadata: {
-      previousStatus: currentStatus,
-      newStatus: nextStatus,
-    },
+    notes,
+    metadata,
   });
 
   const opportunity = await getOpportunityDetail(db, normalizedListingId);
@@ -629,6 +685,69 @@ export async function updateOpportunityStatus(
   return opportunity;
 }
 
+/**
+ * Flag/dismiss a lead as `bad_lead` with a required reason (items 45/47).
+ * Any closer or admin may dismiss — claim/assignment is not required so the
+ * shared Needs action queue can be cleaned without an extra claim click.
+ */
+export async function dismissOpportunity(
+  db: SupabaseClient,
+  normalizedListingId: string,
+  actor: AppUser,
+  input: { reason: DismissReasonCode; notes?: string | null },
+): Promise<OpportunityDetail> {
+  if (!canMutateWorkflow(actor.role)) {
+    throw new OpportunityWorkflowError("forbidden", "Viewers cannot dismiss opportunities");
+  }
+
+  if (!isDismissReasonCode(input.reason)) {
+    throw new OpportunityWorkflowError("validation_error", "A valid dismiss reason is required");
+  }
+
+  const notes = input.notes?.trim() || null;
+  if (input.reason === "other" && (!notes || notes.length < 3)) {
+    throw new OpportunityWorkflowError(
+      "validation_error",
+      "Notes are required when reason is Other (min 3 characters)",
+    );
+  }
+
+  await assertListingExists(db, normalizedListingId);
+  await assertReviewableOpportunity(db, normalizedListingId);
+
+  const existing = await getWorkflowRow(db, normalizedListingId);
+  const currentStatus = existing?.status ?? "new";
+  assertStatusTransitionAllowed(actor, currentStatus, "bad_lead");
+
+  if (currentStatus === "bad_lead") {
+    const opportunity = await getOpportunityDetail(db, normalizedListingId);
+    if (!opportunity) {
+      throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+    }
+    return opportunity;
+  }
+
+  const workflow = await upsertWorkflowRow(db, normalizedListingId, { status: "bad_lead" });
+  await syncLeadFromWorkflow(db, normalizedListingId, workflow);
+  await writeOpportunityAction(db, {
+    normalizedListingId,
+    actorUserId: actor.id,
+    action: "status_changed",
+    notes,
+    metadata: {
+      previousStatus: currentStatus,
+      newStatus: "bad_lead",
+      reason: input.reason,
+      reasonLabel: DISMISS_REASON_LABELS[input.reason],
+    },
+  });
+
+  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  if (!opportunity) {
+    throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
+  }
+  return opportunity;
+}
 export async function addOpportunityNote(
   db: SupabaseClient,
   normalizedListingId: string,

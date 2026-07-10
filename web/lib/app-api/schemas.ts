@@ -449,8 +449,22 @@ export const MutatableWorkflowStatusSchema = z.enum([
   "purchased",
   "bought",
   "passed",
+  "bad_lead",
 ]);
 export type MutatableWorkflowStatus = z.infer<typeof MutatableWorkflowStatusSchema>;
+
+export const DismissReasonCodeSchema = z.enum([
+  "not_a_good_lead",
+  "title_issues",
+  "dealer",
+  "wrong_vehicle",
+  "bad_price",
+  "bad_condition",
+  "too_far",
+  "duplicate",
+  "other",
+]);
+export type DismissReasonCode = z.infer<typeof DismissReasonCodeSchema>;
 
 export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   reasonCodes: z.array(z.string()),

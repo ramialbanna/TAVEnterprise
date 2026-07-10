@@ -5,6 +5,7 @@ import type { AppUser } from "./users";
 import {
   fetchWorkflowMap,
   isActiveClaim,
+  isSuppressedFromActiveQueue,
   listOpportunityActions,
   writeOpportunityAction,
   OpportunityWorkflowError,
@@ -444,6 +445,7 @@ export function matchesNeedsAction(
   workflow: WorkflowDisplayContext | null,
   now: Date = new Date(),
 ): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (!row.assignedTo) return true;
   if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
     return true;
@@ -460,6 +462,7 @@ export function matchesMine(
   workflow: WorkflowDisplayContext | null,
   viewerUserId: string,
 ): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.assignedTo === viewerUserId) return true;
   if (workflow && isActiveClaim(workflow) && workflow.claimedByUserId === viewerUserId) {
     return true;
@@ -468,6 +471,7 @@ export function matchesMine(
 }
 
 export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.spread === null || row.spread < WORTH_A_LOOK_MIN_SPREAD) return false;
   if (row.mmrValue === null || row.mmrValue <= 0) return false;
   if (row.lastSeenAt) {
@@ -508,10 +512,13 @@ function applyViewFilter(
   workflowByListing: Map<string, WorkflowDisplayContext>,
 ): OpportunityRow[] {
   const view = filter.view ?? "all";
-  if (view === "all") return rows;
-
   const now = new Date();
-  return rows.filter((row) => {
+
+  // Default queue views exclude dismissed / terminal statuses (items 45/47).
+  const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));
+  if (view === "all") return active;
+
+  return active.filter((row) => {
     const workflow = workflowByListing.get(row.id) ?? null;
     switch (view) {
       case "needs_action":

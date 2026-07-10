@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-10 · **Focus:** Items **45/47** (flag/dismiss bad lead); then **51**, **53**, **44**, **46**
+**Last updated:** 2026-07-10 · **Focus:** Items **51** (Bad Lead labels / fuller list TBD), **53**, **44**, **46**
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-10): **40–43**, **48–50**, **52** shipped on `main`. Queue counts/Received (`6486776`); VIN save + valuation refresh (`fe50370`); **VIN → Y/M/M/S + live valuation** (`#48`); web-ci lint/typecheck guards (`c374bf3`, `5ead1cd`); snappy queue tabs (`e55015b`). Next: **45/47** (flag bad lead), **51** (workflow), **53** (salesperson/appraiser directory). Queued: **44** (listed date), **46** (listing→Cox autofill). See **Product principle** + active table below.
+> Sprint so far (through 2026-07-10): **40–43**, **45/47**, **48–50**, **52** shipped on `main`. Queue counts/Received (`6486776`); VIN save + valuation refresh (`fe50370`); **VIN → Y/M/M/S + live valuation** (`#48`); **flag/dismiss bad lead** (`#45/47` — `POST …/dismiss` → `bad_lead` + reason; excluded from default queues); web-ci lint/typecheck guards (`c374bf3`, `5ead1cd`); snappy queue tabs (`e55015b`). Next: **51** (workflow labels / fuller list TBD), **53** (salesperson/appraiser directory). Queued: **44** (listed date), **46** (listing→Cox autofill). See **Product principle** + active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -88,6 +88,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **43** | Tab switch latency | `e55015b` | `staleTime` 60s, `placeholderData`, hover prefetch, tab spinner |
 | **52** | Double-click / dead UI on tabs | `e55015b` | Optimistic tab selection; shell stays mounted |
 | **48** | VIN → Y/M/M/S + fresh MMR/Max buy | `3dfd38a` | Decode on VIN blur/save → catalog fill + valuation remount |
+| **45/47** | Flag/dismiss bad lead | _(pending commit)_ | Queue Flag → reason dialog → `bad_lead`; excluded from default views |
 
 **Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
 
@@ -95,9 +96,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
-| **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
-| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
+| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
 | **44** | **Listing posted date** — marketplace post time (distinct from Received); ingest may need `posted_at` | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill from listing** — map parser identity to Cox catalog tokens | **High** | [ ] |
@@ -111,13 +110,13 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
 | **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
 | **44** | **Listing posted date** — show when the seller listed the vehicle on the marketplace (distinct from Received / first seen) | **High** | [ ] |
-| **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
+| **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [x] |
 | **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [ ] |
-| **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
+| **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [x] |
 | **48** | **VIN → Y/M/M/S + fresh MMR/Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [x] |
 | **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
 | **50** | **Refresh valuation wipes results (buyer email #4)** — Refresh clears everything and returns nothing | **Critical** | [x] |
-| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
+| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [~] |
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
 
@@ -505,12 +504,12 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 ### Exit criteria
 
-- [ ] Dismiss button visible on queue rows for users with mutate permission
-- [ ] Cannot dismiss without selecting a reason
-- [ ] Dismissed row disappears from **Needs action** / **All** default views immediately
-- [ ] `tav.opportunity_actions` row records reason + actor + timestamp
-- [ ] Detail page action history shows dismiss event
-- [ ] Tests: API validation (missing reason → 400), filter exclusion, permission gates
+- [x] Dismiss button visible on queue rows for users with mutate permission
+- [x] Cannot dismiss without selecting a reason
+- [x] Dismissed row disappears from **Needs action** / **All** default views immediately
+- [x] `tav.opportunity_actions` row records reason + actor + timestamp
+- [x] Detail page action history shows dismiss event
+- [x] Tests: API validation (missing reason → 400), filter exclusion, permission gates
 
 ---
 
@@ -642,11 +641,11 @@ Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded re
 
 ### Exit criteria
 
-- [ ] Buyer can flag with at least: Not a good lead, Title Issues, Dealer (+ other agreed reasons)
-- [ ] Flagged row disappears from default queue views for **all** users (not just actor)
-- [ ] Action audited with reason + actor + timestamp
-- [ ] Cannot submit without a reason
-- [ ] Tests: filter exclusion + permission + missing reason → 400
+- [x] Buyer can flag with at least: Not a good lead, Title Issues, Dealer (+ other agreed reasons)
+- [x] Flagged row disappears from default queue views for **all** users (not just actor)
+- [x] Action audited with reason + actor + timestamp
+- [x] Cannot submit without a reason
+- [x] Tests: filter exclusion + permission + missing reason → 400
 
 ---
 
@@ -844,10 +843,10 @@ Delivered → @Auction → Sold
 
 ### Exit criteria
 
-- [ ] **Bad Lead** settable + excluded from default queues
-- [ ] **Purchased** clearly available and labeled
+- [x] **Bad Lead** settable + excluded from default queues
+- [x] **Purchased** clearly available and labeled
 - [ ] Buyer’s fuller list documented as follow-up (do not invent statuses beyond minimum without confirmation)
-- [ ] Tests for new status transitions + terminal filter
+- [x] Tests for new status transitions + terminal filter
 
 ---
 
@@ -946,6 +945,9 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 45/47 — Flag/dismiss bad lead (2026-07-10)**  
+Queue Flag action → reason dialog → `POST /app/opportunities/:id/dismiss` sets `bad_lead` with reason metadata; default views exclude suppressed statuses. Migration `0062_bad_lead_status`.
 
 **Item 48 — VIN → Y/M/M/S + fresh MMR/Max buy (2026-07-10)**  
 `decodeVinToVehicleSelection` on Vehicle blur/save; catalog fill via `hydrateVinAutofill`; Valuation remounts on identity key change.

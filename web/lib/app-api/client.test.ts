@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addOpportunityNote,
+  dismissOpportunity,
   getKpis,
   getSystemStatus,
   historicalSalesQuery,
@@ -166,6 +167,70 @@ describe("happy path delegates to parsers", () => {
     );
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.status).toBe("reviewed");
+  });
+
+  it("dismissOpportunity posts to /api/app/opportunities/:id/dismiss", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(200, {
+        ok: true,
+        data: {
+          id: "listing-1",
+          type: "lead",
+          badges: [],
+          source: "facebook",
+          region: "dallas_tx",
+          sourceRunId: null,
+          normalizedListingId: "listing-1",
+          vehicleCandidateId: null,
+          leadId: null,
+          title: "2019 Ford F-150",
+          year: 2019,
+          make: "Ford",
+          model: "F-150",
+          style: null,
+          vin: null,
+          price: 25000,
+          mmrValue: 28000,
+          spread: 3000,
+          finalScore: 72,
+          grade: "good",
+          status: "bad_lead",
+          submittedBy: null,
+          assignedTo: null,
+          assignedCloserName: null,
+          claimedBy: null,
+          claimedAt: null,
+          claimExpiresAt: null,
+          lastEvaluatedBy: null,
+          lastEvaluatedAt: null,
+          firstSeenAt: "2026-05-01T00:00:00.000Z",
+          lastSeenAt: "2026-05-01T00:00:00.000Z",
+          receivedAt: "2026-05-01T00:00:00.000Z",
+          seenCount: 1,
+          listingUrl: null,
+          estimateFlags: { mmr: false, mileage: false, style: false },
+          reasonCodes: [],
+          valuationMissingReason: null,
+          scoreComponents: null,
+          candidateListingCount: null,
+          mileage: null,
+          actions: [],
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await dismissOpportunity("listing-1", { reason: "dealer" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/app/opportunities/listing-1/dismiss",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ reason: "dealer" }),
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.status).toBe("bad_lead");
   });
 
   it("addOpportunityNote posts to /api/app/opportunities/:id/notes", async () => {

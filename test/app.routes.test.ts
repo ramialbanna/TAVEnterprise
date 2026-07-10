@@ -17,6 +17,7 @@ import {
 import { parseListingUrl } from "../src/intake/parseListingUrl";
 import {
   updateOpportunityStatus,
+  dismissOpportunity,
   addOpportunityNote,
   OpportunityWorkflowError,
 } from "../src/persistence/opportunityWorkflow";
@@ -96,6 +97,7 @@ vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
   return {
     ...actual,
     updateOpportunityStatus: vi.fn(),
+    dismissOpportunity: vi.fn(),
     addOpportunityNote: vi.fn(),
   };
 });
@@ -177,6 +179,7 @@ beforeEach(() => {
   vi.mocked(resolveAppUser).mockResolvedValue(null);
   vi.mocked(submitManualOpportunity).mockReset();
   vi.mocked(updateOpportunityStatus).mockReset();
+  vi.mocked(dismissOpportunity).mockReset();
   vi.mocked(addOpportunityNote).mockReset();
   vi.mocked(patchOpportunityFields).mockReset();
 });
@@ -1907,6 +1910,68 @@ describe("POST /app/opportunities/:id/status", () => {
     );
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /app/opportunities/:id/dismiss", () => {
+  const closer = {
+    id: "user-1",
+    email: "alice@texasautovalue.com",
+    displayName: "Alice Adams",
+    role: "closer" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("dismisses with a valid reason", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(dismissOpportunity).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      status: "bad_lead",
+      reasonCodes: [],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: null,
+      mileage: 45000,
+      actions: [],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/dismiss", { reason: "dealer" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(dismissOpportunity)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      { reason: "dealer", notes: undefined },
+    );
+  });
+
+  it("returns 400 for invalid reason codes", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/dismiss", { reason: "not_real" }),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { ok: boolean; error: string };
+    expect(body.error).toBe("invalid_reason");
+  });
+
+  it("returns 400 when reason is missing", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/dismiss", {}),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(400);
   });
 });
 

@@ -11,6 +11,7 @@ import {
   TOOLTIPS,
 } from "@/lib/copy/opportunities-labels";
 import { canShowClaimAction } from "@/lib/opportunities/claim-eligibility";
+import { isSuppressedFromActiveQueue } from "@/lib/opportunities/dismiss-reasons";
 import {
   DEFAULT_PAGE_SIZE,
   PAGE_SIZE_OPTIONS,
@@ -146,10 +147,12 @@ export function OpportunitiesTableNew({
   selectedId,
   claimActor,
   claimPendingId,
+  dismissPendingId,
   onOpenDetail,
   onPaginationChange,
   onSortChange,
   onClaim,
+  onDismiss,
   queueView,
 }: {
   rows: OpportunityRow[];
@@ -161,11 +164,13 @@ export function OpportunitiesTableNew({
   selectedId?: string | null;
   claimActor: Parameters<typeof canShowClaimAction>[0];
   claimPendingId?: string | null;
+  dismissPendingId?: string | null;
   onSelect?: (row: OpportunityRow) => void;
   onOpenDetail: (row: OpportunityRow) => void;
   onPaginationChange: (offset: number, limit: number) => void;
   onSortChange: (sort: OpportunitySort) => void;
   onClaim: (row: OpportunityRow) => void;
+  onDismiss: (row: OpportunityRow) => void;
   queueView: OpportunityView;
 }) {
   const [columnVisibility, setColumnVisibility] = useState(() =>
@@ -232,8 +237,15 @@ export function OpportunitiesTableNew({
           <OpportunityRowActionsNew
             row={row}
             canClaim={canShowClaimAction(claimActor, row)}
+            canDismiss={
+              !!claimActor &&
+              (claimActor.role === "admin" || claimActor.role === "closer") &&
+              !isSuppressedFromActiveQueue(row.status)
+            }
             claimPending={claimPendingId === row.id}
+            dismissPending={dismissPendingId === row.id}
             onClaim={onClaim}
+            onDismiss={onDismiss}
           />
         );
       default:

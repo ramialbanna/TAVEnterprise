@@ -43,6 +43,7 @@ export const STATUS_LABELS: Record<string, string> = {
   purchased: "Bought",
   bought: "Bought",
   passed: "Passed",
+  bad_lead: "Bad lead",
 };
 
 export const TABLE_HEADERS = {
@@ -74,7 +75,7 @@ export const PAGE_COPY = {
   queueSummaryTitle: "Your day at a glance",
   tableTitle: "Your queue",
   tableFooter:
-    "Click a row for a quick preview. Use the action icons to view the listing or start working a deal.",
+    "Click a row for a quick preview. Use the action icons to view the listing, claim a deal, or flag a bad lead.",
   emptyTitle: "No deals in your queue yet",
   emptyHint:
     "Leads, almost-deals, and team submissions show up here. Submit a listing link with the button above.",

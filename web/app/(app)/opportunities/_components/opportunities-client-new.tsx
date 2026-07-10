@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import {
   claimOpportunity,
+  dismissOpportunity,
   getAppMe,
   listOpportunitiesPage,
   type ListOpportunitiesPageOptions,
@@ -18,6 +19,7 @@ import type { ApiResult } from "@/lib/app-api";
 import { codeMessage } from "@/lib/app-api";
 import type { OpportunityListPage } from "@/lib/app-api/schemas";
 import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
+import type { DismissReasonCode } from "@/lib/opportunities/dismiss-reasons";
 import {
   countFirstSeenToday,
   DEFAULT_QUEUE_VIEW,
@@ -30,6 +32,7 @@ import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { ClaimFeedbackInline } from "./claim-feedback-inline";
+import { DismissOpportunityDialog } from "./dismiss-opportunity-dialog";
 import { OpportunitiesMobileActionBar } from "./opportunities-mobile-action-bar";
 import { OpportunitiesQueueTabs } from "./opportunities-queue-tabs";
 import { OpportunitiesTableNew } from "./opportunities-table-new";
@@ -98,6 +101,7 @@ export function OpportunitiesClientNew({
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [sort, setSort] = useState<OpportunitySort>("received_desc");
   const [claimFeedbackRow, setClaimFeedbackRow] = useState<OpportunityRow | null>(null);
+  const [dismissTarget, setDismissTarget] = useState<OpportunityRow | null>(null);
 
   const viewParam = searchParams.get("view");
   const viewKey = viewParam ?? "";
@@ -224,6 +228,23 @@ export function OpportunitiesClientNew({
         return;
       }
       toast.error(codeMessage(result.error));
+    },
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: (input: { row: OpportunityRow; reason: DismissReasonCode; notes?: string }) =>
+      dismissOpportunity(input.row.id, { reason: input.reason, notes: input.notes }),
+    onSuccess: (result, variables) => {
+      if (result.ok) {
+        toast.success("Flagged as bad lead");
+        setDismissTarget(null);
+        if (selected?.id === variables.row.id) setSelected(null);
+        void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
+        void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(variables.row.id) });
+        return;
+      }
+      if (!result.ok) toast.error(codeMessage(result.error));
     },
   });
 
@@ -357,14 +378,37 @@ export function OpportunitiesClientNew({
             selectedId={selected?.id ?? null}
             claimActor={claimActor}
             claimPendingId={claimMutation.isPending ? (claimMutation.variables?.id ?? null) : null}
+            dismissPendingId={
+              dismissMutation.isPending ? (dismissMutation.variables?.row.id ?? null) : null
+            }
             onOpenDetail={(row) => router.push(`/opportunities/${row.id}`)}
             onPaginationChange={handlePaginationChange}
             onSortChange={handleSortChange}
             onClaim={(row) => claimMutation.mutate(row)}
+            onDismiss={(row) => setDismissTarget(row)}
             queueView={view}
           />
         </CardContent>
       </Card>
+
+      <DismissOpportunityDialog
+        open={dismissTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDismissTarget(null);
+        }}
+        vehicleLabel={
+          dismissTarget
+            ? [dismissTarget.year, dismissTarget.make, dismissTarget.model]
+                .filter(Boolean)
+                .join(" ") || dismissTarget.title
+            : null
+        }
+        pending={dismissMutation.isPending}
+        onSubmit={({ reason, notes }) => {
+          if (!dismissTarget) return;
+          dismissMutation.mutate({ row: dismissTarget, reason, notes });
+        }}
+      />
 
       {selected ? (
         <OpportunitiesMobileActionBar

@@ -47,6 +47,7 @@ import type {
   AppUserSummary,
   AppUser,
   MutatableWorkflowStatus,
+  DismissReasonCode,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -193,6 +194,12 @@ export type AssignOpportunityRequest = {
 /** Request body for POST /app/opportunities/:id/status. */
 export type UpdateOpportunityStatusRequest = {
   status: MutatableWorkflowStatus;
+};
+
+/** Request body for POST /app/opportunities/:id/dismiss. */
+export type DismissOpportunityRequest = {
+  reason: DismissReasonCode;
+  notes?: string;
 };
 
 /** Request body for POST /app/opportunities/:id/notes. */
@@ -486,6 +493,15 @@ export async function updateOpportunityStatus(
   body: UpdateOpportunityStatusRequest,
 ): Promise<ApiResult<OpportunityDetail>> {
   const r = await postJson(`opportunities/${encodeURIComponent(id)}/status`, body);
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityDetail(r.status, r.json);
+}
+
+export async function dismissOpportunity(
+  id: string,
+  body: DismissOpportunityRequest,
+): Promise<ApiResult<OpportunityDetail>> {
+  const r = await postJson(`opportunities/${encodeURIComponent(id)}/dismiss`, body);
   if (r === FETCH_FAILED) return clientTransportError();
   return parseOpportunityDetail(r.status, r.json);
 }
