@@ -15,6 +15,7 @@ vi.mock("@/lib/app-api/client", async (importOriginal) => {
     getMmrCatalogMakes: vi.fn(),
     getMmrCatalogModels: vi.fn(),
     getMmrCatalogStyles: vi.fn(),
+    postMmrVin: vi.fn(),
   };
 });
 
@@ -23,12 +24,14 @@ import {
   getMmrCatalogMakes,
   getMmrCatalogModels,
   getMmrCatalogStyles,
+  postMmrVin,
 } from "@/lib/app-api/client";
 
 const mockedYears = vi.mocked(getMmrCatalogYears);
 const mockedMakes = vi.mocked(getMmrCatalogMakes);
 const mockedModels = vi.mocked(getMmrCatalogModels);
 const mockedStyles = vi.mocked(getMmrCatalogStyles);
+const mockedPostMmrVin = vi.mocked(postMmrVin);
 
 function catalogOk(items: string[]): ApiResult<MmrCatalog> {
   return {
@@ -122,9 +125,22 @@ beforeEach(() => {
   mockedYears.mockResolvedValue(
     catalogOk(["2024", "2023", "2022", "2021", "2020", "2019", "2018"]),
   );
-  mockedMakes.mockResolvedValue(catalogOk(["Honda", "Toyota"]));
-  mockedModels.mockResolvedValue(catalogOk(["Accord", "Civic"]));
-  mockedStyles.mockResolvedValue(catalogOk(["EX", "LX"]));
+  mockedMakes.mockResolvedValue(catalogOk(["Honda", "Toyota", "Kia"]));
+  mockedModels.mockResolvedValue(catalogOk(["Accord", "Civic", "Sorento"]));
+  mockedStyles.mockResolvedValue(catalogOk(["EX", "LX", "SX"]));
+  mockedPostMmrVin.mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      mmrValue: 28500,
+      confidence: "high",
+      method: "vin",
+      year: 2021,
+      make: "Kia",
+      model: "Sorento",
+      trim: "SX",
+    },
+  });
 });
 
 describe("OpportunityVehicleBlock", () => {
@@ -236,6 +252,84 @@ describe("OpportunityVehicleBlock", () => {
     );
 
     expect(screen.getByLabelText("Location")).toHaveTextContent("123 Main St, 75201");
+  });
+
+  it("decodes VIN on save and patches catalog Y/M/M/S", async () => {
+    const onSave = vi.fn();
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          onSave,
+          opportunity: makeDetail({
+            vin: null,
+            year: 2021,
+            make: null,
+            model: null,
+            style: null,
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("VIN"), {
+      target: { value: "7MUCAAAG7NV022177" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        vin: "7MUCAAAG7NV022177",
+        make: "Kia",
+        model: "Sorento",
+        style: "SX",
+      }),
+    );
+    expect(mockedPostMmrVin).toHaveBeenCalledWith({
+      vin: "7MUCAAAG7NV022177",
+      mileage: 32000,
+    });
+    expect(screen.getByText(/filled from VIN/i)).toBeInTheDocument();
+  });
+
+  it("keeps VIN and existing YMM when decode fails", async () => {
+    mockedPostMmrVin.mockResolvedValue({
+      ok: false,
+      kind: "unavailable",
+      error: "no_mmr_value",
+      status: 200,
+      message: "No MMR value available for this VIN.",
+    });
+    const onSave = vi.fn();
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          onSave,
+          opportunity: makeDetail({
+            vin: null,
+            year: 2021,
+            make: "Honda",
+            model: "Accord",
+            style: "EX",
+          }),
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    });
+
+    fireEvent.change(screen.getByLabelText("VIN"), {
+      target: { value: "7MUCAAAG7NV022177" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({ vin: "7MUCAAAG7NV022177" }),
+    );
+    expect(screen.getByText(/No MMR value available/i)).toBeInTheDocument();
+    expect((screen.getByLabelText("Make") as HTMLSelectElement).value).toBe("Honda");
+    expect((screen.getByLabelText("Model") as HTMLSelectElement).value).toBe("Accord");
   });
 });
 

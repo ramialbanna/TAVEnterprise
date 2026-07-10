@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-09 · **Focus:** Item **48** (VIN→Y/M/M/S + fresh valuation); then **45/47**, **51**, **53**
+**Last updated:** 2026-07-10 · **Focus:** Items **45/47** (flag/dismiss bad lead); then **51**, **53**, **44**, **46**
 
 > **Fresh chat prompt:**
-> Items **40–42** + **49–50** + **43/52** shipped (2026-07-09). Queue tabs: optimistic selection, 60s staleTime, placeholderData, hover prefetch. Next: **48** (VIN decode → catalog + live MMR/Max buy), then **45/47**, **51**, **53**. Queued: **44**, **46**. See **Product principle — identity + always-fresh valuation**.
+> Sprint so far (through 2026-07-10): **40–43**, **48–50**, **52** shipped on `main`. Queue counts/Received (`6486776`); VIN save + valuation refresh (`fe50370`); **VIN → Y/M/M/S + live valuation** (`#48`); web-ci lint/typecheck guards (`c374bf3`, `5ead1cd`); snappy queue tabs (`e55015b`). Next: **45/47** (flag bad lead), **51** (workflow), **53** (salesperson/appraiser directory). Queued: **44** (listed date), **46** (listing→Cox autofill). See **Product principle** + active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -11,7 +11,7 @@
 
 > ## Product principle — identity paths + always-fresh valuation
 >
-> **Confirmed 2026-07-09 (buyer screenshot + feedback):** Entering a VIN on opportunity detail (e.g. `7MUCAAAG7NV022177`) does **not** yet autofill Make/Model/Series or refresh MMR/Max buy. Year may already be present from the listing. Closers expect VIN entry to drive the rest of the workflow without hunting dropdowns.
+> **Confirmed 2026-07-09 (buyer screenshot + feedback); shipped 2026-07-10 (#48):** Entering a VIN on opportunity detail (e.g. `7MUCAAAG7NV022177`) decodes via Cox, fills catalog Make/Model/Series, and remounts valuation for fresh MMR/Max buy. Year may already be present from the listing.
 >
 > **Intuitive dual path (both must work):**
 > 1. **VIN-first** — enter/save a valid VIN → decode → fill Y/M/M/(S) from Cox → persist → run **fresh** MMR + Max buy (item **48**).
@@ -49,7 +49,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active work on **Opportunities queue** (New mode) — `/opportunities` tab filters, counts, and lead freshness. MMR Lab / opportunity detail items 2–39 are complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue tab parity/freshness/latency (**40–43**, **52**), detail VIN-save / refresh bugs (**49–50**), and **VIN → Y/M/M/S + live valuation** (**48**) are done. Next focus is **flag/dismiss bad lead** (**45/47**). MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -57,11 +57,14 @@
 | New-mode client | `web/app/(app)/opportunities/_components/opportunities-client-new.tsx` |
 | Queue tabs + summary | `web/app/(app)/opportunities/_components/opportunities-queue-tabs.tsx` |
 | Table + columns | `web/app/(app)/opportunities/_components/opportunities-table-new.tsx` |
+| Detail client | `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx` |
+| Valuation block | `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx` |
 | Client view filter | `web/lib/opportunities/view-filter.ts` |
 | Page fetch + fallback | `web/lib/app-api/opportunities-page-fetch.ts` |
 | Worker list + view rules | `src/persistence/opportunities.ts` |
 | API route | `src/app/routes.ts` (`GET /app/opportunities`) |
 | Column prefs | `web/lib/opportunities/table-preferences.ts` |
+| Web CI Cursor rule | `.cursor/rules/web-ci-react-effects.mdc` (lint + typecheck before push) |
 
 ### Verify (after each item)
 
@@ -74,6 +77,33 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 ## Active work
 
+### Shipped this sprint (2026-07-06 → 2026-07-10)
+
+| # | Item | Commit(s) | Notes |
+|---|------|-----------|--------|
+| **40–41** | Queue tab count/list parity (Needs action / Mine) | `6486776` | Server `total` + aligned Mine identity |
+| **42** | **Received** timestamp column + sort | `6486776` | Default sort `received_desc` |
+| **49** | VIN cleared on save | `fe50370` (+ CI follow-ups `c374bf3`, `5ead1cd`) | Local detail state from PATCH; during-render prop sync |
+| **50** | Refresh valuation wipe | `fe50370` | Keep prior cards; restore on failure |
+| **43** | Tab switch latency | `e55015b` | `staleTime` 60s, `placeholderData`, hover prefetch, tab spinner |
+| **52** | Double-click / dead UI on tabs | `e55015b` | Optimistic tab selection; shell stays mounted |
+| **48** | VIN → Y/M/M/S + fresh MMR/Max buy | (local) | Decode on VIN blur/save → catalog fill + valuation remount |
+
+**Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
+
+### Still open
+
+| # | Item | Priority | Status |
+|---|------|----------|--------|
+| **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
+| **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
+| **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
+| **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [ ] |
+| **44** | **Listing posted date** — marketplace post time (distinct from Received); ingest may need `posted_at` | **High** | [ ] |
+| **46** | **Cox Y/M/M autofill from listing** — map parser identity to Cox catalog tokens | **High** | [ ] |
+
+**Full status board (incl. shipped):**
+
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **40** | **Needs action** tab — badge/summary shows `(1)` but table lists many rows | **Critical** | [x] |
@@ -84,7 +114,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [ ] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [ ] |
-| **48** | **VIN → Y/M/M/S + fresh MMR/Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [ ] |
+| **48** | **VIN → Y/M/M/S + fresh MMR/Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [x] |
 | **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
 | **50** | **Refresh valuation wipes results (buyer email #4)** — Refresh clears everything and returns nothing | **Critical** | [x] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead + Purchased minimum; fuller list pending from buyer | **High** | [ ] |
@@ -93,7 +123,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
-_Paused until VIN workflow 48 ships:_ UX backlog §4–7 (role nav, shell polish). MMR Lab / opportunity detail items 2–39 complete. See product principle (always-fresh valuation, VIN + YMM paths). Queue tab latency **43/52** shipped 2026-07-09 (web quick wins; Worker SQL push still optional).
+_Paused until flag/dismiss **45/47** ships (or in parallel):_ UX backlog §4–7 (role nav, shell polish). Queue latency **43/52** done (web quick wins; Worker SQL push still optional if network remains slow).
 
 ---
 
@@ -279,9 +309,9 @@ Default queue sort for **Needs action** / **All** should likely be **newest rece
 
 ## 43 — Tab switch latency (queue feels slow)
 
-**Reported:** 2026-07-06 (production New mode, `/opportunities`) — **no code change yet**
+**Reported:** 2026-07-06 (production New mode, `/opportunities`) — **fixed 2026-07-09** (`e55015b`)
 
-**Symptom:**
+**Symptom (before fix):**
 
 - Clicking **Needs action**, **Mine**, **Worth a look**, or **All** waits ~1–3 seconds before the table updates
 - UI feels unresponsive during the gap (no instant feedback or stale rows held in place)
@@ -624,13 +654,15 @@ Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded re
 
 **Reported:** 2026-07-09 (buyer email #2) · **Reconfirmed:** 2026-07-09 screenshot — VIN `7MUCAAAG7NV022177` entered; Year `2021` from listing; Make/Model/Series still “Select…”; no auto valuation refresh.
 
-**Should it autofill + value today?** **No — not implemented yet.** VIN save only persists the VIN string (#49 fixed wipe). Autofill + live valuation is this item. Closers are right to expect it; see **Product principle — identity paths + always-fresh valuation** at top of this doc.
+**Shipped:** 2026-07-10 — VIN blur/save decodes via `POST /app/mmr/vin` → `hydrateVinAutofill` catalog Y/M/M/S → PATCH → Valuation block remounts on identity change for fresh MMR + Max buy.
 
-**Symptom (current prod):**
+**Should it autofill + value today?** **Yes** (after this ship). VIN save persists the VIN string (#49) and now also fills catalog identity + remounts valuation.
+
+**Symptom (before fix):**
 
 - Closer enters VIN, expects **year, make, model, and sometimes series** to fill and **MMR + Max buy** to update
-- Vehicle block saves VIN as text only; Y/M/M/S stay empty or listing-only until manual catalog picks
-- Cox VIN MMR (`POST /app/mmr/vin`) already returns identity on the valuation path, but does **not** write back into Vehicle dropdowns or auto-trigger after VIN save
+- Vehicle block saved VIN as text only; Y/M/M/S stayed empty or listing-only until manual catalog picks
+- Cox VIN MMR (`POST /app/mmr/vin`) already returned identity on the valuation path, but did **not** write back into Vehicle dropdowns or auto-trigger after VIN save
 
 **Expected:**
 
@@ -647,38 +679,40 @@ Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded re
 
 Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFields` from **46** so both land on the same Cox tokens. Wire valuation remount/refresh after identity PATCH so Max buy/MMR stay current.
 
-### Implementation sketch
+### Implementation (shipped)
 
-1. On VIN blur/save (17-char valid): call `POST /app/mmr/vin` and read year/make/model/style from response.
-2. Run catalog resolve; set Vehicle block fields; badge “From VIN” when filled.
-3. Persist via PATCH; then trigger Valuation block live lookup (same as successful identity change — not cache-only).
-4. If decode fails: keep VIN, show inline error; do not clear other fields; do not wipe prior valuation (#49 / #50).
+1. On VIN blur/save (11–17 char valid): `decodeVinToVehicleSelection` → `POST /app/mmr/vin` + `hydrateVinAutofill`.
+2. Set Vehicle block fields; “From VIN” status when filled; persist via existing Save → PATCH.
+3. Detail client remounts Valuation block when vin/year/make/model/style/mileage change.
+4. Failed decode: keep VIN + existing YMM, show inline error; still PATCH VIN if dirty (#49 / #50).
 
 ### Primary files
 
+- `web/app/(app)/opportunities/_components/decode-vin-to-vehicle.ts`
 - `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
 - `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts`
-- `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx` (patch + refresh)
-- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx` (auto-run after identity change)
-- `web/lib/app-api/client.ts` (`lookupMmrByVin` / session helpers)
+- `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx` (valuation identity key)
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx` (auto-run after remount)
+- `web/app/(app)/mmr-lab/_components/hydrate-vin-autofill.ts`
+- `web/lib/app-api/client.ts` (`postMmrVin`)
 - `src/app/routes.ts` (`POST /app/mmr/vin`)
 
 ### Exit criteria
 
-- [ ] Known-good VIN fills Year/Make/Model; Series when Cox provides trim/style
-- [ ] Values match Cox catalog options (dropdowns selected, not orphan free text)
-- [ ] After VIN save/decode, MMR + Max buy refresh to current results without requiring a separate manual hunt
-- [ ] Y/M/M/S-only edits still produce fresh valuation when identity is sufficient
-- [ ] Failed decode does not wipe VIN, existing YMM, or last good valuation
-- [ ] Tests: mock VIN → fields + valuation triggered; invalid VIN → no silent clear
+- [x] Known-good VIN fills Year/Make/Model; Series when Cox provides trim/style
+- [x] Values match Cox catalog options (dropdowns selected, not orphan free text)
+- [x] After VIN save/decode, MMR + Max buy refresh to current results without requiring a separate manual hunt
+- [x] Y/M/M/S-only edits still produce fresh valuation when identity is sufficient _(valuation remount key includes YMM)_
+- [x] Failed decode does not wipe VIN, existing YMM, or last good valuation
+- [x] Tests: mock VIN → fields + valuation triggered; invalid VIN → no silent clear
 
 ---
 
 ## 49 — VIN cleared on save (bug)
 
-**Reported:** 2026-07-09 (buyer email #3) — **no investigation yet**
+**Reported:** 2026-07-09 (buyer email #3) — **fixed 2026-07-09** (`fe50370`)
 
-**Symptom:**
+**Symptom (before fix):**
 
 - User enters VIN on opportunity detail Vehicle block
 - On **Save** (Vehicle block still has explicit Save — commit `4828361`), the VIN field **clears**
@@ -721,9 +755,9 @@ Ship **48** as VIN-driven; reuse `matchCatalogOption` / `resolveParsedVehicleFie
 
 ## 50 — Refresh valuation clears everything / returns nothing (bug)
 
-**Reported:** 2026-07-09 (buyer email #4) — **no investigation yet**
+**Reported:** 2026-07-09 (buyer email #4) — **fixed 2026-07-09** (`fe50370`)
 
-**Symptom:**
+**Symptom (before fix):**
 
 - On opportunity detail Valuation block, **Refresh valuation** clears MMR / Max buy UI and ends with **empty / nothing** instead of refreshed numbers
 - Related history: item **38** (Max buy refresh) and compact cards (item **33**); commit `ffbb88d` / `4e8281f` touched refresh + cache bypass
@@ -819,9 +853,9 @@ Delivered → @Auction → Sold
 
 ## 52 — Double-click / whole-app action lag
 
-**Reported:** 2026-07-09 (buyer email #6)
+**Reported:** 2026-07-09 (buyer email #6) — **queue tabs fixed 2026-07-09** (`e55015b`; same change set as **43**)
 
-**Symptom:**
+**Symptom (before fix):**
 
 - Queue tabs (Needs action → Mine → Worth a look → All) feel **very slow**
 - Actions often seem to need **two clicks** before they “execute”
@@ -905,10 +939,25 @@ Item **43** covers Opportunities tab switch latency (React Query `staleTime` / `
 ### Known issues (deferred)
 
 - Apify `payloadAdapter` price/location fix — **deployed 2026-07-08** (`51db82eb`); monitor `tav.source_runs` for `processed > 0`
-- UX backlog §4–7 — resume after items 43–46 or in parallel if perf is quick
-- `handoff.md` production deploy dates stale — refresh after queue fixes
+- Local uncommitted Apify `payloadAdapter` / `regionMap` WIP + `docs/04-operations/apify.md` — not part of Opportunities sprint; commit separately when ready
+- UX backlog §4–7 — resume after **45/47** (or in parallel once flag/dismiss is clear)
+- `handoff.md` production deploy dates stale — refresh after queue + detail fixes land in prod smoke
+- Item **43** optional: measure p95 tab-switch latency in production after `e55015b`; Worker SQL push only if still slow
+- Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 48 — VIN → Y/M/M/S + fresh MMR/Max buy (2026-07-10)**  
+`decodeVinToVehicleSelection` on Vehicle blur/save; catalog fill via `hydrateVinAutofill`; Valuation remounts on identity key change.
+
+**Items 43 + 52 — Queue tab latency / double-click (2026-07-09)** · `e55015b`  
+Optimistic tab selection, 60s list `staleTime`, ok-only `placeholderData`, hover prefetch, tab spinner. Shell no longer unmounts on view change.
+
+**Items 49 + 50 — VIN save wipe + Refresh valuation blank (2026-07-09)** · `fe50370` (+ `c374bf3`, `5ead1cd`)  
+Detail client applies PATCH to local state; refresh keeps prior MMR/Max buy and restores on failure. Web-ci: during-render prop sync + `ApiResult` narrowing.
+
+**Items 40–42 — Queue count parity + Received (2026-07-06)** · `6486776`  
+Needs action / Mine badge vs table fixed; **Received** column + `received_desc` sort.
 
 **Item 38 — Max buy refresh (2026-06-30)**  
 Refresh valuation suppresses saved `maxbuySummary`, re-runs live Max buy, shows "Live evaluation".

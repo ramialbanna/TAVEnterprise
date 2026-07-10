@@ -22,6 +22,11 @@ import { Label } from "@/components/ui/label";
 
 import { MMR_COLOR_OPTIONS } from "../../mmr-lab/_components/mmr-adjustments";
 import {
+  decodeVinToVehicleSelection,
+  isDecodableVin,
+  normalizeOpportunityVin,
+} from "./decode-vin-to-vehicle";
+import {
   applyVehicleCascadeChange,
   partitionYears,
   useVehicleCatalogOptions,
@@ -45,10 +50,26 @@ type VehicleValues = {
   color: string;
 };
 
+function mileageFromValues(values: VehicleValues): number | null {
+  if (values.mileage === "") return null;
+  const n = Number(values.mileage);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+
+function shouldAttemptVinDecode(values: VehicleValues, initial: VehicleValues): boolean {
+  const vin = normalizeOpportunityVin(values.vin);
+  if (!isDecodableVin(vin)) return false;
+  const vinChanged = vin !== normalizeOpportunityVin(initial.vin);
+  const ymmIncomplete = !values.make.trim() || !values.model.trim();
+  return vinChanged || ymmIncomplete;
+}
+
 /**
  * vAuto-style vehicle identity grid (redesign §3). Y/M/M/S use Cox catalog
  * dropdowns; body type, engine, transmission, and color use static picklists
  * (see `vehicle-attribute-options.ts`). VIN and odometer stay text inputs.
+ *
+ * VIN save/blur (NEXT_STEPS #48): decode → catalog Y/M/M/S → persist via Save.
  */
 export function OpportunityVehicleBlock({
   opportunity,
@@ -80,6 +101,9 @@ export function OpportunityVehicleBlock({
   );
 
   const [values, setValues] = useState(initial);
+  const [decoding, setDecoding] = useState(false);
+  const [decodeError, setDecodeError] = useState<string | null>(null);
+  const [fromVin, setFromVin] = useState(false);
 
   const vehicleSelection: VehicleSelection = {
     year: values.year,
@@ -90,7 +114,7 @@ export function OpportunityVehicleBlock({
   const catalog = useVehicleCatalogOptions(vehicleSelection);
   const { recent: recentYears, older: olderYears } = partitionYears(catalog.years);
   const catalogConnected = catalog.catalogState !== "not_connected";
-  const disabled = !canMutate || pending;
+  const disabled = !canMutate || pending || decoding;
 
   const isDirty = useMemo(() => {
     return (Object.keys(initial) as (keyof VehicleValues)[]).some(
@@ -99,6 +123,16 @@ export function OpportunityVehicleBlock({
   }, [initial, values]);
 
   function updateField<K extends keyof VehicleValues>(key: K, value: VehicleValues[K]) {
+    if (
+      key === "vin" ||
+      key === "year" ||
+      key === "make" ||
+      key === "model" ||
+      key === "style"
+    ) {
+      setDecodeError(null);
+      setFromVin(false);
+    }
     setValues((prev) => {
       if (key === "year" || key === "make" || key === "model" || key === "style") {
         const prevVehicle: VehicleSelection = {
@@ -117,35 +151,89 @@ export function OpportunityVehicleBlock({
     });
   }
 
-  function buildPatch(): PatchOpportunityRequest {
+  function buildPatchFrom(next: VehicleValues): PatchOpportunityRequest {
     const patch: PatchOpportunityRequest = {};
-    if (values.vin !== initial.vin) patch.vin = values.vin.trim() || null;
-    if (values.mileage !== initial.mileage) {
-      const n = Number(values.mileage);
-      patch.mileage = values.mileage === "" || !Number.isFinite(n) ? null : Math.round(n);
+    if (next.vin !== initial.vin) patch.vin = next.vin.trim() || null;
+    if (next.mileage !== initial.mileage) {
+      const n = Number(next.mileage);
+      patch.mileage = next.mileage === "" || !Number.isFinite(n) ? null : Math.round(n);
     }
-    if (values.year !== initial.year) {
-      const n = Number(values.year);
-      patch.year = values.year === "" || !Number.isFinite(n) ? null : Math.round(n);
+    if (next.year !== initial.year) {
+      const n = Number(next.year);
+      patch.year = next.year === "" || !Number.isFinite(n) ? null : Math.round(n);
     }
-    if (values.make !== initial.make) patch.make = values.make.trim() || null;
-    if (values.model !== initial.model) patch.model = values.model.trim() || null;
-    if (values.style !== initial.style) patch.style = values.style.trim() || null;
-    if (values.bodyType !== initial.bodyType) patch.bodyType = values.bodyType.trim() || null;
-    if (values.engine !== initial.engine) patch.engine = values.engine.trim() || null;
-    if (values.transmission !== initial.transmission)
-      patch.transmission = values.transmission.trim() || null;
-    if (values.color !== initial.color) patch.color = values.color.trim() || null;
+    if (next.make !== initial.make) patch.make = next.make.trim() || null;
+    if (next.model !== initial.model) patch.model = next.model.trim() || null;
+    if (next.style !== initial.style) patch.style = next.style.trim() || null;
+    if (next.bodyType !== initial.bodyType) patch.bodyType = next.bodyType.trim() || null;
+    if (next.engine !== initial.engine) patch.engine = next.engine.trim() || null;
+    if (next.transmission !== initial.transmission)
+      patch.transmission = next.transmission.trim() || null;
+    if (next.color !== initial.color) patch.color = next.color.trim() || null;
     return patch;
+  }
+
+  async function applyVinDecode(nextValues: VehicleValues): Promise<VehicleValues> {
+    if (!shouldAttemptVinDecode(nextValues, initial)) {
+      return nextValues;
+    }
+
+    setDecoding(true);
+    setDecodeError(null);
+    try {
+      const result = await decodeVinToVehicleSelection(nextValues.vin, {
+        mileage: mileageFromValues(nextValues),
+        catalogYears: catalog.years,
+      });
+
+      if (!result.ok) {
+        setDecodeError(result.error);
+        setFromVin(false);
+        // Keep VIN + existing YMM; normalize VIN casing in the field.
+        const normalized = normalizeOpportunityVin(nextValues.vin);
+        return normalized === nextValues.vin
+          ? nextValues
+          : { ...nextValues, vin: normalized };
+      }
+
+      setFromVin(true);
+      setDecodeError(null);
+      return {
+        ...nextValues,
+        vin: normalizeOpportunityVin(nextValues.vin),
+        year: result.selection.year,
+        make: result.selection.make,
+        model: result.selection.model,
+        style: result.selection.style,
+      };
+    } finally {
+      setDecoding(false);
+    }
   }
 
   function handleReset() {
     setValues(initial);
+    setDecodeError(null);
+    setFromVin(false);
   }
 
-  function handleSave() {
-    const patch = buildPatch();
+  async function handleSave() {
+    const decoded = await applyVinDecode(values);
+    if (decoded !== values) {
+      setValues(decoded);
+    }
+    const patch = buildPatchFrom(decoded);
     if (Object.keys(patch).length > 0) onSave(patch);
+  }
+
+  async function handleVinBlur() {
+    if (!canMutate || pending || decoding) return;
+    if (!shouldAttemptVinDecode(values, initial)) return;
+
+    const decoded = await applyVinDecode(values);
+    if (decoded !== values) {
+      setValues(decoded);
+    }
   }
 
   function textField(
@@ -163,9 +251,11 @@ export function OpportunityVehicleBlock({
           id={id}
           value={values[key]}
           onChange={(e) => updateField(key, e.target.value)}
+          onBlur={key === "vin" ? () => void handleVinBlur() : undefined}
           disabled={disabled}
           inputMode={opts?.numeric ? "numeric" : undefined}
           className={`h-9 ${opts?.mono ? "font-mono text-xs" : ""}`}
+          autoComplete={key === "vin" ? "off" : undefined}
         />
       </div>
     );
@@ -242,14 +332,27 @@ export function OpportunityVehicleBlock({
   const makeOptions = selectOptionsWithLegacy(catalog.makes, values.make);
   const modelOptions = selectOptionsWithLegacy(catalog.models, values.model);
   const styleOptions = selectOptionsWithLegacy(catalog.styles, values.style);
+  const displayError = decodeError ?? error;
 
   return (
     <div className="space-y-4">
-      {error ? (
+      {displayError ? (
         <div className="flex items-start gap-2 rounded-md border border-status-error/30 bg-status-error-bg px-3 py-2 text-sm text-status-error">
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-          <span>{error}</span>
+          <span>{displayError}</span>
         </div>
+      ) : null}
+
+      {fromVin ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          Year / make / model / series filled from VIN.
+        </p>
+      ) : null}
+
+      {decoding ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          Decoding VIN…
+        </p>
       ) : null}
 
       {!catalogConnected && catalog.reason ? (
@@ -272,7 +375,7 @@ export function OpportunityVehicleBlock({
           return (
             <div className="space-y-1">
               <Label htmlFor={id} className="text-xs text-muted-foreground">
-                Year
+                Year{fromVin ? " · From VIN" : ""}
               </Label>
               <select
                 id={id}
@@ -311,15 +414,22 @@ export function OpportunityVehicleBlock({
           );
         })()}
 
-        {selectField("vehicle-make", "Make", values.make, (v) => updateField("make", v), makeOptions, {
-          disabled: !values.year,
-          loading: catalog.loading === "makes",
-          placeholder: !values.year ? "Select year first" : "Select make",
-        })}
+        {selectField(
+          "vehicle-make",
+          fromVin ? "Make · From VIN" : "Make",
+          values.make,
+          (v) => updateField("make", v),
+          makeOptions,
+          {
+            disabled: !values.year,
+            loading: catalog.loading === "makes",
+            placeholder: !values.year ? "Select year first" : "Select make",
+          },
+        )}
 
         {selectField(
           "vehicle-model",
-          "Model",
+          fromVin ? "Model · From VIN" : "Model",
           values.model,
           (v) => updateField("model", v),
           modelOptions,
@@ -332,7 +442,7 @@ export function OpportunityVehicleBlock({
 
         {selectField(
           "vehicle-style",
-          "Series",
+          fromVin ? "Series · From VIN" : "Series",
           values.style,
           (v) => updateField("style", v),
           styleOptions,
@@ -401,17 +511,17 @@ export function OpportunityVehicleBlock({
           <Button
             type="button"
             size="sm"
-            onClick={handleSave}
-            disabled={!isDirty || pending}
+            onClick={() => void handleSave()}
+            disabled={!isDirty || pending || decoding}
           >
-            Save
+            {decoding ? "Decoding…" : "Save"}
           </Button>
           <Button
             type="button"
             size="sm"
             variant="ghost"
             onClick={handleReset}
-            disabled={!isDirty || pending}
+            disabled={!isDirty || pending || decoding}
           >
             Reset
           </Button>

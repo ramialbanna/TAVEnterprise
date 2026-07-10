@@ -286,7 +286,20 @@ export function OpportunityDetailClientNew({
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Valuation" description="MMR + Max buy summary">
-        <OpportunityValuationBlock key={opportunity.id} opportunity={opportunity} />
+        {/* Remount when valuation identity changes so MMR/Max buy auto-run fresh
+            after VIN decode or Y/M/M/S save (NEXT_STEPS #48). */}
+        <OpportunityValuationBlock
+          key={[
+            opportunity.id,
+            opportunity.vin ?? "",
+            opportunity.year ?? "",
+            opportunity.make ?? "",
+            opportunity.model ?? "",
+            opportunity.style ?? "",
+            opportunity.mileage ?? "",
+          ].join("|")}
+          opportunity={opportunity}
+        />
       </CollapsibleBlock>
 
       <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
