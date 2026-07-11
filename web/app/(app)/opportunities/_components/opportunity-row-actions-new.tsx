@@ -34,6 +34,7 @@ export function OpportunityRowActionsNew({
           title="View listing"
           asChild
           onClick={(event) => event.stopPropagation()}
+          onAuxClick={(event) => event.stopPropagation()}
         >
           <a href={row.listingUrl} target="_blank" rel="noopener noreferrer">
             <ExternalLink className="size-3.5" />

@@ -148,7 +148,7 @@ export function OpportunitiesClientNew({
   const viewerUserId = viewerOpts?.viewerUserId ?? null;
 
   const query = useQuery({
-    queryKey: [queryKeys.opportunitiesPage(listFilter), viewerUserId] as const,
+    queryKey: queryKeys.opportunitiesPage(listFilter, viewerUserId),
     queryFn: () => listOpportunitiesPage(listFilter, viewerOpts),
     initialData: matchesInitialFetch ? initial : undefined,
     enabled: view !== "mine" || meQuery.isSuccess,
@@ -172,7 +172,7 @@ export function OpportunitiesClientNew({
         sort,
       });
       void queryClient.prefetchQuery({
-        queryKey: [queryKeys.opportunitiesPage(filter), viewerUserId] as const,
+        queryKey: queryKeys.opportunitiesPage(filter, viewerUserId),
         queryFn: () => listOpportunitiesPage(filter, viewerOpts),
         staleTime: LIST_STALE_TIME_MS,
       });
@@ -183,18 +183,18 @@ export function OpportunitiesClientNew({
   const summaryQueries = useQueries({
     queries: [
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "needs_action" })), viewerUserId] as const,
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "needs_action" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" }), viewerOpts),
         staleTime: LIST_STALE_TIME_MS,
       },
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "mine" })), viewerUserId] as const,
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "mine" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" }), viewerOpts),
         enabled: meQuery.isSuccess,
         staleTime: LIST_STALE_TIME_MS,
       },
       {
-        queryKey: [queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" })), viewerUserId] as const,
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" }), viewerOpts),
         staleTime: LIST_STALE_TIME_MS,
       },

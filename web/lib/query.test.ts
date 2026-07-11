@@ -18,6 +18,29 @@ describe("queryKeys", () => {
       "historical-sales",
       { year: 2026, make: "Ford" },
     ]);
+    expect(queryKeys.opportunitiesPage({ view: "needs_action" })).toEqual([
+      "opportunities-page",
+      { view: "needs_action" },
+      null,
+    ]);
+    expect(queryKeys.opportunitiesPage({ view: "mine" }, "u1")).toEqual([
+      "opportunities-page",
+      { view: "mine" },
+      "u1",
+    ]);
+  });
+
+  it("opportunities-page keys match invalidateQueries prefix", () => {
+    const client = makeQueryClient();
+    const key = queryKeys.opportunitiesPage(
+      { limit: 25, offset: 0, sort: "received_desc", view: "needs_action" },
+      "u1",
+    );
+    client.setQueryData(key, { ok: true });
+    // Nested [["opportunities-page", …], viewer] would NOT match this prefix.
+    expect(client.isFetching({ queryKey: ["opportunities-page"] })).toBe(0);
+    void client.invalidateQueries({ queryKey: ["opportunities-page"] });
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
   });
 });
 

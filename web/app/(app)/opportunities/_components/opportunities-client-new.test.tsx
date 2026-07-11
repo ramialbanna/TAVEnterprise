@@ -27,10 +27,11 @@ vi.mock("@/lib/app-api/client", async (importOriginal) => {
   };
 });
 
-import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
+import { dismissOpportunity, getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
 
 const mockedList = vi.mocked(listOpportunitiesPage);
 const mockedMe = vi.mocked(getAppMe);
+const mockedDismiss = vi.mocked(dismissOpportunity);
 
 const sampleRow: OpportunityRow = {
   id: "listing-1",
@@ -200,6 +201,60 @@ describe("OpportunitiesClientNew", () => {
     expect(replace).toHaveBeenCalled();
 
     resolveWorth?.(page([], 0));
+
+    await waitFor(() => {
+      expect(screen.queryByText("2019 Honda Accord")).not.toBeInTheDocument();
+    });
+  });
+
+  it("removes a flagged lead from the queue without a full page refresh", async () => {
+    const user = userEvent.setup();
+    let dismissed = false;
+    mockedDismiss.mockImplementation(async () => {
+      dismissed = true;
+      return {
+        ok: true,
+        status: 200,
+        data: { ...sampleRow, status: "bad_lead" },
+      };
+    });
+
+    mockedList.mockImplementation(async (filter) => {
+      if (filter?.view === "worth_a_look") return page([], 0);
+      if (filter?.view === "mine") return page([], 0);
+      if (filter?.view === "all" && filter.limit === 100) {
+        return dismissed ? page([], 0) : page([sampleRow], 1);
+      }
+      if (filter?.limit === 1) {
+        const total = filter.view === "needs_action" && !dismissed ? 1 : 0;
+        return page([], total);
+      }
+      return dismissed ? page([], 0) : page([sampleRow], 1);
+    });
+
+    render(
+      <OpportunitiesClientNew
+        initial={page([sampleRow], 1)}
+        initialView="needs_action"
+      />,
+      { wrapper: TestWrapper },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
+      expect(screen.getByLabelText("Flag bad lead")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Flag bad lead"));
+    await user.click(screen.getByRole("radio", { name: /Dealer/i }));
+    await user.click(screen.getByRole("button", { name: /^Flag bad lead$/i }));
+
+    await waitFor(() => {
+      expect(mockedDismiss).toHaveBeenCalledWith("listing-1", {
+        reason: "dealer",
+        notes: undefined,
+      });
+    });
 
     await waitFor(() => {
       expect(screen.queryByText("2019 Honda Accord")).not.toBeInTheDocument();

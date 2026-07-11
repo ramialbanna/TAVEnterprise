@@ -140,4 +140,47 @@ describe("OpportunitiesTableNew", () => {
     expect(link).not.toBeNull();
     expect(link).toHaveAttribute("href", "/opportunities/listing-1");
   });
+
+  it("middle-click on listing icon opens posting, not detail", () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+
+    render(
+      <OpportunitiesTableNew
+        rows={[baseRow]}
+        total={1}
+        offset={0}
+        limit={25}
+        sort="spread_desc"
+        claimActor={null}
+        onSelect={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onPaginationChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onClaim={vi.fn()}
+        onDismiss={vi.fn()}
+        queueView="needs_action"
+      />,
+    );
+
+    const listingLinks = screen.getAllByLabelText("View listing");
+    fireEvent(
+      listingLinks[0]!,
+      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }),
+    );
+    expect(openSpy).not.toHaveBeenCalled();
+
+    const row = document.querySelector('tr[role="link"]');
+    expect(row).not.toBeNull();
+    fireEvent(
+      row!,
+      new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 }),
+    );
+    expect(openSpy).toHaveBeenCalledWith(
+      "/opportunities/listing-1",
+      "_blank",
+      "noopener,noreferrer",
+    );
+
+    openSpy.mockRestore();
+  });
 });

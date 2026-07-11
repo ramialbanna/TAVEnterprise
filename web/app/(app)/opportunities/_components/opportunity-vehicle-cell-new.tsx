@@ -75,6 +75,7 @@ export function OpportunityVehicleCellNew({
             aria-label="View listing"
             title="View listing"
             onClick={(event) => event.stopPropagation()}
+            onAuxClick={(event) => event.stopPropagation()}
           >
             <ExternalLink className="size-3.5" />
           </a>

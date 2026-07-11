@@ -64,8 +64,9 @@ export const queryKeys = {
   ingestRuns: (filter?: IngestRunsKeyFilter) => ["ingest-runs", filter ?? {}] as const,
   ingestRun: (id: string) => ["ingest-run", id] as const,
   opportunities: (filter?: OpportunitiesKeyFilter) => ["opportunities", filter ?? {}] as const,
-  opportunitiesPage: (filter?: OpportunitiesPageKeyFilter) =>
-    ["opportunities-page", filter ?? {}] as const,
+  /** Flat key so `invalidateQueries({ queryKey: ["opportunities-page"] })` matches (incl. viewer). */
+  opportunitiesPage: (filter?: OpportunitiesPageKeyFilter, viewerUserId?: string | null) =>
+    ["opportunities-page", filter ?? {}, viewerUserId ?? null] as const,
   opportunity: (id: string) => ["opportunity", id] as const,
   appUsers: ["app-users"] as const,
   appMe: ["app-me"] as const,

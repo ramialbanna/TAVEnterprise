@@ -366,10 +366,12 @@ export function OpportunitiesTableNew({
                       openDetail(event);
                     }}
                     onAuxClick={(event) => {
-                      if (event.button === 1) {
-                        event.preventDefault();
-                        openDetail({ button: 1 });
-                      }
+                      if (event.button !== 1) return;
+                      // Let listing / external links handle middle-click themselves.
+                      const target = event.target as HTMLElement | null;
+                      if (target?.closest('a[target="_blank"]')) return;
+                      event.preventDefault();
+                      openDetail({ button: 1 });
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
