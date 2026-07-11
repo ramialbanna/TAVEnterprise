@@ -24,6 +24,10 @@ export function paginateOpportunityRowsClient(
         return (
           new Date(b.receivedAt ?? 0).getTime() - new Date(a.receivedAt ?? 0).getTime()
         );
+      case "posted_desc":
+        return (
+          new Date(b.postedAt ?? 0).getTime() - new Date(a.postedAt ?? 0).getTime()
+        );
       default:
         return 0;
     }

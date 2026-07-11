@@ -25,7 +25,7 @@ import {
   writeColumnVisibility,
   writeTableDensity,
 } from "@/lib/opportunities/table-preferences";
-import { formatNumber, formatMoney, formatDateTime } from "@/lib/format";
+import { formatNumber, formatMoney, formatDateTime, formatRelativeTime, EMPTY_VALUE } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { emptyStateForView } from "@/lib/opportunities/empty-state-new";
@@ -220,6 +220,20 @@ export function OpportunitiesTableNew({
         return <SpreadSignalCell spread={row.spread} />;
       case "finalScore":
         return formatNumber(row.finalScore);
+      case "postedAt": {
+        const relative = formatRelativeTime(row.postedAt);
+        if (!row.postedAt || relative === EMPTY_VALUE) return EMPTY_VALUE;
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-default tabular-nums" title={formatDateTime(row.postedAt)}>
+                {relative}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top">{formatDateTime(row.postedAt)}</TooltipContent>
+          </Tooltip>
+        );
+      }
       case "receivedAt":
         return formatDateTime(row.receivedAt);
       case "assignedCloserName":
@@ -264,6 +278,12 @@ export function OpportunitiesTableNew({
     }
     if (columnId === "finalScore") {
       return <HeaderWithTooltip label={col.label} tooltip={TOOLTIPS.finalScore} />;
+    }
+    if (columnId === "postedAt") {
+      return <HeaderWithTooltip label={col.label} tooltip={TOOLTIPS.postedAt} />;
+    }
+    if (columnId === "receivedAt") {
+      return <HeaderWithTooltip label={col.label} tooltip={TOOLTIPS.receivedAt} />;
     }
     return col.label;
   }

@@ -2,7 +2,7 @@
 
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import { formatRegion } from "@/lib/copy/opportunities-labels";
-import { formatDateTime, formatMoney, formatNumber } from "@/lib/format";
+import { formatDateTime, formatMoney, formatNumber, formatRelativeTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -64,6 +64,15 @@ export function OpportunityListingBlock({
       <DetailRow label="Submitted by" value={opportunity.submittedBy ?? "—"} />
       <DetailRow label="Entry method" value={entryMethodLabel} />
       <DetailRow label="Assigned closer" value={opportunity.assignedCloserName ?? "—"} />
+      <DetailRow
+        label="Listed"
+        value={
+          opportunity.postedAt
+            ? `${formatRelativeTime(opportunity.postedAt)} (${formatDateTime(opportunity.postedAt)})`
+            : "—"
+        }
+      />
+      <DetailRow label="Received" value={formatDateTime(opportunity.receivedAt)} />
       <DetailRow label="First seen" value={formatDateTime(opportunity.firstSeenAt)} />
       <DetailRow label="Last seen" value={formatDateTime(opportunity.lastSeenAt)} />
       <DetailRow label="Seen count" value={formatNumber(opportunity.seenCount) ?? "—"} />

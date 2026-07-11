@@ -849,6 +849,54 @@ describe("parseFacebookItem — rec.trim override", () => {
   });
 });
 
+// ── Group E3: postedAt (item 44 — Listed date) ────────────────────────────────
+
+describe("parseFacebookItem — postedAt", () => {
+  it("E3.1: persists postedAt ISO from payloadAdapter onto NormalizedListingInput", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e3-1",
+        title: "2020 Toyota Camry SE",
+        price: "$18,000",
+        postedAt: "2026-07-11T06:14:23.000Z",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.postedAt).toBe("2026-07-11T06:14:23.000Z");
+  });
+
+  it("E3.2: accepts posted_at / listedAt aliases", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e3-2",
+        title: "2020 Toyota Camry SE",
+        price: "$18,000",
+        posted_at: "2026-07-10T12:00:00Z",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.postedAt).toBe("2026-07-10T12:00:00.000Z");
+  });
+
+  it("E3.3: omits postedAt when absent (no fake timestamp)", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/e3-3",
+        title: "2020 Toyota Camry SE",
+        price: "$18,000",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.postedAt).toBeUndefined();
+  });
+});
+
 // ── Group F: Schema drift detection ──────────────────────────────────────────
 
 describe("detectFacebookDrift", () => {

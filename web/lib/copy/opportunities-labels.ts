@@ -68,6 +68,8 @@ export const TOOLTIPS = {
   mmrValue: "MMR — Manheim Market Report wholesale estimate",
   spread: "Difference between asking price and wholesale value",
   finalScore: "Combined deal score from price, vehicle, and market signals",
+  postedAt: "When the seller posted on Facebook Marketplace",
+  receivedAt: "When TAV created or surfaced this opportunity",
 } as const;
 
 export const PAGE_COPY = {

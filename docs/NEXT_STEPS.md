@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-11 · **Focus:** **55** Phase A shipped (flag off by default — turn on for soak); **44** Listed date; **54** remaining; **46**; **51** TBD
+**Last updated:** 2026-07-11 · **Focus:** **44** Listed date shipped (new ingests); **55** soak on; **54** remaining; **46**; **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-11): **40–43**, **45/47**, **48–50**, **52–53** shipped; **54** slices 1–2 on `main`; **44** decided (Listed = `listing_date_ms` → `posted_at`, relative time — ingest still open). **55** Phase A shipped: `SCRAPER_REVIEW_MODE` + **Scraper review** tab (`view=scraper_review`) — recent no-MMR scrapes + soft near-miss economics fails; lead upsert unchanged; flag **off** by default. **Next:** enable flag for soak and/or **44**. Also **54** ingest invent stop. See active table below.
+> Sprint so far (through 2026-07-11): **40–43**, **45/47**, **48–50**, **52–53** shipped; **54** slices 1–2 on `main`; **44** shipped (Listed = `listing_date_ms` → `posted_at`, relative time on queue + detail; new Facebook ingests only). **55** Phase A shipped + soak enabled. **Next:** **54** ingest invent stop. Also **46** / **51**. See active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–43**, **45/47–50**, **52–53** are done. **54** in progress (slices 1–2 shipped; ingest invent + app/MMR Lab gates remain). Also open: **44**, **46**, **51**, **55** (Phase A shipped — enable flag for soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–45**, **47–50**, **52–53** are done. **54** in progress (slices 1–2 shipped; ingest invent + app/MMR Lab gates remain). Also open: **46**, **51**, **55** (Phase A + soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -94,6 +94,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **45/47** | Flag/dismiss bad lead | `3ed1c8f` | Queue Flag → reason dialog → `bad_lead`; excluded from default views |
 | **53** | Salesperson / Appraiser directory | `24db7a7`, `d557463` | Dropdowns + admin CRUD; roster `role = both` |
 | **54** slices 1–2 | Max buy no invent + detail UX | `af362d7`, `9bc8bd3` | Null mileage / unknown band; saved ingest MMR; catalog case-match |
+| **44** | **Listed** date (seller post time) | _(this change)_ | `listing_date_ms` → `posted_at`; relative Listed column + detail |
 
 **Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
 
@@ -102,9 +103,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **54** | **No guessed miles…** — slices 1–2 done; **remaining:** ingest invent stop, app/MMR Lab mileage gates, docs | **Critical** | [~] |
-| **55** | **Scraper review mode** — Phase A: flag + tab shipped (default off); enable for soak; Phase B MMR coverage later | **High** | [~] |
+| **55** | **Scraper review mode** — Phase A + soak; Phase B MMR coverage later | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
-| **44** | **Listing posted date** — **Listed** as relative time from Apify `listing_date_ms` → `posted_at` (ingest gap); keep Received separate | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill from listing** — Phase A case-match partly via **54** `9bc8bd3`; fuller fuzzy/title→Cox still open | **High** | [~] |
 
 **Full status board (incl. shipped):**
@@ -115,7 +115,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **41** | **Mine** tab — badge shows `(1)` but tab body is empty | **Critical** | [x] |
 | **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
 | **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
-| **44** | **Listing posted date** — **Listed** relative time from seller post (`listing_date_ms`); distinct from Received | **High** | [ ] |
+| **44** | **Listing posted date** — **Listed** relative time from seller post (`listing_date_ms`); distinct from Received | **High** | [x] |
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [x] |
 | **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [~] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [x] |
@@ -389,7 +389,8 @@ Default queue sort for **Needs action** / **All** should likely be **newest rece
 ## 44 — Listing posted date (when seller listed on marketplace)
 
 **Reported:** 2026-07-08 (production New mode, `/opportunities`)  
-**Decided:** 2026-07-11 (Apify run analysis + buyer preference) — **no code change yet**
+**Decided:** 2026-07-11 (Apify run analysis + buyer preference)  
+**Shipped:** 2026-07-11 — ingest + queue **Listed** + detail; new Facebook ingests only (no historical backfill)
 
 **Symptom:**
 
@@ -411,7 +412,7 @@ Actor: `raidr-api/custom-vehicle-scraper`.
 | `_fetchedAt` | When the scraper fetched the item | Yes — **not** post time |
 | Our `first_seen_at` / Received | When TAV ingested / surfaced | Yes — **not** post time |
 
-Example ([Honda Civic listing](https://www.facebook.com/marketplace/item/1030036669435233/)): `listing_date_ms` → `2026-07-11T06:14:23Z` (~“3 hours ago” on FB); `_fetchedAt` → `06:30Z`; our `posted_at` → **null**.
+Example ([Honda Civic listing](https://www.facebook.com/marketplace/item/1030036669435233/)): `listing_date_ms` → `2026-07-11T06:14:23Z` (~“3 hours ago” on FB); `_fetchedAt` → `06:30Z`; our `posted_at` was **null** before this fix.
 
 **Do not depend on detail mode for Listed date** — `listing_date_ms` is enough. Detail mode is optional for description/condition.
 
@@ -422,9 +423,9 @@ Example ([Honda Civic listing](https://www.facebook.com/marketplace/item/1030036
 | `receivedAt` | `leads.created_at` / manual submission / `first_seen_at` fallback | When TAV made this actionable | ✅ Yes (item 42) — keep |
 | `firstSeenAt` | `normalized_listings.first_seen_at` | First ingest into TAV | Hidden by default |
 | `lastSeenAt` | `normalized_listings.last_seen_at` | Last scrape | Hidden by default |
-| `posted_at` | `normalized_listings.posted_at` | **Seller listing post time** | ❌ **Not populated / not exposed** |
+| `posted_at` | `normalized_listings.posted_at` ← Apify `listing_date_ms` | **Seller listing post time** | ✅ **Listed** column |
 
-**Ingest gap (confirmed 2026-07-11):** `payloadAdapter.ts` already maps `listing_date_ms` → `postedAt`, but `parseFacebookItem` (`src/sources/facebook.ts`) does **not** copy `postedAt` into `NormalizedListingInput` — so `posted_at` is **0/9613** Facebook rows in Supabase even though Apify sends the timestamp.
+**Ingest gap (fixed 2026-07-11):** `payloadAdapter.ts` already mapped `listing_date_ms` → `postedAt`; `parseFacebookItem` now copies `postedAt` / `posted_at` / `listedAt` into `NormalizedListingInput.postedAt` so `p_posted_at` persists.
 
 ### Product decision (locked 2026-07-11)
 
@@ -434,40 +435,40 @@ Example ([Honda Civic listing](https://www.facebook.com/marketplace/item/1030036
 | Display format | **Relative** via existing `formatRelativeTime` — `just now`, `5 minutes ago`, `3 hours ago` |
 | Exact time | Tooltip (and detail page) shows absolute datetime |
 | Received | Keep available (column or detail) — “when TAV got it”; not the main glance metric |
-| Sort default (optional follow-up) | Prefer newest **Listed** for scraper freshness; keep Received sort available |
+| Sort | `posted_desc` available in sort dropdown |
 
 Tooltip copy: **Listed** = when the seller posted on Facebook; **Received** = when TAV created/surfaced the opportunity.
 
 ### Implementation sketch
 
-1. **Ingest:** extend `parseFacebookItem` to pass `postedAt` / `posted_at` / `listedAt` into `NormalizedListingInput.postedAt` (adapter already maps `listing_date_ms`).
-2. **Worker:** expose `postedAt` on `OpportunityRow` / `OpportunityDetail` from `normalized_listings.posted_at`.
-3. **Web schema:** add `postedAt` to `OpportunityRow` in `web/lib/app-api/schemas.ts`.
-4. **Table:** **Listed** column — default visible; render with `formatRelativeTime(postedAt)`; tooltip = absolute `formatDateTime`.
-5. **Sort (nice-to-have):** `posted_desc` / `listed_desc` in Worker + sort dropdown.
-6. **Detail:** show Listed (relative + absolute) near Received in listing/provenance block.
-7. **Backfill:** new ingests only unless a one-off backfill from retained Apify datasets is requested later.
+1. **Ingest:** ✅ `parseFacebookItem` passes `postedAt` into `NormalizedListingInput`
+2. **Worker:** ✅ expose `postedAt` on `OpportunityRow` / `OpportunityDetail` from `normalized_listings.posted_at`
+3. **Web schema:** ✅ `postedAt` on `OpportunityRow`
+4. **Table:** ✅ **Listed** column — relative + absolute tooltip
+5. **Sort:** ✅ `posted_desc`
+6. **Detail:** ✅ Listed + Received on listing block
+7. **Backfill:** new ingests only (optional Apify backfill later)
 
 ### Primary files
 
 - `src/sources/facebook.ts` (`parseFacebookItem` — persist posted time)
 - `src/apify/payloadAdapter.ts` (already maps `listing_date_ms` → `postedAt`)
 - `src/persistence/opportunities.ts` (`LISTING_COLUMNS`, `mapToOpportunityRow`, sorts)
-- `src/app/routes.ts` (`OPPORTUNITY_SORTS` if adding listed sort)
+- `src/app/routes.ts` (`OPPORTUNITY_SORTS`)
 - `web/lib/app-api/schemas.ts`
-- `web/lib/format.ts` (`formatRelativeTime` — already exists)
+- `web/lib/format.ts` (`formatRelativeTime`)
 - `web/lib/opportunities/table-preferences.ts`
 - `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`
-- Detail listing / provenance block
+- `web/app/(app)/opportunities/_components/opportunity-listing-block.tsx`
 
 ### Exit criteria
 
-- [ ] `posted_at` populated on **new** Facebook ingests (verify in Supabase after ingest fix)
-- [ ] **Listed** column shows relative time (e.g. `3 hours ago`) for scraper leads
-- [ ] Hover/tooltip shows exact datetime
-- [ ] Distinct from **Received** — copy documents both
-- [ ] Manual submissions / missing source post time show `—` (no fake timestamp)
-- [ ] Does **not** require `fetchDetailedItems` to be on
+- [x] `posted_at` populated on **new** Facebook ingests (verify in Supabase after ingest fix)
+- [x] **Listed** column shows relative time (e.g. `3 hours ago`) for scraper leads
+- [x] Hover/tooltip shows exact datetime
+- [x] Distinct from **Received** — copy documents both
+- [x] Manual submissions / missing source post time show `—` (no fake timestamp)
+- [x] Does **not** require `fetchDetailedItems` to be on
 
 ---
 
@@ -1223,6 +1224,9 @@ Ops baseline still stands for **production lead quality**: [diagnostics.md](04-o
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 44 — Listing posted date / Listed column (2026-07-11)**  
+Facebook ingest persists `postedAt` (`listing_date_ms` → `posted_at`). Queue **Listed** shows relative time + absolute tooltip; detail listing block shows Listed + Received; sort `posted_desc`. New ingests only — historical rows stay null until re-scraped or backfilled.
 
 **Item 55 Phase A — Scraper review mode (2026-07-11)**  
 `SCRAPER_REVIEW_MODE` (default off) + Opportunities **Scraper review** tab. Recent (48h) no-MMR scrapes and soft near-miss economics fails appear with clear badges; Needs action / All stay clean; lead upsert unchanged. Enable in wrangler `[vars]` for soak.

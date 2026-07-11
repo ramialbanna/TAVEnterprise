@@ -378,6 +378,8 @@ export const OpportunityRowSchema = z.object({
   firstSeenAt: z.string().nullable(),
   lastSeenAt: z.string().nullable(),
   receivedAt: z.string().nullable().optional(),
+  /** Seller marketplace post time (distinct from Received). */
+  postedAt: z.string().nullable().optional(),
   seenCount: z.number().nullable(),
   listingUrl: z.string().nullable(),
   entryMethod: z.enum(["manual", "scraper", "import"]).nullable().optional(),

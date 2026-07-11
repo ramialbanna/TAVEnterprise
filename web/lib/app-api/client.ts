@@ -80,7 +80,12 @@ export type OpportunitiesFilter = {
   status?: string;
 };
 
-export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
+export type OpportunitySort =
+  | "spread_desc"
+  | "score_desc"
+  | "last_seen_desc"
+  | "received_desc"
+  | "posted_desc";
 export type OpportunityView =
   | "needs_action"
   | "mine"

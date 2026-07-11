@@ -6,6 +6,7 @@ export type TableColumnId =
   | "mmrValue"
   | "spread"
   | "finalScore"
+  | "postedAt"
   | "receivedAt"
   | "assignedCloserName"
   | "claimedBy"
@@ -21,6 +22,7 @@ export const DEFAULT_PAGE_SIZE = 25;
 export const PAGE_SIZE_OPTIONS = [25, 50] as const;
 
 export const SORT_OPTIONS: readonly { value: OpportunitySort; label: string }[] = [
+  { value: "posted_desc", label: "Listed (newest first)" },
   { value: "received_desc", label: "Received (newest first)" },
   { value: "spread_desc", label: "Room to make (best first)" },
   { value: "score_desc", label: "Deal score (highest first)" },
@@ -38,6 +40,7 @@ export const TABLE_COLUMNS: readonly {
   { id: "mmrValue", label: "Wholesale value", defaultVisible: true, hideable: true },
   { id: "spread", label: "Room to make", defaultVisible: true, hideable: true },
   { id: "finalScore", label: "Deal score", defaultVisible: true, hideable: true },
+  { id: "postedAt", label: "Listed", defaultVisible: true, hideable: true },
   { id: "receivedAt", label: "Received", defaultVisible: true, hideable: true },
   { id: "assignedCloserName", label: "Assignee", defaultVisible: true, hideable: true },
   { id: "claimedBy", label: "Working by", defaultVisible: true, hideable: true },

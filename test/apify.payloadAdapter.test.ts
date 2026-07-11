@@ -235,6 +235,7 @@ describe("mapped raidr-api item is consumable by parseFacebookItem", () => {
     expect(r.listing.make).toBe("toyota");
     expect(r.listing.model).toBe("camry");
     expect(r.listing.mileage).toBe(62_000);
+    expect(r.listing.postedAt).toBe(new Date(1778443122000).toISOString());
     expect(r.listing.url).toBe(
       "https://www.facebook.com/marketplace/item/1686857085840236/",
     );

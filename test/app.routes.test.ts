@@ -1411,6 +1411,7 @@ const OPPORTUNITY_ROW = {
   firstSeenAt: "2026-05-20T10:00:00.000Z",
   lastSeenAt: "2026-05-21T10:00:00.000Z",
   receivedAt: "2026-05-21T09:00:00.000Z",
+  postedAt: null,
   seenCount: 1,
   listingUrl: "https://example.com/listing/1",
   entryMethod: null,

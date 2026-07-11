@@ -52,6 +52,7 @@ function sampleRow(over: Partial<OpportunityRow> = {}): OpportunityRow {
     firstSeenAt: "2026-05-20T10:00:00.000Z",
     lastSeenAt: "2026-05-21T10:00:00.000Z",
     receivedAt: "2026-05-21T09:00:00.000Z",
+    postedAt: null,
     seenCount: 1,
     listingUrl: null,
     entryMethod: null,
@@ -360,6 +361,16 @@ describe("opportunity list views and pagination", () => {
     ];
     sortOpportunityRows(rows, "received_desc");
     expect(rows.map((r) => r.id)).toEqual(["b", "a"]);
+  });
+
+  it("sortOpportunityRows orders by posted desc", () => {
+    const rows = [
+      sampleRow({ id: "a", postedAt: "2026-05-20T10:00:00.000Z" }),
+      sampleRow({ id: "b", postedAt: "2026-05-22T10:00:00.000Z" }),
+      sampleRow({ id: "c", postedAt: null }),
+    ];
+    sortOpportunityRows(rows, "posted_desc");
+    expect(rows.map((r) => r.id)).toEqual(["b", "a", "c"]);
   });
 
   it("paginateOpportunityRows slices with total", () => {

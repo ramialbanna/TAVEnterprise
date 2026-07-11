@@ -325,6 +325,20 @@ function extractVin(item: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+/** Seller listing post time — ISO string from payloadAdapter (`listing_date_ms`) or aliases. */
+function extractPostedAt(item: Record<string, unknown>): string | undefined {
+  for (const key of ["postedAt", "posted_at", "listedAt"]) {
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const ms = Date.parse(trimmed);
+    if (!Number.isFinite(ms)) continue;
+    return new Date(ms).toISOString();
+  }
+  return undefined;
+}
+
 // ── Schema drift detection ────────────────────────────────────────────────────
 // Fields the Facebook adapter actively reads or recognises as benign.
 // Any top-level key NOT in this set is reported as an unexpected_field drift event.
@@ -453,6 +467,9 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     const trim = explicitTrimRaw.length > 0 ? explicitTrimRaw.toLowerCase() : titleTrim;
     const sourceListingId = extractSourceListingId(rec);
     const vin = extractVin(rec);
+    // payloadAdapter maps listing_date_ms → postedAt before we run; persist so
+    // queue "Listed" can show seller post time (item 44).
+    const postedAt = extractPostedAt(rec);
 
     const listing: NormalizedListingInput = {
       source: "facebook",
@@ -469,6 +486,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
       ...(mileage !== undefined && { mileage }),
       ...(sourceListingId !== undefined && { sourceListingId }),
       ...(vin !== undefined && { vin }),
+      ...(postedAt !== undefined && { postedAt }),
     };
 
     return { ok: true, listing };

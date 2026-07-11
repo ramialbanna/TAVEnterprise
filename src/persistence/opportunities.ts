@@ -70,6 +70,8 @@ export interface OpportunityRow {
   lastSeenAt: string | null;
   /** When the lead/submission became an opportunity (lead.created_at or manual submit). */
   receivedAt: string | null;
+  /** Seller marketplace post time (`normalized_listings.posted_at` ← Apify `listing_date_ms`). */
+  postedAt: string | null;
   seenCount: number | null;
   listingUrl: string | null;
   entryMethod: string | null;
@@ -111,7 +113,12 @@ export interface OpportunityDetail extends OpportunityRow {
   actions: OpportunityActionRecord[];
 }
 
-export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
+export type OpportunitySort =
+  | "spread_desc"
+  | "score_desc"
+  | "last_seen_desc"
+  | "received_desc"
+  | "posted_desc";
 
 export type OpportunityView =
   | "needs_action"
@@ -171,7 +178,7 @@ export interface ScraperReviewMapOptions {
 }
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -502,6 +509,7 @@ function mapToOpportunityRow(
     firstSeenAt: asString(listing.first_seen_at),
     lastSeenAt: asString(listing.last_seen_at),
     receivedAt: resolveReceivedAt(lead, manual, listing),
+    postedAt: asString(listing.posted_at),
     seenCount: scrapeCount,
     listingUrl: asString(listing.listing_url),
     entryMethod: asString(listing.entry_method),
@@ -623,6 +631,8 @@ export function sortOpportunityRows(
         return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
       case "received_desc":
         return (b.receivedAt ?? "").localeCompare(a.receivedAt ?? "");
+      case "posted_desc":
+        return (b.postedAt ?? "").localeCompare(a.postedAt ?? "");
       default:
         return (b.lastSeenAt ?? "").localeCompare(a.lastSeenAt ?? "");
     }
