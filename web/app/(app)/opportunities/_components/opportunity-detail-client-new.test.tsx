@@ -96,6 +96,18 @@ vi.mock("./use-vehicle-catalog", () => ({
     const needle = rawValue.trim().toLowerCase();
     return options.find((o) => o.toLowerCase() === needle) ?? null;
   },
+  pickCatalogOptionFuzzy: (options: string[], rawValue: string | undefined) => {
+    if (!rawValue?.trim()) return null;
+    const needle = rawValue.trim().toLowerCase();
+    return options.find((o) => o.toLowerCase() === needle) ?? null;
+  },
+  buildMmrLabPrefillHref: () => "/mmr-lab",
+  resolveListingToCatalog: vi.fn(async () => ({
+    selection: { year: "", make: "", model: "", style: "" },
+    styleEstimated: false,
+    changedFields: {},
+    unmatched: ["year", "make", "model", "style"],
+  })),
   applyVehicleCascadeChange: (
     prev: { year: string; make: string; model: string; style: string },
     next: { year: string; make: string; model: string; style: string },

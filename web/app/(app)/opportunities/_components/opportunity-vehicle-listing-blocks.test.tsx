@@ -203,6 +203,55 @@ describe("OpportunityVehicleBlock", () => {
     expect(screen.getByRole("option", { name: "1.5L Turbo" })).toBeInTheDocument();
   });
 
+  it("applies listing identity to Cox catalog tokens and saves", async () => {
+    mockedMakes.mockResolvedValue(catalogOk(["Kia"]));
+    mockedModels.mockResolvedValue(catalogOk(["Sportage"]));
+    mockedStyles.mockResolvedValue(catalogOk(["4D SUV FE", "4D SUV LX"]));
+
+    const onSave = vi.fn();
+    render(
+      <OpportunityVehicleBlock
+        {...props({
+          onSave,
+          opportunity: makeDetail({
+            title: "2018 Kia Sportage FE",
+            year: 2018,
+            make: "kia",
+            model: "sportage fe",
+            style: null,
+            vin: null,
+          }),
+        })}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Use listing identity" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Use listing identity" }));
+
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalled();
+    });
+
+    const patch = onSave.mock.calls[0]![0] as Record<string, unknown>;
+    expect(patch.year).toBe(2018);
+    expect(patch.make).toBe("Kia");
+    expect(patch.model).toBe("Sportage");
+    expect(String(patch.style)).toMatch(/FE/i);
+    expect(screen.getByText(/Auto-matched from listing/i)).toBeInTheDocument();
+  });
+
+  it("links to MMR Lab with catalog tokens", async () => {
+    render(<OpportunityVehicleBlock {...props()} />);
+    const link = await screen.findByRole("link", { name: "Open in MMR Lab" });
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/mmr-lab\?/),
+    );
+  });
+
   it("does not save until Save is clicked", async () => {
     const onSave = vi.fn();
     render(<OpportunityVehicleBlock {...props({ onSave })} />);

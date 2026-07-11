@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-11 · **Focus:** **54** remaining shipped (no invent on ingest); **55** soak; **46**; **51** TBD
+**Last updated:** 2026-07-11 · **Focus:** **46** Cox autofill shipped; **55** soak; **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-11): **40–45**, **47–50**, **52–53** shipped; **44** Listed date; **54** complete (Max buy + detail + ingest no invent); **55** Phase A + soak. **Next:** **46** / **51** / Phase B MMR coverage. See active table below.
+> Sprint so far (through 2026-07-11): **40–45**, **47–50**, **52–54** shipped; **44** Listed; **46** Cox listing→catalog autofill (Use listing identity + MMR Lab link); **55** Phase A + soak. **Next:** **51** (buyer checklist) / Phase B MMR coverage. See active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–45**, **47–50**, **52–54** are done. Also open: **46**, **51**, **55** (Phase A + soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–50**, **52–54** are done (**46** Cox autofill included). Also open: **51**, **55** (Phase A + soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -105,7 +105,6 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|----------|--------|
 | **55** | **Scraper review mode** — Phase A + soak; Phase B MMR coverage later | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
-| **46** | **Cox Y/M/M autofill from listing** — Phase A case-match partly via **54** `9bc8bd3`; fuller fuzzy/title→Cox still open | **High** | [~] |
 
 **Full status board (incl. shipped):**
 
@@ -117,7 +116,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
 | **44** | **Listing posted date** — **Listed** relative time from seller post (`listing_date_ms`); distinct from Received | **High** | [x] |
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [x] |
-| **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [~] |
+| **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [x] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [x] |
 | **48** | **VIN → Y/M/M/S + fresh MMR / Max buy** — enter VIN → fill catalog Y/M/M/(S) + live valuation (confirmed UX 2026-07-09) | **Critical** | [x] |
 | **49** | **VIN cleared on save (buyer email #3)** — VIN input empties after save | **Critical** | [x] |
@@ -549,7 +548,7 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 **Reported:** 2026-07-08 (production opportunity detail + MMR Lab)
 
-**Status:** **[~]** Phase A case-match on Vehicle block **shipped via item 54 slice 2** (`9bc8bd3`) — listing `honda`/`odyssey` select as Cox `Honda`/`Odyssey`. Remaining: fuzzy/title→style inference, one-click apply, MMR Lab prefill parity (Phases B–D below).
+**Status:** **Complete 2026-07-11** — Phase A case-match + Phases B–D (`resolveListingToCatalog`, **Use listing identity**, Open in MMR Lab prefill).
 
 **Symptom (original):**
 
@@ -563,64 +562,23 @@ Recommend **A** for v1 unless buyers need a separate "contacted then passed" vs 
 
 | Piece | Status | File |
 |-------|--------|------|
-| Cox catalog dropdowns (Y/M/M/S) | ✅ Shipped on Vehicle block | `opportunity-vehicle-block.tsx`, `use-vehicle-catalog.ts` |
-| Catalog API | ✅ `GET /app/mmr/catalog/years\|makes\|models\|styles` | `src/app/routes.ts` |
-| `matchCatalogOption()` | ✅ Case-insensitive catalog match helper | `use-vehicle-catalog.ts` |
-| Listing → Vehicle block catalog resolution | ✅ **Case-match on load** (54 / `9bc8bd3`) | `opportunity-vehicle-block.tsx` |
-| MMR recompute from detail | ✅ `buildMmrRecomputeRequest` / `opportunity-valuation-block.tsx` | Uses saved vehicle fields |
-| Title → Cox fuzzy / style inference | ❌ Not automated end-to-end | Parser in `src/sources/facebook.ts` ≠ Cox vocab |
-
-### Implementation sketch
-
-**Phase A — Catalog match on load (smallest win):**
-
-1. When Vehicle block mounts (and catalog connected), for each of make/model/style:
-   - Fetch catalog options for current year/make/model cascade
-   - Run `matchCatalogOption(catalogMakes, opportunity.make)` etc.
-   - If match found, pre-select canonical catalog value; badge "Auto-matched from listing" when different from raw parser output
-2. If no catalog match, leave fields empty and show inline hint ("Pick make from Cox catalog — listing said 'sportage fe'")
-
-**Phase B — Trim/style inference:**
-
-1. Use `opportunity.trim` / title remainder + `cleanTrim` logic (already in `payloadAdapter.ts` for Apify detail mode) to suggest style
-2. Optional: call `GET /app/mmr/catalog/styles?year&make&model` and fuzzy-match title tokens against style list (same pattern as MMR Lab item #17 approximate style)
-
-**Phase C — One-click "Apply listing → Cox" + MMR:**
-
-1. Button: **Use listing identity** — runs catalog match cascade, saves patch via existing `PATCH /app/opportunities/:id`, triggers MMR recompute
-2. Wire into `opportunity-valuation-block.tsx` so MMR card can run immediately after autofill without separate save
-
-**Phase D — MMR Lab prefill parity:**
-
-1. Extend existing URL prefill (item 35) so `?year=&make=&model=` params use catalog-resolved tokens, not raw parser strings
-2. Queue row action: "Open in MMR Lab" passes resolved Cox values when available
-
-### Constraints (do not violate)
-
-- Never round MMR adjustment dollars (see critical banner at top of this doc)
-- Autofill is **best-effort** — badge when style is estimated; **do not invent mileage** (item **54**)
-- Failed catalog match must not block manual override
-- Autofill must not silently save wrong Cox identity — show diff when canonical ≠ parsed (e.g. `sportage fe` → `Sportage`)
-
-### Primary files
-
-- `web/app/(app)/opportunities/_components/use-vehicle-catalog.ts` (`matchCatalogOption`, new `resolveListingToCatalog()`)
-- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx`
-- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx`
-- `web/app/(app)/mmr-lab/_components/build-mmr-recompute-request.ts`
-- `web/app/(app)/mmr-lab/_components/mmr-lab-client.tsx` (prefill)
-- `src/apify/payloadAdapter.ts` (`cleanTrim` — consider shared export for title trim cleanup)
-- `docs/07-buybox/MMR-LAB-ARCHITECTURE.md`
+| Cox catalog dropdowns (Y/M/M/S) | ✅ | `opportunity-vehicle-block.tsx`, `use-vehicle-catalog.ts` |
+| `matchCatalogOption` / `pickCatalogOptionFuzzy` | ✅ | `use-vehicle-catalog.ts` |
+| `resolveListingToCatalog` | ✅ | Fuzzy model + style inference + drivetrain variants |
+| Case-match on load | ✅ | Vehicle block (item 54) |
+| **Use listing identity** | ✅ | Apply + PATCH + valuation remount |
+| Open in MMR Lab | ✅ | Catalog-canonical `?year=&make=&model=&style=` or `?vin=` |
+| Manual submit parse match | ✅ | Uses `resolveListingToCatalog` via `resolveParsedVehicleFields` |
 
 ### Exit criteria
 
-- [x] Opening a lead with exact case-insensitive make/model (e.g. `honda` / `odyssey`) pre-selects Cox catalog tokens on Vehicle block (**54** / `9bc8bd3`)
-- [ ] Opening a lead with `2018 Kia Sportage FE` (verbose model/trim) pre-fills Cox make/model/style without manual search (Phases B–C)
-- [ ] MMR YMM lookup succeeds (or fails with clear "no catalog match") from autofill — not silent wrong trim
-- [ ] User sees when autofill changed parser output vs Cox canonical (badge or inline diff)
-- [ ] Manual override still works; autofill never locks fields
-- [ ] Tests: `matchCatalogOption` edge cases + Vehicle block mount with mocked catalog responses
-- [ ] MMR Lab prefill parity (Phase D)
+- [x] Opening a lead with exact case-insensitive make/model (e.g. `honda` / `odyssey`) pre-selects Cox catalog tokens on Vehicle block
+- [x] Opening a lead with `2018 Kia Sportage FE` (verbose model/trim) pre-fills Cox make/model/style via **Use listing identity**
+- [x] MMR YMM lookup uses autofilled catalog tokens (or clear no-match error) — not silent wrong trim
+- [x] User sees when autofill changed parser output vs Cox canonical (badge / inline diff)
+- [x] Manual override still works; autofill never locks fields
+- [x] Tests: `matchCatalogOption` / `resolveListingToCatalog` + Vehicle block apply flow
+- [x] MMR Lab prefill parity (Open in MMR Lab with canonical tokens)
 
 ---
 
@@ -1189,6 +1147,9 @@ Ops baseline still stands for **production lead quality**: [diagnostics.md](04-o
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 46 — Cox Y/M/M autofill (2026-07-11)**  
+`resolveListingToCatalog` (fuzzy model + style + drivetrain variants); Vehicle **Use listing identity** applies + saves + shows parser→Cox diff; **Open in MMR Lab** with canonical query params. Manual submit uses the same resolver.
 
 **Item 54 complete — no invent miles (2026-07-11)**  
 Ingest `workerClient` no longer calls `getMmrMileageData` to invent odometer; YMM/VIN omit mileage when unknown; snapshots store null; badges show Mileage unknown for new rows. Docs: `manheim-cox.md` odometer optional. Historical invented-miles snapshots unchanged.

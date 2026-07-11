@@ -28,9 +28,12 @@ import {
 } from "./decode-vin-to-vehicle";
 import {
   applyVehicleCascadeChange,
+  buildMmrLabPrefillHref,
   matchCatalogOption,
   partitionYears,
+  resolveListingToCatalog,
   useVehicleCatalogOptions,
+  type ListingCatalogResolution,
   type VehicleSelection,
 } from "./use-vehicle-catalog";
 
@@ -106,6 +109,9 @@ export function OpportunityVehicleBlock({
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [decodeError, setDecodeError] = useState<string | null>(null);
   const [fromVin, setFromVin] = useState(false);
+  const [listingMatch, setListingMatch] = useState<ListingCatalogResolution | null>(null);
+  const [listingApplying, setListingApplying] = useState(false);
+  const [listingError, setListingError] = useState<string | null>(null);
 
   const vehicleSelection: VehicleSelection = {
     year: values.year,
@@ -156,6 +162,8 @@ export function OpportunityVehicleBlock({
     ) {
       setDecodeError(null);
       setFromVin(false);
+      setListingMatch(null);
+      setListingError(null);
     }
     setValues((prev) => {
       if (key === "year" || key === "make" || key === "model" || key === "style") {
@@ -247,6 +255,63 @@ export function OpportunityVehicleBlock({
     setValues(initial);
     setDecodeError(null);
     setFromVin(false);
+    setListingMatch(null);
+    setListingError(null);
+  }
+
+  async function handleUseListingIdentity() {
+    if (!canMutate || pending || saveInFlight || listingApplying) return;
+    if (opportunity.year == null || !opportunity.make?.trim() || !opportunity.model?.trim()) {
+      setListingError("Listing needs year, make, and model before catalog match.");
+      return;
+    }
+
+    setListingApplying(true);
+    setListingError(null);
+    setDecodeError(null);
+    try {
+      const resolved = await resolveListingToCatalog({
+        year: opportunity.year,
+        make: opportunity.make,
+        model: opportunity.model,
+        style: opportunity.style,
+        title: opportunity.title,
+      });
+
+      if (!resolved.selection.year || !resolved.selection.make || !resolved.selection.model) {
+        setListingError(
+          `No Cox catalog match for listing — said “${opportunity.make} ${opportunity.model}”. Pick from the dropdowns.`,
+        );
+        setListingMatch(resolved);
+        return;
+      }
+
+      const next: VehicleValues = {
+        ...values,
+        year: resolved.selection.year,
+        make: resolved.selection.make,
+        model: resolved.selection.model,
+        style: resolved.selection.style,
+      };
+      setValues(next);
+      setFromVin(false);
+      setListingMatch(resolved);
+
+      const patch = buildPatchFrom(next);
+      // Always persist resolved identity so valuation remounts even when casing-only.
+      const forcePatch: PatchOpportunityRequest = {
+        ...patch,
+        year: Number(resolved.selection.year),
+        make: resolved.selection.make,
+        model: resolved.selection.model,
+        style: resolved.selection.style || null,
+      };
+      onSave(forcePatch);
+    } catch {
+      setListingError("Could not match listing identity to the Cox catalog.");
+    } finally {
+      setListingApplying(false);
+    }
   }
 
   async function handleSave() {
@@ -370,7 +435,30 @@ export function OpportunityVehicleBlock({
   const makeOptions = selectOptionsWithLegacy(catalog.makes, values.make);
   const modelOptions = selectOptionsWithLegacy(catalog.models, values.model);
   const styleOptions = selectOptionsWithLegacy(catalog.styles, values.style);
-  const displayError = decodeError ?? error;
+  const displayError = decodeError ?? listingError ?? error;
+  const canApplyListing =
+    canMutate &&
+    catalogConnected &&
+    opportunity.year != null &&
+    !!opportunity.make?.trim() &&
+    !!opportunity.model?.trim();
+  const mmrLabHref = buildMmrLabPrefillHref({
+    vin: values.vin || opportunity.vin,
+    selection: {
+      year: values.year,
+      make: values.make,
+      model: values.model,
+      style: values.style,
+    },
+  });
+  const listingDiffParts = listingMatch
+    ? (Object.entries(listingMatch.changedFields) as [
+        keyof typeof listingMatch.changedFields,
+        { from: string; to: string },
+      ][])
+        .filter(([, change]) => change != null)
+        .map(([field, change]) => `${field}: “${change!.from}” → “${change!.to}”`)
+    : [];
 
   return (
     <div className="space-y-4">
@@ -387,9 +475,23 @@ export function OpportunityVehicleBlock({
         </p>
       ) : null}
 
-      {decoding ? (
+      {listingMatch && listingDiffParts.length > 0 ? (
         <p className="text-xs text-muted-foreground" role="status">
-          Decoding VIN…
+          Auto-matched from listing
+          {listingMatch.styleEstimated ? " (style approximated)" : ""}:{" "}
+          {listingDiffParts.join(" · ")}
+        </p>
+      ) : null}
+
+      {listingMatch?.styleEstimated && listingDiffParts.length === 0 ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          Style approximated from listing — confirm series before trusting MMR.
+        </p>
+      ) : null}
+
+      {decoding || listingApplying ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          {listingApplying ? "Matching listing to Cox catalog…" : "Decoding VIN…"}
         </p>
       ) : null}
 
@@ -545,29 +647,51 @@ export function OpportunityVehicleBlock({
       </div>
 
       {canMutate ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="sm"
             onClick={() => void handleSave()}
-            disabled={!isDirty || pending || saveInFlight}
+            disabled={!isDirty || pending || saveInFlight || listingApplying}
           >
             {saveInFlight || decoding ? "Decoding…" : "Save"}
           </Button>
           <Button
             type="button"
             size="sm"
+            variant="outline"
+            onClick={() => void handleUseListingIdentity()}
+            disabled={!canApplyListing || pending || saveInFlight || listingApplying}
+          >
+            Use listing identity
+          </Button>
+          <Button
+            type="button"
+            size="sm"
             variant="ghost"
             onClick={handleReset}
-            disabled={!isDirty || pending || saveInFlight}
+            disabled={!isDirty || pending || saveInFlight || listingApplying}
           >
             Reset
+          </Button>
+          <Button type="button" size="sm" variant="ghost" asChild>
+            <a href={mmrLabHref} target="_blank" rel="noopener noreferrer">
+              Open in MMR Lab
+            </a>
           </Button>
           {isDirty ? (
             <span className="text-xs text-muted-foreground">Unsaved changes</span>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="ghost" asChild>
+            <a href={mmrLabHref} target="_blank" rel="noopener noreferrer">
+              Open in MMR Lab
+            </a>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
