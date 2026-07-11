@@ -524,7 +524,7 @@ status:
 |---|---|---|
 | `not_configured` | No intel binding/URL configured | Operator |
 | `insufficient_params` | No VIN and incomplete YMM | Source data |
-| `mileage_missing` | YMM requires mileage | Source data |
+| `mileage_missing` | Legacy (pre–item 54); unused for new lookups — odometer is optional | — |
 | `trim_missing` | No trim and none derivable from title (Cox YMMT needs a bodyname) | Source data / normalization |
 | `cox_no_data` | Intel 2xx negative envelope (Cox 404 — no match) | Expected (no MMR for this YMM/VIN) |
 | `cox_bad_request` | Intel rejected our request body (400 / `validation_error`) | **Us** (payload/shape) |

@@ -129,23 +129,41 @@ describe("writeValuationSnapshot — core fields", () => {
     expect(payload.raw_response).toEqual({ raw: true });
   });
 
-  it("stores valuation mileage when it differs from missing source listing mileage", async () => {
+  it("stores listing-actual valuation mileage when provided", async () => {
     const { db, insertSpy } = makeDb();
-    const estimatedMileageValuation: ValuationResult = {
+    const withMiles: ValuationResult = {
       ...YMM_VALUATION,
-      mileageUsed: 96_000,
-      isInferredMileage: true,
+      mileageUsed: 62_000,
+      isInferredMileage: false,
     };
 
     await writeValuationSnapshot(db, {
-      normalizedListingId: "nl-estimated-mileage",
-      listing: { ...BASE_LISTING, mileage: undefined },
-      valuation: estimatedMileageValuation,
+      normalizedListingId: "nl-actual-mileage",
+      listing: { ...BASE_LISTING, mileage: 62_000 },
+      valuation: withMiles,
     });
 
     const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
-    expect(payload.mileage).toBe(96_000);
+    expect(payload.mileage).toBe(62_000);
     expect(payload.mmr_value).toBe(12_500);
+  });
+
+  it("stores null mileage when listing and valuation both omit odometer (item 54)", async () => {
+    const { db, insertSpy } = makeDb();
+    const noMiles: ValuationResult = {
+      ...YMM_VALUATION,
+      mileageUsed: null,
+      isInferredMileage: false,
+    };
+
+    await writeValuationSnapshot(db, {
+      normalizedListingId: "nl-unknown-mileage",
+      listing: { ...BASE_LISTING, mileage: undefined },
+      valuation: noMiles,
+    });
+
+    const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.mileage).toBeNull();
   });
 
   it("sets vehicle_candidate_id to null when not provided", async () => {
@@ -255,20 +273,20 @@ describe("writeValuationMissSnapshot", () => {
     expect(payload.mileage).toBe(55_000);
   });
 
-  it("stores estimated lookup mileage on miss rows without changing listing identity fields", async () => {
+  it("stores null lookup mileage on miss when odometer was omitted (item 54)", async () => {
     const { db, insertSpy } = makeDb();
 
     await writeValuationMissSnapshot(db, {
-      normalizedListingId: "nl-miss-estimated-mileage",
+      normalizedListingId: "nl-miss-unknown-mileage",
       listing: { ...BASE_LISTING, mileage: undefined },
       missingReason: "cox_no_data",
       method: "year_make_model",
-      mileageUsed: 96_000,
-      isInferredMileage: true,
+      mileageUsed: null,
+      isInferredMileage: false,
     });
 
     const payload = insertSpy.mock.calls[0]![0] as Record<string, unknown>;
-    expect(payload.mileage).toBe(96_000);
+    expect(payload.mileage).toBeNull();
     expect(payload.year).toBe(2020);
     expect(payload.make).toBe("Honda");
     expect(payload.model).toBe("Civic");

@@ -36,35 +36,13 @@ export interface MmrMileageData {
 }
 
 /**
- * Resolve the mileage value for an MMR lookup, inferring when necessary.
+ * Resolve the mileage value for an MMR lookup when the caller **supplied** a
+ * mileage argument (actual vs invalid → inferred classification).
  *
- * @param modelYear   Vehicle's model year (e.g. 2020).
- * @param listedMiles Mileage as reported by the source listing. May be null,
- *                    undefined, 0, negative, NaN, or non-finite.
- * @param now         Current date. Defaults to `new Date()`. Inject for tests.
- * @returns           `{ value, isInferred, method }`. `value` is always a
- *                    positive integer in the inclusive range
- *                    `[INFERRED_MILEAGE_FLOOR, MAX_MILEAGE_CAP]` when
- *                    inferred. `value` is the rounded integer of `listedMiles`
- *                    when actual.
- *
- * Actual path: triggered when `listedMiles` is a finite number greater than 0.
- * Result is `Math.round(listedMiles)` with `isInferred = false`.
- *
- * Inference path: triggered when `listedMiles` is null, undefined, NaN, 0,
- * negative, or non-finite (Infinity / -Infinity). The estimate is computed by
- * model-year case:
- *
- *   - **Future model year** (`modelYear > currentYear`): returns
- *     `NEXT_YEAR_BASE_MILES` (2,500). Not rounded — the constant is the spec.
- *   - **Current model year** (`modelYear === currentYear`):
- *     `currentMonth * MONTHLY_AVG_MILES`.
- *   - **Older model** (`modelYear < currentYear`):
- *     `(currentYear - modelYear) * US_ANNUAL_AVG_MILES + currentMonth * MONTHLY_AVG_MILES`.
- *
- * For the current-year and older-model cases, the estimate is rounded to the
- * nearest 1,000, then capped at `MAX_MILEAGE_CAP` and floored at
- * `INFERRED_MILEAGE_FLOOR`.
+ * **Item 54:** Do **not** call this to invent miles for ingest or Max buy when
+ * listing mileage is absent. Omit odometer instead (intel `resolveLookupMileage`
+ * already returns null when `mileage === undefined`). This helper remains for
+ * classifying a supplied mileage value (intel worker path).
  */
 export function getMmrMileageData(
   modelYear: number,

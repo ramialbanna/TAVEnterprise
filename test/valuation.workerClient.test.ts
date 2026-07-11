@@ -73,10 +73,10 @@ const ENVELOPE_YMM = {
   cache_hit: true,
 };
 
-const ENVELOPE_YMM_INFERRED = {
+const ENVELOPE_YMM_OMIT_ODOMETER = {
   ...ENVELOPE_YMM,
-  mileage_used: 96_000,
-  is_inferred_mileage: true,
+  mileage_used: null,
+  is_inferred_mileage: false,
 };
 
 const ENVELOPE_NEGATIVE = {
@@ -543,10 +543,8 @@ describe("getMmrValueFromWorker — error cases", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("OUTCOME: YMM path with missing mileage lets intel infer 15k/year mileage and labels the result", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-17T12:00:00.000Z"));
-    mockFetch(200, ENVELOPE_YMM_INFERRED);
+  it("OUTCOME: YMM path with missing mileage omits odometer and does not invent 15k/year miles (item 54)", async () => {
+    mockFetch(200, ENVELOPE_YMM_OMIT_ODOMETER);
     const outcome = await getMmrLookupOutcome(
       { year: 2020, make: "Toyota", model: "Camry", trim: "SE" },
       BASE_ENV,
@@ -554,9 +552,9 @@ describe("getMmrValueFromWorker — error cases", () => {
     expect(outcome.kind).toBe("hit");
     if (outcome.kind !== "hit") return;
     expect(outcome.result.mmrValue).toBe(16_000);
-    expect(outcome.result.mileageUsed).toBe(96_000);
-    expect(outcome.result.isInferredMileage).toBe(true);
-    expect(outcome.result.mileageMethod).toBe("estimated_annual_average");
+    expect(outcome.result.mileageUsed).toBeNull();
+    expect(outcome.result.isInferredMileage).toBe(false);
+    expect(outcome.result.mileageMethod).toBeUndefined();
 
     const [, init] = findFetchCallContaining("/mmr/year-make-model");
     expect(JSON.parse(String(init.body))).toEqual({

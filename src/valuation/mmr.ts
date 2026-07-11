@@ -24,9 +24,9 @@ export interface MmrResult {
   lookupModel?: string | null;
   lookupTrim?: string | null;
   normalizationConfidence?: NormalizationConfidence;
-  /** Mileage actually sent to Manheim/Cox. May be estimated when listing mileage is absent. */
+  /** Mileage sent to Manheim/Cox when known. Null when odometer was omitted (item 54). */
   mileageUsed?: number | null;
-  /** True when mileageUsed came from the 15k/year estimator, not the source listing. */
+  /** True only when the intel envelope reports inferred mileage — never invent 15k×age on ingest. */
   isInferredMileage?: boolean;
   mileageMethod?: MmrMileageMethod;
 }

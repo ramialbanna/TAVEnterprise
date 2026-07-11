@@ -25,7 +25,7 @@ export interface ValuationMissSnapshotInput {
   lookupMake?: string | null;
   lookupModel?: string | null;
   lookupTrim?: string | null;
-  /** Mileage used by the valuation attempt; may be estimated when listing mileage is absent. */
+  /** Mileage used by the valuation attempt; listing-actual only — never invent (item 54). */
   mileageUsed?: number | null;
   isInferredMileage?: boolean;
   fetchedAt?: string;

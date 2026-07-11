@@ -121,7 +121,7 @@ export interface ValuationResult {
   normalizationConfidence?: NormalizationConfidence;
   /** Mileage sent to the valuation source; distinct from source listing mileage. */
   mileageUsed?: number | null;
-  /** True when mileageUsed was estimated from model year at 15k miles/year. */
+  /** True when intel reports inferred mileage. Ingest must not invent 15k×age (item 54). */
   isInferredMileage?: boolean;
 }
 

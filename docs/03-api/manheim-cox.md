@@ -101,8 +101,10 @@ Content-Type:  application/vnd.coxauto.v1+json
 no fetch, log `manheim.http.skipped { reason: "cox_ymm_requires_trim" }`) when trim
 is missing or whitespace-only and vendor=cox.
 
-**Mileage gating:** app-facing YMM valuation requires finite odometer mileage before
-the vendor call. A selected Year/Make/Model/Style without mileage is identity only.
+**Mileage gating:** app-facing and ingest YMM valuation treat odometer as **optional**.
+When mileage is omitted, the intel worker does not invent 15k×age miles — Cox prices at
+the segment average odometer. Listing mileage stays null; UI shows **Mileage unknown**
+(item **54**). Style/bodyname is still required for Cox YMMT.
 
 ### 3a. Query parameters (Cox MMR 1.4)
 
@@ -133,7 +135,7 @@ Before enabling any new surface, validate through the server-side Worker path on
 
 1. Token can be fetched with production credentials.
 2. Catalog years/makes/models/trims return non-empty metadata.
-3. YMM valuation requires style/bodyname and odometer before the vendor call.
+3. YMM valuation requires style/bodyname; odometer is optional (omit → Cox average).
 4. `401`, `403`, `596`, and `invalid_scope` degrade to not-provisioned /
    unavailable state, never fake catalog data.
 5. Logs and PR/issue comments contain only classifications and shape metadata,
