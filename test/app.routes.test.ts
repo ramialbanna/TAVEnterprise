@@ -1952,6 +1952,34 @@ describe("POST /app/opportunities/:id/dismiss", () => {
     );
   });
 
+  it("accepts damaged as a dismiss reason", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(closer);
+    vi.mocked(dismissOpportunity).mockResolvedValue({
+      ...OPPORTUNITY_ROW,
+      status: "bad_lead",
+      reasonCodes: [],
+      valuationMissingReason: null,
+      scoreComponents: null,
+      candidateListingCount: null,
+      mileage: 45000,
+      actions: [],
+    });
+
+    const res = await worker.fetch(
+      authedPost("/app/opportunities/listing-1/dismiss", { reason: "damaged" }),
+      makeEnv(),
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(dismissOpportunity)).toHaveBeenCalledWith(
+      expect.anything(),
+      "listing-1",
+      closer,
+      { reason: "damaged", notes: undefined },
+    );
+  });
+
   it("returns 400 for invalid reason codes", async () => {
     vi.mocked(resolveAppUser).mockResolvedValue(closer);
     const res = await worker.fetch(

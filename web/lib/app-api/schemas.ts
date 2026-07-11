@@ -460,6 +460,7 @@ export const DismissReasonCodeSchema = z.enum([
   "wrong_vehicle",
   "bad_price",
   "bad_condition",
+  "damaged",
   "too_far",
   "duplicate",
   "other",

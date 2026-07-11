@@ -215,7 +215,16 @@ describe("OpportunitiesClientNew", () => {
       return {
         ok: true,
         status: 200,
-        data: { ...sampleRow, status: "bad_lead" },
+        data: {
+          ...sampleRow,
+          status: "bad_lead",
+          reasonCodes: [],
+          valuationMissingReason: null,
+          scoreComponents: null,
+          candidateListingCount: null,
+          mileage: null,
+          actions: [],
+        },
       };
     });
 
