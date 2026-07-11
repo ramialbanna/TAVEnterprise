@@ -23,6 +23,7 @@ export const OPPORTUNITY_TYPE_LABELS = {
   lead: "Lead",
   near_miss: "Almost a deal",
   manual_submission: "Submitted by team",
+  scraper_review: "Scraper review",
 } as const;
 
 /** Maps API badge strings to buyer-friendly labels. Unlisted badges pass through. */
@@ -30,6 +31,8 @@ export const BADGE_LABELS: Record<string, string> = {
   "Near miss": "Almost a deal",
   "Manual submission": "Submitted by team",
   "Mileage unknown": "Mileage unknown",
+  "Scraper review": "Scraper review",
+  "No MMR": "No MMR",
 };
 
 /** Maps workflow status values to buyer-friendly labels. */

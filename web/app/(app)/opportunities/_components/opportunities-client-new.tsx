@@ -44,7 +44,13 @@ const SUMMARY_FETCH_LIMIT = 100;
 /** List + tab revisit cache — NEXT_STEPS #43. */
 const LIST_STALE_TIME_MS = 60_000;
 
-const QUEUE_VIEWS = new Set<OpportunityView>(["needs_action", "mine", "worth_a_look", "all"]);
+const QUEUE_VIEWS = new Set<OpportunityView>([
+  "needs_action",
+  "mine",
+  "worth_a_look",
+  "scraper_review",
+  "all",
+]);
 
 function parseViewParam(raw: string | null): OpportunityView {
   if (raw && QUEUE_VIEWS.has(raw as OpportunityView)) return raw as OpportunityView;
@@ -199,6 +205,11 @@ export function OpportunitiesClientNew({
         staleTime: LIST_STALE_TIME_MS,
       },
       {
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "scraper_review" }), viewerUserId),
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "scraper_review" }), viewerOpts),
+        staleTime: LIST_STALE_TIME_MS,
+      },
+      {
         queryKey: ["opportunities-summary", "new-today", viewerUserId] as const,
         queryFn: () =>
           listOpportunitiesPage(
@@ -256,10 +267,11 @@ export function OpportunitiesClientNew({
     needs_action: extractTotal(summaryQueries[0].data),
     mine: extractTotal(summaryQueries[1].data),
     worth_a_look: extractTotal(summaryQueries[2].data),
+    scraper_review: extractTotal(summaryQueries[3].data),
   };
 
   const needsYou = tabCounts.needs_action ?? 0;
-  const newTodayResult = summaryQueries[3].data;
+  const newTodayResult = summaryQueries[4].data;
   const newToday =
     newTodayResult?.ok === true
       ? countFirstSeenToday(newTodayResult.data.items)

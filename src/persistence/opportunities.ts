@@ -19,7 +19,7 @@ import {
  * and vehicle candidates — no writes, no workflow mutations.
  */
 
-export type OpportunityType = "lead" | "near_miss" | "manual_submission";
+export type OpportunityType = "lead" | "near_miss" | "manual_submission" | "scraper_review";
 
 /** Compact summary of the latest MaxBuy recommendation for a listing (P8 — queue badge). */
 export interface MaxbuySummary {
@@ -113,7 +113,12 @@ export interface OpportunityDetail extends OpportunityRow {
 
 export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
 
-export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
+export type OpportunityView =
+  | "needs_action"
+  | "mine"
+  | "worth_a_look"
+  | "all"
+  | "scraper_review";
 
 export interface OpportunityListFilter {
   limit: number;
@@ -127,6 +132,11 @@ export interface OpportunityListFilter {
   type?: OpportunityType;
   grade?: string;
   status?: string;
+  /**
+   * When true (Worker `SCRAPER_REVIEW_MODE=true`), include recent no-MMR scrapes
+   * and soft near-miss economics fails as review-only rows. Lead upsert unchanged.
+   */
+  scraperReviewMode?: boolean;
 }
 
 export interface OpportunityListPage {
@@ -143,6 +153,22 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 
 /** Claim window ending within this many ms counts as needs-action. */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
+
+/** Max age of `first_seen_at` for scraper-review inclusion (item 55). */
+export const SCRAPER_REVIEW_WINDOW_HOURS = 48;
+
+export const SCRAPER_REVIEW_WINDOW_MS = SCRAPER_REVIEW_WINDOW_HOURS * 60 * 60 * 1000;
+
+/** Badge applied to review-only rows so production views can exclude them. */
+export const SCRAPER_REVIEW_BADGE = "Scraper review";
+
+export const NO_MMR_BADGE = "No MMR";
+
+export interface ScraperReviewMapOptions {
+  enabled: boolean;
+  windowMs?: number;
+  now?: Date;
+}
 
 const LISTING_COLUMNS =
   "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty";
@@ -163,12 +189,66 @@ export function isReviewableNearMiss(input: {
   make: string | null;
   model: string | null;
 }): boolean {
+  if (!isSoftReviewableNearMiss(input)) return false;
+  // Same deal ladder as ingest: pass-grade junk is typically asking above MMR (deal score < 25).
+  return computeDealScore(input.price!, input.mmrValue!) >= 25;
+}
+
+/**
+ * Near-miss structural gates without the deal-score ≥ 25 economics floor.
+ * Used only when scraper review mode is on to surface overpriced MMR hits for soak.
+ */
+export function isSoftReviewableNearMiss(input: {
+  freshnessStatus: string | null;
+  price: number | null;
+  mmrValue: number | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+}): boolean {
   const freshness = input.freshnessStatus ?? "new";
   if (SUPPRESSED_FRESHNESS.has(freshness)) return false;
   if (input.year === null || !input.make?.trim() || !input.model?.trim()) return false;
   if (input.price === null || input.mmrValue === null || input.mmrValue <= 0) return false;
-  // Same deal ladder as ingest: pass-grade junk is typically asking above MMR (deal score < 25).
-  return computeDealScore(input.price, input.mmrValue) >= 25;
+  return true;
+}
+
+/** True when `first_seen_at` is within the scraper-review lookback window. */
+export function isWithinScraperReviewWindow(
+  firstSeenAt: string | null,
+  now: Date = new Date(),
+  windowMs: number = SCRAPER_REVIEW_WINDOW_MS,
+): boolean {
+  if (!firstSeenAt) return false;
+  const seenMs = new Date(firstSeenAt).getTime();
+  if (!Number.isFinite(seenMs)) return false;
+  const age = now.getTime() - seenMs;
+  return age >= 0 && age <= windowMs;
+}
+
+/**
+ * No-MMR scrape eligible for the temporary scraper-review surface (item 55).
+ * Requires identity + non-suppressed freshness; window checked separately.
+ */
+export function isScraperReviewNoMmrEligible(input: {
+  freshnessStatus: string | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+}): boolean {
+  const freshness = input.freshnessStatus ?? "new";
+  if (SUPPRESSED_FRESHNESS.has(freshness)) return false;
+  if (input.year === null || !input.make?.trim() || !input.model?.trim()) return false;
+  return true;
+}
+
+/** Review-only rows must not appear in Needs action / Mine / Worth a look / All. */
+export function isScraperReviewOnly(row: Pick<OpportunityRow, "type" | "badges">): boolean {
+  return row.type === "scraper_review" || row.badges.includes(SCRAPER_REVIEW_BADGE);
+}
+
+export function matchesScraperReview(row: Pick<OpportunityRow, "type" | "badges">): boolean {
+  return isScraperReviewOnly(row);
 }
 
 const VALUATION_COLUMNS =
@@ -230,9 +310,13 @@ export function buildOpportunityBadges(input: {
   isManualSubmission: boolean;
   estimateFlags: OpportunityEstimateFlags;
   candidateListingCount: number | null;
+  scraperReview?: boolean;
+  noMmr?: boolean;
 }): string[] {
   const badges: string[] = [];
   if (input.isManualSubmission) badges.push("Manual submission");
+  if (input.scraperReview) badges.push(SCRAPER_REVIEW_BADGE);
+  if (input.noMmr) badges.push(NO_MMR_BADGE);
   if (input.scrapeCount <= 1) badges.push("First seen");
   else badges.push(`Seen again #${input.scrapeCount - 1}`);
   if (input.priceChanged) badges.push("Price changed");
@@ -278,25 +362,60 @@ function mapToOpportunityRow(
   manual: ManualSubmissionContext | null,
   workflow: WorkflowDisplayContext | null,
   maxbuySummary: MaxbuySummary | null,
+  review: ScraperReviewMapOptions = { enabled: false },
 ): OpportunityRow | null {
   const hasLead = lead !== null;
   const hasMmr = diagnostic.mmr_value !== null;
   const isManualSubmission = manual !== null;
-  const type = resolveOpportunityType(hasLead, hasMmr, isManualSubmission);
-  if (type === null) return null;
+  let type = resolveOpportunityType(hasLead, hasMmr, isManualSubmission);
+  let scraperReview = false;
+  let noMmr = false;
 
-  if (
-    type === "near_miss" &&
-    !isReviewableNearMiss({
-      freshnessStatus: asString(listing.freshness_status),
-      price: asNumber(listing.price),
+  const freshnessStatus = asString(listing.freshness_status);
+  const year = asNumber(listing.year);
+  const make = asString(listing.make);
+  const model = asString(listing.model);
+  const price = asNumber(listing.price);
+  const now = review.now ?? new Date();
+  const windowMs = review.windowMs ?? SCRAPER_REVIEW_WINDOW_MS;
+  const withinWindow = isWithinScraperReviewWindow(
+    asString(listing.first_seen_at),
+    now,
+    windowMs,
+  );
+
+  if (type === "near_miss") {
+    const nearMissInput = {
+      freshnessStatus,
+      price,
       mmrValue: diagnostic.mmr_value,
-      year: asNumber(listing.year),
-      make: asString(listing.make),
-      model: asString(listing.model),
-    })
-  ) {
-    return null;
+      year,
+      make,
+      model,
+    };
+    if (!isReviewableNearMiss(nearMissInput)) {
+      if (
+        review.enabled &&
+        withinWindow &&
+        isSoftReviewableNearMiss(nearMissInput)
+      ) {
+        scraperReview = true;
+      } else {
+        return null;
+      }
+    }
+  } else if (type === null) {
+    if (
+      review.enabled &&
+      withinWindow &&
+      isScraperReviewNoMmrEligible({ freshnessStatus, year, make, model })
+    ) {
+      type = "scraper_review";
+      scraperReview = true;
+      noMmr = true;
+    } else {
+      return null;
+    }
   }
 
   const listingMileage = asNumber(listing.mileage);
@@ -306,7 +425,6 @@ function mapToOpportunityRow(
     diagnostic.valuation_style_is_estimated,
   );
   const scrapeCount = asNumber(listing.scrape_count) ?? 1;
-  const price = asNumber(listing.price);
   const mmrValue = diagnostic.mmr_value;
   const spread =
     mmrValue !== null && price !== null ? mmrValue - price : null;
@@ -321,6 +439,8 @@ function mapToOpportunityRow(
     isManualSubmission,
     estimateFlags,
     candidateListingCount,
+    scraperReview,
+    noMmr,
   });
 
   const assignedTo =
@@ -445,6 +565,7 @@ export function matchesNeedsAction(
   workflow: WorkflowDisplayContext | null,
   now: Date = new Date(),
 ): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (!row.assignedTo) return true;
   if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
@@ -462,6 +583,7 @@ export function matchesMine(
   workflow: WorkflowDisplayContext | null,
   viewerUserId: string,
 ): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.assignedTo === viewerUserId) return true;
   if (workflow && isActiveClaim(workflow) && workflow.claimedByUserId === viewerUserId) {
@@ -471,6 +593,7 @@ export function matchesMine(
 }
 
 export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.spread === null || row.spread < WORTH_A_LOOK_MIN_SPREAD) return false;
   if (row.mmrValue === null || row.mmrValue <= 0) return false;
@@ -516,9 +639,17 @@ function applyViewFilter(
 
   // Default queue views exclude dismissed / terminal statuses (items 45/47).
   const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));
-  if (view === "all") return active;
 
-  return active.filter((row) => {
+  if (view === "scraper_review") {
+    if (!filter.scraperReviewMode) return [];
+    return active.filter((row) => matchesScraperReview(row));
+  }
+
+  // Production views never include review-only soak rows (item 55).
+  const production = active.filter((row) => !isScraperReviewOnly(row));
+  if (view === "all") return production;
+
+  return production.filter((row) => {
     const workflow = workflowByListing.get(row.id) ?? null;
     switch (view) {
       case "needs_action":
@@ -719,6 +850,7 @@ function assembleRows(
   manualByListing: Map<string, ManualSubmissionContext>,
   workflowByListing: Map<string, WorkflowDisplayContext>,
   maxbuySummaryByListing: Map<string, MaxbuySummary>,
+  review: ScraperReviewMapOptions = { enabled: false },
 ): OpportunityRow[] {
   const diagnostics = buildListingDiagnostics(listings, valuations, leads);
   const leadByListing = new Map<string, LeadRow>();
@@ -747,6 +879,7 @@ function assembleRows(
       manual,
       workflow,
       maxbuySummary,
+      review,
     );
     if (row) rows.push(row);
   }
@@ -798,6 +931,10 @@ export async function listOpportunities(
   ];
   const candidateCounts = await fetchCandidateCounts(db, candidateIds);
 
+  const review: ScraperReviewMapOptions = {
+    enabled: filter.scraperReviewMode === true,
+  };
+
   const rows = assembleRows(
     allListings,
     valuations,
@@ -806,6 +943,7 @@ export async function listOpportunities(
     manualByListing,
     workflowByListing,
     maxbuySummaryByListing,
+    review,
   );
   const filtered = applyListFilter(rows, filter);
   const viewed = applyViewFilter(filtered, filter, workflowByListing);
@@ -816,6 +954,7 @@ export async function listOpportunities(
 export async function getOpportunityDetail(
   db: SupabaseClient,
   id: string,
+  options: { scraperReviewMode?: boolean } = {},
 ): Promise<OpportunityDetail | null> {
   const { data: listingRow, error: listingErr } = await db
     .from("normalized_listings")
@@ -851,6 +990,7 @@ export async function getOpportunityDetail(
     manualByListing.get(id) ?? null,
     workflowByListing.get(id) ?? null,
     maxbuySummaryByListing.get(id) ?? null,
+    { enabled: options.scraperReviewMode === true },
   );
   if (!row) return null;
 
@@ -997,7 +1137,9 @@ export async function patchOpportunityFields(
     });
   }
 
-  const refreshed = await getOpportunityDetail(db, normalizedListingId);
+  const refreshed = await getOpportunityDetail(db, normalizedListingId, {
+    scraperReviewMode: true,
+  });
   if (!refreshed) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }

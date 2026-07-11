@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-10 · **Focus:** Item **54** remaining (ingest stop inventing miles; app/MMR Lab gates); **44**, **46**; **51** fuller list TBD
+**Last updated:** 2026-07-11 · **Focus:** **55** Phase A shipped (flag off by default — turn on for soak); **44** Listed date; **54** remaining; **46**; **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-10): **40–43**, **45/47**, **48–50**, **52–53** shipped; **54** slices 1–2 on `main` (`af362d7`, `9bc8bd3`) — Max buy no longer invents odometer; detail shows saved ingest MMR + catalog-matches listing YMM casing; Max buy UI gate does not require miles. **Next on 54:** stop inventing miles at **ingest** (`workerClient`); relax app/MMR Lab YMM mileage gates; update `manheim-cox.md`. Also queued: **44** (listed date), **46** (fuller Cox autofill — Phase A case-match partly via **54**), **51** (workflow list TBD). See **Product principle** + active table below.
+> Sprint so far (through 2026-07-11): **40–43**, **45/47**, **48–50**, **52–53** shipped; **54** slices 1–2 on `main`; **44** decided (Listed = `listing_date_ms` → `posted_at`, relative time — ingest still open). **55** Phase A shipped: `SCRAPER_REVIEW_MODE` + **Scraper review** tab (`view=scraper_review`) — recent no-MMR scrapes + soft near-miss economics fails; lead upsert unchanged; flag **off** by default. **Next:** enable flag for soak and/or **44**. Also **54** ingest invent stop. See active table below.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–43**, **45/47–50**, **52–53** are done. **54** in progress (slices 1–2 shipped; ingest invent + app/MMR Lab gates remain). Also open: **44**, **46**, **51**. MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–43**, **45/47–50**, **52–53** are done. **54** in progress (slices 1–2 shipped; ingest invent + app/MMR Lab gates remain). Also open: **44**, **46**, **51**, **55** (Phase A shipped — enable flag for soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -102,8 +102,9 @@ cd .. && npm run lint && npm run typecheck && npm test
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **54** | **No guessed miles…** — slices 1–2 done; **remaining:** ingest invent stop, app/MMR Lab mileage gates, docs | **Critical** | [~] |
+| **55** | **Scraper review mode** — Phase A: flag + tab shipped (default off); enable for soak; Phase B MMR coverage later | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
-| **44** | **Listing posted date** — marketplace post time (distinct from Received); ingest may need `posted_at` | **High** | [ ] |
+| **44** | **Listing posted date** — **Listed** as relative time from Apify `listing_date_ms` → `posted_at` (ingest gap); keep Received separate | **High** | [ ] |
 | **46** | **Cox Y/M/M autofill from listing** — Phase A case-match partly via **54** `9bc8bd3`; fuller fuzzy/title→Cox still open | **High** | [~] |
 
 **Full status board (incl. shipped):**
@@ -114,7 +115,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **41** | **Mine** tab — badge shows `(1)` but tab body is empty | **Critical** | [x] |
 | **42** | **Lead received timestamp** — show when the lead came in; sort/filter by freshness | **Critical** | [x] |
 | **43** | **Tab switch latency** — Needs action / Mine / Worth a look / All feel slow (~2s) after click | **High** | [x] |
-| **44** | **Listing posted date** — show when the seller listed the vehicle on the marketplace (distinct from Received / first seen) | **High** | [ ] |
+| **44** | **Listing posted date** — **Listed** relative time from seller post (`listing_date_ms`); distinct from Received | **High** | [ ] |
 | **45** | **Dismiss opportunity** — right-side queue action with required reason; remove from active views | **High** | [x] |
 | **46** | **Cox Y/M/M autofill** — map listing-parsed identity to Cox catalog tokens so MMR Lab / detail valuation can run without manual dropdown hunting | **High** | [~] |
 | **47** | **Flag bad lead (buyer email #1)** — reason vocabulary: not a good lead, Title Issues, Dealer, etc.; filters out for everyone | **Critical** | [x] |
@@ -125,6 +126,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [~] |
+| **55** | **Scraper review mode** — feature-flagged queue soak (no-MMR / soft near-miss); lead grade unchanged; MMR coverage = Phase B | **High** | [~] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -386,63 +388,86 @@ Default queue sort for **Needs action** / **All** should likely be **newest rece
 
 ## 44 — Listing posted date (when seller listed on marketplace)
 
-**Reported:** 2026-07-08 (production New mode, `/opportunities`) — **no code change yet**
+**Reported:** 2026-07-08 (production New mode, `/opportunities`)  
+**Decided:** 2026-07-11 (Apify run analysis + buyer preference) — **no code change yet**
 
 **Symptom:**
 
-- Queue shows **Received** (when TAV surfaced the lead) but not **when the seller originally posted** the Facebook listing
-- Buyers reviewing fresh scraper leads cannot tell if a vehicle was listed 2 hours ago vs 3 days ago on the marketplace itself
+- Queue shows **Received** as an absolute datetime (when TAV surfaced the lead) but not **when the seller originally posted** the Facebook listing
+- Buyers reviewing scraper leads cannot tell if a vehicle was listed 20 minutes ago vs 3 days ago on the marketplace itself
 - `lastSeenAt` is hidden by default and reflects last scrape, not seller post time
 
-**Expected:** Buyers can see **Listed** (or **Posted**) — the marketplace listing creation/post time — on the queue row and/or opportunity detail, distinct from **Received**.
+**Expected:** Queue shows **Listed** as relative time (e.g. `3 hours ago`, `just now`) from the marketplace post timestamp, with the exact datetime on hover. Distinct from **Received**.
+
+### Confirmed data (2026-07-11 Apify check)
+
+Actor: `raidr-api/custom-vehicle-scraper`.
+
+| Apify field | Meaning | Available when detail OFF? |
+|-------------|---------|----------------------------|
+| **`listing_date_ms`** | Seller listing post time (epoch ms) — **use this** | **Yes** (present on search results) |
+| `listing_date` | Same time, epoch seconds | Yes |
+| `extraListingData.creation_time` | Detail-mode twin (~same as `listing_date_ms`) | Only when `fetchDetailedItems: true` |
+| `_fetchedAt` | When the scraper fetched the item | Yes — **not** post time |
+| Our `first_seen_at` / Received | When TAV ingested / surfaced | Yes — **not** post time |
+
+Example ([Honda Civic listing](https://www.facebook.com/marketplace/item/1030036669435233/)): `listing_date_ms` → `2026-07-11T06:14:23Z` (~“3 hours ago” on FB); `_fetchedAt` → `06:30Z`; our `posted_at` → **null**.
+
+**Do not depend on detail mode for Listed date** — `listing_date_ms` is enough. Detail mode is optional for description/condition.
 
 ### Data model notes
 
 | Field | Source today | Meaning | Exposed on queue? |
 |-------|----------------|---------|-------------------|
-| `receivedAt` | `leads.created_at` / manual submission / `first_seen_at` fallback | When TAV made this actionable | ✅ Yes (item 42) |
+| `receivedAt` | `leads.created_at` / manual submission / `first_seen_at` fallback | When TAV made this actionable | ✅ Yes (item 42) — keep |
 | `firstSeenAt` | `normalized_listings.first_seen_at` | First ingest into TAV | Hidden by default |
 | `lastSeenAt` | `normalized_listings.last_seen_at` | Last scrape | Hidden by default |
-| `posted_at` | `normalized_listings.posted_at` | **Seller listing post time** (from source) | ❌ **Not exposed** |
+| `posted_at` | `normalized_listings.posted_at` | **Seller listing post time** | ❌ **Not populated / not exposed** |
 
-**Ingest gap (code review 2026-07-08):** Apify `custom-vehicle-scraper` already emits `postedAt` on dataset items (and `payloadAdapter.ts` preserves/maps it from `listing_date_ms`). `NormalizedListingInput` and `normalized_listings.posted_at` exist, but `parseFacebookItem` (`src/sources/facebook.ts`) does **not** copy `postedAt` / `posted_at` / `listedAt` into the normalized listing today — so `posted_at` is likely **NULL** for most Facebook rows even though the raw payload has the timestamp. **Verify in Supabase** before UI work: `SELECT posted_at, first_seen_at, title FROM tav.normalized_listings WHERE source = 'facebook' ORDER BY created_at DESC LIMIT 20`.
+**Ingest gap (confirmed 2026-07-11):** `payloadAdapter.ts` already maps `listing_date_ms` → `postedAt`, but `parseFacebookItem` (`src/sources/facebook.ts`) does **not** copy `postedAt` into `NormalizedListingInput` — so `posted_at` is **0/9613** Facebook rows in Supabase even though Apify sends the timestamp.
 
-### Product decision (confirm at implementation)
+### Product decision (locked 2026-07-11)
 
-| Option | Label | Sort | Notes |
-|--------|-------|------|-------|
-| A (recommended) | **Listed** | `posted_at DESC` | Marketplace post time — what buyers asked for |
-| B | **Listed** + **Received** | Both columns | Clearer but wider table |
-| C | Relative in Vehicle cell | — | e.g. "Listed 3h ago · Received 10m ago" |
+| Choice | Decision |
+|--------|----------|
+| Primary queue clock | **Listed** = seller post time (`posted_at` ← `listing_date_ms`) |
+| Display format | **Relative** via existing `formatRelativeTime` — `just now`, `5 minutes ago`, `3 hours ago` |
+| Exact time | Tooltip (and detail page) shows absolute datetime |
+| Received | Keep available (column or detail) — “when TAV got it”; not the main glance metric |
+| Sort default (optional follow-up) | Prefer newest **Listed** for scraper freshness; keep Received sort available |
 
-Tooltip must explain: **Listed** = seller post time on Facebook; **Received** = when TAV created/surfaced the opportunity.
+Tooltip copy: **Listed** = when the seller posted on Facebook; **Received** = when TAV created/surfaced the opportunity.
 
 ### Implementation sketch
 
-1. **Ingest fix (if `posted_at` is null):** extend `parseFacebookItem` to extract `postedAt` / `posted_at` / `listedAt` from the mapped item into `NormalizedListingInput.postedAt`.
-2. **Worker:** add `postedAt` to `OpportunityRow` / `OpportunityDetail` in `mapToOpportunityRow` from `normalized_listings.posted_at`.
-3. **Web schema:** extend `OpportunityRow` in `web/lib/app-api/schemas.ts`.
-4. **Table:** add **Listed** column in `table-preferences.ts` (visible by default or one click away in column picker).
-5. **Sort:** add `posted_desc` / `listed_desc` to `OPPORTUNITY_SORTS` in Worker + sort dropdown.
-6. **Detail:** show Listed timestamp in Vehicle block "Additional Information" or a metadata strip near Received.
+1. **Ingest:** extend `parseFacebookItem` to pass `postedAt` / `posted_at` / `listedAt` into `NormalizedListingInput.postedAt` (adapter already maps `listing_date_ms`).
+2. **Worker:** expose `postedAt` on `OpportunityRow` / `OpportunityDetail` from `normalized_listings.posted_at`.
+3. **Web schema:** add `postedAt` to `OpportunityRow` in `web/lib/app-api/schemas.ts`.
+4. **Table:** **Listed** column — default visible; render with `formatRelativeTime(postedAt)`; tooltip = absolute `formatDateTime`.
+5. **Sort (nice-to-have):** `posted_desc` / `listed_desc` in Worker + sort dropdown.
+6. **Detail:** show Listed (relative + absolute) near Received in listing/provenance block.
+7. **Backfill:** new ingests only unless a one-off backfill from retained Apify datasets is requested later.
 
 ### Primary files
 
-- `src/sources/facebook.ts` (`parseFacebookItem` — extract posted time)
-- `src/persistence/opportunities.ts` (`LISTING_COLUMNS`, `mapToOpportunityRow`, `sortOpportunityRows`)
-- `src/app/routes.ts` (`OPPORTUNITY_SORTS`)
+- `src/sources/facebook.ts` (`parseFacebookItem` — persist posted time)
+- `src/apify/payloadAdapter.ts` (already maps `listing_date_ms` → `postedAt`)
+- `src/persistence/opportunities.ts` (`LISTING_COLUMNS`, `mapToOpportunityRow`, sorts)
+- `src/app/routes.ts` (`OPPORTUNITY_SORTS` if adding listed sort)
 - `web/lib/app-api/schemas.ts`
+- `web/lib/format.ts` (`formatRelativeTime` — already exists)
 - `web/lib/opportunities/table-preferences.ts`
 - `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`
-- `web/app/(app)/opportunities/_components/opportunity-vehicle-block.tsx` (detail)
+- Detail listing / provenance block
 
 ### Exit criteria
 
-- [ ] `posted_at` populated on new Facebook ingests (verified in Supabase after ingest fix)
-- [ ] **Listed** column visible on New-mode queue with correct timestamps for scraper leads
-- [ ] Distinct from **Received** — tooltip documents both
-- [ ] Sort by newest listed first available
-- [ ] Manual submissions without source post time show honest empty/estimate badge (no fake timestamp)
+- [ ] `posted_at` populated on **new** Facebook ingests (verify in Supabase after ingest fix)
+- [ ] **Listed** column shows relative time (e.g. `3 hours ago`) for scraper leads
+- [ ] Hover/tooltip shows exact datetime
+- [ ] Distinct from **Received** — copy documents both
+- [ ] Manual submissions / missing source post time show `—` (no fake timestamp)
+- [ ] Does **not** require `fetchDetailedItems` to be on
 
 ---
 
@@ -1098,6 +1123,96 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ---
 
+## 55 — Scraper review mode (see Apify output in the queue)
+
+**Reported:** 2026-07-11 (scraper soak — “we need to see what the scraper actually sends before fine-tuning filters”)
+
+**Symptom:** Apify is delivering hundreds of Facebook listings, but the Opportunities queue only shows scored **leads** + strict **near misses**. ~86% of new listings never appear because they lack MMR (or fail near-miss economics). That hides scraper output during testing.
+
+**Goal (now):** Temporarily surface recent scraped inventory in the app so buyers/ops can judge **scraper quality** (titles, prices, freshness, junk rate). Fine-tune lead/MMR gates **after** that soak — not before.
+
+### Funnel snapshot (since start of yesterday, America/Chicago — measured 2026-07-11)
+
+| Stage | Count | Notes |
+|-------|------:|-------|
+| Apify `item_count` (sum of runs) | ~4,905 | Many already-seen (dedupe) |
+| `processed` into pipeline | ~1,262 | |
+| Adapter `filtered_out` | **46** | All `missing_ymm` — small |
+| New Facebook `normalized_listings` | ~1,213 | |
+| Latest valuation **no usable MMR** | ~1,043 | **~86% of new listings** — invisible in queue today |
+| MMR hit | ~170 | |
+| Became `tav.leads` | **50** | grades: good 36, fair 14 |
+| MMR hit but **no lead** (`pass`-ish) | ~120 | Mostly **over MMR** (avg spread ≈ −108%) |
+
+**Top valuation miss reasons:** `cox_no_data` ~602 · `trim_missing` ~481 · (has MMR) ~177
+
+### Product decision (locked 2026-07-11)
+
+**Phase A — scraper testing (do this first)**
+
+| Do | Don’t |
+|----|-------|
+| **Feature-flagged “Scraper review” path** so recent scrapes show in the queue **even without MMR** | Change what a real **lead** is (`finalScore ≥ 55` / `upsertLead`) for the soak |
+| Soften or skip `isReviewableNearMiss` economics gate **while the flag is on** | Permanently lower the pass threshold to inflate `tav.leads` |
+| Badge rows clearly (`No MMR`, `Scraper review`, keep Near miss / lead grades when present) | Mix unlabeled junk into **Needs action** as if they were buy-box leads |
+| Cap to recent `first_seen_at` (e.g. last **24–48h**) so the table stays usable | Dump the entire historical `normalized_listings` corpus into the UI |
+| Prefer a dedicated tab/view **Scraper review** (optional but cleaner) | Pretend review rows are production deals in metrics/reporting |
+
+**Phase B — after soak (quality)**
+
+| Do | Don’t |
+|----|-------|
+| Turn the flag **off** (or admin-only) when testing is done | Leave review mode on in production forever by accident |
+| Improve MMR hit rate (`trim_missing` / `cox_no_data`) via **46**, better trim/VIN → Cox | Treat the current ~120 overpriced MMR-no-lead rows as “missed good deals” |
+| Only then reconsider score tweaks **if** a sample shows underpriced near-cuts | Lower pass “just to see more rows” without a flag + exit plan |
+
+Ops baseline still stands for **production lead quality**: [diagnostics.md](04-operations/diagnostics.md) — don’t lower `pass` to manufacture leads. Review mode is a **separate, temporary** surface.
+
+### Implementation sketch (Phase A)
+
+1. **Env / Worker flag** — e.g. `SCRAPER_REVIEW_MODE=true` (staging first; easy off-switch).
+2. **List path** (`src/persistence/opportunities.ts`):
+   - Today `resolveOpportunityType` returns `null` without lead/MMR/manual → row dropped.
+   - When flag on: include recent Facebook (etc.) listings with no MMR as a review type **or** as near_miss with an honest badge; relax `isReviewableNearMiss` deal-score ≥ 25 while flagged.
+3. **Time window** — only `first_seen_at` within last N hours (config; start 48h).
+4. **UI** — badges; optional queue tab `view=scraper_review` so Needs action stays clean.
+5. **Do not** write synthetic `tav.leads` rows for every scrape.
+6. **Pair with item 44** when ready — **Listed** relative time makes scraper freshness readable.
+
+### Primary files
+
+- `src/persistence/opportunities.ts` — `resolveOpportunityType`, `isReviewableNearMiss`, `mapToOpportunityRow`, list/view filters
+- `src/app/routes.ts` / env — feature flag
+- `web/lib/opportunities/view-filter.ts` + queue tabs — optional `scraper_review` view
+- `web/app/(app)/opportunities/_components/*` — badges / tab copy
+- Wrangler / secrets docs — flag documentation
+
+### Related items
+
+- **44** — Listed relative time (`listing_date_ms` → `posted_at`) — high value during scraper soak
+- **46** — Cox Y/M/M autofill (Phase B MMR coverage)
+- **54** — no inventing miles
+- Apify `fetchDetailedItems` — richer description/condition; not required for Listed date
+
+### Exit criteria
+
+**Phase A**
+
+- [x] Flag documented; default **off** in production until soak is intentional (`SCRAPER_REVIEW_MODE` in `wrangler.toml` / `src/types/env.ts` / `.dev.vars.example`)
+- [x] With flag on, recent scrapes without MMR appear in queue/review tab with clear badges (`Scraper review`, `No MMR`; soft near-miss keeps Near miss + Scraper review)
+- [x] Real lead creation / grade threshold unchanged (list path only; no `upsertLead` change)
+- [x] Window cap prevents unbounded historical dump (`first_seen_at` within 48h)
+- [x] Flag off restores prior queue behavior (`view=scraper_review` empty; production views unchanged)
+
+**Phase B (later)**
+
+- [ ] Funnel re-run after valuation/adapter work; `trim_missing` / `cox_no_data` share down
+- [ ] Lead count rises from more fair+ MMR hits, not from permanent pass-floor cuts
+
+**Enable soak:** set `SCRAPER_REVIEW_MODE = "true"` in the target env’s `[vars]` (staging first), redeploy Worker, open **Scraper review** tab.
+
+---
+
 ### Known issues (deferred)
 
 - Apify `payloadAdapter` price/location fix — **deployed 2026-07-08** (`51db82eb`); monitor `tav.source_runs` for `processed > 0`
@@ -1108,6 +1223,9 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 55 Phase A — Scraper review mode (2026-07-11)**  
+`SCRAPER_REVIEW_MODE` (default off) + Opportunities **Scraper review** tab. Recent (48h) no-MMR scrapes and soft near-miss economics fails appear with clear badges; Needs action / All stay clean; lead upsert unchanged. Enable in wrangler `[vars]` for soak.
 
 **Item 54 slices 1–2 — Max buy no invent + detail UX (2026-07-10)**  
 Slice 1: `evaluateRun` / `getRecommendation` keep null mileage. Slice 2: detail Max buy gate drops mileage requirement; Vehicle catalog-matches `honda`→`Honda`; Valuation shows saved ingest MMR with provenance when live YMM/series incomplete. Ingest invent still open.

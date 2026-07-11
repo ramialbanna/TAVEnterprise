@@ -118,6 +118,14 @@ export interface Env {
   MAXBUY_EVALUATE_ENABLED: string;
 
   /**
+   * Temporary Opportunities “Scraper review” queue (item 55). When exactly
+   * "true", recent scrapes without MMR (and soft near-miss economics fails)
+   * appear under view=scraper_review. Does not change lead upsert / pass floor.
+   * Default off — set in wrangler.toml [vars] for an intentional soak only.
+   */
+  SCRAPER_REVIEW_MODE: string;
+
+  /**
    * Base URL of maxbuy-worker. Empty when only the MAXBUY_WORKER service
    * binding is wired.
    */

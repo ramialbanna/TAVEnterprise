@@ -395,6 +395,7 @@ Non-secret flags (default in `wrangler.toml [vars]`; override in `.dev.vars` for
 - `MANHEIM_LOOKUP_MODE` — `"direct"` or `"worker"`
 - `INTEL_WORKER_URL`
 - `APIFY_WEBHOOK_ENABLED`
+- `SCRAPER_REVIEW_MODE` — temporary Opportunities scraper-soak tab (item 55); default `"false"`
 - `MANHEIM_API_VENDOR`, `MANHEIM_GRANT_TYPE`, `MANHEIM_SCOPE` — Cox config documented in `.dev.vars.example`
 
 Full template: repo-root `.dev.vars.example`. Binding source of truth: `src/types/env.ts`.

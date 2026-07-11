@@ -53,7 +53,7 @@ Any change that collapses two of them needs an architecture review first.
 
 Never commit real secret values. Templates stay in `.dev.vars.example` and `web/.env.example`.
 
-**Worker (`.dev.vars`)** — see `src/types/env.ts` and `.dev.vars.example` for the full list. Secrets include Supabase, ingest HMAC, Cox/Manheim, admin/app API, intel worker, Apify. Non-secret flags (`HYBRID_BUYBOX_ENABLED`, `MANHEIM_LOOKUP_MODE`, `INTEL_WORKER_URL`, `APIFY_WEBHOOK_ENABLED`) default in `wrangler.toml [vars]` and can be overridden locally.
+**Worker (`.dev.vars`)** — see `src/types/env.ts` and `.dev.vars.example` for the full list. Secrets include Supabase, ingest HMAC, Cox/Manheim, admin/app API, intel worker, Apify. Non-secret flags (`HYBRID_BUYBOX_ENABLED`, `MANHEIM_LOOKUP_MODE`, `INTEL_WORKER_URL`, `APIFY_WEBHOOK_ENABLED`, `SCRAPER_REVIEW_MODE`) default in `wrangler.toml [vars]` and can be overridden locally.
 
 **Web (`web/.env.local`)** — server-only vars validated by `web/lib/env.ts`:
 

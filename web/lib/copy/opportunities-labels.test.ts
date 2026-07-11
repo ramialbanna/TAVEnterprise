@@ -50,6 +50,7 @@ describe("formatOpportunityType", () => {
   it("maps opportunity types", () => {
     expect(formatOpportunityType("near_miss")).toBe("Almost a deal");
     expect(formatOpportunityType("manual_submission")).toBe("Submitted by team");
+    expect(formatOpportunityType("scraper_review")).toBe("Scraper review");
   });
 
   it("includes capitalized grade for leads", () => {

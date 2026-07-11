@@ -31,6 +31,9 @@ APIFY_WEBHOOK_ENABLED = "false"
 # Listing URL parse (Phase 3 intake). "true" enables POST /app/opportunities/parse.
 OPPORTUNITIES_PARSE_ENABLED = "false"
 MAXBUY_EVALUATE_ENABLED = "false"
+# Item 55 — temporary scraper soak queue. Default off; set "true" only for an
+# intentional soak (staging first). Does not change lead grade / upsertLead.
+SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = ""
 # MAXBUY_WORKER_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put MAXBUY_WORKER_SECRET
@@ -55,6 +58,8 @@ INTEL_WORKER_URL = "https://tav-intelligence-worker-staging.rami-1a9.workers.dev
 APIFY_WEBHOOK_ENABLED = "true"
 OPPORTUNITIES_PARSE_ENABLED = "false"
 MAXBUY_EVALUATE_ENABLED = "true"
+# Scraper review soak — enable when ops wants the Scraper review tab populated.
+SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
@@ -85,6 +90,7 @@ INTEL_WORKER_URL = "https://tav-intelligence-worker-production.rami-1a9.workers.
 APIFY_WEBHOOK_ENABLED = "true"
 OPPORTUNITIES_PARSE_ENABLED = "false"
 MAXBUY_EVALUATE_ENABLED = "true"
+SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"

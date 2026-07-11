@@ -8,12 +8,23 @@ export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
 export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
+export const SCRAPER_REVIEW_BADGE = "Scraper review";
+
+export function isScraperReviewOnly(row: Pick<OpportunityRow, "type" | "badges">): boolean {
+  return row.type === "scraper_review" || row.badges.includes(SCRAPER_REVIEW_BADGE);
+}
+
+export function matchesScraperReview(row: Pick<OpportunityRow, "type" | "badges">): boolean {
+  return isScraperReviewOnly(row);
+}
+
 function isClaimActive(claimExpiresAt: string | null, now: Date): boolean {
   if (!claimExpiresAt) return false;
   return new Date(claimExpiresAt).getTime() > now.getTime();
 }
 
 export function matchesNeedsAction(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (!row.assignedTo) return true;
   if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
@@ -31,6 +42,7 @@ export function matchesMine(
   viewerUserId: string,
   viewerDisplayName?: string | null,
 ): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.assignedTo === viewerUserId) return true;
   if (!isClaimActive(row.claimExpiresAt, new Date())) return false;
@@ -41,6 +53,7 @@ export function matchesMine(
 }
 
 export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): boolean {
+  if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
   if (row.spread === null || row.spread < WORTH_A_LOOK_MIN_SPREAD) return false;
   if (row.mmrValue === null || row.mmrValue <= 0) return false;
@@ -62,9 +75,16 @@ export function filterOpportunityRowsByView(
 
   // Default queue views exclude dismissed / terminal statuses (items 45/47).
   const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));
-  if (!view || view === "all") return active;
 
-  return active.filter((row) => {
+  if (view === "scraper_review") {
+    return active.filter((row) => matchesScraperReview(row));
+  }
+
+  // Production views never include review-only soak rows (item 55).
+  const production = active.filter((row) => !isScraperReviewOnly(row));
+  if (!view || view === "all") return production;
+
+  return production.filter((row) => {
     switch (view) {
       case "needs_action":
         return matchesNeedsAction(row, now);

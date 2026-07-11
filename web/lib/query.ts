@@ -38,7 +38,7 @@ export type OpportunitiesKeyFilter = {
   limit?: number;
   source?: string;
   region?: string;
-  type?: "lead" | "near_miss" | "manual_submission";
+  type?: "lead" | "near_miss" | "manual_submission" | "scraper_review";
   grade?: string;
   status?: string;
 };
@@ -47,10 +47,10 @@ export type OpportunitiesPageKeyFilter = {
   limit?: number;
   offset?: number;
   sort?: "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
-  view?: "needs_action" | "mine" | "worth_a_look" | "all";
+  view?: "needs_action" | "mine" | "worth_a_look" | "all" | "scraper_review";
   source?: string;
   region?: string;
-  type?: "lead" | "near_miss" | "manual_submission";
+  type?: "lead" | "near_miss" | "manual_submission" | "scraper_review";
   grade?: string;
   status?: string;
 };

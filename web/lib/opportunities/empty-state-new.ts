@@ -27,6 +27,11 @@ export const QUEUE_EMPTY_STATE_NEW: Record<OpportunityView, QueueEmptyStateNew> 
     hint: "Deals with at least $1,000 room to make and seen in the last week appear here.",
     action: { label: "Submit a listing", href: "/opportunities/submit" },
   },
+  scraper_review: {
+    title: "No recent scrapes to review",
+    hint: "Turn on SCRAPER_REVIEW_MODE on the Worker to surface recent no-MMR scrapes here for soak testing.",
+    action: { label: "See needs action", href: "/opportunities?view=needs_action" },
+  },
   all: {
     title: "No deals in your queue yet",
     hint: "Paste a marketplace link to add your first deal. Leads and almost-deals from ingest will appear here too.",

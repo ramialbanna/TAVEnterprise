@@ -85,6 +85,7 @@ function makeEnv(): Env {
     APIFY_WEBHOOK_ENABLED: "false",
     OPPORTUNITIES_PARSE_ENABLED: "false",
     MAXBUY_EVALUATE_ENABLED: "false",
+    SCRAPER_REVIEW_MODE: "false",
     MAXBUY_WORKER_URL: "",
     MAXBUY_WORKER_SECRET: "",
   };

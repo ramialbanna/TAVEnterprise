@@ -80,6 +80,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     APIFY_WEBHOOK_ENABLED: "true",
     OPPORTUNITIES_PARSE_ENABLED: "false",
     MAXBUY_EVALUATE_ENABLED: "false",
+    SCRAPER_REVIEW_MODE: "false",
     MAXBUY_WORKER_URL: "",
     MAXBUY_WORKER_SECRET: "",
     ...overrides,

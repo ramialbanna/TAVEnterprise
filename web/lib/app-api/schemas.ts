@@ -347,7 +347,7 @@ export const OpportunityEstimateFlagsSchema = z
 
 export const OpportunityRowSchema = z.object({
   id: z.string(),
-  type: z.enum(["lead", "near_miss", "manual_submission"]),
+  type: z.enum(["lead", "near_miss", "manual_submission", "scraper_review"]),
   badges: z.array(z.string()),
   source: z.string(),
   region: z.string().nullable(),

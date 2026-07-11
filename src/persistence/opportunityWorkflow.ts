@@ -223,7 +223,11 @@ async function assertReviewableOpportunity(
   db: SupabaseClient,
   normalizedListingId: string,
 ): Promise<OpportunityDetail> {
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  // scraperReviewMode: allow mutations on soak rows once the listing id is known
+  // (queue visibility remains gated by SCRAPER_REVIEW_MODE on the list path).
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, {
+    scraperReviewMode: true,
+  });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -478,7 +482,7 @@ export async function assignOpportunity(
     },
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -541,7 +545,7 @@ export async function claimOpportunity(
     metadata: { claimExpiresAt },
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -568,7 +572,7 @@ export async function recordOpportunityEvaluation(
     action: "evaluated",
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -655,7 +659,7 @@ export async function updateOpportunityStatus(
   assertStatusTransitionAllowed(actor, currentStatus, nextStatus);
 
   if (currentStatus === nextStatus) {
-    const opportunity = await getOpportunityDetail(db, normalizedListingId);
+    const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
     if (!opportunity) {
       throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
     }
@@ -680,7 +684,7 @@ export async function updateOpportunityStatus(
     metadata,
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -722,7 +726,7 @@ export async function dismissOpportunity(
   assertStatusTransitionAllowed(actor, currentStatus, "bad_lead");
 
   if (currentStatus === "bad_lead") {
-    const opportunity = await getOpportunityDetail(db, normalizedListingId);
+    const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
     if (!opportunity) {
       throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
     }
@@ -744,7 +748,7 @@ export async function dismissOpportunity(
     },
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }
@@ -781,7 +785,7 @@ export async function addOpportunityNote(
     metadata: actionMetadata,
   });
 
-  const opportunity = await getOpportunityDetail(db, normalizedListingId);
+  const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {
     throw new OpportunityWorkflowError("opportunity_not_found", "Opportunity is not reviewable");
   }

@@ -7,7 +7,13 @@ import { DEFAULT_QUEUE_VIEW } from "@/lib/opportunities/queue-views";
 import { OpportunitiesInterfaceClient } from "./_components/opportunities-interface-client";
 import { OpportunitiesPageIntro } from "./_components/opportunities-page-intro";
 
-const QUEUE_VIEWS = new Set<OpportunityView>(["needs_action", "mine", "worth_a_look", "all"]);
+const QUEUE_VIEWS = new Set<OpportunityView>([
+  "needs_action",
+  "mine",
+  "worth_a_look",
+  "scraper_review",
+  "all",
+]);
 
 function parseQueueView(raw: string | undefined): OpportunityView {
   if (raw && QUEUE_VIEWS.has(raw as OpportunityView)) return raw as OpportunityView;

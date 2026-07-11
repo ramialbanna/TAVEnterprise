@@ -5,6 +5,7 @@ import { formatOpportunityBadge, formatOpportunityType } from "@/lib/copy/opport
 
 function badgeVariant(badge: string): "healthy" | "review" | "error" | "neutral" {
   if (badge === "Near miss") return "review";
+  if (badge === "Scraper review" || badge === "No MMR") return "review";
   if (badge === "Manual submission") return "healthy";
   if (badge.startsWith("Estimated")) return "review";
   if (badge === "Price changed") return "neutral";
@@ -53,7 +54,9 @@ export function OpportunityTypeBadgeNew({
           : "neutral"
       : row.type === "manual_submission"
         ? "healthy"
-        : "review";
+        : row.type === "scraper_review"
+          ? "review"
+          : "review";
 
   return (
     <Badge variant={variant} className={compact ? "px-1 py-0 text-[10px] leading-4" : undefined}>

@@ -98,6 +98,32 @@ describe("view-filter", () => {
     expect(filterOpportunityRowsByView(rows, "all")).toHaveLength(2);
   });
 
+  it("keeps scraper review rows only on scraper_review view", () => {
+    const lead = row({ id: "lead", type: "lead", badges: [] });
+    const review = row({
+      id: "review",
+      type: "scraper_review",
+      badges: ["Scraper review", "No MMR"],
+      mmrValue: null,
+      spread: null,
+      assignedTo: null,
+    });
+    const softNearMiss = row({
+      id: "soft",
+      type: "near_miss",
+      badges: ["Scraper review", "Near miss"],
+      assignedTo: null,
+    });
+    expect(filterOpportunityRowsByView([lead, review, softNearMiss], "all")).toEqual([lead]);
+    expect(filterOpportunityRowsByView([lead, review, softNearMiss], "needs_action")).toEqual([
+      lead,
+    ]);
+    expect(filterOpportunityRowsByView([lead, review, softNearMiss], "scraper_review")).toEqual([
+      review,
+      softNearMiss,
+    ]);
+  });
+
   it("shouldApplyClientViewFilter only when items exceed total", () => {
     const items = [row(), row({ assignedTo: "user-2" })];
     expect(

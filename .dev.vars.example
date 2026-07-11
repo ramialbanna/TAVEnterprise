@@ -66,3 +66,4 @@ APIFY_TOKEN=replace_me
 #                              # "worker" = MMR via tav-intelligence-worker (staging + production default)
 # INTEL_WORKER_URL=            # e.g. https://tav-intelligence-worker-staging.rami-1a9.workers.dev
 # APIFY_WEBHOOK_ENABLED=false  # "true" enables POST /apify-webhook locally
+# SCRAPER_REVIEW_MODE=false    # "true" shows recent no-MMR scrapes under Scraper review tab (item 55)

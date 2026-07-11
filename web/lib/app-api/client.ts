@@ -75,13 +75,18 @@ export type OpportunitiesFilter = {
   limit?: number;
   source?: string;
   region?: string;
-  type?: "lead" | "near_miss" | "manual_submission";
+  type?: "lead" | "near_miss" | "manual_submission" | "scraper_review";
   grade?: string;
   status?: string;
 };
 
 export type OpportunitySort = "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc";
-export type OpportunityView = "needs_action" | "mine" | "worth_a_look" | "all";
+export type OpportunityView =
+  | "needs_action"
+  | "mine"
+  | "worth_a_look"
+  | "all"
+  | "scraper_review";
 
 /** Paginated list filter — triggers `{ items, total, offset }` response from the Worker. */
 export type OpportunitiesPageFilter = OpportunitiesFilter & {

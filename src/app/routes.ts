@@ -1113,9 +1113,9 @@ async function handleIngestRunDetail(env: Env, id: string): Promise<Response> {
 }
 
 const OPPORTUNITY_SORTS = ["spread_desc", "score_desc", "last_seen_desc", "received_desc"] as const satisfies readonly OpportunitySort[];
-const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all"] as const satisfies readonly OpportunityView[];
+const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all", "scraper_review"] as const satisfies readonly OpportunityView[];
 
-const OPPORTUNITY_TYPES = ["lead", "near_miss"] as const satisfies readonly OpportunityType[];
+const OPPORTUNITY_TYPES = ["lead", "near_miss", "scraper_review"] as const satisfies readonly OpportunityType[];
 const LEAD_GRADES = ["excellent", "good", "fair", "pass"] as const;
 const LEAD_STATUSES = [
   "new",
@@ -1222,7 +1222,10 @@ async function handleOpportunitiesList(
   }
 
   try {
-    const page = await listOpportunities(db, filter);
+    const page = await listOpportunities(db, {
+      ...filter,
+      scraperReviewMode: env.SCRAPER_REVIEW_MODE === "true",
+    });
     if (paginatedResponse) {
       return json({ ok: true, data: page });
     }
@@ -1235,7 +1238,7 @@ async function handleOpportunitiesList(
 
 /**
  * GET /app/opportunities/:id — one opportunity detail. 404 when unknown or not
- * reviewable (no lead and no MMR hit).
+ * reviewable (no lead and no MMR hit), unless scraper review mode includes it.
  */
 async function handleOpportunityDetail(env: Env, id: string): Promise<Response> {
   let db: ReturnType<typeof getSupabaseClient>;
@@ -1247,7 +1250,9 @@ async function handleOpportunityDetail(env: Env, id: string): Promise<Response> 
   }
 
   try {
-    const data = await getOpportunityDetail(db, id);
+    const data = await getOpportunityDetail(db, id, {
+      scraperReviewMode: env.SCRAPER_REVIEW_MODE === "true",
+    });
     if (data === null) return json({ ok: false, error: "not_found" }, 404);
     return json({ ok: true, data });
   } catch (err) {

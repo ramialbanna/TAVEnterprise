@@ -2,11 +2,18 @@ import { describe, it, expect } from "vitest";
 import {
   buildOpportunityBadges,
   isReviewableNearMiss,
+  isSoftReviewableNearMiss,
+  isWithinScraperReviewWindow,
+  isScraperReviewNoMmrEligible,
+  isScraperReviewOnly,
   matchesNeedsAction,
   matchesMine,
+  matchesScraperReview,
   matchesWorthALook,
   sortOpportunityRows,
   paginateOpportunityRows,
+  SCRAPER_REVIEW_BADGE,
+  SCRAPER_REVIEW_WINDOW_MS,
   type OpportunityRow,
 } from "../src/persistence/opportunities";
 import type { WorkflowDisplayContext } from "../src/persistence/opportunityWorkflow";
@@ -134,6 +141,105 @@ describe("isReviewableNearMiss", () => {
         model: "F-150",
       }),
     ).toBe(false);
+  });
+
+  it("soft gate keeps overpriced MMR hits that fail deal-score", () => {
+    const overpriced = {
+      freshnessStatus: "new",
+      price: 25_000,
+      mmrValue: 20_000,
+      year: 2019,
+      make: "Ford",
+      model: "F-150",
+    };
+    expect(isReviewableNearMiss(overpriced)).toBe(false);
+    expect(isSoftReviewableNearMiss(overpriced)).toBe(true);
+  });
+});
+
+describe("scraper review helpers (item 55)", () => {
+  const now = new Date("2026-07-11T12:00:00.000Z");
+
+  it("isWithinScraperReviewWindow respects lookback", () => {
+    expect(isWithinScraperReviewWindow("2026-07-11T06:00:00.000Z", now)).toBe(true);
+    expect(
+      isWithinScraperReviewWindow(
+        new Date(now.getTime() - SCRAPER_REVIEW_WINDOW_MS - 1).toISOString(),
+        now,
+      ),
+    ).toBe(false);
+    expect(isWithinScraperReviewWindow(null, now)).toBe(false);
+  });
+
+  it("isScraperReviewNoMmrEligible requires YMM and non-suppressed freshness", () => {
+    expect(
+      isScraperReviewNoMmrEligible({
+        freshnessStatus: "new",
+        year: 2020,
+        make: "Honda",
+        model: "Civic",
+      }),
+    ).toBe(true);
+    expect(
+      isScraperReviewNoMmrEligible({
+        freshnessStatus: "removed",
+        year: 2020,
+        make: "Honda",
+        model: "Civic",
+      }),
+    ).toBe(false);
+    expect(
+      isScraperReviewNoMmrEligible({
+        freshnessStatus: "new",
+        year: null,
+        make: "Honda",
+        model: "Civic",
+      }),
+    ).toBe(false);
+  });
+
+  it("buildOpportunityBadges marks scraper review and no MMR", () => {
+    const badges = buildOpportunityBadges({
+      scrapeCount: 1,
+      priceChanged: false,
+      mileageChanged: false,
+      mileageUnknown: true,
+      hasLead: false,
+      hasMmr: false,
+      isManualSubmission: false,
+      estimateFlags: { mileage: false, style: false, mmr: false },
+      candidateListingCount: null,
+      scraperReview: true,
+      noMmr: true,
+    });
+    expect(badges).toContain(SCRAPER_REVIEW_BADGE);
+    expect(badges).toContain("No MMR");
+    expect(badges).not.toContain("Near miss");
+  });
+
+  it("isScraperReviewOnly / matchesScraperReview cover type and badge", () => {
+    expect(
+      isScraperReviewOnly(sampleRow({ type: "scraper_review", badges: ["No MMR"] })),
+    ).toBe(true);
+    expect(
+      matchesScraperReview(
+        sampleRow({ type: "near_miss", badges: [SCRAPER_REVIEW_BADGE, "Near miss"] }),
+      ),
+    ).toBe(true);
+    expect(isScraperReviewOnly(sampleRow({ type: "lead", badges: [] }))).toBe(false);
+  });
+
+  it("excludes scraper-review-only rows from production view matchers", () => {
+    const reviewRow = sampleRow({
+      type: "scraper_review",
+      badges: [SCRAPER_REVIEW_BADGE, "No MMR"],
+      assignedTo: null,
+      mmrValue: null,
+      spread: null,
+    });
+    expect(matchesNeedsAction(reviewRow, null)).toBe(false);
+    expect(matchesMine(reviewRow, null, "user-1")).toBe(false);
+    expect(matchesWorthALook(reviewRow)).toBe(false);
   });
 });
 
