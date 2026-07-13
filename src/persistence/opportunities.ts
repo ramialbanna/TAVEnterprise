@@ -161,8 +161,12 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 /** Claim window ending within this many ms counts as needs-action. */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
-/** Max age of `first_seen_at` for scraper-review inclusion (item 55). */
-export const SCRAPER_REVIEW_WINDOW_HOURS = 48;
+/**
+ * Max age of `first_seen_at` for scraper-review inclusion (item 55).
+ * Temporarily 120h (was 48) so item-56 Apify outage backfill (2026-07-11→13)
+ * with original Received timestamps still appears in Scraper review.
+ */
+export const SCRAPER_REVIEW_WINDOW_HOURS = 120;
 
 export const SCRAPER_REVIEW_WINDOW_MS = SCRAPER_REVIEW_WINDOW_HOURS * 60 * 60 * 1000;
 

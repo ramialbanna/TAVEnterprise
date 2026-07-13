@@ -106,6 +106,25 @@ function wrapOkEnvelope(body: unknown) {
   };
 }
 
+function catalogOk(items: string[]) {
+  return {
+    ok: true,
+    status: 200,
+    json: vi.fn().mockResolvedValue({
+      success: true,
+      data: { items, catalogState: "connected", cached: false, reason: null },
+    }),
+  };
+}
+
+function ymmOk() {
+  return {
+    ok: true,
+    status: 200,
+    json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
+  };
+}
+
 function mockFetch(status: number, body: unknown) {
   const isOk = status >= 200 && status < 300;
   // Auto-wrap on 2xx; non-2xx bodies pass through (workerClient short-circuits
@@ -363,8 +382,8 @@ describe("getMmrValueFromWorker — YMM normalization", () => {
       BASE_ENV,
     );
     expect(result?.normalizationConfidence).toBe("none");
-    expect(result?.lookupMake).toBeNull();
-    expect(result?.lookupModel).toBeNull();
+    expect(result?.lookupMake).toBe("Toyota");
+    expect(result?.lookupModel).toBe("Camry");
   });
 
   it("trim is included in the YMM request body when present", async () => {
@@ -765,24 +784,10 @@ describe("#41 title-trim fallback before trim_missing", () => {
 describe("#43 Cox catalog style selection before YMM lookup", () => {
   it("uses an exact catalog style instead of the loose title trim", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: {
-            items: ["4D CREW CAB XLT", "2D REGULAR CAB XL", "2D REGULAR CAB XLT"],
-            catalogState: "connected",
-            cached: false,
-            reason: null,
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
-      });
+      .mockResolvedValueOnce(catalogOk(["Ford"]))
+      .mockResolvedValueOnce(catalogOk(["F150"]))
+      .mockResolvedValueOnce(catalogOk(["4D CREW CAB XLT", "2D REGULAR CAB XL", "2D REGULAR CAB XLT"]))
+      .mockResolvedValueOnce(ymmOk());
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Ford"]),
@@ -804,32 +809,18 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
     );
 
     expect(outcome.kind).toBe("hit");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/catalog/years/2019/makes/Ford/models/F150/styles");
-    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/catalog/years/2019/makes/Ford/models/F150/styles");
+    const ymmInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
     expect(JSON.parse(ymmInit.body as string).trim).toBe("2D REGULAR CAB XL");
   });
 
   it("uses the first live catalog style as an estimate when style evidence is ambiguous", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: {
-            items: ["4D CREW CAB RST", "4D DOUBLE CAB RST"],
-            catalogState: "connected",
-            cached: false,
-            reason: null,
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
-      });
+      .mockResolvedValueOnce(catalogOk(["Chevrolet"]))
+      .mockResolvedValueOnce(catalogOk(["Silverado 1500"]))
+      .mockResolvedValueOnce(catalogOk(["4D CREW CAB RST", "4D DOUBLE CAB RST"]))
+      .mockResolvedValueOnce(ymmOk());
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Chevrolet"]),
@@ -852,8 +843,8 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
 
     expect(outcome.kind).toBe("hit");
     if (outcome.kind !== "hit") return;
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const ymmInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
     expect(JSON.parse(ymmInit.body as string).trim).toBe("4D CREW CAB RST");
     expect(outcome.result.lookupTrim).toBe("4D CREW CAB RST");
     expect(outcome.result.normalizationConfidence).toBe("partial");
@@ -862,24 +853,10 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
 
   it("uses the first live catalog style as an estimate when source trim is missing", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: {
-            items: ["4D SUV R-DYNAMIC HST", "4D SUV R-DYNAMIC S", "4D SUV SE"],
-            catalogState: "connected",
-            cached: false,
-            reason: null,
-          },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
-      });
+      .mockResolvedValueOnce(catalogOk(["Land Rover"]))
+      .mockResolvedValueOnce(catalogOk(["Range Rover Evoque"]))
+      .mockResolvedValueOnce(catalogOk(["4D SUV R-DYNAMIC HST", "4D SUV R-DYNAMIC S", "4D SUV SE"]))
+      .mockResolvedValueOnce(ymmOk());
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Land Rover"]),
@@ -901,7 +878,7 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
 
     expect(outcome.kind).toBe("hit");
     if (outcome.kind !== "hit") return;
-    const ymmInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    const ymmInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
     expect(JSON.parse(ymmInit.body as string).trim).toBe("4D SUV R-DYNAMIC HST");
     expect(outcome.result.lookupTrim).toBe("4D SUV R-DYNAMIC HST");
     expect(outcome.result.normalizationConfidence).toBe("partial");
@@ -911,35 +888,10 @@ describe("#43 Cox catalog style selection before YMM lookup", () => {
 describe("#53 Cox catalog model variant selection before style lookup", () => {
   it("uses an exact Cox model variant when drivetrain evidence is present", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: { items: [], catalogState: "not_connected", cached: false, reason: "not_found" },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: { items: ["K5 AWD", "K5 FWD"], catalogState: "connected", cached: false, reason: null },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: { items: ["4D SEDAN GT-LINE", "4D SEDAN LXS"], catalogState: "connected", cached: false, reason: null },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue(wrapOkEnvelope(ENVELOPE_YMM)),
-      });
+      .mockResolvedValueOnce(catalogOk(["Kia"]))
+      .mockResolvedValueOnce(catalogOk(["K5 AWD", "K5 FWD"]))
+      .mockResolvedValueOnce(catalogOk(["4D SEDAN GT-LINE", "4D SEDAN LXS"]))
+      .mockResolvedValueOnce(ymmOk());
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Kia"]),
@@ -962,7 +914,7 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
 
     expect(outcome.kind).toBe("hit");
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/catalog/years/2021/makes/Kia/models/K5/styles");
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/catalog/years/2021/makes");
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/catalog/years/2021/makes/Kia/models");
     expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/catalog/years/2021/makes/Kia/models/K5%20AWD/styles");
     const ymmInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
@@ -973,22 +925,8 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
 
   it("returns model_variant_missing when Cox splits the model but listing evidence cannot choose AWD/FWD", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: { items: [], catalogState: "not_connected", cached: false, reason: "not_found" },
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          success: true,
-          data: { items: ["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"], catalogState: "connected", cached: false, reason: null },
-        }),
-      });
+      .mockResolvedValueOnce(catalogOk(["Honda"]))
+      .mockResolvedValueOnce(catalogOk(["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"]));
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Honda"]),

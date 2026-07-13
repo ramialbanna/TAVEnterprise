@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-11 · **Focus:** **46** Cox autofill shipped; **55** soak; **51** TBD
+**Last updated:** 2026-07-13 · **Focus:** **55** soak / Phase B; **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-11): **40–45**, **47–50**, **52–54** shipped; **44** Listed; **46** Cox listing→catalog autofill (Use listing identity + MMR Lab link); **55** Phase A + soak. **Next:** **51** (buyer checklist) / Phase B MMR coverage. See active table below.
+> Sprint so far (through 2026-07-13): **40–50**, **52–54**, **46**, **56** shipped; **55** Phase A live. **Open:** **55 Phase B** — ingest listing→Cox Y/M/M/S (reuse **46**) before MMR; **51** buyer checklist. See §55.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–50**, **52–54** are done (**46** Cox autofill included). Also open: **51**, **55** (Phase A + soak; Phase B MMR coverage later). MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–50**, **52–54**, **56** are done (**46** Cox autofill included). Also open: **51**, **55** (Phase A live; Phase B = ingest title→Cox Y/M/M/S). MMR Lab / opportunity detail items 2–39 remain complete.
 
 | Area | Path |
 |------|------|
@@ -103,7 +103,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **55** | **Scraper review mode** — Phase A + soak; Phase B MMR coverage later | **High** | [~] |
+| **55** | **Scraper review mode** — Phase A live; Phase B ingest mapping shipped (funnel re-measure pending) | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 
 **Full status board (incl. shipped):**
@@ -125,7 +125,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [x] |
-| **55** | **Scraper review mode** — feature-flagged queue soak (no-MMR / soft near-miss); lead grade unchanged; MMR coverage = Phase B | **High** | [~] |
+| **55** | **Scraper review mode** — feature-flagged queue soak; Phase B = ingest title→Cox catalog Y/M/M/S before MMR | **High** | [~] |
+| **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1082,15 +1083,49 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 | Cap to recent `first_seen_at` (e.g. last **24–48h**) so the table stays usable | Dump the entire historical `normalized_listings` corpus into the UI |
 | Prefer a dedicated tab/view **Scraper review** (optional but cleaner) | Pretend review rows are production deals in metrics/reporting |
 
-**Phase B — after soak (quality)**
+**Phase B — after soak (quality) — plan locked 2026-07-13**
 
 | Do | Don’t |
 |----|-------|
 | Turn the flag **off** (or admin-only) when testing is done | Leave review mode on in production forever by accident |
-| Improve MMR hit rate (`trim_missing` / `cox_no_data`) via **46**, better trim/VIN → Cox | Treat the current ~120 overpriced MMR-no-lead rows as “missed good deals” |
+| Improve MMR hit rate by sending Cox **better Y/M/M/S** (reuse **46**) | Treat overpriced MMR-no-lead rows as “missed good deals” |
 | Only then reconsider score tweaks **if** a sample shows underpriced near-cuts | Lower pass “just to see more rows” without a flag + exit plan |
+| Measure **new ingest** only after the mapping fix | Re-value the item-**56** direct backfill dump through Cox (out of scope) |
 
 Ops baseline still stands for **production lead quality**: [diagnostics.md](04-operations/diagnostics.md) — don’t lower `pass` to manufacture leads. Review mode is a **separate, temporary** surface.
+
+### Phase B review (2026-07-13 — read-only)
+
+Last **120h** of `tav.normalized_listings`:
+
+| Stage | Count | Notes |
+|-------|------:|-------|
+| Listings | ~8,281 | Includes item-56 Scraper-review backfill |
+| With valuation snapshot | ~3,398 | Worker actually asked Cox |
+| No snapshot | ~4,883 | Mostly **56** direct DB load (never called Cox — expected) |
+| MMR hit | ~451 | ~13% of valued |
+| Leads | ~111 | 73 good / 37 fair |
+| MMR hit, no lead | ~340 | Mostly **over MMR** (avg spread ≈ −83%) — economics working |
+
+**Miss reasons (valued, no MMR):** `cox_no_data` ~53% · `trim_missing` ~47%.
+
+**Plain English root cause:** When the Worker *does* ask Cox, it often sends incomplete car identity — e.g. “Ford F-150” with no trim/style, or trim glued into model (`mustang gt`). Cox can’t price that well. This is **not** “Worker skipped” and **not** a Cox outage — it’s weak Facebook-title → Cox-catalog mapping at ingest. The detail page already fixes this for closers via item **46**; ingest does not yet.
+
+**Top miss platforms:** F-150 / Silverado / Ram (both miss buckets). Titles often already contain style cues (`EcoBoost Coupe`, `328i`, `Elevation`, `Nightshade`) that never become Cox style tokens.
+
+### Implementation sketch (Phase B) — make ingest Y/M/M/S better
+
+**Goal:** Before the Worker calls Cox, clean the listing into Cox dropdown tokens the same way a closer’s detail page does.
+
+1. **Pull style/trim from the title** — e.g. EcoBoost Coupe, 328i, Elevation, Super Duty, Nightshade.
+2. **Split trim out of model** — `Mustang GT` → model Mustang + style GT; `Altima 2.5` / `Rogue SV` same idea.
+3. **Match to Cox catalog** — reuse item **46** (`resolveListingToCatalog` / `matchCatalogOption` helpers), not free-text Facebook strings.
+4. **Then call Cox** with those cleaned Y/M/M/S values (miles still optional per **54** — never invent odometer).
+5. **Badge guessed style** — Estimated style when inferred, so buyers know.
+6. **Prioritize trucks** — F-150 / Silverado / Ram dominate misses; cab/bed/trim from title when possible.
+7. **Re-measure funnel** on **new** scrapes only; then turn `SCRAPER_REVIEW_MODE` off (or admin-only).
+
+**Do not:** lower the lead pass floor; mass-revalue item-56 backfill rows; invent miles.
 
 ### Implementation sketch (Phase A)
 
@@ -1098,25 +1133,32 @@ Ops baseline still stands for **production lead quality**: [diagnostics.md](04-o
 2. **List path** (`src/persistence/opportunities.ts`):
    - Today `resolveOpportunityType` returns `null` without lead/MMR/manual → row dropped.
    - When flag on: include recent Facebook (etc.) listings with no MMR as a review type **or** as near_miss with an honest badge; relax `isReviewableNearMiss` deal-score ≥ 25 while flagged.
-3. **Time window** — only `first_seen_at` within last N hours (config; start 48h).
+3. **Time window** — only `first_seen_at` within last N hours (config; start 48h; temporarily 120h during outage soak).
 4. **UI** — badges; optional queue tab `view=scraper_review` so Needs action stays clean.
 5. **Do not** write synthetic `tav.leads` rows for every scrape.
 6. **Pair with item 44** when ready — **Listed** relative time makes scraper freshness readable.
 
 ### Primary files
 
+**Phase A (shipped):**
 - `src/persistence/opportunities.ts` — `resolveOpportunityType`, `isReviewableNearMiss`, `mapToOpportunityRow`, list/view filters
 - `src/app/routes.ts` / env — feature flag
 - `web/lib/opportunities/view-filter.ts` + queue tabs — optional `scraper_review` view
 - `web/app/(app)/opportunities/_components/*` — badges / tab copy
-- Wrangler / secrets docs — flag documentation
+
+**Phase B (next):**
+- Ingest valuation path — `src/valuation/workerClient.ts` / Facebook adapter / wherever YMM is built before Cox
+- Shared catalog match — port or share `resolveListingToCatalog` / item **46** helpers from `web/lib/opportunities/` into Worker-usable code (or call catalog APIs from ingest)
+- `src/sources/facebook.ts` — title parse: model vs trim split
+- Tests: title fixtures → Cox tokens → fewer `trim_missing` / `cox_no_data` on known samples
 
 ### Related items
 
 - **44** — Listed relative time (`listing_date_ms` → `posted_at`) — high value during scraper soak
-- **46** — Cox Y/M/M autofill (Phase B MMR coverage)
+- **46** — Cox Y/M/M autofill (Phase B reuses this on **ingest**, not only detail)
 - **54** — no inventing miles
-- Apify `fetchDetailedItems` — richer description/condition; not required for Listed date
+- **56** — backfill without Cox is separate; do not conflate with Phase B mapping work
+- Apify `fetchDetailedItems` — richer description/condition; optional later boost, not required to start Phase B
 
 ### Exit criteria
 
@@ -1128,25 +1170,71 @@ Ops baseline still stands for **production lead quality**: [diagnostics.md](04-o
 - [x] Window cap prevents unbounded historical dump (`first_seen_at` within 48h)
 - [x] Flag off restores prior queue behavior (`view=scraper_review` empty; production views unchanged)
 
-**Phase B (later)**
+**Phase B**
 
-- [ ] Funnel re-run after valuation/adapter work; `trim_missing` / `cox_no_data` share down
+- [x] Ingest runs listing → Cox-catalog Y/M/M/S (item **46** path) before MMR lookup
+- [x] Title style cues and model/trim splits covered for top miss platforms (esp. trucks)
+- [ ] Funnel re-run on **new** scrapes: `trim_missing` / `cox_no_data` share down vs 2026-07-13 baseline
 - [ ] Lead count rises from more fair+ MMR hits, not from permanent pass-floor cuts
+- [x] Estimated-style badge when style was inferred
+- [ ] `SCRAPER_REVIEW_MODE` turned off or admin-only after soak
 
-**Enable soak:** set `SCRAPER_REVIEW_MODE = "true"` in the target env’s `[vars]` (staging first), redeploy Worker, open **Scraper review** tab.
+**Enable soak:** `SCRAPER_REVIEW_MODE = "true"` on production (Cloudflare + `wrangler.toml` `[env.production]`). Flag alone does **not** create rows — ingest must succeed first (see outage note / item **56**).
+
+---
+
+## 56 — Apify `unmapped_task` outage + missed-lead backfill
+
+**Reported / diagnosed:** 2026-07-13  
+**Related:** item **55** soak looked empty; `SCRAPER_REVIEW_MODE` was already `true` on Cloudflare the whole time — **not** the root cause.
+
+### Timeline
+
+| When | What |
+|------|------|
+| **2026-07-07** | `dallas-nick-task` (`ZQEsd3nHcLAs5kLwL`) wired + schedule `tav-tx-dallas-custom`; region map change existed in a session but **never landed on `main` / stayed production-durable**. |
+| **~2026-07-08** | Custom-scraper `payloadAdapter` price/location gap found (`invalid_price`); fix remained local WIP. |
+| **2026-07-11 ~10:13 UTC** | Last `tav.source_runs` row for Dallas (`run_id` `1bFsK5ozMSRyeinrP`). After this, Apify kept succeeding but TAV stopped recording runs. |
+| **2026-07-11 → 2026-07-13** | Schedule + webhooks healthy every ~5 min. Worker returned **HTTP 200** with `{"ok":true,"skipped":"unmapped_task","actor_task_id":"ZQEsd3nHcLAs5kLwL"}` (same for Oklahoma `UfFehLMz5zylHOxCS`). Apify marked dispatches SUCCEEDED; **zero new normalized listings / leads** from those tasks. |
+| **2026-07-13** | Diagnosed via Apify webhook dispatch bodies + Supabase `source_runs`. Root cause: production `APIFY_TASK_REGION_MAP` lacked custom-task IDs (committed map only had the four original facebook-marketplace tasks). |
+
+### Fix shipped (2026-07-13)
+
+- Commit **`347ca3c`** — map `ZQEsd3nHcLAs5kLwL` → `dallas_tx`, `UfFehLMz5zylHOxCS` → `oklahoma_city_ok`; extend `payloadAdapter` for custom-scraper `price.{amount,formatted}` + flat `location.{city,state}`.
+- Deployed `tav-aip-production` (region map + adapter live). Ops doc: `docs/04-operations/apify.md`.
+- **`SCRAPER_REVIEW_MODE`** remains intentional soak flag only — was already true on CF; local `wrangler.toml` `[env.production]` synced to `"true"`.
+
+### Done — missed Apify inventory in Scraper review (2026-07-13)
+
+Closed without full Worker/Cox webhook replay. Product ask: surface missed Dallas/OK scrapes in **Scraper review** with **Received** = original Apify scrape time (`first_seen_at`).
+
+- [x] Enumerated Apify SUCCEEDED runs for `dallas-nick-task` + Oklahoma (`2026-07-11 10:13 UTC` → fix window); ~1,065 runs, ~6.5k unique parseable listings
+- [x] Direct upsert into `tav.normalized_listings` (`entry_method = scraper`) with original `scraped_at` / `first_seen_at` / `posted_at` — no Cloudflare ingest, no lead/MMR creation
+- [x] ~5k rows landed in the outage window (accepted as good enough; remainder skipped/dupes/interrupted)
+- [x] Scraper review lookback temporarily **120h** (was 48) so original Received timestamps still appear during soak (`SCRAPER_REVIEW_WINDOW_HOURS`)
+- [x] Live path remains fixed (`347ca3c`); new schedule runs continue via webhook
+
+**Primary refs:** `docs/backfill-scraper-review-extract.mts`, `src/persistence/opportunities.ts` (window), `docs/04-operations/apify.md`
 
 ---
 
 ### Known issues (deferred)
 
-- Apify `payloadAdapter` price/location fix — **deployed 2026-07-08** (`51db82eb`); monitor `tav.source_runs` for `processed > 0`
-- Local uncommitted Apify `payloadAdapter` / `regionMap` WIP + `docs/04-operations/apify.md` — not part of Opportunities sprint; commit separately when ready
 - UX backlog §4–7 — resume after **45/47** (or in parallel once flag/dismiss is clear)
 - `handoff.md` production deploy dates stale — refresh after queue + detail fixes land in prod smoke
 - Item **43** optional: measure p95 tab-switch latency in production after `e55015b`; Worker SQL push only if still slow
 - Item **52** optional: global pending style on async buttons; app-wide shell lag only if buyers still report after queue fix
 
 ### Recently resolved (reference)
+
+**Item 55 Phase B — Ingest listing→Cox catalog Y/M/M/S (2026-07-13)**  
+`resolveListingToCatalogForIngest` in Worker (`src/valuation/resolveListingToCatalog.ts`) runs before MMR lookup: case-match make, fuzzy/strip model (`sportage fe`→Sportage+FE), drivetrain variant selection, title-aware style pick. Reuses item **46** cascade; falls back to listing trim when catalog unavailable. Funnel re-measure on new scrapes still pending.
+
+**Item 56 — Apify missed-run backfill (2026-07-13)**  
+Direct Supabase load of outage-window Dallas/OK scrapes into Scraper review with original Received times (~5k listings). Live webhook path fixed earlier (`347ca3c`). No full Cox/lead replay.
+
+**Apify custom-task ingest (2026-07-13)** · `347ca3c`  
+Production no longer skips Dallas/Oklahoma custom scrapes as `unmapped_task`; custom-scraper price/location adapter shipped.
 
 **Item 46 — Cox Y/M/M autofill (2026-07-11)**  
 `resolveListingToCatalog` (fuzzy model + style + drivetrain variants); Vehicle **Use listing identity** applies + saves + shows parser→Cox diff; **Open in MMR Lab** with canonical query params. Manual submit uses the same resolver.

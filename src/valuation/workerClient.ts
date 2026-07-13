@@ -9,8 +9,7 @@ import { normalizeMmrParams } from "./normalizeMmrParams";
 import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
-import { isCatalogModelVariantOf, selectCatalogModelVariantForListing } from "./selectCatalogModelVariant";
-import { selectCatalogStyleForListing } from "./selectCatalogStyle";
+import { resolveListingToCatalogForIngest } from "./resolveListingToCatalog";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -212,18 +211,6 @@ async function fetchCatalogItems(args: {
   }
 }
 
-function catalogModelsPath(year: number, make: string): string {
-  return `/catalog/years/${encodeURIComponent(String(year))}/makes/${encodeURIComponent(make)}/models`;
-}
-
-function catalogStylesPath(year: number, make: string, model: string): string {
-  return (
-    `/catalog/years/${encodeURIComponent(String(year))}` +
-    `/makes/${encodeURIComponent(make)}` +
-    `/models/${encodeURIComponent(model)}/styles`
-  );
-}
-
 /**
  * Call tav-intelligence-worker for an MMR valuation lookup.
  *
@@ -304,156 +291,104 @@ async function performMmrCall(
     // YMM path — Cox YMMT requires bodyname (trim/style). Odometer is optional:
     // omit when listing miles are unknown (intel → Cox average). Do not invent
     // 15k×age miles (item 54).
-    // Trim resolution: explicit trim first, then a title-derived real token
-    // (never fabricated) before declaring trim_missing. Cox YMMT requires a
-    // 4th path segment; a recoverable token keeps the listing in the running.
-    let effectiveTrim = params.trim?.trim() || "";
-    if (!effectiveTrim) {
-      const derived = extractTitleTrim(params.title);
-      if (derived) {
-        effectiveTrim = derived;
-        log("ingest.mmr_trim_from_title", { derived_trim: derived });
-      }
-    }
-    // Normalize make/model via reference data before sending
-    const db = getSupabaseClient(env);
-    const ref = await loadMmrReferenceData(db);
-    const normalized = normalizeMmrParams(
-      { make, model, trim: effectiveTrim },
-      ref,
-    );
-
-    // Use canonical values when resolved; fall back to raw on partial/none
-    const sendMake = normalized.canonicalMake ?? make;
-    let sendModel = normalized.canonicalModel ?? model;
-
-    endpoint = `${baseUrl}/mmr/year-make-model`;
-    let sendTrim = normalized.trim?.trim() || effectiveTrim;
-    let catalogStyles = await fetchCatalogItems({
-      baseUrl,
-      env,
-      useServiceBinding,
-      path: catalogStylesPath(year, sendMake, sendModel),
-      eventLabel: "styles",
-      serviceSecretConfigured,
-    });
-
-    if (catalogStyles?.catalogState === "not_connected") {
-      const catalogModels = await fetchCatalogItems({
+    //
+    // Item 55 Phase B: resolve listing → Cox catalog Y/M/M/S (item 46) before
+    // MMR lookup so ingest sends the same tokens closers get on detail.
+    const catalogFetch = (path: string, eventLabel: string) =>
+      fetchCatalogItems({
         baseUrl,
         env,
         useServiceBinding,
-        path: catalogModelsPath(year, sendMake),
-        eventLabel: "models",
+        path,
+        eventLabel,
         serviceSecretConfigured,
       });
-      if (catalogModels?.catalogState === "connected") {
-        const selectedModel = selectCatalogModelVariantForListing({
-          models: catalogModels.items,
-          sourceModel: sendModel,
-          title: params.title,
-          trim: sendTrim,
-        });
-        if (!selectedModel) {
-          const variantCount = catalogModels.items.filter((catalogModel) =>
-            isCatalogModelVariantOf(sendModel, catalogModel),
-          ).length;
-          if (variantCount > 0) {
-            log("ingest.mmr_catalog_model_variant_unmatched", {
-              year,
-              make: sendMake,
-              model: sendModel,
-              variant_count: variantCount,
-              trim_present: sendTrim.length > 0,
-              title_present: typeof params.title === "string" && params.title.trim().length > 0,
-            });
-            return {
-              kind: "miss",
-              reason: "model_variant_missing",
-              method: "year_make_model",
-              normalizationConfidence: normalized.normalizationConfidence,
-              ...mileageMeta,
-            };
-          }
-        }
-        if (selectedModel) {
-          sendModel = selectedModel.model;
-          log("ingest.mmr_catalog_model_variant_selected", {
-            year,
-            make: sendMake,
-            model: sendModel,
-            matched_signals: selectedModel.matchedSignals,
-          });
-          catalogStyles = await fetchCatalogItems({
-            baseUrl,
-            env,
-            useServiceBinding,
-            path: catalogStylesPath(year, sendMake, sendModel),
-            eventLabel: "styles",
-            serviceSecretConfigured,
-          });
-        }
-      }
-    }
 
-    let lookupTrimEstimated = false;
+    const catalogResolved = await resolveListingToCatalogForIngest(
+      {
+        year,
+        make,
+        model,
+        trim: params.trim,
+        title: params.title,
+      },
+      catalogFetch,
+    );
 
-    if (!sendTrim && catalogStyles?.catalogState !== "connected") {
+    const db = getSupabaseClient(env);
+    const ref = await loadMmrReferenceData(db);
+    const normalized = normalizeMmrParams(
+      { make, model, trim: params.trim?.trim() || extractTitleTrim(params.title) || "" },
+      ref,
+    );
+
+    if (catalogResolved.modelVariantAmbiguous) {
+      log("ingest.mmr_catalog_model_variant_unmatched", {
+        year,
+        make: catalogResolved.make,
+        model,
+        title_present: typeof params.title === "string" && params.title.trim().length > 0,
+      });
       return {
         kind: "miss",
-        reason: "trim_missing",
+        reason: "model_variant_missing",
         method: "year_make_model",
+        normalizationConfidence: normalized.normalizationConfidence,
         ...mileageMeta,
       };
     }
 
+    const sendMake = catalogResolved.make ?? normalized.canonicalMake ?? make;
+    const sendModel = catalogResolved.model ?? normalized.canonicalModel ?? model;
+    let sendTrim =
+      catalogResolved.style ??
+      params.trim?.trim() ??
+      normalized.trim?.trim() ??
+      "";
+    const lookupTrimEstimated = catalogResolved.style ? catalogResolved.styleEstimated : false;
+
+    if (!sendTrim) {
+      const derived = extractTitleTrim(params.title);
+      if (derived) {
+        sendTrim = derived;
+        log("ingest.mmr_trim_from_title", { derived_trim: derived });
+      }
+    }
+
+    if (!sendTrim) {
+      return {
+        kind: "miss",
+        reason: "trim_missing",
+        method: "year_make_model",
+        normalizationConfidence: normalized.normalizationConfidence,
+        ...mileageMeta,
+      };
+    }
+
+    endpoint = `${baseUrl}/mmr/year-make-model`;
     body = {
       year,
       make: sendMake,
       model: sendModel,
+      trim: sendTrim,
       ...(actualMileage !== undefined && { mileage: actualMileage }),
     };
 
-    if (catalogStyles?.catalogState === "connected") {
-      const selected = selectCatalogStyleForListing({
-        styles: catalogStyles.items,
-        title: params.title,
-        trim: sendTrim,
-      });
-      if (!selected) {
-        log("ingest.mmr_catalog_style_unmatched", {
-          year,
-          make: sendMake,
-          model: sendModel,
-          style_count: catalogStyles.items.length,
-          trim_present: sendTrim.length > 0,
-          title_present: typeof params.title === "string" && params.title.trim().length > 0,
-        });
-        return {
-          kind: "miss",
-          reason: "trim_missing",
-          method: "year_make_model",
-          normalizationConfidence: normalized.normalizationConfidence,
-          ...mileageMeta,
-        };
-      }
-      sendTrim = selected.style;
-      lookupTrimEstimated = selected.isEstimated;
-      log(
-        lookupTrimEstimated
-          ? "ingest.mmr_catalog_style_estimated"
-          : "ingest.mmr_catalog_style_selected",
-        {
+    if (lookupTrimEstimated) {
+      log("ingest.mmr_catalog_style_estimated", {
         year,
         make: sendMake,
         model: sendModel,
         style: sendTrim,
-        estimated: lookupTrimEstimated,
-        matched_signals: selected.matchedSignals,
-        },
-      );
+      });
+    } else if (catalogResolved.style) {
+      log("ingest.mmr_catalog_style_selected", {
+        year,
+        make: sendMake,
+        model: sendModel,
+        style: sendTrim,
+      });
     }
-    if (sendTrim) body.trim = sendTrim;
 
     // exact and alias both yield "medium"; partial/none degrades to "low"
     confidence =
@@ -465,9 +400,9 @@ async function performMmrCall(
     method = "year_make_model";
 
     normalizationMeta = {
-      lookupMake: normalized.canonicalMake,
-      lookupModel: normalized.canonicalModel,
-      lookupTrim: sendTrim || effectiveTrim || null,
+      lookupMake: sendMake,
+      lookupModel: sendModel,
+      lookupTrim: sendTrim,
       normalizationConfidence: lookupTrimEstimated
         ? "partial"
         : normalized.normalizationConfidence,
