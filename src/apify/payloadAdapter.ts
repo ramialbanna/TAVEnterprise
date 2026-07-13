@@ -26,7 +26,10 @@ const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
 interface RaidrApiListingPrice {
   amount?: unknown;
   amount_with_offset_in_currency?: unknown;
+  amount_with_offset?: unknown;
   formatted_amount?: unknown;
+  // custom-vehicle-scraper uses `formatted` instead of `formatted_amount`
+  formatted?: unknown;
 }
 
 interface RaidrApiSeller {
@@ -52,7 +55,9 @@ function extractPrice(listingPrice: unknown): string | undefined {
   // any currency/comma formatting downstream.
   const amount = readString(lp.amount);
   if (amount !== undefined) return amount;
-  const formatted = readString(lp.formatted_amount);
+  const formattedAmount = readString(lp.formatted_amount);
+  if (formattedAmount !== undefined) return formattedAmount;
+  const formatted = readString(lp.formatted);
   if (formatted !== undefined) return formatted;
   return undefined;
 }
@@ -108,7 +113,11 @@ export function mapRaidrApiItem(item: unknown): unknown {
     (v) => typeof v === "string" || typeof v === "number",
   );
   if (!adapterPriceIsScalar) {
-    const extracted = extractPrice(rec.listing_price);
+    const extracted =
+      extractPrice(rec.listing_price) ??
+      extractPrice(rec.listingPrice) ??
+      extractPrice(rec.price) ??
+      extractPrice(rec.Price);
     if (extracted !== undefined) out.price = extracted;
   }
 
@@ -219,18 +228,27 @@ export function mapRaidrApiItem(item: unknown): unknown {
     }
   }
 
-  // Basic-mode city/state fallback — top-level `location.reverse_geocode`
-  // structure is what the search-results-only payload provides.
+  // Basic-mode city/state fallback — facebook-marketplace-vehicle-scraper emits
+  // `location.reverse_geocode`; custom-vehicle-scraper emits flat
+  // `location.{city,state,displayName}`.
   if (readString(rec.city) === undefined && readString(out.city as unknown) === undefined) {
     const topLoc = rec.location;
     if (topLoc && typeof topLoc === "object" && !Array.isArray(topLoc)) {
-      const rg = (topLoc as { reverse_geocode?: unknown }).reverse_geocode;
-      if (rg && typeof rg === "object" && !Array.isArray(rg)) {
-        const r = rg as Record<string, unknown>;
-        const city = readString(r.city);
-        if (city) out.city = city;
-        const state = readString(r.state);
-        if (state) out.state = state;
+      const loc = topLoc as Record<string, unknown>;
+      const flatCity = readString(loc.city);
+      if (flatCity) out.city = flatCity;
+      const flatState = readString(loc.state);
+      if (flatState) out.state = flatState;
+
+      if (readString(out.city as unknown) === undefined) {
+        const rg = loc.reverse_geocode;
+        if (rg && typeof rg === "object" && !Array.isArray(rg)) {
+          const r = rg as Record<string, unknown>;
+          const city = readString(r.city);
+          if (city) out.city = city;
+          const state = readString(r.state);
+          if (state) out.state = state;
+        }
       }
     }
   }

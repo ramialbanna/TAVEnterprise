@@ -133,6 +133,41 @@ describe("mapRaidrApiItem — price", () => {
     const out = mapRaidrApiItem(item) as Record<string, unknown>;
     expect(out.price).toBe(19500); // scalar preserved, not replaced from nested
   });
+
+  it("extracts nested price.amount from custom-vehicle-scraper shape", () => {
+    const item = {
+      id: "27664010343233913",
+      title: "2018 Kia Sportage FE",
+      price: {
+        amount: "6999.00",
+        currency: "USD",
+        formatted: "$6,999",
+        amount_with_offset: "699900",
+      },
+      location: { city: "Dallas", state: "TX", displayName: "Dallas, Texas" },
+      postedAt: "2026-07-08T13:01:10.000Z",
+    };
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.price).toBe("6999.00");
+  });
+
+  it("falls back to price.formatted when amount missing (custom actor)", () => {
+    const item = {
+      id: "123",
+      title: "2020 Ford F-150",
+      price: { formatted: "$18,500", currency: "USD" },
+    };
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.price).toBe("$18,500");
+  });
+
+  it("prefers listing_price over price when both nested objects present", () => {
+    const item = raidrItem({
+      price: { amount: "9999.00", formatted: "$9,999" },
+    });
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.price).toBe("18500.00"); // listing_price wins
+  });
 });
 
 // ── Posted-at conversion ──────────────────────────────────────────────────────
@@ -266,10 +301,6 @@ describe("mapped raidr-api item is consumable by parseFacebookItem", () => {
   });
 
   it("1966 Piper item (real run dataset): now rejects at invalid_year rather than missing_identifier", () => {
-    // Direct regression: the exact dataset item from run V17qPHYuTwc59QbF6
-    // previously failed at extractUrl with missing_identifier. With the
-    // mapper in place, the adapter sees a valid URL and parses the title,
-    // then rejects at the year-validity gate (year < 2000).
     const mapped = mapRaidrApiItem(
       raidrItem({
         marketplace_listing_title: "1966 Piper cherokee 140",
@@ -281,6 +312,29 @@ describe("mapped raidr-api item is consumable by parseFacebookItem", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.reason).toBe("invalid_year");
+  });
+
+  it("custom-vehicle-scraper item passes parseFacebookItem end-to-end", () => {
+    const mapped = mapRaidrApiItem({
+      id: "27664010343233913",
+      url: "https://www.facebook.com/marketplace/item/1717012662948423/",
+      title: "2018 Kia Sportage FE",
+      price: {
+        amount: "6999.00",
+        currency: "USD",
+        formatted: "$6,999",
+        amount_with_offset: "699900",
+      },
+      location: { city: "Dallas", state: "TX", displayName: "Dallas, Texas" },
+      postedAt: "2026-07-08T13:01:10.000Z",
+    });
+    const r = parseFacebookItem(mapped, CTX);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.year).toBe(2018);
+    expect(r.listing.make).toBe("kia");
+    expect(r.listing.model).toBe("sportage fe");
+    expect(r.listing.price).toBe(6999);
   });
 });
 
@@ -492,6 +546,18 @@ describe("mapRaidrApiItem — detail-mode description and location", () => {
     const item = raidrItem({
       location: { reverse_geocode: { city: "Dallas", state: "TX" } },
     });
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.city).toBe("Dallas");
+    expect(out.state).toBe("TX");
+  });
+
+  it("extracts flat location.city/state from custom-vehicle-scraper shape", () => {
+    const item = {
+      id: "27664010343233913",
+      title: "2018 Kia Sportage FE",
+      price: { amount: "6999.00", formatted: "$6,999" },
+      location: { city: "Dallas", state: "TX", displayName: "Dallas, Texas" },
+    };
     const out = mapRaidrApiItem(item) as Record<string, unknown>;
     expect(out.city).toBe("Dallas");
     expect(out.state).toBe("TX");

@@ -18,15 +18,25 @@ describe("Apify task → TAV region mapping", () => {
     expect(mapApifyTaskToRegion("Xpq656NgueqfXDHvU")).toBe("oklahoma_city_ok");
   });
 
+  it("maps dallas-nick-task (ZQEsd3nHcLAs5kLwL) to dallas_tx", () => {
+    expect(mapApifyTaskToRegion("ZQEsd3nHcLAs5kLwL")).toBe("dallas_tx");
+  });
+
+  it("maps oklahoma custom task (UfFehLMz5zylHOxCS) to oklahoma_city_ok", () => {
+    expect(mapApifyTaskToRegion("UfFehLMz5zylHOxCS")).toBe("oklahoma_city_ok");
+  });
+
   it("returns null for an unknown task id", () => {
     expect(mapApifyTaskToRegion("not-a-real-task-id")).toBeNull();
   });
 
-  it("only the four Apify Facebook tasks are in the map", () => {
+  it("maps all wired Apify tasks (original four + custom dallas/oklahoma)", () => {
     expect(Object.keys(APIFY_TASK_REGION_MAP).sort()).toEqual(
       [
         "MWtcjZFWqJrnYChgp",
+        "UfFehLMz5zylHOxCS",
         "Xpq656NgueqfXDHvU",
+        "ZQEsd3nHcLAs5kLwL",
         "nccVufFs2grLH4Qsj",
         "vk7OijnAOOo8V1ekc",
       ],
