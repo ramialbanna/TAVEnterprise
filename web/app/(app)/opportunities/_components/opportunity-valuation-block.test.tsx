@@ -424,10 +424,12 @@ describe("OpportunityValuationBlock", () => {
 
     screen.getByRole("button", { name: /refresh valuation/i }).click();
 
-    await waitFor(() => expect(mmrCalls).toBeGreaterThanOrEqual(2));
-    // Prior MMR hero must remain — not blank / error wipe.
+    await waitFor(() => {
+      expect(mmrCalls).toBeGreaterThanOrEqual(2);
+      // Wait until refresh settles and prior MMR hero is restored (not skeleton).
+      expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
+    });
     expect(screen.getByText("MMR")).toBeInTheDocument();
-    expect(screen.getAllByText("$15,000").length).toBeGreaterThan(0);
   });
 
   it("shows F grade for saved pass with low segment data", async () => {
