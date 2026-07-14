@@ -8,6 +8,7 @@ import {
   isScraperReviewOnly,
   matchesNeedsAction,
   matchesMine,
+  matchesFlaggedLeads,
   matchesScraperReview,
   matchesWorthALook,
   sortOpportunityRows,
@@ -241,6 +242,12 @@ describe("scraper review helpers (item 55)", () => {
     expect(matchesNeedsAction(reviewRow, null)).toBe(false);
     expect(matchesMine(reviewRow, null, "user-1")).toBe(false);
     expect(matchesWorthALook(reviewRow)).toBe(false);
+  });
+
+  it("matchesFlaggedLeads only includes bad_lead status", () => {
+    expect(matchesFlaggedLeads(sampleRow({ status: "bad_lead" }))).toBe(true);
+    expect(matchesFlaggedLeads(sampleRow({ status: "new" }))).toBe(false);
+    expect(matchesFlaggedLeads(sampleRow({ status: "passed" }))).toBe(false);
   });
 });
 

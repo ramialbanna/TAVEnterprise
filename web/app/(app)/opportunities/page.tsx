@@ -12,6 +12,7 @@ const QUEUE_VIEWS = new Set<OpportunityView>([
   "mine",
   "worth_a_look",
   "scraper_review",
+  "flagged_leads",
   "all",
 ]);
 

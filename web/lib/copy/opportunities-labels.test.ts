@@ -39,6 +39,7 @@ describe("formatOpportunityBadge", () => {
   it("maps known badges", () => {
     expect(formatOpportunityBadge("Near miss")).toBe("Almost a deal");
     expect(formatOpportunityBadge("Manual submission")).toBe("Submitted by team");
+    expect(formatOpportunityBadge("Scraper review")).toBe("Unprocessed lead");
   });
 
   it("passes through unknown badges", () => {
@@ -50,7 +51,7 @@ describe("formatOpportunityType", () => {
   it("maps opportunity types", () => {
     expect(formatOpportunityType("near_miss")).toBe("Almost a deal");
     expect(formatOpportunityType("manual_submission")).toBe("Submitted by team");
-    expect(formatOpportunityType("scraper_review")).toBe("Scraper review");
+    expect(formatOpportunityType("scraper_review")).toBe("Unprocessed Leads");
   });
 
   it("includes capitalized grade for leads", () => {

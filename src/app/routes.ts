@@ -1119,7 +1119,7 @@ const OPPORTUNITY_SORTS = [
   "received_desc",
   "posted_desc",
 ] as const satisfies readonly OpportunitySort[];
-const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all", "scraper_review"] as const satisfies readonly OpportunityView[];
+const OPPORTUNITY_VIEWS = ["needs_action", "mine", "worth_a_look", "all", "scraper_review", "flagged_leads"] as const satisfies readonly OpportunityView[];
 
 const OPPORTUNITY_TYPES = ["lead", "near_miss", "scraper_review"] as const satisfies readonly OpportunityType[];
 const LEAD_GRADES = ["excellent", "good", "fair", "pass"] as const;

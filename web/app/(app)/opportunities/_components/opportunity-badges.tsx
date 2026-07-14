@@ -40,7 +40,7 @@ export function OpportunityTypeBadge({ row }: { row: Pick<OpportunityRow, "type"
     return <Badge variant="healthy">Manual</Badge>;
   }
   if (row.type === "scraper_review") {
-    return <Badge variant="review">Scraper review</Badge>;
+    return <Badge variant="review">Unprocessed lead</Badge>;
   }
   return <Badge variant="review">Near miss</Badge>;
 }

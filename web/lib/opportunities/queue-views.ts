@@ -7,7 +7,8 @@ export const QUEUE_VIEWS: readonly { value: OpportunityView; label: string }[] =
   { value: "needs_action", label: "Needs action" },
   { value: "mine", label: "Mine" },
   { value: "worth_a_look", label: "Worth a look" },
-  { value: "scraper_review", label: "Scraper review" },
+  { value: "scraper_review", label: "Unprocessed Leads" },
+  { value: "flagged_leads", label: "Flagged Leads" },
   { value: "all", label: "All" },
 ] as const;
 
@@ -27,8 +28,12 @@ export const QUEUE_EMPTY_COPY: Record<OpportunityView, QueueEmptyCopy> = {
     hint: "Deals with at least $1,000 room to make and seen in the last week appear here.",
   },
   scraper_review: {
-    title: "No recent scrapes to review",
+    title: "No unprocessed leads right now",
     hint: "When scraper review mode is on, recent listings without MMR (and soft near misses) appear here for soak — not as buy-box leads.",
+  },
+  flagged_leads: {
+    title: "No flagged leads",
+    hint: "Deals flagged as bad leads are hidden from the main queue and kept here for reference.",
   },
   all: {
     title: "No deals in your queue yet",

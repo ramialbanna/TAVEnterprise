@@ -64,6 +64,10 @@ export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): 
   return true;
 }
 
+export function matchesFlaggedLeads(row: Pick<OpportunityRow, "status">): boolean {
+  return row.status === "bad_lead";
+}
+
 export function filterOpportunityRowsByView(
   rows: OpportunityRow[],
   view: OpportunityView | undefined,
@@ -72,6 +76,10 @@ export function filterOpportunityRowsByView(
   const now = options?.now ?? new Date();
   const viewerUserId = options?.viewerUserId;
   const viewerDisplayName = options?.viewerDisplayName;
+
+  if (view === "flagged_leads") {
+    return rows.filter((row) => matchesFlaggedLeads(row));
+  }
 
   // Default queue views exclude dismissed / terminal statuses (items 45/47).
   const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));

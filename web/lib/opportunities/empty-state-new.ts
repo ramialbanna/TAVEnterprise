@@ -28,8 +28,13 @@ export const QUEUE_EMPTY_STATE_NEW: Record<OpportunityView, QueueEmptyStateNew> 
     action: { label: "Submit a listing", href: "/opportunities/submit" },
   },
   scraper_review: {
-    title: "No recent scrapes to review",
+    title: "No unprocessed leads right now",
     hint: "Turn on SCRAPER_REVIEW_MODE on the Worker to surface recent no-MMR scrapes here for soak testing.",
+    action: { label: "See needs action", href: "/opportunities?view=needs_action" },
+  },
+  flagged_leads: {
+    title: "No flagged leads",
+    hint: "When a deal is flagged as a bad lead, it is removed from the main queue and stored here.",
     action: { label: "See needs action", href: "/opportunities?view=needs_action" },
   },
   all: {

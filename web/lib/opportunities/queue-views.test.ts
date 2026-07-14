@@ -63,6 +63,7 @@ describe("emptyCopyForView", () => {
     expect(emptyCopyForView("needs_action").title).toBe("You're all caught up");
     expect(emptyCopyForView("mine").title).toContain("assigned");
     expect(emptyCopyForView("worth_a_look").title).toContain("standouts");
-    expect(emptyCopyForView("scraper_review").title).toContain("scrapes");
+    expect(emptyCopyForView("scraper_review").title).toContain("unprocessed");
+    expect(emptyCopyForView("flagged_leads").title).toContain("flagged");
   });
 });

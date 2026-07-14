@@ -91,7 +91,8 @@ export type OpportunityView =
   | "mine"
   | "worth_a_look"
   | "all"
-  | "scraper_review";
+  | "scraper_review"
+  | "flagged_leads";
 
 /** Paginated list filter — triggers `{ items, total, offset }` response from the Worker. */
 export type OpportunitiesPageFilter = OpportunitiesFilter & {

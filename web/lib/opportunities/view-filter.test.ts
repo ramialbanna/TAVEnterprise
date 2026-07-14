@@ -64,6 +64,7 @@ describe("view-filter", () => {
     const passed = row({ id: "c", assignedTo: null, status: "passed" });
     expect(filterOpportunityRowsByView([active, bad, passed], "all")).toEqual([active]);
     expect(filterOpportunityRowsByView([active, bad, passed], "needs_action")).toEqual([active]);
+    expect(filterOpportunityRowsByView([active, bad, passed], "flagged_leads")).toEqual([bad]);
   });
 
   it("filters mine by assignee user id", () => {

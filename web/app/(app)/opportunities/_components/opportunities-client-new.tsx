@@ -49,6 +49,7 @@ const QUEUE_VIEWS = new Set<OpportunityView>([
   "mine",
   "worth_a_look",
   "scraper_review",
+  "flagged_leads",
   "all",
 ]);
 
@@ -210,6 +211,11 @@ export function OpportunitiesClientNew({
         staleTime: LIST_STALE_TIME_MS,
       },
       {
+        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "flagged_leads" }), viewerUserId),
+        queryFn: () => listOpportunitiesPage(countFilter({ view: "flagged_leads" }), viewerOpts),
+        staleTime: LIST_STALE_TIME_MS,
+      },
+      {
         queryKey: ["opportunities-summary", "new-today", viewerUserId] as const,
         queryFn: () =>
           listOpportunitiesPage(
@@ -268,10 +274,11 @@ export function OpportunitiesClientNew({
     mine: extractTotal(summaryQueries[1].data),
     worth_a_look: extractTotal(summaryQueries[2].data),
     scraper_review: extractTotal(summaryQueries[3].data),
+    flagged_leads: extractTotal(summaryQueries[4].data),
   };
 
   const needsYou = tabCounts.needs_action ?? 0;
-  const newTodayResult = summaryQueries[4].data;
+  const newTodayResult = summaryQueries[5].data;
   const newToday =
     newTodayResult?.ok === true
       ? countFirstSeenToday(newTodayResult.data.items)

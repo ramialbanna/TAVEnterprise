@@ -125,7 +125,8 @@ export type OpportunityView =
   | "mine"
   | "worth_a_look"
   | "all"
-  | "scraper_review";
+  | "scraper_review"
+  | "flagged_leads";
 
 export interface OpportunityListFilter {
   limit: number;
@@ -334,7 +335,7 @@ export function buildOpportunityBadges(input: {
   if (input.mileageChanged) badges.push("Mileage changed");
   if (input.mileageUnknown) badges.push("Mileage unknown");
   if (input.estimateFlags.mileage) badges.push("Estimated miles");
-  if (input.estimateFlags.style) badges.push("Estimated style");
+  if (input.estimateFlags.style) badges.push("Estimated YMMS");
   if (input.estimateFlags.mmr) badges.push("Estimated MMR");
   if (!input.hasLead && input.hasMmr) badges.push("Near miss");
   if (input.candidateListingCount !== null && input.candidateListingCount > 1) {
@@ -616,6 +617,10 @@ export function matchesWorthALook(row: OpportunityRow, now: Date = new Date()): 
   return true;
 }
 
+export function matchesFlaggedLeads(row: Pick<OpportunityRow, "status">): boolean {
+  return row.status === "bad_lead";
+}
+
 export function sortOpportunityRows(
   rows: OpportunityRow[],
   sort: OpportunitySort = "last_seen_desc",
@@ -650,6 +655,10 @@ function applyViewFilter(
 ): OpportunityRow[] {
   const view = filter.view ?? "all";
   const now = new Date();
+
+  if (view === "flagged_leads") {
+    return rows.filter((row) => matchesFlaggedLeads(row));
+  }
 
   // Default queue views exclude dismissed / terminal statuses (items 45/47).
   const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));

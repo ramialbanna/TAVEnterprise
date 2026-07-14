@@ -47,7 +47,7 @@ export type OpportunitiesPageKeyFilter = {
   limit?: number;
   offset?: number;
   sort?: "spread_desc" | "score_desc" | "last_seen_desc" | "received_desc" | "posted_desc";
-  view?: "needs_action" | "mine" | "worth_a_look" | "all" | "scraper_review";
+  view?: "needs_action" | "mine" | "worth_a_look" | "all" | "scraper_review" | "flagged_leads";
   source?: string;
   region?: string;
   type?: "lead" | "near_miss" | "manual_submission" | "scraper_review";
