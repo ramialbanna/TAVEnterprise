@@ -48,7 +48,7 @@ export function buyerNavItems(): NavLinkItem[] {
     },
     {
       href: "/mmr-lab",
-      label: "Value a vehicle",
+      label: "TAV MMR",
       icon: Search,
       isActive: (pathname) =>
         pathname.startsWith("/mmr-lab") || pathname.startsWith("/maxbuy"),
@@ -100,7 +100,7 @@ const TITLE_ENTRIES: { match: (pathname: string) => boolean; label: string }[] =
   { match: (p) => p.startsWith("/opportunities/submit"), label: "Submit listing" },
   {
     match: (p) => p.startsWith("/mmr-lab") || p.startsWith("/maxbuy"),
-    label: "Value a vehicle",
+    label: "TAV MMR",
   },
   { match: (p) => p === "/my-work", label: "My work" },
   { match: (p) => p.startsWith("/opportunities"), label: "Opportunities" },

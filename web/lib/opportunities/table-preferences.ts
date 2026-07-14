@@ -37,7 +37,7 @@ export const TABLE_COLUMNS: readonly {
 }[] = [
   { id: "vehicle", label: "Vehicle", defaultVisible: true, hideable: false },
   { id: "price", label: "Asking price", defaultVisible: true, hideable: true },
-  { id: "mmrValue", label: "Wholesale value", defaultVisible: true, hideable: true },
+  { id: "mmrValue", label: "MMR Value", defaultVisible: true, hideable: true },
   { id: "spread", label: "Room to make", defaultVisible: true, hideable: true },
   { id: "finalScore", label: "Deal score", defaultVisible: true, hideable: true },
   { id: "postedAt", label: "Listed", defaultVisible: true, hideable: true },

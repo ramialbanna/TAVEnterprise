@@ -28,8 +28,8 @@ describe("nav-new", () => {
     expect(navTitleNew("/dashboard")).toBe("Home");
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
-    expect(navTitleNew("/mmr-lab")).toBe("Value a vehicle");
-    expect(navTitleNew("/maxbuy")).toBe("Value a vehicle");
+    expect(navTitleNew("/mmr-lab")).toBe("TAV MMR");
+    expect(navTitleNew("/maxbuy")).toBe("TAV MMR");
     expect(analyticsNavItem().label).toBe("Analytics");
   });
 
@@ -37,6 +37,6 @@ describe("nav-new", () => {
     const hrefs = buyerNavItems().map((i) => i.href);
     expect(hrefs).toContain("/mmr-lab");
     expect(hrefs).not.toContain("/maxbuy");
-    expect(buyerNavItems().find((i) => i.href === "/mmr-lab")?.label).toBe("Value a vehicle");
+    expect(buyerNavItems().find((i) => i.href === "/mmr-lab")?.label).toBe("TAV MMR");
   });
 });

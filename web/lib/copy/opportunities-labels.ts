@@ -54,7 +54,7 @@ export const TABLE_HEADERS = {
   type: "Type",
   badges: "Signals",
   price: "Asking price",
-  mmrValue: "Wholesale value",
+  mmrValue: "MMR Value",
   spread: "Room to make",
   finalScore: "Deal score",
   assignedCloserName: "Assignee",
@@ -88,7 +88,7 @@ export const PAGE_COPY = {
   preview: {
     valuationTitle: "Pricing",
     askingPrice: "Asking price",
-    wholesaleValue: "Wholesale value",
+    wholesaleValue: "MMR Value",
     roomToMake: "Room to make",
     dealScore: "Deal score",
     status: "Status",

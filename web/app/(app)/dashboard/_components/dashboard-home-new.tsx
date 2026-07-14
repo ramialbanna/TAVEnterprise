@@ -95,7 +95,7 @@ export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts 
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
               <Search className="mb-1 size-5 text-primary" aria-hidden />
-              <CardTitle className="text-lg">Value a vehicle</CardTitle>
+              <CardTitle className="text-lg">TAV MMR</CardTitle>
               <CardDescription>
                 Wholesale MMR lookup, Max buy evaluation, and market context at the lane.
               </CardDescription>

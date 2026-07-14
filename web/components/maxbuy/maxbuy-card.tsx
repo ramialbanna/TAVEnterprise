@@ -52,7 +52,7 @@ function DisabledShell({
           TAV history + costs → recommended max buy and buy/pass verdict. Wholesale (MMR) stays
           available in{" "}
           <Link href="/mmr-lab" className="font-medium text-primary hover:underline">
-            Value a vehicle
+            TAV MMR
           </Link>
           .
         </CardDescription>
