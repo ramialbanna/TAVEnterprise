@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-16 · **Focus:** **55** funnel soak + finish 2026 catalog sync; **51** TBD
+**Last updated:** 2026-07-16 · **Focus:** **55** funnel soak (catalog sync done); **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint through **2026-07-16**: **55** Phase C complete except catalog **2026/2027** + funnel soak. Worker **`d0cbae12`** (sync retry/skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **33,286 rows** (2016–2025). **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses (1 day — too early for full offline-matcher lift). **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
+> Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** **55** Phase C shipped end-to-end except **2026/2027 catalog rows** + longer funnel soak. Worker `d0cbae12`; web live at `tav-enterprise.vercel.app`. Item **55** stays `[~]` until 2026 sync completes + funnel shows offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**.
+**This doc:** **55** Phase C shipped; catalog **2016–2027** synced 2026-07-16. Worker `9e4d2765`; web live at `tav-enterprise.vercel.app`. Item **55** stays `[~]` until funnel shows offline-matcher lift (multi-day soak). **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**.
 
 | Area | Path |
 |------|------|
@@ -110,7 +110,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; finish **2026/2027** sync + longer funnel soak | **High** | [~] |
+| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 
 **Full status board (incl. shipped):**
@@ -132,7 +132,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [x] |
-| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; finish **2026/2027** sync + longer funnel soak | **High** | [~] |
+| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
@@ -1057,7 +1057,7 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ## 55 — Scraper review mode (see Apify output in the queue)
 
-**Status (2026-07-16):** Phase C **shipped**. Worker `d0cbae12` (sync retry-on-502, skip failed models). Web **deployed** to `https://tav-enterprise.vercel.app` (Suggested Cox matches + Apply on detail). **`cox_catalog_tree`:** 33,286 rows, years **2016–2025**; **2026/2027** finish on next cron (`0 6 * * *`). **Funnel re-measure (live ingests, `source_run_id IS NOT NULL`):** post-Phase C (≥ 2026-07-16) **49.8%** MMR hit vs post-Phase B **48.7%**; `model_variant_missing` **55.4%** vs **56.3%** of misses — early; need multi-day soak for offline matcher. **`SCRAPER_REVIEW_MODE` permanent.** Item `[~]` until 2026 sync + funnel lift confirmed.
+**Status (2026-07-16):** Phase C **shipped**. Worker `9e4d2765` (missing-years cron sync, skip-on-502). Web **deployed** to `https://tav-enterprise.vercel.app` (Suggested Cox matches + Apply on detail). **`cox_catalog_tree`:** **35,978 rows**, years **2016–2027** (synced 2026-07-16; +2,692 rows, 1 model skipped). Daily cron (`0 6 * * *`) syncs **missing years only**. **Funnel re-measure (live ingests):** post-Phase C **49.8%** MMR hit vs post-Phase B **48.7%**; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak. **`SCRAPER_REVIEW_MODE` permanent.** Item `[~]` until funnel lift confirmed.
 
 **Reported:** 2026-07-11 (scraper soak — “we need to see what the scraper actually sends before fine-tuning filters”)
 
@@ -1344,7 +1344,7 @@ CREATE TABLE tav.mmr_style_aliases (
 5. [x] **C-b.2** offline matcher module + wire into `workerClient` ingest path
 6. [x] **C-b.3** detail UI: "Suggested Cox match" + Apply — **web deployed** `tav-enterprise.vercel.app`
 7. [x] Funnel re-measured (2026-07-16) — early; multi-day soak needed
-8. [ ] Finish **2026/2027** catalog sync (next cron or admin trigger)
+8. [x] Finish **2026/2027** catalog sync (2026-07-16 — partial, 1 model skipped; cron now backfills missing years only)
 
 **Catalog sync (production · shipped 2026-07-16 · `5ef2f318`):**
 - **Cron:** existing daily `0 6 * * *` (after stale sweep) — uses Worker secrets + `INTEL_WORKER` binding; **no manual secret entry**
@@ -1370,7 +1370,7 @@ CREATE TABLE tav.mmr_style_aliases (
 
 #### Exit criteria (Phase C)
 
-- [~] `cox_catalog_tree` synced for years current−10 … current+1 — **33,286 rows; 2016–2025 done; 2026/2027 pending**
+- [x] `cox_catalog_tree` synced for years current−10 … current+1 — **35,978 rows; 2016–2027 done** (2026-07-16)
 - [x] Ingest uses offline matcher (DB first; live catalog API fallback when tree stale/miss)
 - [~] `model_variant_missing` share down ≥ 50% vs post-Phase B baseline — **55.4% vs 56.3% after 1 day; re-check after soak**
 - [x] Parser garbage (`BIGHORN 1500`, `Honda+Hr-V`) resolves in adapter tests
@@ -1379,7 +1379,7 @@ CREATE TABLE tav.mmr_style_aliases (
 - [x] Auto-guessed variant/style always badged; never silent
 - [x] Funnel re-measured (2026-07-16); ongoing soak
 
-**Enable review queue:** `SCRAPER_REVIEW_MODE = "true"` permanent (2026-07-16). Worker: Phase C-b sync cron `d0cbae12`. Web: `tav-enterprise.vercel.app`.
+**Enable review queue:** `SCRAPER_REVIEW_MODE = "true"` permanent (2026-07-16). Worker: Phase C-b sync cron `9e4d2765` (missing-years daily). Web: `tav-enterprise.vercel.app`.
 
 ---
 
