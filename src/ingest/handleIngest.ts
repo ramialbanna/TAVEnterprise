@@ -34,6 +34,8 @@ import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttribut
 import { getMmrValue } from "../valuation/mmr";
 import { getMmrLookupOutcome } from "../valuation/workerClient";
 import type { MmrMissReason } from "../valuation/workerClient";
+import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
+import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
 import { getValuationLookupMode } from "../valuation/lookupMode";
 import { fromMmrResult } from "../valuation/valuationResult";
@@ -263,6 +265,7 @@ export async function ingestCore(
       // with a structured `missing_reason` (mileage_missing, trim_missing,
       // cox_no_data, cox_unavailable, etc.) instead of disappearing silently.
       let mmrResult = null;
+      let catalogMatchSuggestions: CatalogMatchSuggestion[] | undefined;
       let workerMiss: {
         reason: MmrMissReason;
         method: ValuationMethod | null;
@@ -288,6 +291,7 @@ export async function ingestCore(
           );
           if (outcome.kind === "hit") {
             mmrResult = outcome.result;
+            catalogMatchSuggestions = outcome.catalogMatchSuggestions;
           } else {
             workerMiss = {
               reason: outcome.reason,
@@ -296,9 +300,18 @@ export async function ingestCore(
               ...(outcome.mileageUsed !== undefined && { mileageUsed: outcome.mileageUsed }),
               ...(outcome.isInferredMileage !== undefined && { isInferredMileage: outcome.isInferredMileage }),
             };
+            catalogMatchSuggestions = outcome.catalogMatchSuggestions;
           }
         } catch (err) {
           logError("valuation", "ingest.mmr_worker_failed", err, listingCtx);
+        }
+      }
+
+      if (catalogMatchSuggestions?.length) {
+        try {
+          await upsertCatalogMatchSuggestions(db, normResult.id, catalogMatchSuggestions);
+        } catch (err) {
+          logError("valuation", "ingest.catalog_match_suggestions_failed", err, listingCtx);
         }
       }
 

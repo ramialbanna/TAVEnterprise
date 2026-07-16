@@ -106,6 +106,7 @@ function makeDetail(overrides: Partial<OpportunityDetail> = {}): OpportunityDeta
     tagExpiration: null,
     certified: false,
     extendedWarranty: false,
+    catalogMatchSuggestions: [],
     ...overrides,
   };
 }

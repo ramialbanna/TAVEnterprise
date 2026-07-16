@@ -1,9 +1,9 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-13 · **Focus:** **55** soak / Phase B; **51** TBD
+**Last updated:** 2026-07-16 · **Focus:** **55** funnel soak + finish 2026 catalog sync; **51** TBD
 
 > **Fresh chat prompt:**
-> Sprint so far (through 2026-07-13): **40–50**, **52–54**, **46**, **56** shipped; **55** Phase A live. **Open:** **55 Phase B** — ingest listing→Cox Y/M/M/S (reuse **46**) before MMR; **51** buyer checklist. See §55.
+> Sprint through **2026-07-16**: **55** Phase C complete except catalog **2026/2027** + funnel soak. Worker **`d0cbae12`** (sync retry/skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **33,286 rows** (2016–2025). **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses (1 day — too early for full offline-matcher lift). **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -52,7 +52,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** Active buyer-facing work on **Opportunities** (queue + detail). Queue/detail sprint items **40–50**, **52–54**, **56** are done (**46** Cox autofill included). Also open: **51**, **55** (Phase A live; Phase B = ingest title→Cox Y/M/M/S). MMR Lab / opportunity detail items 2–39 remain complete.
+**This doc:** **55** Phase C shipped end-to-end except **2026/2027 catalog rows** + longer funnel soak. Worker `d0cbae12`; web live at `tav-enterprise.vercel.app`. Item **55** stays `[~]` until 2026 sync completes + funnel shows offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**.
 
 | Area | Path |
 |------|------|
@@ -80,7 +80,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 ## Active work
 
-### Shipped this sprint (2026-07-06 → 2026-07-10)
+### Shipped this sprint (2026-07-06 → 2026-07-13)
 
 | # | Item | Commit(s) | Notes |
 |---|------|-----------|--------|
@@ -94,8 +94,15 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **45/47** | Flag/dismiss bad lead | `3ed1c8f` | Queue Flag → reason dialog → `bad_lead`; excluded from default views |
 | **53** | Salesperson / Appraiser directory | `24db7a7`, `d557463` | Dropdowns + admin CRUD; roster `role = both` |
 | **54** slices 1–2 | Max buy no invent + detail UX | `af362d7`, `9bc8bd3` | Null mileage / unknown band; saved ingest MMR; catalog case-match |
-| **54** ingest | Stop inventing miles on MMR ingest | _(this change)_ | Omit odometer; null snapshot mileage; docs |
+| **54** ingest | Stop inventing miles on MMR ingest | `43e921b` | Omit odometer; null snapshot mileage; docs |
 | **44** | **Listed** date (seller post time) | `65d3b93` | `listing_date_ms` → `posted_at`; relative Listed column + detail |
+| **55** Phase A | Scraper review queue soak | `f2328da`, `6722d08` | `SCRAPER_REVIEW_MODE` + tab; 120h window for item **56** backfill |
+| **55** Phase B | Ingest listing→Cox Y/M/M/S before MMR | `b2064dd` | `resolveListingToCatalogForIngest`; deployed `tav-aip-production` `ccde935f` |
+| **55** Phase C-a | Parser + variant signals + style soft-fail | `569b4885` | facebook adapter; `selectCatalogModelVariant`; style scoring in ingest |
+| **55** Phase C-b | Offline catalog matcher + suggestions UI | `c9e40f47` | migration `0065`; `matchListingToCoxCatalog`; detail Apply + alias learning |
+| **55** Phase C-b sync | Worker cron catalog tree sync | `d0cbae12` | retry-on-502 + skip bad models; **33,286 rows** (2016–2025) |
+| **55** Phase C-b web | Suggestions UI on detail | Vercel `7WdvQ8t` | `tav-enterprise.vercel.app` — Apply + alias learning |
+| **56** | Apify missed-run backfill + custom-task fix | `347ca3c` | `unmapped_task` fix; ~5k outage listings in Scraper review |
 
 **Also:** Expanded buyer email backlog **47–53** + product principle (VIN + YMM paths, always-fresh valuation). Web-ci Cursor rule requires lint+typecheck before push.
 
@@ -103,7 +110,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **55** | **Scraper review mode** — Phase A live; Phase B ingest mapping shipped (funnel re-measure pending) | **High** | [~] |
+| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; finish **2026/2027** sync + longer funnel soak | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 
 **Full status board (incl. shipped):**
@@ -125,7 +132,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [x] |
-| **55** | **Scraper review mode** — feature-flagged queue soak; Phase B = ingest title→Cox catalog Y/M/M/S before MMR | **High** | [~] |
+| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; finish **2026/2027** sync + longer funnel soak | **High** | [~] |
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
@@ -1050,11 +1057,13 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ## 55 — Scraper review mode (see Apify output in the queue)
 
+**Status (2026-07-16):** Phase C **shipped**. Worker `d0cbae12` (sync retry-on-502, skip failed models). Web **deployed** to `https://tav-enterprise.vercel.app` (Suggested Cox matches + Apply on detail). **`cox_catalog_tree`:** 33,286 rows, years **2016–2025**; **2026/2027** finish on next cron (`0 6 * * *`). **Funnel re-measure (live ingests, `source_run_id IS NOT NULL`):** post-Phase C (≥ 2026-07-16) **49.8%** MMR hit vs post-Phase B **48.7%**; `model_variant_missing` **55.4%** vs **56.3%** of misses — early; need multi-day soak for offline matcher. **`SCRAPER_REVIEW_MODE` permanent.** Item `[~]` until 2026 sync + funnel lift confirmed.
+
 **Reported:** 2026-07-11 (scraper soak — “we need to see what the scraper actually sends before fine-tuning filters”)
 
 **Symptom:** Apify is delivering hundreds of Facebook listings, but the Opportunities queue only shows scored **leads** + strict **near misses**. ~86% of new listings never appear because they lack MMR (or fail near-miss economics). That hides scraper output during testing.
 
-**Goal (now):** Temporarily surface recent scraped inventory in the app so buyers/ops can judge **scraper quality** (titles, prices, freshness, junk rate). Fine-tune lead/MMR gates **after** that soak — not before.
+**Goal (now):** Surface recent scraped inventory in the app so buyers/ops can judge **scraper quality** (titles, prices, freshness, junk rate) and work unprocessed rows. **`SCRAPER_REVIEW_MODE` stays on permanently** (product decision 2026-07-16) — the Scraper review tab is a permanent queue surface, not a temporary soak to disable later.
 
 ### Funnel snapshot (since start of yesterday, America/Chicago — measured 2026-07-11)
 
@@ -1123,7 +1132,7 @@ Last **120h** of `tav.normalized_listings`:
 4. **Then call Cox** with those cleaned Y/M/M/S values (miles still optional per **54** — never invent odometer).
 5. **Badge guessed style** — Estimated style when inferred, so buyers know.
 6. **Prioritize trucks** — F-150 / Silverado / Ram dominate misses; cab/bed/trim from title when possible.
-7. **Re-measure funnel** on **new** scrapes only; then turn `SCRAPER_REVIEW_MODE` off (or admin-only).
+7. **Re-measure funnel** on **new** scrapes only.
 
 **Do not:** lower the lead pass floor; mass-revalue item-56 backfill rows; invent miles.
 
@@ -1146,11 +1155,12 @@ Last **120h** of `tav.normalized_listings`:
 - `web/lib/opportunities/view-filter.ts` + queue tabs — optional `scraper_review` view
 - `web/app/(app)/opportunities/_components/*` — badges / tab copy
 
-**Phase B (next):**
-- Ingest valuation path — `src/valuation/workerClient.ts` / Facebook adapter / wherever YMM is built before Cox
-- Shared catalog match — port or share `resolveListingToCatalog` / item **46** helpers from `web/lib/opportunities/` into Worker-usable code (or call catalog APIs from ingest)
-- `src/sources/facebook.ts` — title parse: model vs trim split
-- Tests: title fixtures → Cox tokens → fewer `trim_missing` / `cox_no_data` on known samples
+**Phase B (shipped 2026-07-13 · `b2064dd` · prod `ccde935f`):**
+- `src/valuation/resolveListingToCatalog.ts` — `resolveListingToCatalogForIngest` (item **46** cascade for ingest)
+- `src/valuation/matchCatalogOption.ts` — case-insensitive + fuzzy catalog match
+- `src/valuation/resolveCatalogStyleFromEvidence.ts` — trim token → Cox style
+- `src/valuation/workerClient.ts` — YMM path calls resolver before MMR lookup
+- `src/valuation/__tests__/resolveListingToCatalog.test.ts`, `test/valuation.workerClient.test.ts`
 
 ### Related items
 
@@ -1167,19 +1177,209 @@ Last **120h** of `tav.normalized_listings`:
 - [x] Flag documented; default **off** in production until soak is intentional (`SCRAPER_REVIEW_MODE` in `wrangler.toml` / `src/types/env.ts` / `.dev.vars.example`)
 - [x] With flag on, recent scrapes without MMR appear in queue/review tab with clear badges (`Scraper review`, `No MMR`; soft near-miss keeps Near miss + Scraper review)
 - [x] Real lead creation / grade threshold unchanged (list path only; no `upsertLead` change)
-- [x] Window cap prevents unbounded historical dump (`first_seen_at` within 48h)
+- [x] Window cap prevents unbounded historical dump (`first_seen_at` within 48h; **120h** during item-**56** soak)
 - [x] Flag off restores prior queue behavior (`view=scraper_review` empty; production views unchanged)
 
 **Phase B**
 
 - [x] Ingest runs listing → Cox-catalog Y/M/M/S (item **46** path) before MMR lookup
 - [x] Title style cues and model/trim splits covered for top miss platforms (esp. trucks)
-- [ ] Funnel re-run on **new** scrapes: `trim_missing` / `cox_no_data` share down vs 2026-07-13 baseline
-- [ ] Lead count rises from more fair+ MMR hits, not from permanent pass-floor cuts
+- [x] Funnel re-run on **new** scrapes: `trim_missing` / `cox_no_data` share down vs 2026-07-13 baseline (see **Phase B funnel re-measure** + **Phase C** below)
+- [x] Lead count rises from more fair+ MMR hits, not from permanent pass-floor cuts (431 leads / ~7k valued post-deploy vs 81 / ~2.8k pre-outage baseline)
 - [x] Estimated-style badge when style was inferred
-- [ ] `SCRAPER_REVIEW_MODE` turned off or admin-only after soak
+- [x] `SCRAPER_REVIEW_MODE` on permanently — Scraper review tab stays (product decision 2026-07-16; **not** a temporary soak to disable)
 
-**Enable soak:** `SCRAPER_REVIEW_MODE = "true"` on production (Cloudflare + `wrangler.toml` `[env.production]`). Flag alone does **not** create rows — ingest must succeed first (see outage note / item **56**).
+### Phase C funnel re-measure (2026-07-16 — live ingests only)
+
+Cohort: `source_run_id IS NOT NULL`. Post-Phase B = `fetched_at` 2026-07-13 12:00 UTC → 2026-07-15. Post-Phase C = `fetched_at >= 2026-07-16` (C-a/C-b worker + partial offline tree).
+
+| Metric | Post Phase B | Post Phase C (1 day) | Notes |
+|--------|------------:|---------------------:|-------|
+| Valued (Cox called) | 5,192 | 1,899 | C cohort still small |
+| MMR hit rate | **48.7%** | **49.8%** | +1.1 pts — early |
+| Miss: `model_variant_missing` share | **56.3%** | **55.4%** | Not yet ≥50% reduction vs baseline |
+
+**Read:** Offline tree (2016–2025) only populated ~15:20 UTC 2026-07-16; need **multi-day soak** before judging exit criteria. Next cron should finish **2026/2027** with retry/skip logic (`d0cbae12`).
+
+### Phase B funnel re-measure (2026-07-15 — live ingests only)
+
+Cohort: `source_run_id IS NOT NULL` (excludes item-**56** backfill). Post-Phase B = valuations `fetched_at >= 2026-07-13 12:00 UTC`. Pre baseline = live ingests `2026-07-08` → `2026-07-11` (healthy days before Apify outage).
+
+| Metric | Pre Phase B | Post Phase B | Notes |
+|--------|------------:|-------------:|-------|
+| Valued (Cox called) | 2,797 | 6,997 | |
+| MMR hit rate | **13.1%** | **48.9%** | ~3.7× |
+| Leads | 81 | 431 | ~5.3×; economics gate still working (MMR-no-lead avg spread ≈ −81%) |
+| Miss: `trim_missing` + `cox_no_data` | **99.9%** of misses | **43.7%** of misses | Legacy buckets collapsed |
+| Miss: `model_variant_missing` | 0% | **56.2%** of misses | New top bucket — Cox model split, no variant evidence |
+
+**Root cause shift:** Phase B fixed make/model/style cascade for many rows, but **`model_variant_missing` hard-fails** when Cox splits a model (e.g. `RAV4 AWD` / `RAV4 FWD`) and the Facebook title lacks drivetrain. ~**2,300 / 48h** listings still can't get Y/M/M/S for auto-MMR (~85% `model_variant_missing`, ~15% parser/title bugs like `BIGHORN 1500`, `Honda+Hr-V`). **Unprocessed Leads** tab must stay until Phase C reduces manual volume.
+
+### Phase C — Cox catalog tree + offline matcher (design — 2026-07-15)
+
+**Goal:** Pre-download Cox Y/M/M/S per year, build a scored cross-reference from Facebook title tokens → best Cox path, and stop hard-failing on variant ambiguity when title evidence is partial. Extend item **46** / Phase B — do not fork a second identity pipeline.
+
+**Product rules (carry forward):**
+
+- Never invent odometer (**54**).
+- Auto-match only above a confidence floor; badge **Estimated style** / **Estimated variant** when guessed.
+- Below floor → keep row in **Unprocessed Leads** with **top-3 suggested Cox matches** for one-click closer pick on detail.
+- Closer corrections feed alias tables (learning loop).
+
+#### Phase C-a — Quick wins (no catalog sync; ship first) — **shipped 2026-07-15 · prod `569b4885`**
+
+| # | Change | Fixes | Files |
+|---|--------|-------|-------|
+| C-a.1 | **Title parser normalization** — trim-before-model (`BIGHORN 1500` → model `1500`, trim `Big Horn`); strip duplicate make; normalize `+` / `bighorn` | ~15% `trim_missing` | `src/sources/facebook.ts` |
+| C-a.2 | **Variant signals beyond drivetrain** — cab/bed/body (`Crew Cab`, `5 1/2 ft`, `Double Cab`, `Pickup 4D`) in `selectCatalogModelVariantForListing` | Trucks (Tundra, F-150, Ram) | `src/valuation/selectCatalogModelVariant.ts` |
+| C-a.3 | **Don't hard-fail `model_variant_missing`** — when variants tie, score each variant's styles against title tokens; pick best above floor, else store suggestions | ~70% `model_variant_missing` | `src/valuation/resolveListingToCatalog.ts`, `src/valuation/workerClient.ts` |
+
+#### Phase C-b — Pre-downloaded catalog cross-reference — **shipped 2026-07-15 · prod `c9e40f47`**
+
+**Why:** Today ingest does **3–4 live intel-worker catalog fetches per listing** and bails on ambiguity. `tav.mmr_reference_makes` / `mmr_reference_models` are flat (no year, no styles, no variants). A local tree enables offline scoring in one query.
+
+**Sync job** (nightly cron or manual admin trigger):
+
+1. For each Cox year in range (recommend: current year − 10 … current year + 1):
+   - `GET /catalog/years/{year}/makes` → for each make → models → for each model → styles.
+2. Upsert into `tav.cox_catalog_tree` (see schema below).
+3. Record run in `tav.cox_catalog_sync_runs`.
+4. Rate-limit intel worker; resume on failure.
+
+**Matcher** (`matchListingToCoxCatalog` — new shared module, used by ingest + detail):
+
+```
+Input:  year, make, model, trim, title (from Facebook parser)
+Output: { make, model, style, confidence, estimatedFlags[], alternatives[] }
+```
+
+**Scoring** (0–100 per candidate Cox path `(year, make, model, style)`):
+
+| Signal | Weight | Match |
+|--------|-------:|-------|
+| Make token overlap | 15 | `ram` ↔ `Ram` |
+| Model token overlap | 25 | `1500`, `rav4`, `silverado 1500` |
+| Trim token in style | 25 | `xle`, `limited`, `big horn`, `rst` |
+| Drivetrain in model or style | 15 | `awd`, `fwd`, `4x4`, `4wd` |
+| Cab/bed in style | 10 | `crew cab`, `double cab`, `5 1/2 ft` |
+| Body in style | 5 | `sport utility`, `sedan 4d`, `pickup 4d` |
+| Penalty: unmatched Cox tokens | −10 each | Cox string has tokens title doesn't explain |
+| Penalty: parser garbage | −30 | `honda+hr-v`, `bighorn 1500` ordering |
+
+**Confidence policy:**
+
+| Score | Action |
+|------:|--------|
+| ≥ 80 | Auto Cox MMR lookup with matched Y/M/M/S |
+| 60–79 | Auto lookup + badge **Estimated style** or **Estimated variant** |
+| 40–59 | No auto-MMR; persist top-3 in `catalog_match_suggestions`; show on Unprocessed detail |
+| < 40 | Unprocessed only; no suggestions unless ≥ 25 |
+
+**Tie-break:** prefer candidate whose style contains the most trim tokens from title; if still tied on model variants, prefer variant with more style token overlap (not "first catalog row").
+
+#### Schema sketch
+
+```sql
+-- Full Cox Y/M/M/S tree (year-specific — not replaceable by flat mmr_reference_models)
+CREATE TABLE tav.cox_catalog_tree (
+  year          smallint NOT NULL,
+  make          text     NOT NULL,
+  model         text     NOT NULL,   -- includes Cox splits: "RAV4 AWD", "1500", "K5 FWD"
+  style         text     NOT NULL,   -- Cox bodyname / trim token
+  search_text   text     NOT NULL,   -- lowercased concat for trigram/GIN: "2022 ram 1500 4d crew cab big horn"
+  variant_kind  text     NULL        -- 'drivetrain' | 'cab_bed' | 'powertrain' | 'base'
+    CHECK (variant_kind IS NULL OR variant_kind IN ('drivetrain','cab_bed','powertrain','base')),
+  synced_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (year, make, model, style)
+);
+
+CREATE INDEX cox_catalog_tree_year_make_idx ON tav.cox_catalog_tree (year, make);
+CREATE INDEX cox_catalog_tree_search_gin ON tav.cox_catalog_tree USING gin (search_text gin_trgm_ops);
+-- Requires pg_trgm extension if not already enabled.
+
+CREATE TABLE tav.cox_catalog_sync_runs (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  started_at    timestamptz NOT NULL DEFAULT now(),
+  finished_at   timestamptz,
+  status        text NOT NULL CHECK (status IN ('running','completed','failed','partial')),
+  years_synced  smallint[] NOT NULL DEFAULT '{}',
+  row_count     integer,
+  error_message text
+);
+
+-- Top-N matcher output for Unprocessed / detail (optional JSONB on listing or separate)
+CREATE TABLE tav.catalog_match_suggestions (
+  normalized_listing_id uuid PRIMARY KEY REFERENCES tav.normalized_listings (id) ON DELETE CASCADE,
+  suggestions           jsonb NOT NULL,  -- [{ make, model, style, score, estimatedVariant, estimatedStyle }]
+  best_score            smallint,
+  computed_at           timestamptz NOT NULL DEFAULT now()
+);
+
+-- Learning loop: closer-picked Y/M/M/S → instant re-match next time
+CREATE TABLE tav.mmr_style_aliases (
+  alias           text NOT NULL,
+  canonical_make  text NOT NULL,
+  canonical_model text NOT NULL,
+  canonical_style text NOT NULL,
+  source          text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','ingest_learned')),
+  PRIMARY KEY (alias, canonical_make, canonical_model)
+);
+```
+
+**`suggestions` JSON example:**
+
+```json
+[
+  { "make": "Toyota", "model": "RAV4 FWD", "style": "4D SUV XLE", "score": 72, "estimatedVariant": true, "estimatedStyle": false },
+  { "make": "Toyota", "model": "RAV4 AWD", "style": "4D SUV XLE", "score": 68, "estimatedVariant": true, "estimatedStyle": false }
+]
+```
+
+#### Implementation order
+
+1. [x] **C-a.1** parser fixes + tests (facebook adapter fixtures from prod failures)
+2. [x] **C-a.2** cab/bed variant signals
+3. [x] **C-a.3** variant soft-fail + suggestion persistence (no sync yet — still uses live catalog API)
+4. [x] **C-b.1** migration + sync — worker daily cron + admin trigger (`5ef2f318`); **partial first run** 33,286 rows (2016–2025); 2026 pending
+5. [x] **C-b.2** offline matcher module + wire into `workerClient` ingest path
+6. [x] **C-b.3** detail UI: "Suggested Cox match" + Apply — **web deployed** `tav-enterprise.vercel.app`
+7. [x] Funnel re-measured (2026-07-16) — early; multi-day soak needed
+8. [ ] Finish **2026/2027** catalog sync (next cron or admin trigger)
+
+**Catalog sync (production · shipped 2026-07-16 · `5ef2f318`):**
+- **Cron:** existing daily `0 6 * * *` (after stale sweep) — uses Worker secrets + `INTEL_WORKER` binding; **no manual secret entry**
+- **Admin:** `POST /admin/catalog/sync-cox-tree` (Bearer `ADMIN_API_SECRET`)
+- **First run (2026-07-16):** status `partial`, **33,286 rows**, years **2016–2025**; failed on 2026 Mercedes Sprinter styles (intel HTTP 502)
+- **Local ops only:** `scripts/sync-cox-catalog.mjs` (not required in prod)
+
+**Product decision (2026-07-16):** `SCRAPER_REVIEW_MODE` **stays on permanently** — Scraper review tab is a permanent queue surface; do **not** plan to disable.
+
+#### Primary files (Phase C)
+
+- `src/sources/facebook.ts` — parser (C-a.1)
+- `src/valuation/selectCatalogModelVariant.ts` — cab/bed signals (C-a.2)
+- `src/valuation/matchListingToCoxCatalog.ts` — **new** offline scorer (C-b.2)
+- `src/valuation/resolveListingToCatalog.ts` — delegate to matcher; remove hard `modelVariantAmbiguous` bail
+- `src/valuation/workerClient.ts` — ingest path; persist `catalog_match_suggestions`
+- `src/catalog/syncCoxCatalogTree.ts` — worker cron + admin sync (C-b.1 prod)
+- `src/catalog/intelCatalogClient.ts` — intel catalog fetch for sync
+- `scripts/sync-cox-catalog.mjs` — local-only ops script (C-b.1 dev)
+- `supabase/migrations/0065_cox_catalog_tree.sql` — schema
+- `web/.../opportunity-vehicle-block.tsx` — show suggestions on detail
+- `src/persistence/opportunities.ts` — expose suggestions on Unprocessed rows (optional column/badge)
+
+#### Exit criteria (Phase C)
+
+- [~] `cox_catalog_tree` synced for years current−10 … current+1 — **33,286 rows; 2016–2025 done; 2026/2027 pending**
+- [x] Ingest uses offline matcher (DB first; live catalog API fallback when tree stale/miss)
+- [~] `model_variant_missing` share down ≥ 50% vs post-Phase B baseline — **55.4% vs 56.3% after 1 day; re-check after soak**
+- [x] Parser garbage (`BIGHORN 1500`, `Honda+Hr-V`) resolves in adapter tests
+- [x] Unprocessed rows show top-3 suggested Cox matches on detail — **live on Vercel**
+- [x] Closer manual pick writes `mmr_style_aliases`; repeat listing auto-matches
+- [x] Auto-guessed variant/style always badged; never silent
+- [x] Funnel re-measured (2026-07-16); ongoing soak
+
+**Enable review queue:** `SCRAPER_REVIEW_MODE = "true"` permanent (2026-07-16). Worker: Phase C-b sync cron `d0cbae12`. Web: `tav-enterprise.vercel.app`.
 
 ---
 
@@ -1227,8 +1427,8 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 
 ### Recently resolved (reference)
 
-**Item 55 Phase B — Ingest listing→Cox catalog Y/M/M/S (2026-07-13)**  
-`resolveListingToCatalogForIngest` in Worker (`src/valuation/resolveListingToCatalog.ts`) runs before MMR lookup: case-match make, fuzzy/strip model (`sportage fe`→Sportage+FE), drivetrain variant selection, title-aware style pick. Reuses item **46** cascade; falls back to listing trim when catalog unavailable. Funnel re-measure on new scrapes still pending.
+**Item 55 Phase B — Ingest listing→Cox catalog Y/M/M/S (2026-07-13)** · `b2064dd`  
+`resolveListingToCatalogForIngest` in Worker runs before MMR lookup: case-match make, fuzzy/strip model (`sportage fe`→Sportage+FE), drivetrain variant selection, title-aware style pick. Deployed `tav-aip-production` `ccde935f`. Post-deploy smoke: ingest + valuation active; funnel re-measure on new scrapes still pending.
 
 **Item 56 — Apify missed-run backfill (2026-07-13)**  
 Direct Supabase load of outage-window Dallas/OK scrapes into Scraper review with original Received times (~5k listings). Live webhook path fixed earlier (`347ca3c`). No full Cox/lead replay.

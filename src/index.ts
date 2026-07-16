@@ -6,6 +6,7 @@ import { handleApp } from "./app/routes";
 import { getSupabaseClient } from "./persistence/supabase";
 import { runStaleSweep } from "./stale/engine";
 import { recordCronRunSafe } from "./persistence/cronRuns";
+import { runCoxCatalogSync } from "./catalog/syncCoxCatalogTree";
 import { log, serializeError } from "./logging/logger";
 import { VERSION } from "./version";
 
@@ -40,28 +41,51 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    log("cron.stale_sweep.started");
     const db = getSupabaseClient(env);
-    const startedAt = new Date().toISOString();
+
+    log("cron.stale_sweep.started");
+    const staleStartedAt = new Date().toISOString();
     try {
       const { updated } = await runStaleSweep(db);
       await recordCronRunSafe(db, {
         jobName: "stale_sweep",
-        startedAt,
+        startedAt: staleStartedAt,
         finishedAt: new Date().toISOString(),
         status: "ok",
         detail: { updated },
       });
     } catch (err) {
-      // runStaleSweep already logs the failure; record it (best-effort), then rethrow.
       await recordCronRunSafe(db, {
         jobName: "stale_sweep",
-        startedAt,
+        startedAt: staleStartedAt,
         finishedAt: new Date().toISOString(),
         status: "failed",
         detail: { error: serializeError(err) },
       });
       throw err;
+    }
+
+    log("cron.cox_catalog_sync.started");
+    const syncStartedAt = new Date().toISOString();
+    try {
+      const result = await runCoxCatalogSync(env, db);
+      await recordCronRunSafe(db, {
+        jobName: "cox_catalog_sync",
+        startedAt: syncStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "ok",
+        detail: result,
+      });
+      log("cron.cox_catalog_sync.completed", result);
+    } catch (err) {
+      await recordCronRunSafe(db, {
+        jobName: "cox_catalog_sync",
+        startedAt: syncStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "failed",
+        detail: { error: serializeError(err) },
+      });
+      log("cron.cox_catalog_sync.failed", { error: serializeError(err) });
     }
   },
 };

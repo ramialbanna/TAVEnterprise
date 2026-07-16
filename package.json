@@ -20,7 +20,8 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" \"workers/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "test:int": "vitest run --config vitest.int.config.ts"
+    "test:int": "vitest run --config vitest.int.config.ts",
+    "sync:cox-catalog": "node scripts/sync-cox-catalog.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

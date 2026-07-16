@@ -10,6 +10,8 @@ import { log } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
 import { resolveListingToCatalogForIngest } from "./resolveListingToCatalog";
+import type { CatalogMatchSuggestion } from "./resolveListingToCatalog";
+import { buildIngestCatalogOfflineDeps } from "./buildIngestCatalogOfflineDeps";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -91,7 +93,7 @@ export function classifyIntelHttpError(
 }
 
 export type MmrLookupOutcome =
-  | { kind: "hit"; result: MmrResult }
+  | { kind: "hit"; result: MmrResult; catalogMatchSuggestions?: CatalogMatchSuggestion[] }
   | {
       kind: "miss";
       reason: MmrMissReason;
@@ -99,6 +101,7 @@ export type MmrLookupOutcome =
       normalizationConfidence?: NormalizationConfidence;
       mileageUsed?: number | null;
       isInferredMileage?: boolean;
+      catalogMatchSuggestions?: CatalogMatchSuggestion[];
     };
 
 // tav-intelligence-worker wraps every successful response as
@@ -266,6 +269,7 @@ async function performMmrCall(
         normalizationConfidence: NormalizationConfidence;
       }
     | undefined;
+  let catalogMatchSuggestions: CatalogMatchSuggestion[] | undefined;
   // Item 54: never invent odometer. Only forward listing-actual miles to intel;
   // when absent, omit mileage so Cox prices at segment average.
   const actualMileage =
@@ -304,6 +308,9 @@ async function performMmrCall(
         serviceSecretConfigured,
       });
 
+    const db = getSupabaseClient(env);
+    const offlineDeps = buildIngestCatalogOfflineDeps(db);
+
     const catalogResolved = await resolveListingToCatalogForIngest(
       {
         year,
@@ -313,27 +320,30 @@ async function performMmrCall(
         title: params.title,
       },
       catalogFetch,
+      offlineDeps,
     );
-
-    const db = getSupabaseClient(env);
+    catalogMatchSuggestions = catalogResolved.catalogMatchSuggestions;
     const ref = await loadMmrReferenceData(db);
     const normalized = normalizeMmrParams(
       { make, model, trim: params.trim?.trim() || extractTitleTrim(params.title) || "" },
       ref,
     );
 
-    if (catalogResolved.modelVariantAmbiguous) {
+    if (catalogResolved.modelVariantAmbiguous && !catalogResolved.model) {
       log("ingest.mmr_catalog_model_variant_unmatched", {
         year,
         make: catalogResolved.make,
         model,
         title_present: typeof params.title === "string" && params.title.trim().length > 0,
+        suggestion_count: catalogResolved.catalogMatchSuggestions?.length ?? 0,
+        suggestions: catalogResolved.catalogMatchSuggestions?.slice(0, 3),
       });
       return {
         kind: "miss",
         reason: "model_variant_missing",
         method: "year_make_model",
         normalizationConfidence: normalized.normalizationConfidence,
+        catalogMatchSuggestions,
         ...mileageMeta,
       };
     }
@@ -361,6 +371,7 @@ async function performMmrCall(
         reason: "trim_missing",
         method: "year_make_model",
         normalizationConfidence: normalized.normalizationConfidence,
+        catalogMatchSuggestions,
         ...mileageMeta,
       };
     }
@@ -380,6 +391,14 @@ async function performMmrCall(
         make: sendMake,
         model: sendModel,
         style: sendTrim,
+      });
+    } else if (catalogResolved.variantEstimated) {
+      log("ingest.mmr_catalog_variant_estimated", {
+        year,
+        make: sendMake,
+        model: sendModel,
+        style: sendTrim,
+        suggestion_count: catalogResolved.catalogMatchSuggestions?.length ?? 0,
       });
     } else if (catalogResolved.style) {
       log("ingest.mmr_catalog_style_selected", {
@@ -544,7 +563,11 @@ async function performMmrCall(
         ? { mileageMethod: "actual" as const }
         : {}),
   };
-  return { kind: "hit", result };
+  return {
+    kind: "hit",
+    result,
+    ...(catalogMatchSuggestions && { catalogMatchSuggestions }),
+  };
 }
 
 /**
@@ -559,7 +582,13 @@ export async function getMmrLookupOutcome(
   env: Env,
 ): Promise<MmrLookupOutcome> {
   const raw = await performMmrCall(params, env);
-  if (raw.kind === "hit") return { kind: "hit", result: raw.result };
+  if (raw.kind === "hit") {
+    return {
+      kind: "hit",
+      result: raw.result,
+      ...(raw.catalogMatchSuggestions && { catalogMatchSuggestions: raw.catalogMatchSuggestions }),
+    };
+  }
   // Strip the internal httpStatus from the exported outcome shape.
   return {
     kind: "miss",
@@ -568,6 +597,7 @@ export async function getMmrLookupOutcome(
     ...(raw.normalizationConfidence && { normalizationConfidence: raw.normalizationConfidence }),
     ...(raw.mileageUsed !== undefined && { mileageUsed: raw.mileageUsed }),
     ...(raw.isInferredMileage !== undefined && { isInferredMileage: raw.isInferredMileage }),
+    ...(raw.catalogMatchSuggestions && { catalogMatchSuggestions: raw.catalogMatchSuggestions }),
   };
 }
 

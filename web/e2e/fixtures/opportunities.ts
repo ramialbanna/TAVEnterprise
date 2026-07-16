@@ -200,5 +200,6 @@ export function e2eOpportunityDetail(row: OpportunityRow): OpportunityDetail {
     candidateListingCount: 1,
     mileage: 48000,
     actions: [],
+    catalogMatchSuggestions: [],
   };
 }

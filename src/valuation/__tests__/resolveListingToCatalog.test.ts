@@ -122,4 +122,78 @@ describe("resolveListingToCatalogForIngest", () => {
     expect(result.model).toBe("K5 AWD");
     expect(result.style).toBe("4D SEDAN GT-LINE");
   });
+
+  it("auto-picks a Cox model variant via style scoring when drivetrain is absent", async () => {
+    const fetchCatalog = mockCatalog({
+      "/catalog/years/2016/makes": {
+        catalogState: "connected",
+        items: ["Honda"],
+      },
+      "/catalog/years/2016/makes/Honda/models": {
+        catalogState: "connected",
+        items: ["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"],
+      },
+      "/catalog/years/2016/makes/Honda/models/CR-V%20AWD/styles": {
+        catalogState: "connected",
+        items: ["4D Sport Utility EX-L", "4D Sport Utility LX"],
+      },
+      "/catalog/years/2016/makes/Honda/models/CR-V%20FWD/styles": {
+        catalogState: "connected",
+        items: ["4D Sport Utility LX", "4D Sport Utility SE"],
+      },
+    });
+
+    const result = await resolveListingToCatalogForIngest(
+      {
+        year: 2016,
+        make: "Honda",
+        model: "CR-V",
+        trim: "EX-L",
+        title: "2016 Honda CR-V EX-L Sport Utility 4D",
+      },
+      fetchCatalog,
+    );
+
+    expect(result.model).toBe("CR-V AWD");
+    expect(result.style).toBe("4D Sport Utility EX-L");
+    expect(result.variantEstimated).toBe(true);
+    expect(result.modelVariantAmbiguous).toBe(false);
+    expect(result.catalogMatchSuggestions?.length).toBeGreaterThan(0);
+  });
+
+  it("returns suggestions when Cox variants tie on style evidence", async () => {
+    const fetchCatalog = mockCatalog({
+      "/catalog/years/2016/makes": {
+        catalogState: "connected",
+        items: ["Honda"],
+      },
+      "/catalog/years/2016/makes/Honda/models": {
+        catalogState: "connected",
+        items: ["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"],
+      },
+      "/catalog/years/2016/makes/Honda/models/CR-V%20AWD/styles": {
+        catalogState: "connected",
+        items: ["4D Sport Utility LX"],
+      },
+      "/catalog/years/2016/makes/Honda/models/CR-V%20FWD/styles": {
+        catalogState: "connected",
+        items: ["4D Sport Utility LX"],
+      },
+    });
+
+    const result = await resolveListingToCatalogForIngest(
+      {
+        year: 2016,
+        make: "Honda",
+        model: "CR-V",
+        trim: "Sport Utility",
+        title: "2016 Honda CR-V Sport Utility 4D",
+      },
+      fetchCatalog,
+    );
+
+    expect(result.model).toBeNull();
+    expect(result.modelVariantAmbiguous).toBe(true);
+    expect(result.catalogMatchSuggestions).toHaveLength(2);
+  });
 });

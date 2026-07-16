@@ -224,6 +224,7 @@ describe("OpportunitiesClientNew", () => {
           candidateListingCount: null,
           mileage: null,
           actions: [],
+          catalogMatchSuggestions: [],
         },
       };
     });

@@ -1,4 +1,10 @@
+import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import type { SupabaseClient } from "./supabase";
+import { getCatalogMatchSuggestions } from "./catalogMatchSuggestions";
+import {
+  buildListingStyleAliasKey,
+  upsertMmrStyleAlias,
+} from "./mmrStyleAliases";
 import { buildListingDiagnostics } from "./ingestRuns";
 import { computeDealScore } from "../scoring/deal";
 import type { AppUser } from "./users";
@@ -111,6 +117,8 @@ export interface OpportunityDetail extends OpportunityRow {
   candidateListingCount: number | null;
   mileage: number | null;
   actions: OpportunityActionRecord[];
+  /** Top Cox catalog paths from ingest matcher (item 55 Phase C-b). */
+  catalogMatchSuggestions?: CatalogMatchSuggestion[];
 }
 
 export type OpportunitySort =
@@ -552,6 +560,7 @@ function mapToOpportunityDetail(
   lead: LeadRow | null,
   candidateListingCount: number | null,
   actions: OpportunityActionRecord[],
+  catalogMatchSuggestions: CatalogMatchSuggestion[] = [],
 ): OpportunityDetail {
   const reasonCodes = lead?.reason_codes;
   return {
@@ -562,6 +571,7 @@ function mapToOpportunityDetail(
     candidateListingCount,
     mileage: asNumber(listing.mileage),
     actions,
+    catalogMatchSuggestions,
   };
 }
 
@@ -1018,7 +1028,16 @@ export async function getOpportunityDetail(
   if (!row) return null;
 
   const actions = await listOpportunityActions(db, id);
-  return mapToOpportunityDetail(row, listing, diagnostic, lead, candidateListingCount, actions);
+  const storedSuggestions = await getCatalogMatchSuggestions(db, id);
+  return mapToOpportunityDetail(
+    row,
+    listing,
+    diagnostic,
+    lead,
+    candidateListingCount,
+    actions,
+    storedSuggestions?.suggestions ?? [],
+  );
 }
 
 const MAX_FETCH = 500;
@@ -1158,6 +1177,31 @@ export async function patchOpportunityFields(
       action: "fields_updated",
       metadata: { changes },
     });
+
+    const identityChanged =
+      "make" in patch || "model" in patch || "style" in patch;
+    const nextMake = ("make" in patch ? patch.make : asString(existing.make)) ?? "";
+    const nextModel = ("model" in patch ? patch.model : asString(existing.model)) ?? "";
+    const nextStyle = ("style" in patch ? patch.style : asString(existing.trim)) ?? "";
+    if (
+      identityChanged &&
+      nextMake.trim() &&
+      nextModel.trim() &&
+      nextStyle.trim()
+    ) {
+      const aliasKey = buildListingStyleAliasKey(
+        asString(existing.make),
+        asString(existing.model),
+        asString(existing.trim),
+      );
+      await upsertMmrStyleAlias(db, {
+        aliasKey,
+        canonicalMake: nextMake.trim(),
+        canonicalModel: nextModel.trim(),
+        canonicalStyle: nextStyle.trim(),
+        source: "ingest_learned",
+      });
+    }
   }
 
   const refreshed = await getOpportunityDetail(db, normalizedListingId, {

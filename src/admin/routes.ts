@@ -15,6 +15,7 @@ import { withRetry } from "../persistence/retry";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { log, serializeError } from "../logging/logger";
+import { runCoxCatalogSync } from "../catalog/syncCoxCatalogTree";
 
 const INTEL_SERVICE_BINDING_BASE = "https://tav-intelligence-worker.internal";
 
@@ -321,6 +322,24 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     const limit = Math.min(limitParam ? parseInt(limitParam, 10) : 20, 100);
     const batches = await listImportBatches(db, limit);
     return json({ ok: true, data: batches });
+  }
+
+  // POST /admin/catalog/sync-cox-tree — populate tav.cox_catalog_tree from intel worker
+  if (request.method === "POST" && pathname === "/admin/catalog/sync-cox-tree") {
+    try {
+      const result = await runCoxCatalogSync(env, db);
+      return json({ ok: true, data: result });
+    } catch (err) {
+      log("admin.catalog_sync_failed", { error: serializeError(err) });
+      return json(
+        {
+          ok: false,
+          error: "catalog_sync_failed",
+          message: err instanceof Error ? err.message : String(err),
+        },
+        503,
+      );
+    }
   }
 
   return json({ ok: false, error: "not_found" }, 404);

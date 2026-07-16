@@ -176,3 +176,19 @@ export function selectCatalogStyleForListing(
   }
   return { style: best.style, matchedSignals: best.matched, isEstimated: false };
 }
+
+/** Rank Cox styles by title/trim evidence without picking a fallback style. */
+export function rankCatalogStylesForListing(
+  input: CatalogStyleSelectionInput,
+): Array<{ style: string; score: number; matched: string[] }> {
+  const styles = input.styles.filter((style) => style.trim().length > 0);
+  if (styles.length === 0) return [];
+
+  const signals = collectSignals(input.title, input.trim);
+  if (signals.length === 0) return [];
+
+  return styles
+    .map((style) => ({ style, ...scoreStyle(style, signals) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || b.matched.length - a.matched.length);
+}

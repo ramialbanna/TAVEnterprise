@@ -307,6 +307,42 @@ describe("parseFacebookItem — valid cases", () => {
     expect(r.listing.model).toBe("range rover evoque");
     expect(r.listing.trim).toBe("se premium");
   });
+
+  it("A26: BIGHORN 1500 trim-before-model → model 1500 + trim big horn", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/26", title: "2020 Ram BIGHORN 1500 Crew Cab 62k miles", price: "$34,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("ram");
+    expect(r.listing.model).toBe("1500");
+    expect(r.listing.trim).toBe("big horn");
+  });
+
+  it("A27: Honda+Hr-V glued token normalizes to hr-v model", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/27", title: "2021 Honda+Hr-V EX 22k miles", price: "$24,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("honda");
+    expect(r.listing.model).toBe("hr-v");
+    expect(r.listing.trim).toBe("ex");
+  });
+
+  it("A28: duplicate make token stripped from remainder", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/28", title: "2020 Ram Ram 1500 Laramie", price: "$42,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.make).toBe("ram");
+    expect(r.listing.model).toBe("1500");
+    expect(r.listing.trim).toBe("laramie");
+  });
 });
 
 // ── Group B: Edge cases ───────────────────────────────────────────────────────

@@ -162,6 +162,7 @@ function makeDetail(overrides: Partial<OpportunityDetail> = {}): OpportunityDeta
     candidateListingCount: null,
     mileage: 32000,
     actions: [],
+    catalogMatchSuggestions: [],
     ...overrides,
   };
 }

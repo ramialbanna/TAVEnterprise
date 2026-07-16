@@ -17,8 +17,34 @@ vi.mock("../src/valuation/loadMmrReferenceData", () => ({
   resetReferenceDataCache: vi.fn(),
 }));
 
+vi.mock("../src/valuation/buildIngestCatalogOfflineDeps", () => ({
+  buildIngestCatalogOfflineDeps: vi.fn(() => ({})),
+  buildListingStyleAliasKey: vi.fn((make, model, trim) =>
+    [make, model, trim].map((part) => (part ?? "").trim().toLowerCase()).join("|"),
+  ),
+}));
+
+function makeSupabaseMock() {
+  const chain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    ilike: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    insert: vi.fn().mockReturnThis(),
+    upsert: vi.fn().mockResolvedValue({ error: null }),
+    update: vi.fn().mockReturnThis(),
+    single: vi.fn().mockResolvedValue({ data: null, error: null }),
+  };
+  return {
+    schema: vi.fn(() => ({
+      from: vi.fn(() => chain),
+    })),
+    from: vi.fn(() => chain),
+  };
+}
+
 vi.mock("../src/persistence/supabase", () => ({
-  getSupabaseClient: vi.fn(() => ({})),
+  getSupabaseClient: vi.fn(() => makeSupabaseMock()),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -926,7 +952,9 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
   it("returns model_variant_missing when Cox splits the model but listing evidence cannot choose AWD/FWD", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(catalogOk(["Honda"]))
-      .mockResolvedValueOnce(catalogOk(["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"]));
+      .mockResolvedValueOnce(catalogOk(["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"]))
+      .mockResolvedValueOnce(catalogOk(["4D Sport Utility LX"]))
+      .mockResolvedValueOnce(catalogOk(["4D Sport Utility LX"]));
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Honda"]),
@@ -948,6 +976,6 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
     );
 
     expect(outcome.kind === "miss" && outcome.reason).toBe("model_variant_missing");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

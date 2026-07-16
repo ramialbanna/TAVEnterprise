@@ -469,6 +469,16 @@ export const DismissReasonCodeSchema = z.enum([
 ]);
 export type DismissReasonCode = z.infer<typeof DismissReasonCodeSchema>;
 
+export const CatalogMatchSuggestionSchema = z.object({
+  make: z.string(),
+  model: z.string(),
+  style: z.string().nullable(),
+  score: z.number(),
+  estimatedVariant: z.boolean(),
+  estimatedStyle: z.boolean(),
+});
+export type CatalogMatchSuggestion = z.infer<typeof CatalogMatchSuggestionSchema>;
+
 export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   reasonCodes: z.array(z.string()),
   valuationMissingReason: z.string().nullable(),
@@ -476,8 +486,9 @@ export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   candidateListingCount: z.number().nullable(),
   mileage: z.number().nullable(),
   actions: z.array(OpportunityActionSchema).default([]),
+  catalogMatchSuggestions: z.array(CatalogMatchSuggestionSchema).default([]),
 });
-export type OpportunityDetail = z.infer<typeof OpportunityDetailSchema>;
+export type OpportunityDetail = z.output<typeof OpportunityDetailSchema>;
 
 /** POST /app/opportunities/parse — prefilled submit fields (Facebook v1). */
 export const ParsedListingFieldsSchema = z.object({

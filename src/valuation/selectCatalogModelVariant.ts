@@ -18,6 +18,16 @@ const DRIVETRAIN_SIGNALS: ReadonlyArray<{ signal: string; aliases: readonly stri
   { signal: "2WD", aliases: ["2WD", "4X2", "TWO WHEEL DRIVE", "TWO-WHEEL DRIVE"] },
 ];
 
+const CAB_BED_BODY_SIGNALS: ReadonlyArray<{ signal: string; aliases: readonly string[] }> = [
+  { signal: "CREW CAB", aliases: ["CREW CAB", "SUPERCREW", "MEGA CAB", "QUAD CAB"] },
+  { signal: "DOUBLE CAB", aliases: ["DOUBLE CAB", "SUPERCAB", "SUPER CAB", "KING CAB", "EXTENDED CAB"] },
+  { signal: "REGULAR CAB", aliases: ["REGULAR CAB", "STANDARD CAB"] },
+  { signal: "SHORT BED", aliases: ["SHORT BED", "5 1/2 FT", "5.5 FT", "5 FT"] },
+  { signal: "LONG BED", aliases: ["LONG BED", "6 1/2 FT", "6.5 FT", "8 FT"] },
+  { signal: "PICKUP 4D", aliases: ["PICKUP 4D", "PICKUP TRUCK 4D"] },
+  { signal: "SPORT UTILITY 4D", aliases: ["SPORT UTILITY 4D", "SUV 4D"] },
+];
+
 function normalizeToken(value: string): string {
   return value
     .toUpperCase()
@@ -31,17 +41,50 @@ function hasPhrase(haystack: string, phrase: string): boolean {
   return new RegExp(`(?:^| )${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: |$)`).test(haystack);
 }
 
-function collectDrivetrainSignals(title?: string | null, trim?: string | null): string[] {
+function collectMatchedSignalGroups(
+  groups: ReadonlyArray<{ signal: string; aliases: readonly string[] }>,
+  title?: string | null,
+  trim?: string | null,
+): Array<{ signal: string; aliases: readonly string[] }> {
   const evidence = normalizeToken([title, trim].filter(Boolean).join(" "));
   if (!evidence) return [];
 
-  const signals: string[] = [];
-  for (const entry of DRIVETRAIN_SIGNALS) {
+  const matched: Array<{ signal: string; aliases: readonly string[] }> = [];
+  for (const entry of groups) {
     if (entry.aliases.some((alias) => hasPhrase(evidence, normalizeToken(alias)))) {
-      signals.push(entry.signal);
+      matched.push(entry);
     }
   }
-  return signals;
+  return matched;
+}
+
+function scoreVariantModel(
+  catalogModel: string,
+  drivetrainGroups: ReadonlyArray<{ signal: string; aliases: readonly string[] }>,
+  cabBedBodyGroups: ReadonlyArray<{ signal: string; aliases: readonly string[] }>,
+): { score: number; matched: string[] } {
+  const normalized = normalizeToken(catalogModel);
+  const matched: string[] = [];
+  let score = 0;
+
+  const scoreGroup = (
+    groups: ReadonlyArray<{ signal: string; aliases: readonly string[] }>,
+    weight: number,
+  ) => {
+    for (const group of groups) {
+      const modelMatches =
+        hasPhrase(normalized, group.signal) ||
+        group.aliases.some((alias) => hasPhrase(normalized, normalizeToken(alias)));
+      if (!modelMatches) continue;
+      matched.push(group.signal);
+      score += weight;
+    }
+  };
+
+  scoreGroup(drivetrainGroups, 10);
+  scoreGroup(cabBedBodyGroups, 8);
+
+  return { score, matched };
 }
 
 export function isCatalogModelVariantOf(sourceModel: string, catalogModel: string): boolean {
@@ -52,7 +95,7 @@ export function isCatalogModelVariantOf(sourceModel: string, catalogModel: strin
 
 /**
  * Selects the exact Cox model variant when the catalog splits a normalized
- * source model by drivetrain, e.g. `CR-V` → `CR-V AWD` / `CR-V FWD`.
+ * source model by drivetrain, cab/bed, or body cues.
  * Returns null when the source listing does not provide explicit evidence.
  */
 export function selectCatalogModelVariantForListing(
@@ -64,21 +107,29 @@ export function selectCatalogModelVariantForListing(
   const exact = variants.find((model) => normalizeToken(model) === normalizeToken(input.sourceModel));
   if (exact) return { model: exact, matchedSignals: ["EXACT_MODEL"] };
 
-  const signals = collectDrivetrainSignals(input.title, input.trim);
-  if (signals.length === 0) return null;
+  const drivetrainGroups = collectMatchedSignalGroups(DRIVETRAIN_SIGNALS, input.title, input.trim);
+  const cabBedBodyGroups = collectMatchedSignalGroups(CAB_BED_BODY_SIGNALS, input.title, input.trim);
+  if (drivetrainGroups.length === 0 && cabBedBodyGroups.length === 0) return null;
 
   const scored = variants
     .map((model) => {
-      const normalized = normalizeToken(model);
-      const matched = signals.filter((signal) => hasPhrase(normalized, signal));
-      return { model, matched };
+      const { score, matched } = scoreVariantModel(model, drivetrainGroups, cabBedBodyGroups);
+      return { model, score, matched };
     })
-    .filter((row) => row.matched.length > 0)
-    .sort((a, b) => b.matched.length - a.matched.length);
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || b.matched.length - a.matched.length);
 
   if (scored.length === 0) return null;
   const [best, second] = scored;
   if (!best) return null;
-  if (second && second.matched.length === best.matched.length) return null;
+  if (second && second.score === best.score && second.matched.length === best.matched.length) return null;
   return { model: best.model, matchedSignals: best.matched };
+}
+
+/** All Cox catalog variants sharing the same normalized source model token. */
+export function listCatalogModelVariants(
+  models: readonly string[],
+  sourceModel: string,
+): string[] {
+  return models.filter((model) => isCatalogModelVariantOf(sourceModel, model));
 }

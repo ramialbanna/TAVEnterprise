@@ -259,6 +259,33 @@ export function OpportunityVehicleBlock({
     setListingError(null);
   }
 
+  async function handleApplySuggestedMatch(suggestion: {
+    make: string;
+    model: string;
+    style: string | null;
+  }) {
+    if (!canMutate || pending || saveInFlight || !suggestion.style) return;
+
+    const next: VehicleValues = {
+      ...values,
+      year: opportunity.year != null ? String(opportunity.year) : values.year,
+      make: suggestion.make,
+      model: suggestion.model,
+      style: suggestion.style,
+    };
+    setValues(next);
+    setFromVin(false);
+    setListingMatch(null);
+    setListingError(null);
+
+    onSave({
+      year: opportunity.year ?? undefined,
+      make: suggestion.make,
+      model: suggestion.model,
+      style: suggestion.style,
+    });
+  }
+
   async function handleUseListingIdentity() {
     if (!canMutate || pending || saveInFlight || listingApplying) return;
     if (opportunity.year == null || !opportunity.make?.trim() || !opportunity.model?.trim()) {
@@ -487,6 +514,38 @@ export function OpportunityVehicleBlock({
         <p className="text-xs text-muted-foreground" role="status">
           Style approximated from listing — confirm series before trusting MMR.
         </p>
+      ) : null}
+
+      {(opportunity.catalogMatchSuggestions?.length ?? 0) > 0 ? (
+        <div className="space-y-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+          <p className="text-xs font-medium text-foreground">Suggested Cox matches</p>
+          <ul className="space-y-2">
+            {opportunity.catalogMatchSuggestions!.map((suggestion, index) => (
+              <li
+                key={`${suggestion.make}-${suggestion.model}-${suggestion.style ?? "none"}-${index}`}
+                className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+              >
+                <span>
+                  {suggestion.make} / {suggestion.model}
+                  {suggestion.style ? ` / ${suggestion.style}` : ""}
+                  {" · "}
+                  score {suggestion.score}
+                  {suggestion.estimatedVariant ? " · est. variant" : ""}
+                  {suggestion.estimatedStyle ? " · est. style" : ""}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={disabled || !suggestion.style}
+                  onClick={() => void handleApplySuggestedMatch(suggestion)}
+                >
+                  Apply
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {decoding || listingApplying ? (

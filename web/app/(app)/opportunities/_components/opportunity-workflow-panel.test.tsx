@@ -106,6 +106,7 @@ const updatedDetail = {
   candidateListingCount: null,
   mileage: null,
   actions: [],
+  catalogMatchSuggestions: [],
 };
 
 function TestWrapper({ children }: { children: ReactNode }) {

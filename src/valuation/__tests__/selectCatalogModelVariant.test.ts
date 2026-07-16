@@ -42,4 +42,25 @@ describe("selectCatalogModelVariantForListing", () => {
 
     expect(selected).toEqual({ model: "ILX", matchedSignals: ["EXACT_MODEL"] });
   });
+
+  it("selects Crew Cab variant when title names cab type for split truck models", () => {
+    const selected = selectCatalogModelVariantForListing({
+      sourceModel: "1500",
+      title: "2020 Ram 1500 Crew Cab Big Horn Pickup 4D",
+      models: ["1500 Crew Cab", "1500 Double Cab", "1500 Regular Cab"],
+    });
+
+    expect(selected).toEqual({ model: "1500 Crew Cab", matchedSignals: ["CREW CAB"] });
+  });
+
+  it("selects Double Cab when SuperCab appears in the title", () => {
+    const selected = selectCatalogModelVariantForListing({
+      sourceModel: "F-150",
+      title: "2019 Ford F-150 SuperCab XLT Pickup 4D",
+      models: ["F-150 Crew Cab", "F-150 SuperCab", "F-150 Regular Cab"],
+    });
+
+    expect(selected?.model).toBe("F-150 SuperCab");
+    expect(selected?.matchedSignals).toContain("DOUBLE CAB");
+  });
 });

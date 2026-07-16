@@ -71,6 +71,17 @@ const KNOWN_TRIMS: readonly string[] = [
   "tradesman",
 ];
 
+/** Trim tokens glued or misspelled in titles that precede numeric truck models. */
+const TRIM_BEFORE_MODEL_ALIASES: Record<string, string> = {
+  bighorn: "big horn",
+  bighrn: "big horn",
+};
+
+const TRUCK_NUMERIC_MODELS: ReadonlySet<string> = new Set([
+  "1500", "2500", "3500",
+  "f-150", "f-250", "f-350", "f-450",
+]);
+
 const TRIM_STOP_SET: ReadonlySet<string> = new Set(
   KNOWN_TRIMS.filter(t => !t.includes(" ")),
 );
@@ -96,8 +107,60 @@ const MODEL_STOP_RE =
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
 function normaliseWs(s: string): string {
-  // Replace Unicode dashes and non-breaking spaces with ASCII space.
-  return s.replace(/[\u00a0\u2013\u2014]/g, " ").replace(/\s+/g, " ").trim();
+  // Replace Unicode dashes, glued tokens (+), and non-breaking spaces with ASCII space.
+  return s
+    .replace(/[\u00a0\u2013\u2014]/g, " ")
+    .replace(/\+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeListingRemainder(rest: string, make: string): string {
+  let lower = rest.toLowerCase().replace(/[·•]/g, " ").replace(/\+/g, " ").replace(/\s+/g, " ").trim();
+  if (lower.startsWith(`${make} `)) {
+    lower = lower.slice(make.length + 1).trim();
+  }
+  return lower;
+}
+
+function isTruckNumericModel(token: string): boolean {
+  const normalized = normalizeKnownModel(token.toLowerCase());
+  return TRUCK_NUMERIC_MODELS.has(normalized);
+}
+
+/** Ram/Chevy titles often put trim before model number: "BIGHORN 1500" → 1500 + Big Horn. */
+function tryTrimBeforeModel(
+  rest: string,
+): { model: string; remaining: string; trimHint?: string } | undefined {
+  const lower = rest.toLowerCase().trim();
+
+  for (const trim of KNOWN_TRIMS.filter((entry) => entry.includes(" "))) {
+    if (!lower.startsWith(`${trim} `)) continue;
+    const afterTrim = lower.slice(trim.length + 1).trim();
+    const modelToken = afterTrim.split(/\s+/)[0];
+    if (modelToken && isTruckNumericModel(modelToken)) {
+      return {
+        model: normalizeKnownModel(modelToken),
+        remaining: afterTrim.slice(modelToken.length).trim(),
+        trimHint: trim,
+      };
+    }
+  }
+
+  for (const [alias, canonical] of Object.entries(TRIM_BEFORE_MODEL_ALIASES)) {
+    if (!lower.startsWith(`${alias} `)) continue;
+    const afterTrim = lower.slice(alias.length + 1).trim();
+    const modelToken = afterTrim.split(/\s+/)[0];
+    if (modelToken && isTruckNumericModel(modelToken)) {
+      return {
+        model: normalizeKnownModel(modelToken),
+        remaining: afterTrim.slice(modelToken.length).trim(),
+        trimHint: canonical,
+      };
+    }
+  }
+
+  return undefined;
 }
 
 function stripPricePatterns(s: string): string {
@@ -164,8 +227,14 @@ function extractMake(
 
 function extractModel(
   rest: string,
-): { model: string; remaining: string } | undefined {
-  const lower = rest.toLowerCase().replace(/[·•]/g, " ").trim();
+  make: string,
+): { model: string; remaining: string; trimHint?: string } | undefined {
+  const lower = normalizeListingRemainder(rest, make);
+
+  const trimFirst = tryTrimBeforeModel(lower);
+  if (trimFirst) {
+    return trimFirst;
+  }
 
   // Known models matched only at the START of the remainder.
   for (const km of KNOWN_MODELS) {
@@ -446,9 +515,9 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     if (!makeResult) return fail("missing_ymm");
     const { make, rest } = makeResult;
 
-    const modelResult = extractModel(rest);
+    const modelResult = extractModel(rest, make);
     if (!modelResult) return fail("missing_ymm");
-    const { model, remaining } = modelResult;
+    const { model, remaining, trimHint } = modelResult;
 
     const priceRaw =
       rec["price"] ?? rec["Price"] ?? rec["listing_price"] ?? rec["listingPrice"];
@@ -456,7 +525,7 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     if ("invalid" in priceResult) return fail("invalid_price", { raw: priceRaw });
 
     const mileage = parseMileage(rec, title);
-    const titleTrim = extractTrim(remaining);
+    const titleTrim = trimHint ?? extractTrim(remaining);
     // Allow upstream payload mappers (e.g. src/apify/payloadAdapter.ts) to
     // override the title-parsed trim with a canonical value when the source
     // payload supplies a structured trim field. This is the Apify detail-mode
