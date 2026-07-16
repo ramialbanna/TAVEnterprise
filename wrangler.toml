@@ -16,7 +16,7 @@ preview_id = "00464744d6e140799a9a88fe3247cc17"
 
 # Daily stale sweep at 06:00 UTC
 [triggers]
-crons = ["0 6 * * *"]
+crons = ["0 6 * * *", "50 16 * * *"]
 
 [vars]
 HYBRID_BUYBOX_ENABLED = "true"

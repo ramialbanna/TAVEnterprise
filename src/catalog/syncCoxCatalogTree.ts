@@ -7,6 +7,7 @@ import {
 import { log, serializeError } from "../logging/logger";
 import {
   finishCoxCatalogSyncRun,
+  hasCoxCatalogTreeForYear,
   startCoxCatalogSyncRun,
   upsertCoxCatalogTreeRows,
 } from "../persistence/coxCatalogTree";
@@ -23,6 +24,33 @@ export type CoxCatalogSyncResult = {
   skippedModels?: number;
 };
 
+export type CoxCatalogSyncOptions = {
+  /** Explicit year list. When set, `mode` is ignored. */
+  years?: number[];
+  /** When no explicit years: `missing` syncs only years with zero rows (default), `all` re-syncs full range. */
+  mode?: "missing" | "all";
+};
+
+export async function resolveCoxCatalogSyncYears(
+  db: SupabaseClient,
+  options?: CoxCatalogSyncOptions,
+): Promise<number[]> {
+  if (options?.years?.length) {
+    return [...options.years].sort((a, b) => a - b);
+  }
+
+  const range = buildCoxCatalogYearRange();
+  if (options?.mode === "all") return range;
+
+  const missing: number[] = [];
+  for (const year of range) {
+    if (!(await hasCoxCatalogTreeForYear(db, year))) {
+      missing.push(year);
+    }
+  }
+  return missing;
+}
+
 /**
  * Pull Cox Y/M/M/S from tav-intelligence-worker and upsert into `tav.cox_catalog_tree`.
  * Uses existing Worker secrets + INTEL_WORKER service binding — no manual env vars.
@@ -30,9 +58,20 @@ export type CoxCatalogSyncResult = {
 export async function runCoxCatalogSync(
   env: Env,
   db: SupabaseClient,
+  options?: CoxCatalogSyncOptions,
 ): Promise<CoxCatalogSyncResult> {
-  const years = buildCoxCatalogYearRange();
+  const years = await resolveCoxCatalogSyncYears(db, options);
   const runId = await startCoxCatalogSyncRun(db);
+
+  if (years.length === 0) {
+    await finishCoxCatalogSyncRun(db, runId, {
+      status: "completed",
+      yearsSynced: [],
+      rowCount: 0,
+      errorMessage: null,
+    });
+    return { runId, status: "completed", yearsSynced: [], rowCount: 0, skippedModels: 0 };
+  }
 
   let rowCount = 0;
   const syncedYears: number[] = [];

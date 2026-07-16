@@ -68,7 +68,7 @@ export default {
     log("cron.cox_catalog_sync.started");
     const syncStartedAt = new Date().toISOString();
     try {
-      const result = await runCoxCatalogSync(env, db);
+      const result = await runCoxCatalogSync(env, db, { mode: "missing" });
       await recordCronRunSafe(db, {
         jobName: "cox_catalog_sync",
         startedAt: syncStartedAt,

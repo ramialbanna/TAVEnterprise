@@ -15,6 +15,7 @@ vi.mock("../../persistence/coxCatalogTree", () => ({
   startCoxCatalogSyncRun: vi.fn().mockResolvedValue("run-1"),
   finishCoxCatalogSyncRun: vi.fn().mockResolvedValue(undefined),
   upsertCoxCatalogTreeRows: vi.fn().mockResolvedValue(1),
+  hasCoxCatalogTreeForYear: vi.fn().mockResolvedValue(false),
 }));
 
 import { fetchIntelCatalogItems } from "../intelCatalogClient";

@@ -327,7 +327,23 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   // POST /admin/catalog/sync-cox-tree — populate tav.cox_catalog_tree from intel worker
   if (request.method === "POST" && pathname === "/admin/catalog/sync-cox-tree") {
     try {
-      const result = await runCoxCatalogSync(env, db);
+      let options: { years?: number[]; mode?: "missing" | "all" } | undefined;
+      try {
+        const body = (await request.json()) as unknown;
+        if (body && typeof body === "object" && !Array.isArray(body)) {
+          const record = body as Record<string, unknown>;
+          options = {
+            mode: record.mode === "all" || record.mode === "missing" ? record.mode : undefined,
+            years: Array.isArray(record.years)
+              ? record.years.filter((year): year is number => typeof year === "number")
+              : undefined,
+          };
+        }
+      } catch {
+        options = undefined;
+      }
+
+      const result = await runCoxCatalogSync(env, db, options);
       return json({ ok: true, data: result });
     } catch (err) {
       log("admin.catalog_sync_failed", { error: serializeError(err) });

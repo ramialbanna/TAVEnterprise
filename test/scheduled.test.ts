@@ -46,7 +46,11 @@ describe("scheduled() — daily cron jobs", () => {
     await worker.scheduled(event, env, ctx);
 
     expect(vi.mocked(runStaleSweep)).toHaveBeenCalledOnce();
-    expect(vi.mocked(runCoxCatalogSync)).toHaveBeenCalledOnce();
+    expect(vi.mocked(runCoxCatalogSync)).toHaveBeenCalledWith(
+      env,
+      expect.anything(),
+      { mode: "missing" },
+    );
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledWith(
       expect.anything(),
