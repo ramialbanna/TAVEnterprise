@@ -2,7 +2,6 @@ import {
   buildCoxCatalogYearRange,
   buildIntelCatalogPath,
   fetchIntelCatalogItems,
-  IntelCatalogFetchError,
 } from "./intelCatalogClient";
 import { log, serializeError } from "../logging/logger";
 import {
