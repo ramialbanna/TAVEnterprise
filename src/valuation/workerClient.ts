@@ -6,12 +6,19 @@ import type { ValuationConfidence, ValuationMethod, NormalizationConfidence } fr
 import { getSupabaseClient } from "../persistence/supabase";
 import { loadMmrReferenceData } from "./loadMmrReferenceData";
 import { normalizeMmrParams } from "./normalizeMmrParams";
-import { log } from "../logging/logger";
+import { log, logError } from "../logging/logger";
 import { isConfiguredSecret } from "../types/envValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
 import { resolveListingToCatalogForIngest } from "./resolveListingToCatalog";
 import type { CatalogMatchSuggestion } from "./resolveListingToCatalog";
 import { buildIngestCatalogOfflineDeps } from "./buildIngestCatalogOfflineDeps";
+import {
+  resolveListingWithLLM,
+  buildLlmYmmsDeps,
+  llmResolutionToAuditFields,
+  isLlmAttemptFailure,
+} from "./resolveListingWithLLM";
+import { insertLlmYmmsDecision } from "../persistence/llmYmmsDecisions";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -36,6 +43,13 @@ import { buildIngestCatalogOfflineDeps } from "./buildIngestCatalogOfflineDeps";
  *   cox_rate_limited     — worker/vendor rate limited (429 / manheim_rate_limited)
  *   cox_timeout          — request exceeded TIMEOUT_MS
  *   envelope_invalid     — worker returned 2xx but body did not match the contract
+ *   llm_invalid_pick     — item 57: Claude proposed a model/style that does not exist
+ *                          verbatim in the Cox catalog subtree it was given, AND the
+ *                          offline-matcher fallback also could not resolve a model —
+ *                          distinct from model_variant_missing so eval/dashboards can
+ *                          tell "LLM hallucinated" apart from "rules couldn't decide"
+ *   llm_unavailable      — item 57: Claude API call errored/timed out/rate-limited and
+ *                          the offline-matcher fallback also could not resolve a model
  */
 export type MmrMissReason =
   | "not_configured"
@@ -51,7 +65,9 @@ export type MmrMissReason =
   | "cox_unavailable"
   | "cox_rate_limited"
   | "cox_timeout"
-  | "envelope_invalid";
+  | "envelope_invalid"
+  | "llm_invalid_pick"
+  | "llm_unavailable";
 
 /**
  * Map an intel non-2xx response to a specific, actionable miss reason.
@@ -311,17 +327,54 @@ async function performMmrCall(
     const db = getSupabaseClient(env);
     const offlineDeps = buildIngestCatalogOfflineDeps(db);
 
-    const catalogResolved = await resolveListingToCatalogForIngest(
-      {
-        year,
-        make,
-        model,
-        trim: params.trim,
-        title: params.title,
-      },
-      catalogFetch,
-      offlineDeps,
+    // Item 57 — try the LLM resolver first (flag-gated via LLM_YMMS_ENABLED;
+    // no-op today, see docs/LLM-YMMS-Normalization.md). Any non-hit outcome
+    // (disabled, not configured, catalog not synced for this year/make,
+    // Claude error/timeout, or a proposal that fails the deterministic gate)
+    // falls through to the existing offline matcher / live catalog cascade
+    // below — this is a pure addition, never a regression vs today's path.
+    const llmResolution = await resolveListingWithLLM(
+      { year, make, model, trim: params.trim, title: params.title, price: params.price },
+      buildLlmYmmsDeps(db, env),
     );
+
+    if (llmResolution.kind !== "fallback") {
+      try {
+        await insertLlmYmmsDecision(db, {
+          year,
+          inputMake: make,
+          inputModel: model,
+          inputTrim: params.trim,
+          inputTitle: params.title,
+          ...llmResolutionToAuditFields(llmResolution),
+        });
+      } catch (err) {
+        logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
+      }
+    }
+
+    const catalogResolved =
+      llmResolution.kind === "alias_hit" || llmResolution.kind === "llm_hit"
+        ? {
+            make: llmResolution.make,
+            model: llmResolution.model,
+            style: llmResolution.style,
+            styleEstimated: llmResolution.kind === "llm_hit",
+            unmatched: [] as Array<"make" | "model" | "style">,
+            catalogConnected: true,
+            modelVariantAmbiguous: false,
+          }
+        : await resolveListingToCatalogForIngest(
+            {
+              year,
+              make,
+              model,
+              trim: params.trim,
+              title: params.title,
+            },
+            catalogFetch,
+            offlineDeps,
+          );
     catalogMatchSuggestions = catalogResolved.catalogMatchSuggestions;
     const ref = await loadMmrReferenceData(db);
     const normalized = normalizeMmrParams(
@@ -340,7 +393,12 @@ async function performMmrCall(
       });
       return {
         kind: "miss",
-        reason: "model_variant_missing",
+        reason:
+          llmResolution.kind === "llm_invalid_pick"
+            ? "llm_invalid_pick"
+            : isLlmAttemptFailure(llmResolution)
+              ? "llm_unavailable"
+              : "model_variant_missing",
         method: "year_make_model",
         normalizationConfidence: normalized.normalizationConfidence,
         catalogMatchSuggestions,

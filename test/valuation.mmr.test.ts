@@ -88,6 +88,9 @@ function makeEnv(): Env {
     SCRAPER_REVIEW_MODE: "false",
     MAXBUY_WORKER_URL: "",
     MAXBUY_WORKER_SECRET: "",
+    ANTHROPIC_API_KEY: "",
+    LLM_YMMS_ENABLED: "false",
+    LLM_YMMS_MODEL: "claude-sonnet-4-5",
   };
 }
 

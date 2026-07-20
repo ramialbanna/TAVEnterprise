@@ -44,6 +44,11 @@ export interface MmrParams {
    * `trim_missing`. Never fabricated — see extractTitleTrim.
    */
   title?: string;
+  /**
+   * Listing price. Item 57 — passed as advisory context to the LLM Y/M/M/S
+   * resolver only; never used for MMR lookup itself.
+   */
+  price?: number;
 }
 
 const TOKEN_KV_KEY = "manheim:token";

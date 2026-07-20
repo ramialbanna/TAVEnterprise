@@ -1,0 +1,15 @@
+---
+description: Do not summarize unless the user explicitly asks for a summary
+alwaysApply: true
+---
+
+# No unrequested summaries
+
+Do not open responses with overviews, recaps, or "what it is" summaries unless the user explicitly asks for a summary, recap, or overview.
+
+When analyzing files, code, or docs:
+- Give the requested output directly (opinion, gap, decision, fix, etc.)
+- Skip preamble and restating what the artifact already says
+- Keep responses proportional; brevity beats completeness when the user wants a short take
+
+If the user says "analyze" without asking for a summary, analyze for judgment and implications — not a table-of-contents rewrite.

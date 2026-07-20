@@ -1,9 +1,13 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-16 · **Focus:** **55** funnel soak (catalog sync done); **51** TBD
+**Last updated:** 2026-07-20 · **Focus:** **57** LLM Y/M/M/S normalization (deployed to staging + production behind flag, `ANTHROPIC_API_KEY` configured on both, migration `0066` applied; Phase 0 eval ran but every call failed — Anthropic account has no credit balance, not a config/code issue; ingest concurrency fix (§6) still not built); **55** funnel soak (catalog sync done); **51** TBD
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
+>
+> **2026-07-18:** Claude API access unblocked (in principle). Decided to replace/augment **55**'s offline matcher with an LLM (Claude) call per listing — full plan, locked decisions, and rollout phases live in [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md). **Read that doc first**, this file's item **57** below is just the tracker entry. **Same day:** built and merged all of Phase 0 (`scripts/eval-llm-ymms.mjs`) and Phase 1's code (`src/llm/*`, `src/valuation/resolveListingWithLLM.ts`, migration `0066`, wired into `workerClient.ts` behind `LLM_YMMS_ENABLED="false"`, 30 new unit tests, full suite green at 1252 tests). **Nothing has actually run against real data** — no `ANTHROPIC_API_KEY` is configured anywhere yet, and the ingest batch-concurrency fix (doc §6) is still not done, so the flag must stay off. Next actual work: get the real key into `.dev.vars`, run `npm run eval:llm-ymms`, read the results.
+>
+> **2026-07-20:** `ANTHROPIC_API_KEY` set via Cloudflare dashboard on both `tav-aip-staging` and `tav-aip-production` secrets. Worker redeployed to both (`wrangler deploy --env staging` / `--env production`) — still `LLM_YMMS_ENABLED="false"` everywhere, purely to ship the dormant item-57 code paths. Migration `0066_llm_ymms_decisions` applied directly to Supabase (was missing — `list_migrations` showed `0065` as the latest before this). Local `.dev.vars` created from the template and filled in (`ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — note: this project is on Supabase's **new key format** (`sb_secret_...`), the legacy `service_role` JWT is disabled). Ran `npm run eval:llm-ymms` (100 rows, `model_variant_missing`, no `--verify-mmr`): 17 `catalog_not_synced`, 83 reached Anthropic and **all 83 failed** with HTTP 400 `"Your credit balance is too low to access the Anthropic API."` — **this is a billing/account problem, not a code or config problem**; the pipeline (key, migration, prompt, gate) is confirmed wired correctly end-to-end. Blocked on adding credits to the Anthropic account before the eval can actually be scored. Ingest batch-concurrency fix (§6) and all item-57 file changes remain **uncommitted** in the working tree as of this update — commit before this is lost.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -1415,6 +1419,55 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] Live path remains fixed (`347ca3c`); new schedule runs continue via webhook
 
 **Primary refs:** `docs/backfill-scraper-review-extract.mts`, `src/persistence/opportunities.ts` (window), `docs/04-operations/apify.md`
+
+---
+
+## 57 — LLM Y/M/M/S normalization via Claude API (replaces offline matcher as primary path)
+
+**Status (2026-07-20):** Design locked, **Phase 0 + Phase 1 code built, deployed to staging + production (`LLM_YMMS_ENABLED="false"` on both).** `ANTHROPIC_API_KEY` configured, migration `0066` applied, Phase 0 eval actually run — **blocked on Anthropic account credits, not config.** Full walkthrough, locked decisions, prompt/schema spec, and phased rollout plan: [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) — **read that doc first in a fresh chat**; this entry is a tracker pointer + later-phase backlog only.
+
+**Decided:** 2026-07-18 (Claude API access unblocked by leadership; see `TAV API.md`).
+
+**Built 2026-07-18:** `src/llm/ymmsPrompt.ts`, `src/llm/anthropicClient.ts`, `src/valuation/resolveListingWithLLM.ts`, `src/persistence/llmYmmsDecisions.ts` + migration `0066`, wired into `workerClient.ts`, `scripts/eval-llm-ymms.mjs` (`npm run eval:llm-ymms`), 30 new unit tests (full suite: 93 files / 1252 tests green).
+
+**Done 2026-07-20:** `ANTHROPIC_API_KEY` set as a Cloudflare secret on both `tav-aip-staging` and `tav-aip-production`; Worker redeployed to both (flag still `"false"` — dormant code only). Migration `0066_llm_ymms_decisions` applied to Supabase. Local `.dev.vars` populated (Supabase project uses the **new key format** — `sb_secret_...`, not legacy `service_role`). Ran `npm run eval:llm-ymms` against 100 historical `model_variant_missing` rows: 17 `catalog_not_synced` (expected — catalog tree gaps), 83 reached Anthropic, **all 83 returned HTTP 400 "credit balance too low."** Pipeline confirmed wired correctly end-to-end (key auth, prompt build, tool-use gate) — the only blocker is billing on the Anthropic account. **Also still true:** all item-57 files are uncommitted in the working tree — needs a commit before anything else touches this branch. See doc §9/§13 for the exact done/not-done split.
+
+**Goal:** Cut MMR miss rate from ~50% toward 5–10% by replacing item **55**'s offline scored matcher with a Claude API call per listing that reasons over the **full** Cox `(year, make)` catalog subtree (not a pre-scored top-3) and the listing title/description. AI proposes; the existing deterministic exact-match gate against `cox_catalog_tree` disposes — same principle as **55**/**46**, only the proposal step changes from scoring to an LLM call, and the candidate universe widens from top-3 to the full subtree.
+
+**Locked decisions (do not re-litigate — see doc for full rationale):**
+- Single structured-output Claude call per listing — **not** an agent, **not** multi-turn tool use.
+- Full unfiltered model+style list for `(year, make)` fed as context — not the scorer's top-3.
+- Runs on **every** listing (primary path, not a miss-only fallback) — this is why the ingest budget fix below is mandatory, not optional.
+- Deterministic exact-match validation against `cox_catalog_tree` stays mandatory after Claude's pick.
+- `mmr_style_aliases` fast-path runs before any Claude call (cost control + reuse of the existing learning loop).
+- Photos/vision deferred to a later phase (needs Apify capture + durable storage first — Facebook URLs expire).
+- Never let the model call Cox/Manheim directly or invent mileage/trim (carry-forward from **54**).
+
+**Hard constraint found this session — STILL UNFIXED:** `ingestCore` (`src/ingest/handleIngest.ts`) loops items sequentially with `BATCH_TIMEOUT_MS = 25_000` (`COMPLETION_RESERVE_MS = 1_500`), batches up to `MAX_INGEST_ITEMS = 500`. One sequential Claude round-trip per item exhausts that budget after ~15 items. `resolveListingWithLLM` is wired into `workerClient.ts` as one more sequential await in that same loop today — harmless while `LLM_YMMS_ENABLED="false"`, but batch concurrency (or async hand-off) must land before enabling on real traffic — see doc §6.
+
+**Primary files (built):** `src/llm/ymmsPrompt.ts`, `src/llm/anthropicClient.ts`, `src/valuation/resolveListingWithLLM.ts`, `src/persistence/llmYmmsDecisions.ts` + migration `0066_llm_ymms_decisions.sql`, `scripts/eval-llm-ymms.mjs`, env vars in `src/types/env.ts` / `wrangler.toml` / `.dev.vars.example` (`ANTHROPIC_API_KEY`, `LLM_YMMS_ENABLED`, `LLM_YMMS_MODEL`). **Not built:** the ingest concurrency change itself (§6) — sequencing/async work is still 100% ahead of us.
+
+**Related items:** **55** (offline matcher this supersedes as primary path; kept as fallback on Claude API error/timeout), **46** (ingest cascade/alias pattern this reuses), **54** (never invent mileage — same rule applies here).
+
+### Exit criteria — Phase 0 (offline eval, do this before touching prod)
+
+- [x] `scripts/eval-llm-ymms.mjs` pulls historical `model_variant_missing` (or any `missing_reason`) listings from `tav.valuation_snapshots`, joins `normalized_listings`, builds full-catalog context, calls Claude, logs result vs current offline matcher, writes JSON results (`npm run eval:llm-ymms`)
+- [x] Anthropic API key confirmed in Worker secrets (staging + production) and local `.dev.vars`
+- [x] Actually ran the eval (100 rows, 2026-07-20) — **blocked mid-result:** all 83 non-`catalog_not_synced` rows failed with Anthropic HTTP 400 "credit balance too low"; not a code/config issue
+- [ ] **Blocked:** add credits/payment method to the Anthropic account (Console → Plans & Billing) — asked Rami 2026-07-18/20
+- [ ] Re-run eval once credits exist and actually read the accuracy numbers
+- [ ] Valid-Cox-token rate ≥ 99% on eval set
+- [ ] Would-have-hit-MMR rate (via `--verify-mmr`) shows meaningful lift vs current path
+- [ ] Do not wire to production ingest (i.e. flip `LLM_YMMS_ENABLED` for real traffic) until this bar is met
+
+### Later phases (backlog — not yet scoped in detail; expand `LLM-YMMS-Normalization.md` when picked up)
+
+- [ ] Ingest batch concurrency / async rearchitecture — required before 100% traffic (doc §6)
+- [ ] Learning loop — persist accepted Claude picks into `mmr_style_aliases` (`ingest_learned`) so repeats skip the LLM call
+- [ ] Vision tier — enable Apify photo capture, persist images (R2 or equivalent), low-confidence-triggered vision follow-up call only
+- [ ] Model tiering / prompt caching once Phase 0 data shows an easy/hard listing split worth exploiting
+- [ ] Seller classification (dealer vs private/curbstoner) — RFP FR-3.5 phase 2, text + photos, needs its own labeled eval set (50–100); not started, not blocking item 57
+- [ ] Fix `parserGarbagePenalty` regex bug in `matchListingToCoxCatalog.ts` (line 83 — `${...}` inside a non-template regex literal never interpolates) if that matcher stays alive as the fallback path
 
 ---
 

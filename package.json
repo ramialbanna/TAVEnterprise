@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:int": "vitest run --config vitest.int.config.ts",
-    "sync:cox-catalog": "node scripts/sync-cox-catalog.mjs"
+    "sync:cox-catalog": "node scripts/sync-cox-catalog.mjs",
+    "eval:llm-ymms": "node scripts/eval-llm-ymms.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

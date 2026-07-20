@@ -35,15 +35,22 @@ MAXBUY_EVALUATE_ENABLED = "false"
 # intentional soak (staging first). Does not change lead grade / upsertLead.
 SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = ""
+# Item 57 — LLM Y/M/M/S normalization. Default off until the Phase 0 offline
+# eval (docs/LLM-YMMS-Normalization.md) shows a real lift over the offline
+# matcher. When "false" (or ANTHROPIC_API_KEY unset), ingest behavior is
+# unchanged — no Anthropic calls are made.
+LLM_YMMS_ENABLED = "false"
+LLM_YMMS_MODEL = "claude-sonnet-4-5"
 # MAXBUY_WORKER_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put MAXBUY_WORKER_SECRET
 # ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET, APIFY_WEBHOOK_SECRET,
-# APIFY_TOKEN must be set as Cloudflare secrets:
+# APIFY_TOKEN, ANTHROPIC_API_KEY must be set as Cloudflare secrets:
 #   wrangler secret put ADMIN_API_SECRET     # ops admin API (/admin/*)
 #   wrangler secret put APP_API_SECRET       # frontend product API (/app/*) — separate blast radius
 #   wrangler secret put INTEL_WORKER_SECRET  # worker→intel auth
 #   wrangler secret put APIFY_WEBHOOK_SECRET # bearer for Apify → /apify-webhook ingress
 #   wrangler secret put APIFY_TOKEN          # Apify PAT for dataset reads
+#   wrangler secret put ANTHROPIC_API_KEY    # item 57 — LLM Y/M/M/S proposals
 
 [env.staging]
 name = "tav-aip-staging"
@@ -61,6 +68,9 @@ MAXBUY_EVALUATE_ENABLED = "true"
 # Scraper review soak — enable when ops wants the Scraper review tab populated.
 SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
+# Item 57 — off until Phase 0 offline eval shows a real lift; flip on staging first.
+LLM_YMMS_ENABLED = "false"
+LLM_YMMS_MODEL = "claude-sonnet-4-5"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
@@ -93,6 +103,9 @@ MAXBUY_EVALUATE_ENABLED = "true"
 # Matches Cloudflare production (item 55 soak) — keep in sync with CF dashboard.
 SCRAPER_REVIEW_MODE = "true"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
+# Item 57 — stays off in production until staging soak + Phase 0 eval pass.
+LLM_YMMS_ENABLED = "false"
+LLM_YMMS_MODEL = "claude-sonnet-4-5"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"

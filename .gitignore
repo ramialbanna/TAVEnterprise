@@ -63,4 +63,14 @@ tmp/
 scratch/
 supabase/.temp/
 
+# --- Item 57 eval output (may contain listing text; local-only) -------------
+scripts/_eval-results/
+
+# --- Item 56 backfill scratch/data dumps (local-only, not for git history) --
+docs/_apify_backfill_listings.json
+docs/_apify_backfill_missed.json
+docs/_apify_backfill_runs.json
+docs/_apify_backfill_sql/
+docs/_apify_backfill_progress.jsonl
+
 .vercel

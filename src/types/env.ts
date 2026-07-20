@@ -139,4 +139,30 @@ export interface Env {
 
   /** Optional Cloudflare Service Binding to maxbuy-worker. */
   MAXBUY_WORKER?: Fetcher;
+
+  // ── LLM Y/M/M/S normalization (item 57) ────────────────────────────────────
+  /**
+   * Anthropic API key used by src/llm/anthropicClient.ts to propose Y/M/M/S
+   * identity at ingest. NEVER log this. Absent/placeholder = LLM path is
+   * treated as not configured regardless of LLM_YMMS_ENABLED (falls back to
+   * the offline matcher — see resolveListingWithLLM.ts).
+   * Set via: wrangler secret put ANTHROPIC_API_KEY
+   */
+  ANTHROPIC_API_KEY: string;
+
+  /**
+   * Master switch for the LLM Y/M/M/S resolver (item 57). When not exactly
+   * "true", ingest uses only the existing offline matcher
+   * (matchListingToCoxCatalog / resolveListingToCatalogForIngest) — no
+   * Anthropic calls are made. Default "false" until the Phase 0 offline eval
+   * (docs/LLM-YMMS-Normalization.md) shows a real lift. Set in wrangler.toml [vars].
+   */
+  LLM_YMMS_ENABLED: string;
+
+  /**
+   * Anthropic model id used for Y/M/M/S proposals, e.g. "claude-sonnet-4-5".
+   * Non-secret — set in wrangler.toml [vars] so it can change without a
+   * secrets rotation.
+   */
+  LLM_YMMS_MODEL: string;
 }
