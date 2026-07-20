@@ -35,7 +35,7 @@ jobs:
             echo "has_node_project=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         if: steps.node_project.outputs.has_node_project == 'true'
         with:
           node-version: '20'
