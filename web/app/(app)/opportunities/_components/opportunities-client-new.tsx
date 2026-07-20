@@ -3,6 +3,7 @@
 import { startTransition, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Sparkles, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -91,6 +92,67 @@ function listPageFilter(
     sort: opts.sort,
     view,
   };
+}
+
+/**
+ * Dashboard-style stat card (NEXT_STEPS #58) — big number + label + a small
+ * attention indicator, instead of the two counts reading as plain inline
+ * text. `srLabel` carries the full human sentence (e.g. "3 need you") for
+ * assistive tech / tests; the visible number + label are split for the
+ * "stat card" look.
+ */
+function QueueStatCard({
+  value,
+  label,
+  srLabel,
+  icon: Icon,
+  activeClass,
+}: {
+  value: number;
+  label: string;
+  srLabel: string;
+  icon: LucideIcon;
+  activeClass: string;
+}) {
+  const active = value > 0;
+  return (
+    <div className="flex flex-1 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
+      <span className="sr-only">{srLabel}</span>
+      <div aria-hidden className="flex flex-1 flex-col">
+        <span className="text-2xl font-semibold leading-none tabular-nums text-foreground">
+          {value}
+        </span>
+        <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+      </div>
+      <Icon
+        aria-hidden
+        className={cn("size-4 shrink-0", active ? activeClass : "text-muted-foreground/30")}
+      />
+    </div>
+  );
+}
+
+function QueueSummaryStats({ needsYou, newToday }: { needsYou: number; newToday: number }) {
+  const summaryLine = formatQueueSummaryLine({ needsYou, newToday });
+  const [needsPart, todayPart] = summaryLine.split(" · ", 2) as [string, string];
+  return (
+    <div className="flex flex-wrap gap-3 border-b border-border pb-3">
+      <QueueStatCard
+        value={needsYou}
+        label="Need your attention"
+        srLabel={needsPart}
+        icon={AlertCircle}
+        activeClass="text-status-review"
+      />
+      <QueueStatCard
+        value={newToday}
+        label="New today"
+        srLabel={todayPart}
+        icon={Sparkles}
+        activeClass="text-status-healthy"
+      />
+    </div>
+  );
 }
 
 export function OpportunitiesClientNew({
@@ -284,8 +346,6 @@ export function OpportunitiesClientNew({
       ? countFirstSeenToday(newTodayResult.data.items)
       : 0;
 
-  const summaryLine = formatQueueSummaryLine({ needsYou, newToday });
-
   function handleViewChange(nextView: OpportunityView) {
     if (nextView === view) return;
     setView(nextView);
@@ -324,7 +384,7 @@ export function OpportunitiesClientNew({
             <CardTitle className="text-sm font-medium text-muted-foreground">
               {PAGE_COPY.queueSummaryTitle}
             </CardTitle>
-            <p className="text-base font-medium text-foreground">{summaryLine}</p>
+            <QueueSummaryStats needsYou={needsYou} newToday={newToday} />
             <OpportunitiesQueueTabs
               view={view}
               counts={tabCounts}
@@ -373,7 +433,7 @@ export function OpportunitiesClientNew({
           <CardTitle className="text-sm font-medium text-muted-foreground">
             {PAGE_COPY.queueSummaryTitle}
           </CardTitle>
-          <p className="text-base font-medium text-foreground">{summaryLine}</p>
+          <QueueSummaryStats needsYou={needsYou} newToday={newToday} />
           <OpportunitiesQueueTabs
             view={view}
             counts={tabCounts}

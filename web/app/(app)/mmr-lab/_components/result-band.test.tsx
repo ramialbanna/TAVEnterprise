@@ -6,7 +6,7 @@ import { ResultBand } from "./result-band";
 const noop = () => {};
 
 describe("ResultBand — honest, no fabrication", () => {
-  it("idle: Base MMR and every right-panel value render --", () => {
+  it("idle: shows a lightweight example hint instead of a bare -- grid (NEXT_STEPS #58)", () => {
     render(
       <ResultBand
         baseMmr={null}
@@ -15,7 +15,9 @@ describe("ResultBand — honest, no fabrication", () => {
         onAdjustmentsClear={noop}
       />,
     );
-    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(5);
+    expect(screen.getByText(/no vehicle looked up yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/1HGCM82633A004352/)).toBeInTheDocument();
+    expect(screen.queryByText("--")).not.toBeInTheDocument();
   });
 
   it("VIN value populates ONLY Base MMR; other zones stay --", () => {
@@ -49,10 +51,14 @@ describe("ResultBand — honest, no fabrication", () => {
     expect(screen.queryByText("$48,600")).not.toBeInTheDocument();
   });
 
-  it("adjustments are disabled before lookup and enabled after ready", () => {
+  it("adjustments are disabled before ready and enabled after ready", () => {
+    // Idle no longer renders the adjustments panel at all (#58 empty state) —
+    // use "unavailable" (a lookup happened, no MMR value) to exercise the
+    // disabled-but-present panel, then transition to "ready".
     const { rerender } = render(
       <ResultBand
-        phase="idle"
+        phase="unavailable"
+        unavailableReason="no_mmr_value"
         baseMmr={null}
         adjustments={EMPTY_MMR_ADJUSTMENTS}
         onAdjustmentsChange={noop}

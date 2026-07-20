@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,6 +60,28 @@ function Stat({ label, value }: { label: string; value?: number | null }) {
 const adjSelectClass =
   "h-10 w-full rounded-md border border-border bg-background px-3 text-sm " +
   "disabled:cursor-not-allowed disabled:opacity-50";
+
+/**
+ * Pre-search empty state (NEXT_STEPS #58) — a lightweight example hint
+ * instead of Base MMR / adjustments / range all rendering bare "--"
+ * placeholders before the buyer has searched anything.
+ */
+function ResultBandIdle() {
+  return (
+    <div className="px-4 sm:px-6" aria-live="off">
+      <Card className="border-dashed bg-surface-sunken">
+        <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+          <Search className="size-6 text-muted-foreground" aria-hidden />
+          <p className="text-sm font-medium text-foreground">No vehicle looked up yet</p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            Try VIN <span className="font-mono">1HGCM82633A004352</span>, or pick Year / Make /
+            Model / Style above to see the MMR value, adjustments, and range.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function ResultBandSkeleton() {
   return (
@@ -357,6 +379,10 @@ export function ResultBand({
 
   if (phase === "loading") {
     return <ResultBandSkeleton />;
+  }
+
+  if (phase === "idle") {
+    return <ResultBandIdle />;
   }
 
   return (

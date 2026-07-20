@@ -26,8 +26,10 @@ import { queryKeys } from "@/lib/query";
 import { Button } from "@/components/ui/button";
 import { CollapsibleBlock } from "@/components/ui/collapsible-block";
 
+import { OpportunityClaimBanner, resolveClaimBannerState } from "./opportunity-claim-banner";
+import { OpportunityContactInfoBlock } from "./opportunity-contact-info-block";
 import { OpportunityDetailHero } from "./opportunity-detail-hero";
-import { OpportunityWorkflowStepper } from "./opportunity-workflow-stepper";
+import { OpportunityWorkflowStepper, resolveDetailStep } from "./opportunity-workflow-stepper";
 import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
 import { OpportunityValuationBlock } from "./opportunity-valuation-block";
@@ -247,18 +249,52 @@ export function OpportunityDetailClientNew({
     [secondaryActions, pending],
   );
 
+  // Title Information is collapsed by default until the deal reaches
+  // Appraised (or later) — reduces initial scroll/clutter on the detail page
+  // (NEXT_STEPS #58). Auto-expands once the stepper reaches that step.
+  const titleInfoDefaultOpen = resolveDetailStep(opportunity) === "appraised";
+
+  const claimBannerState = resolveClaimBannerState({
+    canMutate,
+    canClaim,
+    collision,
+  });
+
   return (
     <div className="space-y-4">
       <OpportunityDetailHero
         opportunity={opportunity}
-        contactBlockKey={`contact-${patchRevision}`}
         primaryAction={heroPrimaryAction}
         secondaryActions={heroSecondaryActions}
-        onSaveContact={(patch) => patchMutation.mutate(patch)}
-        patchPending={patchMutation.isPending}
-        canMutate={canMutate}
-        patchError={patchError}
       />
+
+      <OpportunityClaimBanner state={claimBannerState} />
+
+      {/* Contact + Vehicle side by side on desktop, stacked on mobile — use the
+          full page width instead of a narrow single-column form (NEXT_STEPS #58). */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CollapsibleBlock title="Contact Information" description="Seller contact details">
+          <OpportunityContactInfoBlock
+            key={`contact-${patchRevision}`}
+            opportunity={opportunity}
+            onSave={(patch) => patchMutation.mutate(patch)}
+            pending={patchMutation.isPending}
+            canMutate={canMutate}
+            error={patchError}
+          />
+        </CollapsibleBlock>
+
+        <CollapsibleBlock title="Vehicle" description="Identity fields">
+          <OpportunityVehicleBlock
+            key={`vehicle-${patchRevision}`}
+            opportunity={opportunity}
+            onSave={(patch) => patchMutation.mutate(patch)}
+            pending={patchMutation.isPending}
+            canMutate={canMutate}
+            error={patchError}
+          />
+        </CollapsibleBlock>
+      </div>
 
       <CollapsibleBlock
         title="Salesperson / Appraisal Information"
@@ -266,17 +302,6 @@ export function OpportunityDetailClientNew({
       >
         <OpportunitySalespersonAppraisalBlock
           key={`salesperson-${patchRevision}`}
-          opportunity={opportunity}
-          onSave={(patch) => patchMutation.mutate(patch)}
-          pending={patchMutation.isPending}
-          canMutate={canMutate}
-          error={patchError}
-        />
-      </CollapsibleBlock>
-
-      <CollapsibleBlock title="Vehicle" description="Identity fields">
-        <OpportunityVehicleBlock
-          key={`vehicle-${patchRevision}`}
           opportunity={opportunity}
           onSave={(patch) => patchMutation.mutate(patch)}
           pending={patchMutation.isPending}
@@ -302,7 +327,14 @@ export function OpportunityDetailClientNew({
         />
       </CollapsibleBlock>
 
-      <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
+      <CollapsibleBlock
+        // Re-seed defaultOpen when the step crosses the Appraised boundary so
+        // the section auto-expands live, not only on next page load.
+        key={`title-info-shell-${titleInfoDefaultOpen}`}
+        title="Title Information"
+        description="Title, lien, and tag details"
+        defaultOpen={titleInfoDefaultOpen}
+      >
         <OpportunityTitleInformationBlock
           key={`title-${patchRevision}`}
           opportunity={opportunity}

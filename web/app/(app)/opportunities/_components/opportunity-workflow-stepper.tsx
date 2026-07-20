@@ -22,7 +22,7 @@ const DETAIL_WORKFLOW_STEPS = [
   { id: "appraised", label: "Appraised" },
 ] as const;
 
-type DetailStepId = (typeof DETAIL_WORKFLOW_STEPS)[number]["id"];
+export type DetailStepId = (typeof DETAIL_WORKFLOW_STEPS)[number]["id"];
 
 function mapToDetailStep(step: WorkflowStepId): DetailStepId {
   if (step === "found" || step === "assigned") return "found";
@@ -33,17 +33,18 @@ function mapToDetailStep(step: WorkflowStepId): DetailStepId {
   return "appraised";
 }
 
-function detailStepIndex(step: DetailStepId): number {
+export function detailStepIndex(step: DetailStepId): number {
   return DETAIL_WORKFLOW_STEPS.findIndex((s) => s.id === step);
 }
 
 /** Resolve the detail step, treating `passed` as Contacted (not Appraised). */
-function resolveDetailStep(opportunity: WorkflowStepInput): DetailStepId {
+export function resolveDetailStep(opportunity: WorkflowStepInput): DetailStepId {
   const status = opportunity.status ?? "new";
   if (status === "passed") return "contacted";
   return mapToDetailStep(resolveWorkflowStep(opportunity));
 }
 
+/** Real horizontal stepper: connected line + dots, not a flat button group (NEXT_STEPS #58). */
 export function OpportunityWorkflowStepper({
   opportunity,
 }: {
@@ -53,25 +54,47 @@ export function OpportunityWorkflowStepper({
   const currentIndex = detailStepIndex(current);
 
   return (
-    <ol
-      className="flex flex-wrap gap-2"
-      aria-label="Deal progress"
-    >
+    <ol className="flex w-full items-start" aria-label="Deal progress">
       {DETAIL_WORKFLOW_STEPS.map((step, index) => {
         const complete = index < currentIndex;
         const active = index === currentIndex;
+        const isLast = index === DETAIL_WORKFLOW_STEPS.length - 1;
         return (
           <li
             key={step.id}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
-              complete && "border-primary/30 bg-primary/10 text-primary",
-              active && "border-primary bg-primary text-primary-foreground",
-              !complete && !active && "border-border text-muted-foreground",
-            )}
+            className={cn("flex items-start", !isLast && "flex-1")}
+            aria-current={active ? "step" : undefined}
           >
-            {complete ? <Check className="size-3.5" aria-hidden /> : null}
-            {step.label}
+            <div className="flex flex-col items-center gap-1.5">
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-semibold transition-colors",
+                  complete && "border-primary bg-primary text-primary-foreground",
+                  active && "border-primary bg-background text-primary",
+                  !complete && !active && "border-border bg-background text-muted-foreground",
+                )}
+              >
+                {complete ? <Check className="size-3.5" aria-hidden /> : index + 1}
+              </span>
+              <span
+                className={cn(
+                  "whitespace-nowrap text-xs font-medium",
+                  (complete || active) && "text-foreground",
+                  !complete && !active && "text-muted-foreground",
+                )}
+              >
+                {step.label}
+              </span>
+            </div>
+            {!isLast ? (
+              <div
+                aria-hidden
+                className={cn(
+                  "mx-2 mt-3.5 h-0.5 flex-1 rounded-full transition-colors",
+                  index < currentIndex ? "bg-primary" : "bg-border",
+                )}
+              />
+            ) : null}
           </li>
         );
       })}

@@ -1,19 +1,9 @@
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 import { Badge } from "@/components/ui/badge";
+import { MetaBadgeDot } from "@/components/ui/meta-badge";
 
 import { formatOpportunityBadge, formatOpportunityType } from "@/lib/copy/opportunities-labels";
-
-function badgeVariant(badge: string): "healthy" | "review" | "error" | "neutral" {
-  if (badge === "Near miss") return "review";
-  if (badge === "Scraper review" || badge === "No MMR") return "review";
-  if (badge === "Manual submission") return "healthy";
-  if (badge.startsWith("Estimated")) return "review";
-  if (badge === "Price changed") return "neutral";
-  if (badge.startsWith("Seen again")) return "neutral";
-  if (badge === "Possible duplicate") return "neutral";
-  if (badge === "First seen") return "healthy";
-  return "neutral";
-}
+import { badgeTone, isMetaBadge } from "@/lib/opportunities/badge-style";
 
 export function OpportunityBadgesNew({
   badges,
@@ -24,16 +14,20 @@ export function OpportunityBadgesNew({
 }) {
   if (badges.length === 0) return compact ? null : <span className="text-muted-foreground">—</span>;
   return (
-    <div className="flex flex-wrap gap-1">
-      {badges.map((badge) => (
-        <Badge
-          key={badge}
-          variant={badgeVariant(badge)}
-          className={compact ? "px-1 py-0 text-[10px] leading-4" : undefined}
-        >
-          {formatOpportunityBadge(badge)}
-        </Badge>
-      ))}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {badges.map((badge) =>
+        isMetaBadge(badge) ? (
+          <MetaBadgeDot key={badge} label={formatOpportunityBadge(badge)} compact={compact} />
+        ) : (
+          <Badge
+            key={badge}
+            variant={badgeTone(badge)}
+            className={compact ? "px-1 py-0 text-[10px] leading-4" : undefined}
+          >
+            {formatOpportunityBadge(badge)}
+          </Badge>
+        ),
+      )}
     </div>
   );
 }

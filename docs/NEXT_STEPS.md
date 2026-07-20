@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-20 · **Focus:** **57** LLM Y/M/M/S normalization (deployed to staging + production behind flag, `ANTHROPIC_API_KEY` configured on both, migration `0066` applied; Phase 0 eval ran but every call failed — Anthropic account has no credit balance, not a config/code issue; ingest concurrency fix (§6 Phase 1) now built, only the credits blocker remains); **55** funnel soak (catalog sync done); **51** TBD
+**Last updated:** 2026-07-20 · **Focus:** **57** LLM Y/M/M/S normalization (deployed to staging + production behind flag, `ANTHROPIC_API_KEY` configured on both, migration `0066` applied; Phase 0 eval ran but every call failed — Anthropic account has no credit balance, not a config/code issue; ingest concurrency fix (§6 Phase 1) now built, only the credits blocker remains); **55** funnel soak (catalog sync done); **51** TBD; **58** new — UI/UX polish backlog (Opportunities list, detail page, MMR Lab) approved 2026-07-20, not started, picked up while **57** is blocked on credits
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
@@ -116,6 +116,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 |---|------|----------|--------|
 | **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
+| **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
 
 **Full status board (incl. shipped):**
 
@@ -138,6 +139,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [x] |
 | **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
+| **57** | **LLM Y/M/M/S normalization via Claude API** — Phase 0/1 built + deployed (flag off); blocked on Anthropic credits; ingest concurrency fix (§6 Phase 1) done | **Critical** | [~] |
+| **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1469,6 +1472,41 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [ ] Model tiering / prompt caching once Phase 0 data shows an easy/hard listing split worth exploiting
 - [ ] Seller classification (dealer vs private/curbstoner) — RFP FR-3.5 phase 2, text + photos, needs its own labeled eval set (50–100); not started, not blocking item 57
 - [ ] Fix `parserGarbagePenalty` regex bug in `matchListingToCoxCatalog.ts` (line 83 — `${...}` inside a non-template regex literal never interpolates) if that matcher stays alive as the fallback path
+
+---
+
+## 58 — UI/UX polish: Opportunities list, detail page, TAV MMR page
+
+**Status (2026-07-20):** Built (uncommitted). Raised as a "no changes, just suggest" visual review of production (`tav-enterprise.vercel.app`) while item 57 is blocked on Anthropic credits; buyer approved the subset below, rejected the rest (deeper badge/spacing rework, dashboard-wide theming, etc. — not in scope here). All checklist items implemented and covered by lint/typecheck/vitest (`npm run lint && npm run typecheck && npm test` in `web/`, 589/589 passing); no E2E/UAT run yet — pending review.
+
+**Goal:** Fix specific visual/UX friction found via live review: badges and the KPI strip read as same-weight inline text instead of a dashboard; the detail page is a narrow single-column form with no visible reason for its disabled-gray fields and a flat button-group instead of a progress stepper; MMR Lab shows bare `--` placeholders before any search.
+
+### Opportunities list
+
+**Primary files:** `web/app/(app)/opportunities/_components/opportunities-table-new.tsx`, `opportunities-queue-tabs.tsx`
+
+- [x] Recolor status/quality badges by meaning, not just text: green/amber/red for lead quality; a distinct muted "duplicate/estimate" style (small dot + gray text, not a same-weight pill) so the eye jumps to what matters (deal score, room-to-make) instead of every badge competing for attention. Shared tone/meta classification now lives in `web/lib/opportunities/badge-style.ts` (used by both `opportunity-badges-new.tsx` and the detail-page `opportunity-badges.tsx`); meta badges (`Possible duplicate`, `Seen again…`, `Price changed`, `Estimated …`) render via the new `MetaBadgeDot` (`web/components/ui/meta-badge.tsx`) instead of a same-weight `Badge` pill.
+- [x] Convert the KPI strip ("57 need you · 57 new today") into actual stat cards (number + label + small trend indicator), visually separated from the tabs below with a card/border — should read as a dashboard summary, not inline text. New `QueueSummaryStats`/`QueueStatCard` in `opportunities-client-new.tsx`; each card shows the count + label with an attention icon (amber `AlertCircle` / green `Sparkles`) that lights up only when the count is non-zero, plus a `border-b` separating the stats row from the queue tabs. Full sentence kept as `sr-only` text so existing regex-based tests/assistive tech still read "N need you" / "N new today".
+
+### Opportunity detail page
+
+**Primary file:** `web/app/(app)/opportunities/_components/opportunity-detail-client-new.tsx`
+
+- [x] Two-column responsive layout: Contact + Vehicle side by side on desktop, stacked on mobile — use full page width instead of a narrow centered form. Contact Info moved out of the hero card (now full width, header-only) into a `lg:grid-cols-2` row alongside Vehicle.
+- [x] Persistent claim/status banner at the top ("This lead is unclaimed — claim it to edit fields") so the disabled-gray-everywhere state has an obvious reason instead of looking broken. Enabled fields should visually pop (white background + border) vs. disabled (flat gray, no border). New `OpportunityClaimBanner`/`resolveClaimBannerState` (`opportunity-claim-banner.tsx`) renders one of three tones (editable/unclaimed/locked) under the hero; `Input`, `Checkbox`, and the Vehicle/Salesperson/Title Information `selectClass` strings now use `disabled:bg-muted disabled:border-transparent disabled:opacity-100` instead of a flat `opacity-50` fade on the enabled look.
+- [x] Collapse Title Information (lien/tag/warranty) by default until the deal reaches Appraised or later; only auto-expand when relevant, reducing initial scroll/clutter. `resolveDetailStep` (exported from `opportunity-workflow-stepper.tsx`) drives `defaultOpen`; the block is keyed on that boolean so it re-seeds open state live when the deal crosses the Appraised boundary, without fighting a manual user toggle otherwise.
+- [x] Replace the plain-text/flat-button-group workflow status row (Found / Working / Contacted / Appraised) with an actual horizontal stepper component — connected dots/lines, current step highlighted, completed steps visually distinct from upcoming ones. Confirmed via screenshot 2026-07-20: today it renders as four equal-weight buttons with only the active one filled blue, not a progress stepper — the state data (items **30**/**51**) already exists, this is visual treatment only. Rebuilt `OpportunityWorkflowStepper` with numbered/checked dots connected by a colored line (filled through completed steps).
+
+### TAV MMR page
+
+**Primary file:** `web/app/(app)/mmr-lab/` components
+
+- [x] Show a lightweight example/skeleton state before search (e.g. "Try VIN 1HGCM...") instead of bare `--` placeholders everywhere pre-search. New `ResultBandIdle` in `result-band.tsx` replaces the dash-filled grid for `phase === "idle"` with a dashed-border hint card ("No vehicle looked up yet" + example VIN), matching the existing idle pattern already used by `HistoricalProjected`/`TransactionsTable`. Updated `result-band.test.tsx` and `mmr-lab-client.test.tsx` accordingly (old tests asserted the bare-`--` behavior this item explicitly removes).
+
+**Exit criteria:**
+- [x] All checked items above implemented
+- [ ] No regression to existing E2E/UAT for opportunities list, detail page, MMR Lab — unit/lint/typecheck all green; no E2E/UAT pass done yet
+- [ ] Visual review confirms: dashboard-style KPI cards, meaning-based badge colors, two-column detail layout, claim/status banner, Title Information collapsed pre-Appraised, real horizontal stepper, MMR Lab skeleton state
 
 ---
 

@@ -2,7 +2,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type AlertVariant = "default" | "amber" | "destructive";
+type AlertVariant = "default" | "amber" | "destructive" | "healthy";
 
 const variantClasses: Record<AlertVariant, string> = {
   default: "border-border bg-card text-foreground",
@@ -10,6 +10,7 @@ const variantClasses: Record<AlertVariant, string> = {
     "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100",
   destructive:
     "border-destructive/50 bg-destructive/10 text-destructive",
+  healthy: "border-status-healthy/30 bg-status-healthy-bg text-status-healthy",
 };
 
 type Props = {

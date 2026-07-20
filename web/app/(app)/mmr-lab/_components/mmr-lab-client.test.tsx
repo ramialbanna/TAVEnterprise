@@ -144,7 +144,9 @@ describe("MmrLabClient — live catalog + honest valuation", () => {
     expect(
       screen.queryByRole("button", { name: /fill example/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("--").length).toBeGreaterThanOrEqual(5);
+    // #58: idle Result band shows a lightweight example hint instead of a
+    // bare "--" grid; the Max buy section still shows its own idle copy.
+    expect(screen.getByText(/no vehicle looked up yet/i)).toBeInTheDocument();
     expect(screen.getByText(/search to run max buy/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "2026" })).toBeInTheDocument(),

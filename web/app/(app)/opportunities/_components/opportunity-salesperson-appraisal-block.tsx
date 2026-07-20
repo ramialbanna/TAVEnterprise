@@ -14,7 +14,8 @@ import { useBlockAutoSave } from "./use-block-auto-save";
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
+  "disabled:cursor-not-allowed disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100";
 
 /**
  * Salesperson / Appraisal Information block. Directory dropdowns (item 53); auto-save on blur.

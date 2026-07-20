@@ -18,7 +18,7 @@ import { useBlockAutoSave } from "./use-block-auto-save";
 
 const selectClass =
   "h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground " +
-  "disabled:cursor-not-allowed disabled:opacity-50";
+  "disabled:cursor-not-allowed disabled:border-transparent disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100";
 
 /**
  * Title Information block — right side of the Salesperson/Appraisal row.
