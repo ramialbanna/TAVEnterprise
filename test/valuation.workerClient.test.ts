@@ -979,3 +979,98 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
+
+describe("item 57 §6 — precomputed llmResolution opt (batched ingest path)", () => {
+  it("uses an alias_hit llmResolution directly, skipping the catalog fetch cascade entirely", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    const outcome = await getMmrLookupOutcome(
+      { year: 2022, make: "Ram", model: "1500 Bighorn", trim: "big horn", mileage: 30_000, title: "2022 Ram 1500 Big Horn" },
+      BASE_ENV,
+      { llmResolution: { kind: "alias_hit", make: "Ram", model: "1500", style: "4D Crew Cab Big Horn" } },
+    );
+
+    expect(outcome.kind).toBe("hit");
+    // Only the /mmr/year-make-model call — no /catalog/* lookups at all.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const ymmInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const sentBody = JSON.parse(ymmInit.body as string) as Record<string, unknown>;
+    expect(sentBody.make).toBe("Ram");
+    expect(sentBody.model).toBe("1500");
+    expect(sentBody.trim).toBe("4D Crew Cab Big Horn");
+  });
+
+  it("uses a valid llm_hit llmResolution directly, skipping the catalog fetch cascade entirely", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    const outcome = await getMmrLookupOutcome(
+      { year: 2022, make: "Ram", model: "1500 Bighorn", trim: "big horn", mileage: 30_000, title: "2022 Ram 1500 Big Horn" },
+      BASE_ENV,
+      {
+        llmResolution: {
+          kind: "llm_hit",
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.9,
+          reasoning: "Big Horn + Crew Cab in title",
+          latencyMs: 1200,
+          anthropicModel: "claude-sonnet-4-5",
+          catalogRowCount: 12,
+        },
+      },
+    );
+
+    expect(outcome.kind).toBe("hit");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const ymmInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const sentBody = JSON.parse(ymmInit.body as string) as Record<string, unknown>;
+    expect(sentBody.model).toBe("1500");
+    expect(sentBody.trim).toBe("4D Crew Cab Big Horn");
+  });
+
+  it("falls through to the normal catalog cascade when llmResolution is a fallback (e.g. llm_disabled)", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogOk(["Toyota"]))
+      .mockResolvedValueOnce(catalogOk(["Camry"]))
+      .mockResolvedValueOnce(catalogOk(["4D Sedan SE"]))
+      .mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    const outcome = await getMmrLookupOutcome(
+      { year: 2021, make: "Toyota", model: "Camry", trim: "SE", mileage: 40_000, title: "2021 Toyota Camry SE" },
+      BASE_ENV,
+      { llmResolution: { kind: "fallback", reason: "llm_disabled" } },
+    );
+
+    expect(outcome.kind).toBe("hit");
+    // Full catalog cascade ran — 3 catalog calls + 1 MMR call — exactly the
+    // same as when no opts are passed at all (see the pre-item-57 YMM tests
+    // above), proving a non-hit precomputed resolution is a true no-op.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("omitting opts entirely preserves the original inline-resolve behavior (backward compatible)", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogOk(["Toyota"]))
+      .mockResolvedValueOnce(catalogOk(["Camry"]))
+      .mockResolvedValueOnce(catalogOk(["4D Sedan LE"]))
+      .mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    // No third argument at all — matches every call site that predates item 57 §6.
+    const outcome = await getMmrLookupOutcome(
+      { year: 2020, make: "Toyota", model: "Camry", trim: "LE", mileage: 20_000 },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind).toBe("hit");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});

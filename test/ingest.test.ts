@@ -501,6 +501,25 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     expect(body.ok).toBe(true);
   });
 
+  it("item 57 §6: passes a precomputed llmResolution (from the batch prefetch) into getMmrLookupOutcome for a no-VIN YMM item", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_MMR_RESULT });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledOnce();
+    // workerEnv does not set LLM_YMMS_ENABLED, so the prefetched resolution
+    // for this item is the flag's own inert fallback — proving the prefetch
+    // ran (this item registers for it: no VIN, full YMM from the title) and
+    // its result reached getMmrLookupOutcome as the 3rd arg, exactly the
+    // shape performMmrCall already treats as "resolve inline instead".
+    expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledWith(
+      expect.anything(),
+      workerEnv,
+      { llmResolution: { kind: "fallback", reason: "llm_disabled" } },
+    );
+  });
+
   it("direct mode does not call getMmrLookupOutcome and does not write miss snapshots", async () => {
     const sig = await sign(VALID_PAYLOAD, SECRET);
     // env has no MANHEIM_LOOKUP_MODE → treated as "direct"

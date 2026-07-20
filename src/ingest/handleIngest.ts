@@ -32,8 +32,9 @@ import { getSegmentAvgMarginPct } from "../persistence/purchaseOutcomes";
 import { getDemandScoreForRegion } from "../persistence/marketDemandIndex";
 import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttributions";
 import { getMmrValue } from "../valuation/mmr";
-import { getMmrLookupOutcome } from "../valuation/workerClient";
-import type { MmrMissReason } from "../valuation/workerClient";
+import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerClient";
+import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
+import type { LlmYmmsResolutionInput } from "../valuation/resolveListingWithLLM";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
@@ -63,6 +64,45 @@ function json(body: unknown, status: number): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Item 57 §6 Phase 1 — pure, side-effect-free pre-pass that figures out
+ * which items in this batch will reach the YMM worker-mode valuation branch
+ * (no VIN, year/make/model present) so createLlmYmmsPrefetch() can start
+ * their Claude calls before the main loop reaches each one. Only supports
+ * "facebook" today, matching the adapter dispatch in the main loop below.
+ *
+ * Calling parseFacebookItem() here duplicates the parse the main loop does
+ * later at step B — that's intentional and cheap (pure function, no I/O);
+ * it avoids threading a parsed-listing cache through the rest of the loop
+ * just for this.
+ */
+function buildLlmYmmsPrefetchInputs(
+  items: readonly unknown[],
+  source: string,
+  adapterCtx: AdapterContext,
+): Map<number, LlmYmmsResolutionInput> {
+  const inputs = new Map<number, LlmYmmsResolutionInput>();
+  if (source !== "facebook") return inputs;
+
+  items.forEach((item, i) => {
+    const parsed = parseFacebookItem(item, adapterCtx);
+    if (!parsed.ok) return;
+    const { listing } = parsed;
+    if (listing.vin) return; // LLM resolution only applies to the no-VIN YMM path
+    if (listing.year === undefined || !listing.make || !listing.model) return;
+    inputs.set(i, {
+      year: listing.year,
+      make: listing.make,
+      model: listing.model,
+      trim: listing.trim,
+      title: listing.title,
+      price: listing.price,
+    });
+  });
+
+  return inputs;
 }
 
 export async function handleIngest(request: Request, env: Env, execCtx: ExecutionContext): Promise<Response> {
@@ -150,6 +190,19 @@ export async function ingestCore(
   const loopDeadline = Date.now() + BATCH_TIMEOUT_MS - COMPLETION_RESERVE_MS;
 
   const adapterCtx: AdapterContext = { region, scrapedAt: scraped_at, sourceRunId: run.id };
+
+  // Item 57 §6 Phase 1 — kick off a bounded-concurrency window of LLM Y/M/M/S
+  // calls for this batch up front, ahead of the sequential loop below, so
+  // their Claude round-trips overlap with each other (and with neighboring
+  // items' DB work) instead of each blocking the loop in turn. This is a
+  // pure addition: when LLM_YMMS_ENABLED is not "true" (every environment
+  // today), resolveListingWithLLM short-circuits per item with zero I/O, so
+  // this whole block is inert. Only applies in worker mode — direct mode
+  // never calls the LLM resolver. See docs/LLM-YMMS-Normalization.md §6.
+  const llmPrefetch: LlmYmmsPrefetch | null =
+    getValuationLookupMode(env) === "worker"
+      ? createLlmYmmsPrefetch(buildLlmYmmsPrefetchInputs(items, source, adapterCtx), env)
+      : null;
 
   // Buy-box rules cached for this run
   let cachedRules: BuyBoxRule[] | undefined;
@@ -285,9 +338,17 @@ export async function ingestCore(
         }
       } else {
         try {
+          // llmPrefetch is always non-null in this branch — it's built above
+          // exactly when getValuationLookupMode(env) === "worker", which is
+          // the only way to reach this else. consume() returns undefined for
+          // any item it didn't register (VIN present, insufficient YMM),
+          // which getMmrLookupOutcome treats as "resolve it inline" — no
+          // behavior change from before this item didn't need the LLM step.
+          const llmResolution = await llmPrefetch!.consume(i);
           const outcome = await getMmrLookupOutcome(
             { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage, title: listing.title, price: listing.price },
             env,
+            { llmResolution },
           );
           if (outcome.kind === "hit") {
             mmrResult = outcome.result;

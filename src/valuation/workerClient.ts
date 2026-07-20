@@ -17,6 +17,8 @@ import {
   buildLlmYmmsDeps,
   llmResolutionToAuditFields,
   isLlmAttemptFailure,
+  type LlmYmmsResolution,
+  type LlmYmmsResolutionInput,
 } from "./resolveListingWithLLM";
 import { insertLlmYmmsDecision } from "../persistence/llmYmmsDecisions";
 
@@ -260,9 +262,23 @@ async function fetchCatalogItems(args: {
  */
 type MmrLookupOutcomeInternal = MmrLookupOutcome & { httpStatus?: number };
 
+/** Optional extras a caller may already have on hand for one lookup. */
+export type MmrLookupOutcomeOpts = {
+  /**
+   * Item 57 §6 Phase 1 — a Y/M/M/S resolution already computed by
+   * createLlmYmmsPrefetch(). When provided, performMmrCall uses it directly
+   * instead of calling resolveListingWithLLM itself, so batched ingest
+   * callers can overlap several listings' Claude calls instead of awaiting
+   * them one at a time in the main loop. Omit (or pass undefined) for the
+   * previous, still-supported behavior of resolving inline.
+   */
+  llmResolution?: LlmYmmsResolution;
+};
+
 async function performMmrCall(
   params: MmrParams,
   env: Env,
+  opts?: MmrLookupOutcomeOpts,
 ): Promise<MmrLookupOutcomeInternal> {
   const hasServiceBinding = env.INTEL_WORKER !== undefined;
   const baseUrl =
@@ -333,10 +349,16 @@ async function performMmrCall(
     // Claude error/timeout, or a proposal that fails the deterministic gate)
     // falls through to the existing offline matcher / live catalog cascade
     // below — this is a pure addition, never a regression vs today's path.
-    const llmResolution = await resolveListingWithLLM(
-      { year, make, model, trim: params.trim, title: params.title, price: params.price },
-      buildLlmYmmsDeps(db, env),
-    );
+    //
+    // §6 Phase 1: a batched ingest caller can pass an already-resolved
+    // llmResolution (from createLlmYmmsPrefetch) so several listings' Claude
+    // calls run concurrently instead of one sequential await per item here.
+    const llmResolution =
+      opts?.llmResolution ??
+      (await resolveListingWithLLM(
+        { year, make, model, trim: params.trim, title: params.title, price: params.price },
+        buildLlmYmmsDeps(db, env),
+      ));
 
     if (llmResolution.kind !== "fallback") {
       try {
@@ -638,8 +660,9 @@ async function performMmrCall(
 export async function getMmrLookupOutcome(
   params: MmrParams,
   env: Env,
+  opts?: MmrLookupOutcomeOpts,
 ): Promise<MmrLookupOutcome> {
-  const raw = await performMmrCall(params, env);
+  const raw = await performMmrCall(params, env, opts);
   if (raw.kind === "hit") {
     return {
       kind: "hit",
@@ -682,4 +705,85 @@ export async function getMmrValueFromWorker(
     case "cox_unavailable":  throw new WorkerUnavailableError(outcome.httpStatus ?? 0);
     default:                 return null;
   }
+}
+
+/**
+ * Item 57 §6 Phase 1 — ingest batch concurrency for the LLM Y/M/M/S step.
+ *
+ * Everything else in ingestCore (raw insert, adapter, dedupe, scoring, lead
+ * upsert) stays exactly as-is and per-item sequential — this exists solely
+ * so the Claude round-trip for several listings in one ingest batch can
+ * overlap instead of running one-at-a-time inside the main loop, which was
+ * exhausting the ~23.5s batch budget after ~15 items (see
+ * docs/LLM-YMMS-Normalization.md §6).
+ *
+ * Callers build `inputsByIndex` up front (one entry per item that will reach
+ * the YMM worker-mode valuation branch: no VIN, year+make+model present) and
+ * then call `consume(i)` at the same point in the loop where the lookup used
+ * to happen inline. `consume` returns `undefined` immediately for any index
+ * not registered (VIN path, direct mode, insufficient YMM) — callers should
+ * pass that straight through to getMmrLookupOutcome's `llmResolution` opt,
+ * which falls back to resolving inline exactly as before.
+ *
+ * A fixed-size window of calls is kept in flight (default 8): all indices up
+ * to the cap start immediately, and each `consume()` call slides the window
+ * forward by one as soon as its own promise resolves. Items that never get
+ * consumed (e.g. the batch is truncated by the deadline before reaching
+ * them) leave their already-started Claude call to resolve and be
+ * discarded — a small, bounded amount of wasted spend, not a correctness
+ * issue, and only possible up to `concurrency` items per batch.
+ */
+export interface LlmYmmsPrefetch {
+  consume(index: number): Promise<LlmYmmsResolution | undefined>;
+}
+
+const DEFAULT_LLM_PREFETCH_CONCURRENCY = 8;
+
+export function createLlmYmmsPrefetch(
+  inputsByIndex: Map<number, LlmYmmsResolutionInput>,
+  env: Env,
+  concurrency: number = DEFAULT_LLM_PREFETCH_CONCURRENCY,
+): LlmYmmsPrefetch {
+  const db = getSupabaseClient(env);
+  const deps = buildLlmYmmsDeps(db, env);
+  const orderedIndices = [...inputsByIndex.keys()].sort((a, b) => a - b);
+  let nextToStart = 0;
+  const inFlight = new Map<number, Promise<LlmYmmsResolution>>();
+
+  function start(index: number): Promise<LlmYmmsResolution> {
+    const input = inputsByIndex.get(index);
+    if (!input) throw new Error(`createLlmYmmsPrefetch: no input registered for index ${index}`);
+    return resolveListingWithLLM(input, deps).catch((err) => {
+      logError("valuation", "ingest.llm_ymms_prefetch_failed", err);
+      return { kind: "fallback", reason: "http_error" } as LlmYmmsResolution;
+    });
+  }
+
+  function fillWindow(): void {
+    while (inFlight.size < concurrency && nextToStart < orderedIndices.length) {
+      const idx = orderedIndices[nextToStart];
+      nextToStart += 1;
+      if (idx !== undefined) inFlight.set(idx, start(idx));
+    }
+  }
+
+  fillWindow();
+
+  return {
+    async consume(index: number): Promise<LlmYmmsResolution | undefined> {
+      if (!inputsByIndex.has(index)) return undefined;
+      let promise = inFlight.get(index);
+      if (!promise) {
+        // Defensive only — normal traversal consumes indices in the same
+        // order they were registered, so the window should already be
+        // running this one. Start it directly if not.
+        promise = start(index);
+        inFlight.set(index, promise);
+      }
+      const result = await promise;
+      inFlight.delete(index);
+      fillWindow();
+      return result;
+    },
+  };
 }

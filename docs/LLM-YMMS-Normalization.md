@@ -112,7 +112,7 @@ Implemented as `isValidCoxPick` in `src/llm/ymmsPrompt.ts`, called from `resolve
 
 ## 6. Ingest architecture — the budget problem you must fix first
 
-> **Status: NOT fixed yet.** The code below describes the still-unsolved problem. `resolveListingWithLLM` is wired into `workerClient.ts` as an *additional* awaited call ahead of the existing offline-matcher call — today it's a no-op (`LLM_YMMS_ENABLED="false"` everywhere), but the sequential-loop budget math is unchanged. **Do not flip `LLM_YMMS_ENABLED` on for real batch traffic until one of Phase 1/Phase 2 below is actually implemented** — this is the one piece of the rollout plan that is not just "not started" but actively load-bearing for safety.
+> **Status: Phase 1 FIXED (2026-07-20).** `resolveListingWithLLM` calls for a batch now run through a bounded-concurrency prefetch window instead of one sequential await per item — see "Phase 1 — implemented" below. Still `LLM_YMMS_ENABLED="false"` everywhere (blocked on Anthropic account credits, not this), but the sequencing/budget problem itself is no longer the blocker for flipping the flag.
 
 `ingestCore` (`src/ingest/handleIngest.ts`) processes every item in a batch **sequentially**, inside a single Worker invocation:
 
@@ -123,14 +123,18 @@ const BATCH_TIMEOUT_MS = 25_000;
 const COMPLETION_RESERVE_MS = 1_500;
 ```
 
-That's a **~23.5s wall-clock budget per ingest call**, shared across up to `MAX_INGEST_ITEMS = 500` items (`validate.ts`). Today that budget already covers several sequential Supabase round-trips plus one MMR-worker call per item. Adding one more **sequential** network round-trip to Claude (realistically 1–4s for a text completion with this much catalog context) exhausts the entire budget after roughly **15 items**, well below real Apify batch sizes — everything after that gets marked `truncated` and simply doesn't get processed that run.
+That's a **~23.5s wall-clock budget per ingest call**, shared across up to `MAX_INGEST_ITEMS = 500` items (`validate.ts`). Today that budget already covers several sequential Supabase round-trips plus one MMR-worker call per item. One more **sequential** network round-trip to Claude per item (realistically 1–4s for a text completion with this much catalog context) would exhaust the entire budget after roughly **15 items**, well below real Apify batch sizes — everything after that gets marked `truncated` and simply doesn't get processed that run.
 
-**This must be solved before "every listing" rollout — not an optional nice-to-have.** Two options, in recommended order:
+**Phase 1 — implemented.** Fire the Claude calls for a batch with bounded concurrency instead of one-at-a-time in the main loop, while keeping the rest of the pipeline (raw insert, adapter, dedupe, per-item deadline check, MMR, scoring, lead upsert) exactly as-is and per-item sequential:
 
-1. **Phase 1 (quick, do first): batch concurrency.** Fire the Claude calls for a chunk of items in parallel (e.g. `Promise.all` with a concurrency cap of 5–10) instead of one-at-a-time in the main loop. Keeps the rest of the pipeline (raw insert, adapter, dedupe, MMR) exactly as-is; only the LLM resolution step becomes concurrent. Cheapest change, buys real headroom, good enough to validate the accuracy story in production behind a flag.
-2. **Phase 2 (do once volume/latency data from Phase 1 says you need it): move LLM resolution off the synchronous webhook path.** Ingest keeps writing raw/normalized/candidate rows fast as it does today; Y/M/M/S resolution + MMR happen in a second async pass (Cloudflare Queue, or a `pending_llm_resolution` status polled by cron) — the same shape already used for parking `model_variant_missing` misses today, just applied earlier and to more rows.
+- `createLlmYmmsPrefetch()` (`src/valuation/workerClient.ts`) takes a `Map<index, LlmYmmsResolutionInput>` for the items in one ingest batch that will reach the YMM worker-mode valuation branch (no VIN, year/make/model present), and keeps a fixed-size sliding window of `resolveListingWithLLM()` calls in flight (default concurrency **8**, matching the "5–10" target below). All indices up to the cap start immediately at construction; each `consume(index)` call awaits (or starts, if the window hasn't reached it yet) that index's promise and slides the window forward by one slot as soon as it resolves.
+- `handleIngest.ts` builds that input map in a pure, side-effect-free pre-pass (`buildLlmYmmsPrefetchInputs`, re-parses each item with the same `parseFacebookItem` the main loop already calls — cheap, deterministic, no I/O) *before* the main sequential loop starts, then calls `llmPrefetch.consume(i)` at the exact point in the loop the LLM resolution used to happen inline.
+- `getMmrLookupOutcome` / `performMmrCall` gained an optional third argument, `{ llmResolution }` — when provided, `performMmrCall` uses it directly instead of calling `resolveListingWithLLM` itself; when omitted (every call site outside ingest, and any item the prefetch didn't register — VIN path, insufficient YMM), it falls back to the original inline-resolve behavior. Fully backward compatible; zero behavior change for existing callers.
+- **Why this doesn't touch the deadline-truncation contract:** the per-item deadline check, raw insert, adapter, and dedupe steps are untouched — they still run exactly once per item, in order, with the same pre-item `Date.now() >= loopDeadline` gate as before. Only the *LLM resolution itself* overlaps across items; a chunk-based restructure (do phase 1 for N items, then phase 2, then phase 3) was considered and rejected specifically because it would have coarsened that deadline check to chunk-granularity and broken the existing per-item truncation tests.
+- **Bounded waste, not a correctness issue:** if a batch is truncated by the deadline before reaching an item whose Claude call was already started by the window, that call is left to resolve and its result discarded — at most `concurrency` (8) wasted calls per batch, only on the (currently rare) truncation path.
+- Tests: `test/valuation.llmYmmsPrefetch.test.ts` (windowing/concurrency/error-degradation, mocked `resolveListingWithLLM`), plus new cases in `test/valuation.workerClient.test.ts` (`llmResolution` opt passthrough) and `test/ingest.test.ts` (prefetch wiring end-to-end with `getMmrLookupOutcome` mocked). All pre-existing tests — including the exact-count deadline-truncation ones — pass unmodified.
 
-Do not skip straight to "every listing in prod" without at least Phase 1 landed — it will silently drop tail-of-batch listings the same way a slow downstream dependency would today, and nothing currently alerts on `ingest.batch_deadline_hit` becoming common.
+**Phase 2 (do once volume/latency data from real traffic says you need it): move LLM resolution off the synchronous webhook path.** Ingest keeps writing raw/normalized/candidate rows fast as it does today; Y/M/M/S resolution + MMR happen in a second async pass (Cloudflare Queue, or a `pending_llm_resolution` status polled by cron) — the same shape already used for parking `model_variant_missing` misses today, just applied earlier and to more rows. Not needed yet — revisit only if Phase 1's concurrency cap turns out to be insufficient headroom once real Anthropic traffic and p50/p95 latency numbers exist.
 
 ## 7. Cost controls
 
@@ -169,13 +173,13 @@ Do not start this until Phase 0–2 below are shipped and the storage prerequisi
 - [x] `src/persistence/llmYmmsDecisions.ts` + migration `0066_llm_ymms_decisions.sql` — audit log (context in, decision out, latency, model, confidence/reasoning)
 - [x] Wired into `workerClient.ts` behind `LLM_YMMS_ENABLED` (default `"false"` in every environment — see `wrangler.toml`); on any non-`fallback` outcome writes an audit row, and on `llm_invalid_pick`/an actual Claude-call failure with no offline resolution, tags the miss reason `llm_invalid_pick` / `llm_unavailable` instead of the generic `model_variant_missing`
 - [x] New `MmrMissReason` values `llm_invalid_pick` / `llm_unavailable` added (free-text column, no migration needed for the enum itself)
-- [ ] **Not done — required before flipping the flag for real traffic:** batch concurrency fix in `ingestCore` (§6) — today `resolveListingWithLLM` is just one more sequential await in the existing per-item loop
-- [ ] Roll out to a small traffic slice first, compare funnel metrics (same cohort methodology as `NEXT_STEPS.md` §55 Phase C re-measures) before going to 100%
+- [x] Batch concurrency fix in `ingestCore` (§6 Phase 1) — `createLlmYmmsPrefetch` window, `2026-07-20`
+- [ ] Roll out to a small traffic slice first, compare funnel metrics (same cohort methodology as `NEXT_STEPS.md` §55 Phase C re-measures) before going to 100% — **still blocked on Anthropic account credits, unrelated to this checklist**
 
 ### Phase 2 — Ingest concurrency/async at scale
 
 - [ ] Measure real p50/p95 Claude latency and batch sizes from Phase 1 production traffic
-- [ ] If Phase 1's `Promise.all` concurrency isn't enough headroom, move to async hand-off (§6 Phase 2)
+- [ ] If Phase 1's prefetch-window concurrency isn't enough headroom, move to async hand-off (§6 Phase 2)
 
 ### Phase 3 — Learning loop
 
@@ -215,7 +219,7 @@ Existing files touched:
 | `src/ingest/handleIngest.ts` | Passes `listing.price` into `getMmrLookupOutcome` |
 | `src/types/env.ts`, `wrangler.toml`, `.dev.vars.example` | New secrets/vars: `ANTHROPIC_API_KEY` (secret), `LLM_YMMS_ENABLED` / `LLM_YMMS_MODEL` (vars, `"false"` everywhere by default) |
 | `test/valuation.mmr.test.ts`, `test/apify.webhook.test.ts`, `test/alerts.test.ts` | Test `Env` fixtures extended with the three new fields |
-| **Still to touch:** `src/ingest/handleIngest.ts` | Batch concurrency for the LLM step (§6 Phase 1) — **not done**, required before enabling on real traffic |
+| `src/valuation/workerClient.ts`, `src/ingest/handleIngest.ts` | Batch concurrency for the LLM step (§6 Phase 1) — **done 2026-07-20**: `createLlmYmmsPrefetch`, `MmrLookupOutcomeOpts`, `buildLlmYmmsPrefetchInputs` |
 | **Still to touch:** `src/persistence/mmrStyleAliases.ts` | Write accepted Claude picks as `ingest_learned` aliases (Phase 3) — **not done** |
 
 ## 11. Explicitly out of scope / do not do
@@ -237,6 +241,7 @@ This is a plain regex literal, not a template string — the `${...}` never inte
 
 ## 13. Blockers
 
-- [ ] **Anthropic API key + dev spend cap (leadership)** — this is the one thing blocking actually *running* any of the code in §9/§10. Not present in `.dev.vars`, staging, or production as of 2026-07-18. Per `TAV API.md` this may already be agreed in principle; get the actual key value and `wrangler secret put ANTHROPIC_API_KEY` it (staging first).
+- [x] Anthropic API key configured — done 2026-07-20 (`.dev.vars`, staging, production secrets, see `NEXT_STEPS.md` item 57)
+- [ ] **Anthropic account credit balance (billing/ops).** The key works end-to-end (auth, prompt build, tool-use gate all confirmed), but every real call fails with HTTP 400 "credit balance too low" — this is the actual remaining blocker on running any of §9/§10 against real data. Add credits/payment method in the Anthropic Console → Plans & Billing, then re-run `npm run eval:llm-ymms`.
 - [ ] Small labeled eval set (known-good Y/M/M/S for a sample of historical listings) — needed to score Phase 0 beyond "valid token rate"; `--verify-mmr` on the eval script is a partial substitute (real Cox hit/miss) but doesn't confirm the pick was *correct*, only that Cox had pricing for it
-- [ ] Ingest batch-concurrency fix (§6) — not a Phase 0 blocker (eval script calls Claude directly, outside the Worker loop), but is a hard blocker before `LLM_YMMS_ENABLED` can go on for real ingest traffic in Phase 1
+- [x] Ingest batch-concurrency fix (§6 Phase 1) — done 2026-07-20; was a hard blocker before `LLM_YMMS_ENABLED` could go on for real ingest traffic, now cleared
