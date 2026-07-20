@@ -42,9 +42,22 @@ export function OpportunityNotesBlock({
     },
   });
 
-  if (!canMutate) return null;
-
   const recentNotes = actions.filter((action) => action.action === "note_added").slice(0, 3);
+
+  // Previously returned null here, which left the "Notes" section looking
+  // empty/broken with no explanation once fields lock (NEXT_STEPS #58 follow-up).
+  if (!canMutate) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Claim this lead to add notes.
+        </p>
+        {recentNotes.length > 0 ? (
+          <OpportunityActionHistory actions={recentNotes} emptyMessage="" />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

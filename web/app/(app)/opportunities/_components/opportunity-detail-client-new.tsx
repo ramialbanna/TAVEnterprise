@@ -271,8 +271,11 @@ export function OpportunityDetailClientNew({
       <OpportunityClaimBanner state={claimBannerState} />
 
       {/* Contact + Vehicle side by side on desktop, stacked on mobile — use the
-          full page width instead of a narrow single-column form (NEXT_STEPS #58). */}
-      <div className="grid gap-4 lg:grid-cols-2">
+          full page width instead of a narrow single-column form (NEXT_STEPS #58).
+          `items-start` keeps each card sized to its own content instead of both
+          stretching to match Vehicle's taller field list (leaves Contact with a
+          big dead-space gap otherwise, since it only has 6 fields). */}
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <CollapsibleBlock title="Contact Information" description="Seller contact details">
           <OpportunityContactInfoBlock
             key={`contact-${patchRevision}`}
