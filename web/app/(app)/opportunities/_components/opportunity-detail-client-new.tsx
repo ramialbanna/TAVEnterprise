@@ -29,6 +29,7 @@ import { CollapsibleBlock } from "@/components/ui/collapsible-block";
 import { OpportunityClaimBanner, resolveClaimBannerState } from "./opportunity-claim-banner";
 import { OpportunityContactInfoBlock } from "./opportunity-contact-info-block";
 import { OpportunityDetailHero } from "./opportunity-detail-hero";
+import { OpportunityListingBlock } from "./opportunity-listing-block";
 import { OpportunityWorkflowStepper, resolveDetailStep } from "./opportunity-workflow-stepper";
 import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
@@ -273,19 +274,28 @@ export function OpportunityDetailClientNew({
       {/* Contact + Vehicle side by side on desktop, stacked on mobile — use the
           full page width instead of a narrow single-column form (NEXT_STEPS #58).
           `items-start` keeps each card sized to its own content instead of both
-          stretching to match Vehicle's taller field list (leaves Contact with a
-          big dead-space gap otherwise, since it only has 6 fields). */}
+          stretching to match Vehicle's taller field list. Contact Information only
+          has 6 fields, so it is paired with Listing Details (provenance — source,
+          asking price, seen counts, etc.) stacked underneath it: that fills the
+          column with genuinely useful content instead of leaving a bare gap next
+          to Vehicle's longer identity form. */}
       <div className="grid items-start gap-4 lg:grid-cols-2">
-        <CollapsibleBlock title="Contact Information" description="Seller contact details">
-          <OpportunityContactInfoBlock
-            key={`contact-${patchRevision}`}
-            opportunity={opportunity}
-            onSave={(patch) => patchMutation.mutate(patch)}
-            pending={patchMutation.isPending}
-            canMutate={canMutate}
-            error={patchError}
-          />
-        </CollapsibleBlock>
+        <div className="space-y-4">
+          <CollapsibleBlock title="Contact Information" description="Seller contact details">
+            <OpportunityContactInfoBlock
+              key={`contact-${patchRevision}`}
+              opportunity={opportunity}
+              onSave={(patch) => patchMutation.mutate(patch)}
+              pending={patchMutation.isPending}
+              canMutate={canMutate}
+              error={patchError}
+            />
+          </CollapsibleBlock>
+
+          <CollapsibleBlock title="Listing Details" description="Source and provenance">
+            <OpportunityListingBlock opportunity={opportunity} />
+          </CollapsibleBlock>
+        </div>
 
         <CollapsibleBlock title="Vehicle" description="Identity fields">
           <OpportunityVehicleBlock
