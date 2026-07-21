@@ -30,7 +30,7 @@ import { OpportunityClaimBanner, resolveClaimBannerState } from "./opportunity-c
 import { OpportunityContactInfoBlock } from "./opportunity-contact-info-block";
 import { OpportunityDetailHero } from "./opportunity-detail-hero";
 import { OpportunityListingBlock } from "./opportunity-listing-block";
-import { OpportunityWorkflowStepper, resolveDetailStep } from "./opportunity-workflow-stepper";
+import { OpportunityWorkflowStepper } from "./opportunity-workflow-stepper";
 import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
 import { OpportunityValuationBlock } from "./opportunity-valuation-block";
@@ -250,11 +250,6 @@ export function OpportunityDetailClientNew({
     [secondaryActions, pending],
   );
 
-  // Title Information is collapsed by default until the deal reaches
-  // Appraised (or later) — reduces initial scroll/clutter on the detail page
-  // (NEXT_STEPS #58). Auto-expands once the stepper reaches that step.
-  const titleInfoDefaultOpen = resolveDetailStep(opportunity) === "appraised";
-
   const claimBannerState = resolveClaimBannerState({
     canMutate,
     canClaim,
@@ -293,14 +288,7 @@ export function OpportunityDetailClientNew({
             />
           </CollapsibleBlock>
 
-          <CollapsibleBlock
-            // Re-seed defaultOpen when the step crosses the Appraised boundary so
-            // the section auto-expands live, not only on next page load.
-            key={`title-info-shell-${titleInfoDefaultOpen}`}
-            title="Title Information"
-            description="Title, lien, and tag details"
-            defaultOpen={titleInfoDefaultOpen}
-          >
+          <CollapsibleBlock title="Title Information" description="Title, lien, and tag details">
             <OpportunityTitleInformationBlock
               key={`title-${patchRevision}`}
               opportunity={opportunity}
