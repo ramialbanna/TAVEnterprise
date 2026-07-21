@@ -275,10 +275,11 @@ export function OpportunityDetailClientNew({
           full page width instead of a narrow single-column form (NEXT_STEPS #58).
           `items-start` keeps each card sized to its own content instead of both
           stretching to match Vehicle's taller field list. Contact Information only
-          has 6 fields, so it is paired with Listing Details (provenance — source,
-          asking price, seen counts, etc.) stacked underneath it: that fills the
-          column with genuinely useful content instead of leaving a bare gap next
-          to Vehicle's longer identity form. */}
+          has 6 fields, so it is paired with Title Information (also actively worked
+          fields — owner, lien, tag) stacked underneath it: that fills the column
+          with content people actually edit instead of leaving a bare gap next to
+          Vehicle's longer identity form. Read-only provenance (Listing Details)
+          moves to the bottom of the page — it's rarely something closers act on. */}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <div className="space-y-4">
           <CollapsibleBlock title="Contact Information" description="Seller contact details">
@@ -292,8 +293,22 @@ export function OpportunityDetailClientNew({
             />
           </CollapsibleBlock>
 
-          <CollapsibleBlock title="Listing Details" description="Source and provenance">
-            <OpportunityListingBlock opportunity={opportunity} />
+          <CollapsibleBlock
+            // Re-seed defaultOpen when the step crosses the Appraised boundary so
+            // the section auto-expands live, not only on next page load.
+            key={`title-info-shell-${titleInfoDefaultOpen}`}
+            title="Title Information"
+            description="Title, lien, and tag details"
+            defaultOpen={titleInfoDefaultOpen}
+          >
+            <OpportunityTitleInformationBlock
+              key={`title-${patchRevision}`}
+              opportunity={opportunity}
+              onSave={(patch) => patchMutation.mutate(patch)}
+              pending={patchMutation.isPending}
+              canMutate={canMutate}
+              error={patchError}
+            />
           </CollapsibleBlock>
         </div>
 
@@ -340,24 +355,6 @@ export function OpportunityDetailClientNew({
         />
       </CollapsibleBlock>
 
-      <CollapsibleBlock
-        // Re-seed defaultOpen when the step crosses the Appraised boundary so
-        // the section auto-expands live, not only on next page load.
-        key={`title-info-shell-${titleInfoDefaultOpen}`}
-        title="Title Information"
-        description="Title, lien, and tag details"
-        defaultOpen={titleInfoDefaultOpen}
-      >
-        <OpportunityTitleInformationBlock
-          key={`title-${patchRevision}`}
-          opportunity={opportunity}
-          onSave={(patch) => patchMutation.mutate(patch)}
-          pending={patchMutation.isPending}
-          canMutate={canMutate}
-          error={patchError}
-        />
-      </CollapsibleBlock>
-
       <CollapsibleBlock title="Notes" description="Closer-added context">
         <OpportunityNotesBlock
           opportunityId={opportunity.id}
@@ -384,6 +381,14 @@ export function OpportunityDetailClientNew({
 
       <CollapsibleBlock title="History" description="Full audit trail" defaultOpen={false}>
         <OpportunityActionHistory actions={opportunity.actions} />
+      </CollapsibleBlock>
+
+      <CollapsibleBlock
+        title="Listing Details"
+        description="Source and provenance"
+        defaultOpen={false}
+      >
+        <OpportunityListingBlock opportunity={opportunity} />
       </CollapsibleBlock>
     </div>
   );
