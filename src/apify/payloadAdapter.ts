@@ -211,6 +211,11 @@ export function mapRaidrApiItem(item: unknown): unknown {
       if (desc) out.description = desc;
     }
 
+    if (readString(rec.condition) === undefined) {
+      const cond = readString(detail.condition);
+      if (cond) out.condition = cond;
+    }
+
     // city / state — extraListingData.location is flat ({city, state, …}).
     if (readString(rec.city) === undefined || readString(rec.state) === undefined) {
       const loc = detail.location;

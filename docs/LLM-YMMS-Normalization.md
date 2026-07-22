@@ -112,7 +112,7 @@ Implemented as `isValidCoxPick` in `src/llm/ymmsPrompt.ts`, called from `resolve
 
 ## 6. Ingest architecture — the budget problem you must fix first
 
-> **Status: Phase 1 FIXED (2026-07-20).** `resolveListingWithLLM` calls for a batch now run through a bounded-concurrency prefetch window instead of one sequential await per item — see "Phase 1 — implemented" below. Still `LLM_YMMS_ENABLED="false"` everywhere (blocked on Anthropic account credits, not this), but the sequencing/budget problem itself is no longer the blocker for flipping the flag.
+> **Status: Phase 1 FIXED (2026-07-20).** `resolveListingWithLLM` calls for a batch now run through a bounded-concurrency prefetch window instead of one sequential await per item — see "Phase 1 — implemented" below. `LLM_YMMS_ENABLED="false"` everywhere — the credits blocker is cleared (2026-07-21) but the flag stays off pending the `--verify-mmr` result and a confidence-threshold decision (see §9 Phase 0).
 
 `ingestCore` (`src/ingest/handleIngest.ts`) processes every item in a batch **sequentially**, inside a single Worker invocation:
 
@@ -160,10 +160,11 @@ Do not start this until Phase 0–2 below are shipped and the storage prerequisi
 ### Phase 0 — Offline eval (no prod wiring)
 
 - [x] Build `scripts/eval-llm-ymms.mjs`: pulls historical `tav.valuation_snapshots` miss rows for a given `missing_reason` (default `model_variant_missing`), joins `normalized_listings` for title/trim/price, builds the full-catalog context, calls Claude, runs the deterministic gate, writes per-row results + a summary to `scripts/_eval-results/*.json` (gitignored). Optional `--verify-mmr` calls the real intel-worker MMR endpoint for a true would-have-hit signal (costs real Cox quota — off by default). Run with `npm run eval:llm-ymms`.
-- [ ] **Blocked:** Confirm Anthropic API key + dev spend cap in Worker secrets (leadership already agreed to unblock this — see `TAV API.md` §Open items) — **nothing above has actually been run against real data yet**; the script errors out immediately without a real `ANTHROPIC_API_KEY` in `.dev.vars`
-- [ ] Actually run it against 100–500 historical listings once the key exists, and read the results
-- [ ] Metrics to check once run: **valid-Cox-token rate** (target ≥99%) and **would-have-hit-MMR rate** (via `--verify-mmr`) vs the ~49.8%/55.4% baseline in §1
-- [ ] **Ship to prod (flip `LLM_YMMS_ENABLED`) only if this shows a real lift**
+- [x] Confirm Anthropic API key + credits in Worker secrets — key set 2026-07-20; **credit balance added 2026-07-21, blocker cleared**.
+- [x] Actually run it against 100 historical listings once the key/credits existed, and read the results — done 2026-07-21 (`model_variant_missing`, 100 rows): 18 `catalog_not_synced`, 82 real Anthropic calls, 0 errors. Raw: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`.
+- [x] **Valid-Cox-token rate** (target ≥99%) — **100% (82/82)**, met. Breakdown: 16 `llm_hit`, 66 `llm_needs_review` (0 `llm_invalid_pick`). The 80% `needs_review` share (mostly confidence 0.3–0.75) means most valid picks are self-flagged uncertain by the model — worth a product call on the auto-accept threshold before this goes anywhere near real traffic.
+- [x] **`--verify-mmr` deliberately skipped (2026-07-21, product call).** Would have required either a locally-recorded copy of `INTEL_WORKER_SECRET` or rotating it — not worth the operational risk for a secondary signal. **Why skipping is safe:** production code (`workerClient.ts`) already only trusts `llm_hit` (valid pick + `needsReview: false`) to actually resolve the catalog — `llm_needs_review` and `llm_invalid_pick` fall straight through to the existing offline matcher/cascade, exactly as if item 57 didn't fire. So the worst case from skipping this check is *less measured lift than hoped*, never a regression or a bad price reaching a buyer.
+- [ ] **Ship to prod (flip `LLM_YMMS_ENABLED`) only if this shows a real lift** — real lift = real traffic funnel measurement (same cohort methodology as item 55 Phase C), not the offline eval. On this 100-row sample only 16/82 (19.5%) were a confident `llm_hit`; the rest fall back to today's ~49.8% baseline path unchanged. Whether 19.5%-of-misses-become-hits is worth turning on is a product call, not a code gate.
 
 ### Phase 1 — Prod integration behind a flag, text-only, concurrent
 
@@ -174,7 +175,7 @@ Do not start this until Phase 0–2 below are shipped and the storage prerequisi
 - [x] Wired into `workerClient.ts` behind `LLM_YMMS_ENABLED` (default `"false"` in every environment — see `wrangler.toml`); on any non-`fallback` outcome writes an audit row, and on `llm_invalid_pick`/an actual Claude-call failure with no offline resolution, tags the miss reason `llm_invalid_pick` / `llm_unavailable` instead of the generic `model_variant_missing`
 - [x] New `MmrMissReason` values `llm_invalid_pick` / `llm_unavailable` added (free-text column, no migration needed for the enum itself)
 - [x] Batch concurrency fix in `ingestCore` (§6 Phase 1) — `createLlmYmmsPrefetch` window, `2026-07-20`
-- [ ] Roll out to a small traffic slice first, compare funnel metrics (same cohort methodology as `NEXT_STEPS.md` §55 Phase C re-measures) before going to 100% — **still blocked on Anthropic account credits, unrelated to this checklist**
+- [ ] Roll out to a small traffic slice first, compare funnel metrics (same cohort methodology as `NEXT_STEPS.md` §55 Phase C re-measures) before going to 100% — **credits blocker cleared 2026-07-21; not started, next real decision point is flipping `LLM_YMMS_ENABLED="true"` on staging only and soaking**
 
 ### Phase 2 — Ingest concurrency/async at scale
 
@@ -242,6 +243,6 @@ This is a plain regex literal, not a template string — the `${...}` never inte
 ## 13. Blockers
 
 - [x] Anthropic API key configured — done 2026-07-20 (`.dev.vars`, staging, production secrets, see `NEXT_STEPS.md` item 57)
-- [ ] **Anthropic account credit balance (billing/ops).** The key works end-to-end (auth, prompt build, tool-use gate all confirmed), but every real call fails with HTTP 400 "credit balance too low" — this is the actual remaining blocker on running any of §9/§10 against real data. Add credits/payment method in the Anthropic Console → Plans & Billing, then re-run `npm run eval:llm-ymms`.
+- [x] **Anthropic account credit balance (billing/ops) — resolved 2026-07-21.** Credits added; re-ran `npm run eval:llm-ymms` and got 82/82 real completions with 0 HTTP errors. Remaining open question is no longer billing — it's the `needs_review` confidence threshold (80% of valid picks this run) and the still-unmeasured would-have-hit-MMR rate (`--verify-mmr`).
 - [ ] Small labeled eval set (known-good Y/M/M/S for a sample of historical listings) — needed to score Phase 0 beyond "valid token rate"; `--verify-mmr` on the eval script is a partial substitute (real Cox hit/miss) but doesn't confirm the pick was *correct*, only that Cox had pricing for it
 - [x] Ingest batch-concurrency fix (§6 Phase 1) — done 2026-07-20; was a hard blocker before `LLM_YMMS_ENABLED` could go on for real ingest traffic, now cleared

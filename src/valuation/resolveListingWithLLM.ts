@@ -29,6 +29,10 @@ export type LlmYmmsResolutionInput = {
   trim?: string | null;
   title?: string | null;
   description?: string | null;
+  condition?: string | null;
+  /** Stated odometer from the listing payload when present — never estimated. */
+  listingMileage?: number | null;
+  location?: string | null;
   price?: number | null;
   /** Prior rules-based miss reason, if this is a re-attempt. */
   priorMissReason?: string | null;
@@ -132,6 +136,9 @@ export async function resolveListingWithLLM(
       trim: input.trim,
       title: input.title,
       description: input.description,
+      condition: input.condition,
+      listingMileage: input.listingMileage,
+      location: input.location,
       price: input.price,
       priorMissReason: input.priorMissReason,
     },

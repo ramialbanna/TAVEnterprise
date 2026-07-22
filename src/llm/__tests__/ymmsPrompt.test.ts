@@ -59,6 +59,7 @@ describe("buildYmmsUserPrompt", () => {
     expect(prompt).toContain("Year: 2022");
     expect(prompt).toContain("Make (already resolved, do not change): Ram");
     expect(prompt).toContain("2022 Ram 1500 Big Horn Crew Cab 4x4");
+    expect(prompt).toContain("hypothesis");
     expect(prompt).toContain("Listing price: $32000");
     expect(prompt).toContain("model_variant_missing");
     expect(prompt).toContain("4D Crew Cab Big Horn");
@@ -66,8 +67,31 @@ describe("buildYmmsUserPrompt", () => {
 
   it("falls back to (none) placeholders when title/description are absent", () => {
     const prompt = buildYmmsUserPrompt({ year: 2020, make: "Honda" }, []);
-    expect(prompt).toContain("Listing title:\n(none)");
-    expect(prompt).toContain("Listing description:\n(none)");
+    expect(prompt).toContain("Listing title (evidence):\n(none)");
+    expect(prompt).toContain("Listing description (evidence):\n(none)");
+  });
+
+  it("includes rich seller text fields for ambiguous truck titles", () => {
+    const rows = [row("F-150", "4D SuperCrew XLT 4WD")];
+    const prompt = buildYmmsUserPrompt(
+      {
+        year: 2016,
+        make: "Ford",
+        model: "F-150",
+        trim: "short bed",
+        title: "2016 Ford F-150 · Short Bed",
+        description: "SuperCrew XLT 4x4, 5.0L V8, clean Carfax.",
+        condition: "USED",
+        listingMileage: 89000,
+        location: "Dallas, TX",
+      },
+      rows,
+    );
+
+    expect(prompt).toContain("SuperCrew XLT 4x4");
+    expect(prompt).toContain("Listing condition (evidence):\nUSED");
+    expect(prompt).toContain("89000 mi");
+    expect(prompt).toContain("Dallas, TX");
   });
 });
 

@@ -1,13 +1,17 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-20 · **Focus:** **57** LLM Y/M/M/S normalization (deployed to staging + production behind flag, `ANTHROPIC_API_KEY` configured on both, migration `0066` applied; Phase 0 eval ran but every call failed — Anthropic account has no credit balance, not a config/code issue; ingest concurrency fix (§6 Phase 1) now built, only the credits blocker remains); **55** funnel soak (catalog sync done); **51** TBD; **58** new — UI/UX polish backlog (Opportunities list, detail page, MMR Lab) approved 2026-07-20, not started, picked up while **57** is blocked on credits
+**Last updated:** 2026-07-22 · **Focus:** **60** new — feed Apify/listing **description + rich text** into item **57** Claude context (today: title/price/parser Y/M/M/T only; prompt description slot always empty) — see [`LLM-YMMS-listing-context.md`](LLM-YMMS-listing-context.md). **57** **live** on staging + production (`LLM_YMMS_ENABLED=true`, deploy `5185eeb5…`, commit `47844d7`, 2026-07-22); early prod: ~25% `llm_hit`, Bronco Black Diamond fixed, sparse F-150 title → `needs_review` + No MMR. **59** Max buy badge on Needs action · **55** funnel soak · **58** UI polish
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
 >
 > **2026-07-18:** Claude API access unblocked (in principle). Decided to replace/augment **55**'s offline matcher with an LLM (Claude) call per listing — full plan, locked decisions, and rollout phases live in [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md). **Read that doc first**, this file's item **57** below is just the tracker entry. **Same day:** built and merged all of Phase 0 (`scripts/eval-llm-ymms.mjs`) and Phase 1's code (`src/llm/*`, `src/valuation/resolveListingWithLLM.ts`, migration `0066`, wired into `workerClient.ts` behind `LLM_YMMS_ENABLED="false"`, 30 new unit tests, full suite green at 1252 tests). **Nothing has actually run against real data** — no `ANTHROPIC_API_KEY` is configured anywhere yet, and the ingest batch-concurrency fix (doc §6) is still not done, so the flag must stay off. Next actual work: get the real key into `.dev.vars`, run `npm run eval:llm-ymms`, read the results.
 >
-> **2026-07-20:** `ANTHROPIC_API_KEY` set via Cloudflare dashboard on both `tav-aip-staging` and `tav-aip-production` secrets. Worker redeployed to both (`wrangler deploy --env staging` / `--env production`) — still `LLM_YMMS_ENABLED="false"` everywhere, purely to ship the dormant item-57 code paths. Migration `0066_llm_ymms_decisions` applied directly to Supabase (was missing — `list_migrations` showed `0065` as the latest before this). Local `.dev.vars` created from the template and filled in (`ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — note: this project is on Supabase's **new key format** (`sb_secret_...`), the legacy `service_role` JWT is disabled). Ran `npm run eval:llm-ymms` (100 rows, `model_variant_missing`, no `--verify-mmr`): 17 `catalog_not_synced`, 83 reached Anthropic and **all 83 failed** with HTTP 400 `"Your credit balance is too low to access the Anthropic API."` — **this is a billing/account problem, not a code or config problem**; the pipeline (key, migration, prompt, gate) is confirmed wired correctly end-to-end. Blocked on adding credits to the Anthropic account before the eval can actually be scored. Ingest batch-concurrency fix (§6) and all item-57 file changes remain **uncommitted** in the working tree as of this update — commit before this is lost.
+> **2026-07-20:** `ANTHROPIC_API_KEY` set via Cloudflare dashboard on both `tav-aip-staging` and `tav-aip-production` secrets. Worker redeployed to both (`wrangler deploy --env staging` / `--env production`) — still `LLM_YMMS_ENABLED="false"` everywhere, purely to ship the dormant item-57 code paths. Migration `0066_llm_ymms_decisions` applied directly to Supabase (was missing — `list_migrations` showed `0065` as the latest before this). Local `.dev.vars` created from the template and filled in (`ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — note: this project is on Supabase's **new key format** (`sb_secret_...`), the legacy `service_role` JWT is disabled). Ran `npm run eval:llm-ymms` (100 rows, `model_variant_missing`, no `--verify-mmr`): 17 `catalog_not_synced`, 83 reached Anthropic and **all 83 failed** with HTTP 400 `"Your credit balance is too low to access the Anthropic API."` — **this is a billing/account problem, not a code or config problem**; the pipeline (key, migration, prompt, gate) is confirmed wired correctly end-to-end. Blocked on adding credits to the Anthropic account before the eval can actually be scored. Ingest batch-concurrency fix (§6) and all item-57 file changes remain **uncommitted** in the working tree as of this update — commit before this is lost. *(Update 2026-07-21: this was committed later the same evening — `90940e9` Phase 0+1, `dee2613` §6 Phase 1 — nothing was lost.)*
+>
+> **2026-07-21:** Credits added to the Anthropic account. Re-ran `npm run eval:llm-ymms` (100 rows, `model_variant_missing`, no `--verify-mmr`, local `.dev.vars`): 18 `catalog_not_synced`, 82 real Anthropic calls, **0 errors** (credits blocker confirmed cleared), **0 `llm_invalid_pick`** → **valid Cox token rate 100%** (Phase 0 bar was ≥99% — met). Breakdown of the 82: 16 `llm_hit` (confident, valid pick), 66 `llm_needs_review` (valid pick but the model itself flagged low confidence — mostly 0.3–0.75, a few up to 0.85). Raw results: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`. Also logged as a new item: **59** — Max buy badge is missing on most **Needs action** queue rows (root cause: Max buy is evaluated on-demand from the detail page, not at ingest, so unopened/unclaimed leads have nothing cached — see §59).
+>
+> **2026-07-21 (later):** Considered running `--verify-mmr` for the real would-have-hit-MMR number, but it requires `INTEL_WORKER_SECRET` and the local `.dev.vars` copy is still `replace_me` — Cloudflare secrets can't be read back once set, so the only paths were (a) someone had a recorded copy (nobody did) or (b) rotate the shared secret between `tav-aip-*` and `tav-intelligence-worker-*`. **Decision: skip `--verify-mmr` entirely** rather than touch a live shared secret for a secondary signal. This is safe, not a corner cut: `workerClient.ts` (§Phase 1, already deployed) only ever trusts a confident `llm_hit` to actually resolve the catalog — `llm_needs_review` and `llm_invalid_pick` fall straight through to the unchanged existing offline-matcher path, so skipping the verify step can only under-measure the lift, never cause a bad price to reach a buyer. **Where this leaves item 57:** code-wise there is nothing left to build for Phase 0/1. The only remaining question is a product one — is a ~19.5% (16/82) confident-hit rate on this sample worth flipping `LLM_YMMS_ENABLED="true"` on **staging only** for a real funnel soak (same cohort methodology as item 55 Phase C) before ever touching production — **not decided, flag is still `"false"` everywhere.**
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -117,6 +121,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
+| **59** | **Max buy not shown on Needs action queue rows** — `maxbuySummary` badge is blank for most unclaimed/new leads because Max buy is computed on-demand (detail-page view), not at ingest — see §59 | **High** | [ ] |
+| **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
 
 **Full status board (incl. shipped):**
 
@@ -141,6 +147,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 | **57** | **LLM Y/M/M/S normalization via Claude API** — Phase 0/1 built + deployed (flag off); blocked on Anthropic credits; ingest concurrency fix (§6 Phase 1) done | **Critical** | [~] |
 | **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
+| **59** | **Max buy not shown on Needs action queue rows** — reported 2026-07-21; on-demand Max buy means fresh/unclaimed leads have no cached recommendation to show | **High** | [ ] |
+| **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1427,7 +1435,9 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 
 ## 57 — LLM Y/M/M/S normalization via Claude API (replaces offline matcher as primary path)
 
-**Status (2026-07-20):** Design locked, **Phase 0 + Phase 1 code built and deployed to staging + production (`LLM_YMMS_ENABLED="false"` on both).** `ANTHROPIC_API_KEY` configured, migration `0066` applied, Phase 0 eval actually run — **blocked on Anthropic account credits, not config.** **Ingest batch-concurrency fix (§6) is now built** (see "Done 2026-07-20 (later)" below) — the credits blocker is the only thing left before the flag can flip on for real traffic. Full walkthrough, locked decisions, prompt/schema spec, and phased rollout plan: [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) — **read that doc first in a fresh chat**; this entry is a tracker pointer + later-phase backlog only.
+**Status (2026-07-22):** **`LLM_YMMS_ENABLED="true"` on staging + production** (commit `47844d7`, Worker `5185eeb5…`). Phase 0 + Phase 1 code live; credits blocker cleared 2026-07-21. First production hours (~14:06 UTC+): **`llm_ymms_decisions`** show mix of `llm_hit` / `llm_needs_review`; Bronco Black Diamond title → correct Cox style + MMR; sparse titles (e.g. `2016 Ford F-150 · Short Bed`) still `needs_review` → offline fallback → No MMR — **motivates item 60** (richer listing text to Claude). Full design: [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md). **Next ingest-quality work:** item **60**, not re-flipping the flag.
+
+**Status (2026-07-21, historical):** Design locked, Phase 0 + Phase 1 code built and deployed (`LLM_YMMS_ENABLED="false"` until 2026-07-22). Re-ran Phase 0 eval: 82 Anthropic calls, **valid Cox token rate 100%**, 16/82 `llm_hit`, 66/82 `needs_review`. **`--verify-mmr` deliberately skipped.** Tracker pointer + later-phase backlog below; read [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) first in a fresh chat for item 57 rules.
 
 **Decided:** 2026-07-18 (Claude API access unblocked by leadership; see `TAV API.md`).
 
@@ -1459,11 +1469,14 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] `scripts/eval-llm-ymms.mjs` pulls historical `model_variant_missing` (or any `missing_reason`) listings from `tav.valuation_snapshots`, joins `normalized_listings`, builds full-catalog context, calls Claude, logs result vs current offline matcher, writes JSON results (`npm run eval:llm-ymms`)
 - [x] Anthropic API key confirmed in Worker secrets (staging + production) and local `.dev.vars`
 - [x] Actually ran the eval (100 rows, 2026-07-20) — **blocked mid-result:** all 83 non-`catalog_not_synced` rows failed with Anthropic HTTP 400 "credit balance too low"; not a code/config issue
-- [ ] **Blocked:** add credits/payment method to the Anthropic account (Console → Plans & Billing) — asked Rami 2026-07-18/20
-- [ ] Re-run eval once credits exist and actually read the accuracy numbers
-- [ ] Valid-Cox-token rate ≥ 99% on eval set
-- [ ] Would-have-hit-MMR rate (via `--verify-mmr`) shows meaningful lift vs current path
-- [ ] Do not wire to production ingest (i.e. flip `LLM_YMMS_ENABLED` for real traffic) until this bar is met
+- [x] **Unblocked 2026-07-21:** credits added to the Anthropic account
+- [x] Re-run eval once credits exist and actually read the accuracy numbers — done 2026-07-21 (100 rows, `model_variant_missing`, no `--verify-mmr`): 18 `catalog_not_synced`, 82 Anthropic calls, 0 errors, 16 `llm_hit`, 66 `llm_needs_review`, 0 `llm_invalid_pick`. Results: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`
+- [x] Valid-Cox-token rate ≥ 99% on eval set — **100% (82/82)**, bar met
+- [x] Would-have-hit-MMR rate (via `--verify-mmr`) — **deliberately skipped 2026-07-21** (would've required rotating the shared `INTEL_WORKER_SECRET` between two live Workers just for a secondary signal; not worth the risk). **Safe to skip because** `workerClient.ts` only ever trusts a confident `llm_hit` — `llm_needs_review`/`llm_invalid_pick` fall back to the existing offline matcher unchanged, so there's no regression risk, only a measurement gap.
+- [ ] Product decision on the `needsReview` / confidence threshold — 80% of valid picks this run were flagged `needs_review` (confidence mostly 0.3–0.75); unclear yet what's auto-acceptable vs. human-review-required. Not really blocking though, since `needsReview` already routes to the old fallback path today.
+- [ ] Real next step: decide whether a 19.5% (16/82) confident-hit rate on this sample is worth flipping `LLM_YMMS_ENABLED="true"` on **staging only** for a soak, measured the same way as item 55 Phase C (funnel re-measure), before touching production
+- [x] **Flipped `LLM_YMMS_ENABLED="true"`** staging + production — 2026-07-22 (`47844d7`, deploy `5185eeb5…`); monitor `llm_ymms_decisions` + MMR funnel
+- [ ] **Item 60** — pass description + Apify listing text into Claude (see §60)
 - [x] Ingest batch-concurrency fix (§6 Phase 1) — built and tested 2026-07-20, independent of the credits blocker
 
 ### Later phases (backlog — not yet scoped in detail; expand `LLM-YMMS-Normalization.md` when picked up)
@@ -1507,6 +1520,71 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] All checked items above implemented
 - [ ] No regression to existing E2E/UAT for opportunities list, detail page, MMR Lab — unit/lint/typecheck all green; no E2E/UAT pass done yet
 - [ ] Visual review confirms: dashboard-style KPI cards, meaning-based badge colors, two-column detail layout, claim/status banner, Title Information collapsed pre-Appraised, real horizontal stepper, MMR Lab skeleton state
+
+---
+
+## 59 — Max buy not shown on Needs action queue rows
+
+**Reported:** 2026-07-21 (buyer feedback, production `/opportunities` — Needs action tab)
+
+**Symptom:** Deals sitting in the **Needs action** tab mostly show no Max buy badge at all in the queue row (`OpportunityVehicleCellNew` renders nothing, or the muted **"MaxBuy: add VIN"** hint) — buyers can't see a Max buy verdict/number to help triage which unclaimed leads to work first.
+
+### Root cause (code review 2026-07-21)
+
+This is **not** a rendering bug — the queue row component and the Worker's `listOpportunities` query already treat Max buy uniformly across every tab/view:
+
+- `fetchMaxbuySummaries()` (`src/persistence/opportunities.ts`) joins `maxbuy_recommendations` for **every** listing in the result set, regardless of `view=`.
+- `OpportunityVehicleCellNew` (`web/app/(app)/opportunities/_components/opportunity-vehicle-cell-new.tsx`) renders `MaxBuyBadge` whenever `row.maxbuySummary` is present, on every tab.
+
+The actual gap is **upstream**: a `maxbuy_recommendations` row only gets created when someone actually calls `POST` the Max buy evaluate endpoint (`src/maxbuy/handlers/evaluate.ts` → `runEvaluate`) — today that only happens **on-demand from the opportunity detail page** (e.g. after a VIN decode / Y/M/M/S save, per item **48**'s "fresh MMR + Max buy" flow). `src/ingest/handleIngest.ts` never calls Max buy evaluate — ingest only writes the MMR `valuation_snapshots` row, not a `maxbuy_recommendations` row.
+
+**Needs action** is specifically the tab of unassigned/unclaimed/freshest leads — by definition, the rows least likely to have been opened by anyone yet. So the one tab where a buyer most wants an at-a-glance signal for triage is structurally the one least likely to have a cached Max buy verdict. `MAXBUY_EVALUATE_ENABLED` is already `"true"` in both staging and production, so this isn't a flag/config gap — it's a "nobody has clicked in yet" gap.
+
+### Fix direction (not started — needs product confirmation on cost/latency tradeoff)
+
+- Most direct: run Max buy evaluation as part of ingest (alongside the existing MMR lookup in `handleIngest.ts`) whenever identity is complete enough (VIN decodes or full Y/M/M/S resolves) — mirrors how `resolveListingToCatalogForIngest` (item 55 Phase B) already runs pre-MMR in the same loop. Needs a batch-budget check similar to item 57 §6 (Max buy calls go to `maxbuy-worker`, adds another per-item round trip to the same `BATCH_TIMEOUT_MS` budget).
+- Cheaper alternative: a small cron/backfill that evaluates Max buy only for rows currently in `needs_action` (bounded set, not every ingest) — lower cost, but still stale between cron runs and does nothing for items 40/41-style "brand new lead" freshness.
+- Do not invent mileage/trim to force an evaluation (item **54** rule still applies) — rows without enough identity should keep showing the existing **"MaxBuy: add VIN"** hint, not a fabricated number.
+
+### Primary files
+
+- `src/ingest/handleIngest.ts` — where an ingest-time Max buy call would be added
+- `src/maxbuy/handlers/evaluate.ts`, `src/maxbuy/evaluateRun.ts` — existing on-demand evaluation path to reuse
+- `src/persistence/opportunities.ts` (`fetchMaxbuySummaries`, `listOpportunities`)
+- `web/app/(app)/opportunities/_components/opportunity-vehicle-cell-new.tsx` (`MaxBuyBadge`, `showAddVinHint`)
+- `wrangler.toml` (`MAXBUY_EVALUATE_ENABLED`, `MAXBUY_WORKER_URL`) — already on in staging/production, just unused at ingest time
+
+### Exit criteria
+
+- [ ] Product decision: evaluate Max buy at ingest time vs. needs-action-only backfill vs. something else
+- [ ] Needs action tab shows a Max buy badge (or an honest "add VIN" hint) for the large majority of rows, not just previously-opened ones
+- [ ] No invented mileage/trim to force an evaluation (item 54)
+- [ ] No regression to ingest batch timing (same budget concern as item 57 §6)
+
+---
+
+## 60 — LLM listing context: description + Apify fields for item 57
+
+**Opened:** 2026-07-22 (production item **57** live; buyer feedback on unprocessed **No MMR** rows with sparse Facebook titles)
+
+**Symptom:** Claude runs on ingest but often returns **`llm_needs_review`** or fails to disambiguate Cox style when the **title alone** is vague (example: `2016 Ford F-150 · Short Bed` → 392 possible F-150 styles → `needs_review` at 0.2 → offline fallback → **`cox_no_data`** → **No MMR** in Scraper review). Meanwhile **`buildYmmsUserPrompt`** already has a **Listing description:** section that ingest **always leaves as `(none)`**.
+
+**Root cause:** `buildLlmYmmsPrefetchInputs()` (`src/ingest/handleIngest.ts`) only passes **`title`, `price`, `year`, `make`, `model`, `trim`**. It does **not** pass seller description, condition, subtitle mileage hints, or other Apify-mapped text. `mapRaidrApiItem()` can attach **`description`** from `extraListingData.description` onto the **raw ingest item**, but **`NormalizedListingInput`** has no description field and nothing copies it into the LLM path. Eval script `--one` accepts `--description`; production ingest does not.
+
+**Goal:** Feed Claude **all useful listing text we already get from Apify** (minimum: **description**; also consider condition, structured location, odometer when present) so it can make an informed Cox pick when the title is thin — without changing item 57’s deterministic gate or MMR trust rules (`llm_hit` only).
+
+**Detailed spec, file list, phases, exit criteria, fresh-chat checklist:** [`docs/LLM-YMMS-listing-context.md`](LLM-YMMS-listing-context.md) — **read that first** when picking up this item.
+
+**Related:** item **57** (LLM resolver, flag on), item **55** (offline matcher fallback), **`payloadAdapter.ts`** (Apify field mapping), item **54** (do not invent mileage — pass real miles only).
+
+### Exit criteria (summary — full list in companion doc)
+
+- [x] Description (and agreed Apify text fields) wired ingest → `LlmYmmsResolutionInput` → `buildYmmsUserPrompt`
+- [x] Tests with Apify-shaped fixture (sparse title + rich description)
+- [ ] Measured lift in `llm_hit` or fewer `cox_no_data` on ambiguous-title cohort vs 2026-07-22 baseline
+- [ ] Optional: persist description on `normalized_listings` if detail UI should show it (Phase B in companion doc)
+
+**Out of scope here:** listing **photos / vision** (item 57 Phase 2 — separate).
 
 ---
 

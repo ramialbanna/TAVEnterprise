@@ -16,6 +16,9 @@ export type YmmsPromptListingInput = {
   trim?: string | null;
   title?: string | null;
   description?: string | null;
+  condition?: string | null;
+  listingMileage?: number | null;
+  location?: string | null;
   price?: number | null;
   /** Prior rules-based miss reason, if this is a re-attempt (e.g. model_variant_missing). */
   priorMissReason?: string | null;
@@ -102,16 +105,31 @@ export function buildYmmsUserPrompt(input: YmmsPromptListingInput, rows: readonl
   const lines: string[] = [];
   lines.push(`Year: ${input.year}`);
   lines.push(`Make (already resolved, do not change): ${input.make}`);
-  if (input.model) lines.push(`Parser-guessed model (may be wrong/incomplete): ${input.model}`);
-  if (input.trim) lines.push(`Parser-guessed trim (may be wrong/missing): ${input.trim}`);
+  lines.push(
+    "Parser year/make/model/trim below are automated guesses (hypothesis only) — " +
+      "prefer listing title and seller description as primary evidence.",
+  );
+  if (input.model) lines.push(`Parser-guessed model (hypothesis): ${input.model}`);
+  if (input.trim) lines.push(`Parser-guessed trim (hypothesis): ${input.trim}`);
   if (typeof input.price === "number") lines.push(`Listing price: $${input.price}`);
   if (input.priorMissReason) lines.push(`Why rules-based matching failed before: ${input.priorMissReason}`);
   lines.push("");
-  lines.push("Listing title:");
+  lines.push("Listing title (evidence):");
   lines.push(input.title?.trim() || "(none)");
   lines.push("");
-  lines.push("Listing description:");
+  lines.push("Listing description (evidence):");
   lines.push(input.description?.trim() || "(none)");
+  if (input.condition?.trim()) {
+    lines.push("");
+    lines.push("Listing condition (evidence):");
+    lines.push(input.condition.trim());
+  }
+  if (typeof input.listingMileage === "number" && Number.isFinite(input.listingMileage)) {
+    lines.push(`Listing odometer when stated (evidence): ${input.listingMileage} mi`);
+  }
+  if (input.location?.trim()) {
+    lines.push(`Listing location: ${input.location.trim()}`);
+  }
   lines.push("");
   lines.push(
     `All Cox models + styles that exist for ${input.year} ${input.make} (pick model and style verbatim from this list):`,

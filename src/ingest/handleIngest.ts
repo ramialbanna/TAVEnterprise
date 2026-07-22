@@ -34,7 +34,7 @@ import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttribut
 import { getMmrValue } from "../valuation/mmr";
 import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerClient";
 import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
-import type { LlmYmmsResolutionInput } from "../valuation/resolveListingWithLLM";
+import { buildLlmYmmsPrefetchInputs } from "./llmYmmsPrefetchInputs";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
@@ -64,45 +64,6 @@ function json(body: unknown, status: number): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-/**
- * Item 57 §6 Phase 1 — pure, side-effect-free pre-pass that figures out
- * which items in this batch will reach the YMM worker-mode valuation branch
- * (no VIN, year/make/model present) so createLlmYmmsPrefetch() can start
- * their Claude calls before the main loop reaches each one. Only supports
- * "facebook" today, matching the adapter dispatch in the main loop below.
- *
- * Calling parseFacebookItem() here duplicates the parse the main loop does
- * later at step B — that's intentional and cheap (pure function, no I/O);
- * it avoids threading a parsed-listing cache through the rest of the loop
- * just for this.
- */
-function buildLlmYmmsPrefetchInputs(
-  items: readonly unknown[],
-  source: string,
-  adapterCtx: AdapterContext,
-): Map<number, LlmYmmsResolutionInput> {
-  const inputs = new Map<number, LlmYmmsResolutionInput>();
-  if (source !== "facebook") return inputs;
-
-  items.forEach((item, i) => {
-    const parsed = parseFacebookItem(item, adapterCtx);
-    if (!parsed.ok) return;
-    const { listing } = parsed;
-    if (listing.vin) return; // LLM resolution only applies to the no-VIN YMM path
-    if (listing.year === undefined || !listing.make || !listing.model) return;
-    inputs.set(i, {
-      year: listing.year,
-      make: listing.make,
-      model: listing.model,
-      trim: listing.trim,
-      title: listing.title,
-      price: listing.price,
-    });
-  });
-
-  return inputs;
 }
 
 export async function handleIngest(request: Request, env: Env, execCtx: ExecutionContext): Promise<Response> {

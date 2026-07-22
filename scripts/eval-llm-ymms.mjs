@@ -22,6 +22,10 @@
  * Usage:
  *   node scripts/eval-llm-ymms.mjs [--limit 200] [--missing-reason model_variant_missing] [--verify-mmr]
  *
+ * Single listing (debug one ad-hoc row through Claude + Cox gate):
+ *   node scripts/eval-llm-ymms.mjs --one --year 2022 --make Toyota --title "2022 Toyota RAV4 XLE AWD"
+ *   node scripts/eval-llm-ymms.mjs --one --listing-id <normalized_listings.uuid> [--verify-mmr]
+ *
  * Requires `.dev.vars` (or env) with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  * ANTHROPIC_API_KEY. --verify-mmr additionally requires INTEL_WORKER_URL +
  * INTEL_WORKER_SECRET and calls the real Cox-backed MMR endpoint — costs
@@ -49,11 +53,35 @@ function loadDevVars(filePath) {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 100, missingReason: "model_variant_missing", verifyMmr: false };
+  const args = {
+    limit: 100,
+    missingReason: "model_variant_missing",
+    verifyMmr: false,
+    one: false,
+    listingId: null,
+    year: null,
+    make: null,
+    model: null,
+    trim: null,
+    title: null,
+    price: null,
+    description: null,
+    priorMissReason: "model_variant_missing",
+  };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--limit") args.limit = Number(argv[++i]);
     else if (argv[i] === "--missing-reason") args.missingReason = argv[++i];
     else if (argv[i] === "--verify-mmr") args.verifyMmr = true;
+    else if (argv[i] === "--one") args.one = true;
+    else if (argv[i] === "--listing-id") args.listingId = argv[++i];
+    else if (argv[i] === "--year") args.year = Number(argv[++i]);
+    else if (argv[i] === "--make") args.make = argv[++i];
+    else if (argv[i] === "--model") args.model = argv[++i];
+    else if (argv[i] === "--trim") args.trim = argv[++i];
+    else if (argv[i] === "--title") args.title = argv[++i];
+    else if (argv[i] === "--price") args.price = Number(argv[++i]);
+    else if (argv[i] === "--description") args.description = argv[++i];
+    else if (argv[i] === "--prior-miss-reason") args.priorMissReason = argv[++i];
   }
   return args;
 }
@@ -117,6 +145,9 @@ function buildYmmsUserPrompt(input, rows) {
   lines.push("");
   lines.push("Listing title:");
   lines.push(input.title?.trim() || "(none)");
+  lines.push("");
+  lines.push("Listing description:");
+  lines.push(input.description?.trim() || "(none)");
   lines.push("");
   lines.push(
     `All Cox models + styles that exist for ${input.year} ${input.make} (pick model and style verbatim from this list):`,
@@ -194,6 +225,17 @@ async function fetchMissRows(db, missingReason, limit) {
   return data ?? [];
 }
 
+async function fetchListingById(db, id) {
+  const { data, error } = await db
+    .schema("tav")
+    .from("normalized_listings")
+    .select("id, year, make, model, trim, title, price, listing_url")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function fetchListingsById(db, ids) {
   const byId = new Map();
   const CHUNK = 200;
@@ -239,6 +281,108 @@ async function verifyMmrHit(intelBaseUrl, intelSecret, { year, make, model, styl
   }
 }
 
+async function runOneListing(db, anthropicKey, model, intelBaseUrl, intelSecret, args) {
+  let input;
+  if (args.listingId) {
+    const listing = await fetchListingById(db, args.listingId);
+    if (!listing) throw new Error(`No normalized_listings row for id ${args.listingId}`);
+    if (listing.year == null || !listing.make) {
+      throw new Error("Listing missing year/make — cannot build Cox catalog context");
+    }
+    input = {
+      year: listing.year,
+      make: listing.make,
+      model: listing.model,
+      trim: listing.trim,
+      title: listing.title,
+      price: listing.price,
+      priorMissReason: args.priorMissReason,
+      listingUrl: listing.listing_url,
+      listingId: listing.id,
+    };
+  } else {
+    if (!args.year || !args.make || !args.title) {
+      throw new Error("--one requires --listing-id OR (--year, --make, --title)");
+    }
+    input = {
+      year: args.year,
+      make: args.make,
+      model: args.model,
+      trim: args.trim,
+      title: args.title,
+      price: args.price,
+      description: args.description,
+      priorMissReason: args.priorMissReason,
+    };
+  }
+
+  const catalogCache = new Map();
+  const rows = await loadCatalogSubtree(db, catalogCache, input.year, input.make);
+  if (rows.length === 0) {
+    const out = { outcome: "catalog_not_synced", input, catalogRowCount: 0 };
+    console.log(JSON.stringify(out, null, 2));
+    return out;
+  }
+
+  const userPrompt = buildYmmsUserPrompt(
+    {
+      year: input.year,
+      make: input.make,
+      model: input.model,
+      trim: input.trim,
+      title: input.title,
+      price: input.price,
+      description: input.description,
+      priorMissReason: input.priorMissReason,
+    },
+    rows,
+  );
+
+  console.log(`Catalog rows for ${input.year} ${input.make}: ${rows.length}`);
+  console.log("Calling Anthropic...\n");
+
+  const callResult = await callAnthropicForYmms(anthropicKey, model, userPrompt);
+  if (callResult.kind !== "ok") {
+    const out = { outcome: "llm_error", input, detail: callResult, catalogRowCount: rows.length };
+    console.log(JSON.stringify(out, null, 2));
+    return out;
+  }
+
+  const { proposal } = callResult;
+  const valid = isValidCoxPick(proposal, rows);
+  let outcome;
+  if (!valid) outcome = "llm_invalid_pick";
+  else if (proposal.needsReview) outcome = "llm_needs_review";
+  else outcome = "llm_hit";
+
+  let mmrVerifiedHit;
+  if (args.verifyMmr && valid) {
+    mmrVerifiedHit = await verifyMmrHit(intelBaseUrl, intelSecret, {
+      year: input.year,
+      make: proposal.make,
+      model: proposal.model,
+      style: proposal.style,
+    });
+  }
+
+  const out = {
+    outcome,
+    input,
+    proposal,
+    validCoxPick: valid,
+    catalogRowCount: rows.length,
+    productionWouldTrust: outcome === "llm_hit",
+    ...(mmrVerifiedHit !== undefined && { mmrVerifiedHit }),
+  };
+  console.log(JSON.stringify(out, null, 2));
+  if (outcome === "llm_hit") {
+    console.log("\nProduction ingest would use this Y/M/M/S for MMR when LLM_YMMS_ENABLED=true.");
+  } else if (outcome === "llm_needs_review" || outcome === "llm_invalid_pick") {
+    console.log("\nProduction would ignore Claude and fall back to offline matcher (same as today).");
+  }
+  return out;
+}
+
 async function main() {
   const vars = loadDevVars(DEV_VARS);
   const supabaseUrl = vars.SUPABASE_URL ?? process.env.SUPABASE_URL;
@@ -258,6 +402,11 @@ async function main() {
   }
 
   const db = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  if (args.one) {
+    await runOneListing(db, anthropicKey, model, intelBaseUrl, intelSecret, args);
+    return;
+  }
 
   console.log(`Pulling up to ${args.limit} listings with missing_reason='${args.missingReason}'...`);
   const missRows = await fetchMissRows(db, args.missingReason, args.limit);
