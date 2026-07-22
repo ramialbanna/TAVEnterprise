@@ -57,11 +57,15 @@ const KNOWN_MODELS: readonly string[] = [
   "r1t", "r1s",
   "rx350", "rx450h", "es350", "is300", "gx460",
   "500e",
+  "bronco sport",
+  "bronco",
 ];
 
 // Single-word trims act as stop tokens during generic model extraction.
 const KNOWN_TRIMS: readonly string[] = [
   "ex-l", "big horn", "laramie longhorn", "road warrior", "king ranch",
+  "black diamond", "big bend", "outer banks", "wildtrak",
+  "badlands", "everglades",
   "se premium",
   "sport", "se", "sel", "le", "xle", "xse",
   "ex", "lx", "dx", "sx", "limited", "premium",

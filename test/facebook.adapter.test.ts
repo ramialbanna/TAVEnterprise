@@ -130,6 +130,24 @@ describe("parseFacebookItem — valid cases", () => {
     expect(r.listing.make).toBe("polestar");
   });
 
+  it("A10b: Ford Bronco with middle-dot title — model bronco, trim black diamond (not bronco black)", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/bronco-1",
+        title: "2022 Ford Bronco · Black Diamond Sport Utility 2D",
+        price: 35000,
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.year).toBe(2022);
+    expect(r.listing.make).toBe("ford");
+    expect(r.listing.model).toBe("bronco");
+    expect(r.listing.trim).toBe("black diamond");
+    expect(r.listing.price).toBe(35000);
+  });
+
   it("A11: Land Rover bigram make", () => {
     const r = parseFacebookItem(
       { url: "https://fb.com/11", title: "2019 Land Rover Discovery Sport", price: "$38,000" },
