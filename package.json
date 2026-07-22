@@ -27,7 +27,7 @@
     "try:apify-llm-one": "node scripts/try-apify-llm-one.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.4",
+    "@supabase/supabase-js": "^2.110.7",
     "zod": "^3.24.2"
   },
   "devDependencies": {
