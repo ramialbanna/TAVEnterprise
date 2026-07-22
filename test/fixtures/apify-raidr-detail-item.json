@@ -1,0 +1,28 @@
+{
+  "id": "27818565947780264",
+  "listingId": "1562126955695964",
+  "title": "2024 Jeep Wrangler",
+  "custom_title": "2024 Jeep wrangler",
+  "price": {
+    "amount": "45638.00",
+    "currency": "USD",
+    "formatted": "$45,638",
+    "amount_with_offset": "4563800"
+  },
+  "location": {
+    "city": "Dallas",
+    "state": "TX",
+    "displayName": "Dallas, Texas"
+  },
+  "url": "https://www.facebook.com/marketplace/item/1562126955695964/",
+  "listing_date_ms": 1784571519000,
+  "extraListingData": {
+    "description": "Exterior: Blue Pearl\nInterior: Black\nEngine: 3.6L V6 24V VVT\nDrivetrain: 4WD\nTransmission: 6 speed manual\nFuel: Gasoline",
+    "condition": "USED",
+    "location": {
+      "city": "Dallas",
+      "state": "TX",
+      "location_text": "Dallas, TX"
+    }
+  }
+}

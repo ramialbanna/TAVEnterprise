@@ -39,7 +39,7 @@ describe("extractLlmListingTextFromIngestItem", () => {
   });
 
   it("reads flat description after mapRaidrApiItem", () => {
-    const samplePath = join(process.cwd(), "scripts", "_tmp-apify-item.json");
+    const samplePath = join(process.cwd(), "test", "fixtures", "apify-raidr-detail-item.json");
     const raw = JSON.parse(readFileSync(samplePath, "utf8"));
     const mapped = mapRaidrApiItem(raw) as Record<string, unknown>;
 
