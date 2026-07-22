@@ -68,8 +68,8 @@ MAXBUY_EVALUATE_ENABLED = "true"
 # Scraper review soak — enable when ops wants the Scraper review tab populated.
 SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
-# Item 57 — off until Phase 0 offline eval shows a real lift; flip on staging first.
-LLM_YMMS_ENABLED = "false"
+# Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
+LLM_YMMS_ENABLED = "true"
 LLM_YMMS_MODEL = "claude-sonnet-4-5"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
@@ -103,8 +103,8 @@ MAXBUY_EVALUATE_ENABLED = "true"
 # Matches Cloudflare production (item 55 soak) — keep in sync with CF dashboard.
 SCRAPER_REVIEW_MODE = "true"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
-# Item 57 — stays off in production until staging soak + Phase 0 eval pass.
-LLM_YMMS_ENABLED = "false"
+# Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
+LLM_YMMS_ENABLED = "true"
 LLM_YMMS_MODEL = "claude-sonnet-4-5"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
