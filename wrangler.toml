@@ -40,7 +40,7 @@ MAXBUY_WORKER_URL = ""
 # matcher. When "false" (or ANTHROPIC_API_KEY unset), ingest behavior is
 # unchanged — no Anthropic calls are made.
 LLM_YMMS_ENABLED = "false"
-LLM_YMMS_MODEL = "claude-sonnet-4-5"
+LLM_YMMS_MODEL = "claude-sonnet-5"
 # MAXBUY_WORKER_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put MAXBUY_WORKER_SECRET
 # ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET, APIFY_WEBHOOK_SECRET,
@@ -70,7 +70,7 @@ SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
-LLM_YMMS_MODEL = "claude-sonnet-4-5"
+LLM_YMMS_MODEL = "claude-sonnet-5"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
@@ -105,7 +105,7 @@ SCRAPER_REVIEW_MODE = "true"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
-LLM_YMMS_MODEL = "claude-sonnet-4-5"
+LLM_YMMS_MODEL = "claude-sonnet-5"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"

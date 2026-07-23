@@ -163,3 +163,18 @@ export function isValidCoxPick(proposal: YmmsProposal, rows: readonly CoxCatalog
       row.style.toLowerCase() === style,
   );
 }
+
+/** Item 61 — ingest auto-accepts valid Cox picks strictly above this (0–1). */
+export const LLM_YMMS_AUTO_ACCEPT_MIN_CONFIDENCE = 0.5;
+
+export type YmmsProposalIngestOutcome = "llm_hit" | "llm_needs_review" | "llm_invalid_pick";
+
+/** Classify a Claude proposal after the deterministic Cox gate (ignores `needsReview`). */
+export function classifyYmmsProposalIngestOutcome(
+  proposal: YmmsProposal,
+  rows: readonly CoxCatalogTreeRow[],
+): YmmsProposalIngestOutcome {
+  if (!isValidCoxPick(proposal, rows)) return "llm_invalid_pick";
+  if (proposal.confidence > LLM_YMMS_AUTO_ACCEPT_MIN_CONFIDENCE) return "llm_hit";
+  return "llm_needs_review";
+}

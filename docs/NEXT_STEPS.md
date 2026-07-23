@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-22 · **Focus:** **60** new — feed Apify/listing **description + rich text** into item **57** Claude context (today: title/price/parser Y/M/M/T only; prompt description slot always empty) — see [`LLM-YMMS-listing-context.md`](LLM-YMMS-listing-context.md). **57** **live** on staging + production (`LLM_YMMS_ENABLED=true`, deploy `5185eeb5…`, commit `47844d7`, 2026-07-22); early prod: ~25% `llm_hit`, Bronco Black Diamond fixed, sparse F-150 title → `needs_review` + No MMR. **59** Max buy badge on Needs action · **55** funnel soak · **58** UI polish
+**Last updated:** 2026-07-23 · **Focus:** **61** deployed + soaking; **62** opened (Apify photos on + in-app listing mirror on detail). **60** Phase A shipped. **57** live + Sonnet 5.
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
@@ -12,6 +12,8 @@
 > **2026-07-21:** Credits added to the Anthropic account. Re-ran `npm run eval:llm-ymms` (100 rows, `model_variant_missing`, no `--verify-mmr`, local `.dev.vars`): 18 `catalog_not_synced`, 82 real Anthropic calls, **0 errors** (credits blocker confirmed cleared), **0 `llm_invalid_pick`** → **valid Cox token rate 100%** (Phase 0 bar was ≥99% — met). Breakdown of the 82: 16 `llm_hit` (confident, valid pick), 66 `llm_needs_review` (valid pick but the model itself flagged low confidence — mostly 0.3–0.75, a few up to 0.85). Raw results: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`. Also logged as a new item: **59** — Max buy badge is missing on most **Needs action** queue rows (root cause: Max buy is evaluated on-demand from the detail page, not at ingest, so unopened/unclaimed leads have nothing cached — see §59).
 >
 > **2026-07-21 (later):** Considered running `--verify-mmr` for the real would-have-hit-MMR number, but it requires `INTEL_WORKER_SECRET` and the local `.dev.vars` copy is still `replace_me` — Cloudflare secrets can't be read back once set, so the only paths were (a) someone had a recorded copy (nobody did) or (b) rotate the shared secret between `tav-aip-*` and `tav-intelligence-worker-*`. **Decision: skip `--verify-mmr` entirely** rather than touch a live shared secret for a secondary signal. This is safe, not a corner cut: `workerClient.ts` (§Phase 1, already deployed) only ever trusts a confident `llm_hit` to actually resolve the catalog — `llm_needs_review` and `llm_invalid_pick` fall straight through to the unchanged existing offline-matcher path, so skipping the verify step can only under-measure the lift, never cause a bad price to reach a buyer. **Where this leaves item 57:** code-wise there is nothing left to build for Phase 0/1. The only remaining question is a product one — is a ~19.5% (16/82) confident-hit rate on this sample worth flipping `LLM_YMMS_ENABLED="true"` on **staging only** for a real funnel soak (same cohort methodology as item 55 Phase C) before ever touching production — **not decided, flag is still `"false"` everywhere.**
+
+> **2026-07-23 (later):** On the live **custom-vehicle-scraper** Apify task(s), ops turned on **Fetch Listing Photos & Videos** (and **Fetch Detailed Item Info** where applicable) so datasets include full seller text + media, not search-feed thumbnails only. **Product note → item 62:** replicate the Facebook listing on the **opportunity detail page** (photo gallery, description, price/location/seller) so closers triage without opening Facebook. Ingest/DB/UI **not built yet** — today `raw_listings.raw_item` often has `primaryImage` only; `normalized_listings.images` is still empty and detail has no listing mirror block. See §62; ties to item **60** (persist description), item **57** Phase 2 (vision follow-up on low-confidence Y/M/M/S), and [`docs/04-operations/apify.md`](04-operations/apify.md) (refresh task config note when verified on Dallas/Oklahoma tasks).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -123,6 +125,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
 | **59** | **Max buy not shown on Needs action queue rows** — `maxbuySummary` badge is blank for most unclaimed/new leads because Max buy is computed on-demand (detail-page view), not at ingest — see §59 | **High** | [ ] |
 | **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
+| **61** | **LLM auto-accept above 0.50 confidence** — ignore `needsReview`; §61 (**deployed, soak ongoing**) | **High** | [~] |
+| **62** | **In-app listing mirror on detail** — photos + description + seller context from Apify; §62 (**Apify photos ON, app not wired**) | **High** | [ ] |
 
 **Full status board (incl. shipped):**
 
@@ -149,6 +153,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
 | **59** | **Max buy not shown on Needs action queue rows** — reported 2026-07-21; on-demand Max buy means fresh/unclaimed leads have no cached recommendation to show | **High** | [ ] |
 | **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
+| **61** | **LLM trust threshold — confidence > 0.50, ignore needsReview** — see §61; **deployed, soak ongoing** | **High** | [~] |
+| **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [ ] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1473,7 +1479,7 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] Re-run eval once credits exist and actually read the accuracy numbers — done 2026-07-21 (100 rows, `model_variant_missing`, no `--verify-mmr`): 18 `catalog_not_synced`, 82 Anthropic calls, 0 errors, 16 `llm_hit`, 66 `llm_needs_review`, 0 `llm_invalid_pick`. Results: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`
 - [x] Valid-Cox-token rate ≥ 99% on eval set — **100% (82/82)**, bar met
 - [x] Would-have-hit-MMR rate (via `--verify-mmr`) — **deliberately skipped 2026-07-21** (would've required rotating the shared `INTEL_WORKER_SECRET` between two live Workers just for a secondary signal; not worth the risk). **Safe to skip because** `workerClient.ts` only ever trusts a confident `llm_hit` — `llm_needs_review`/`llm_invalid_pick` fall back to the existing offline matcher unchanged, so there's no regression risk, only a measurement gap.
-- [ ] Product decision on the `needsReview` / confidence threshold — 80% of valid picks this run were flagged `needs_review` (confidence mostly 0.3–0.75); unclear yet what's auto-acceptable vs. human-review-required. Not really blocking though, since `needsReview` already routes to the old fallback path today.
+- [x] Product decision on the `needsReview` / confidence threshold — **decided 2026-07-23 → item 61:** auto-accept when **`confidence > 0.50`** and **`isValidCoxPick`**; ignore model **`needsReview`**. **Shipped in code 2026-07-23** (`classifyYmmsProposalIngestOutcome`); deploy soak pending.
 - [ ] Real next step: decide whether a 19.5% (16/82) confident-hit rate on this sample is worth flipping `LLM_YMMS_ENABLED="true"` on **staging only** for a soak, measured the same way as item 55 Phase C (funnel re-measure), before touching production
 - [x] **Flipped `LLM_YMMS_ENABLED="true"`** staging + production — 2026-07-22 (`47844d7`, deploy `5185eeb5…`); monitor `llm_ymms_decisions` + MMR funnel
 - [ ] **Item 60** — pass description + Apify listing text into Claude (see §60)
@@ -1585,6 +1591,79 @@ The actual gap is **upstream**: a `maxbuy_recommendations` row only gets created
 - [ ] Optional: persist description on `normalized_listings` if detail UI should show it (Phase B in companion doc)
 
 **Out of scope here:** listing **photos / vision** (item 57 Phase 2 — separate).
+
+---
+
+## 61 — LLM auto-accept: confidence > 0.50 (ignore `needsReview`)
+
+**Opened:** 2026-07-23 (buyer review of Unprocessed / **`llm_needs_review`** samples on 2016+ listings)
+
+**Status:** **Shipped in code 2026-07-23** — `classifyYmmsProposalIngestOutcome` in `src/llm/ymmsPrompt.ts`; resolver uses **`confidence > 0.5`** (strict), **`needsReview` ignored**. **Deploy + staging/production funnel soak still pending.**
+
+**Problem today:** Ingest only applies Claude’s Y/M/M/S pick when the resolver returns **`llm_hit`** — defined as: valid Cox pick **and** Claude set **`needsReview: false`**. Production (~3 days post–item 57, 2026-07-23): **`llm_hit` ~1,066** vs **`llm_needs_review` ~1,055** — roughly **half** of all Claude calls are discarded for MMR even when the proposal **passes `isValidCoxPick`**. Buyer manually validated several **`needs_review`** examples (e.g. 2022 Camry SE Nightshade, 2023 Yukon XL Denali Ultimate, 2019 F-150 King Ranch) as **good guesses**; hedging was mostly unstated drivetrain/cab/engine, not hallucinated trim.
+
+**Decision (buyer 2026-07-23):**
+
+- **`confidence` is 0–1** (model self-score on the tool output).
+- After the existing **`isValidCoxPick`** gate, treat the pick as **`llm_hit` for ingest MMR** when **`confidence > 0.50`** (strictly greater than one-half, unless implementation chooses `>= 0.5` — document which in PR).
+- **Ignore Claude’s `needsReview` boolean** for the ingest trust decision — do not let the model veto its own pick when score is above threshold.
+- **`llm_invalid_pick`** and **`fallback`** behavior unchanged. **`alias_hit`** unchanged.
+- Audit row may still record original `needsReview` + confidence for dashboards; **`accepted`** / outcome labeling should reflect the new rule (e.g. `llm_hit` with metadata that it was threshold-promoted).
+
+**Expected effect:** Many current Unprocessed Leads ( **`model_variant_missing`** after a valid but `needs_review` Claude pick) should get **ingest MMR** on the next scrape/re-ingest. Does **not** fix pre-2016 catalog gap or rows with no Claude call.
+
+**Implementation sketch (when built):**
+
+- **`src/valuation/resolveListingWithLLM.ts`** — after `isValidCoxPick`, branch: if `proposal.confidence > 0.50` → return **`llm_hit`** regardless of `proposal.needsReview`; else keep **`llm_needs_review`**.
+- **`src/valuation/workerClient.ts`** — no second gate on `needsReview` (verify none exists beyond resolver kind).
+- **Tests** — cases: valid pick, `needsReview: true`, confidence 0.85 → **`llm_hit`**; valid pick, confidence 0.4 → **`llm_needs_review`**; invalid pick → **`llm_invalid_pick`** unchanged.
+- **Docs** — update [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) locked decisions when shipped (supersedes “only trust `llm_hit` when needsReview false”).
+- **Rollout:** staging deploy + compare Unprocessed count / MMR hit rate vs 2026-07-23 baseline before relying on production.
+
+**Risks (accepted pending soak):** Wrong Cox variant (e.g. FWD vs AWD, 2WD vs 4WD King Ranch) can produce **misleading MMR** — same risk as a closer picking the wrong dropdown; mitigated by Cox gate (never non-catalog tokens) and buyer override on detail.
+
+### Exit criteria
+
+- [x] Resolver promotes valid picks with **confidence > 0.50** to **`llm_hit`**; **`needsReview` ignored** for ingest trust
+- [x] Unit tests cover threshold boundary (0.50 / 0.51) and invalid picks
+- [ ] Staging soak: measurable drop in **`llm_needs_review`**-only Unprocessed rows on 2016+ ingests
+- [x] `LLM-YMMS-Normalization.md` + this § updated with ship date / deploy version (deploy version TBD at push)
+
+---
+
+## 62 — In-app listing mirror (photos + description on opportunity detail)
+
+**Opened:** 2026-07-23 (buyer UX + Apify config)
+
+**Product goal:** On **opportunity detail**, show a **Facebook-style listing block** — **photo gallery** (swipe/lightbox), **full seller description**, price, location, seller name, link to original post — so closers can judge the car **without leaving TAV** to open Facebook.
+
+**Apify (ops, 2026-07-23):** On the **custom-vehicle-scraper** task(s), enabled **Fetch Listing Photos & Videos** (and **Fetch Detailed Item Info** where already on) in the actor **Data Collection** settings. Expect richer `extraListingData` / media arrays on **new** runs after this change. **Verify** on the next Dallas/Oklahoma dataset and update [`docs/04-operations/apify.md`](04-operations/apify.md) (that doc still says “no detail-fetch” for `dallas-nick-task` as of 2026-07-13).
+
+**Current code reality (pre–item 62):**
+
+| Layer | Today |
+|-------|--------|
+| **Raw ingest** | `raw_listings.raw_item` usually has **`primaryImage`** (single FB CDN URL); full gallery depends on new Apify settings |
+| **Normalized** | `normalized_listings.images` column exists but is **not populated**; **`description`** not on normalized row (item **60** Phase B) |
+| **Adapter** | `src/apify/payloadAdapter.ts` maps detail **text** fields; does **not** flatten photos into `images[]` for persistence |
+| **Detail UI** | No dedicated listing mirror — buyers use external Facebook link |
+
+**Implementation sketch (when picked up):**
+
+1. **Ingest / map** — Extend `payloadAdapter` + `parseFacebookItem` (or post-adapter helper) to extract **`primaryImage` + `extraListingMedia` / photo list** into `NormalizedListingInput.images` (and persist **description** per item **60** Phase B).
+2. **Durability** — Facebook CDN URLs **expire**; for production reliability (and item **57** vision tier), copy images to **R2** (or similar) at ingest, store stable URLs on the listing row — same RFP theme as [`docs/TAV API.md`](TAV%20API.md).
+3. **API** — Expose `images`, `description`, seller/location on `GET` opportunity / normalized listing payload used by detail.
+4. **Web** — New card/section on `opportunity-detail-client-new.tsx` (e.g. **Listing from marketplace**): gallery + description + “View on Facebook” link; mobile-friendly; no autoplay video unless Apify ships stable video URLs.
+5. **LLM (optional follow-on)** — Once gallery is persisted, item **57** Phase 2 can run **vision only** on **`llm_needs_review`** rows using stored images — not required for the buyer-facing mirror.
+
+**Related:** item **60** (description → Claude + persist for UI), item **57** §8 / vision backlog, UI backlog listing photos (table thumbnail was deferred — this item is **detail-first**).
+
+### Exit criteria
+
+- [ ] Apify config confirmed on live tasks; sample ingest shows **multi-photo** (+ description) in `raw_listings` after enable
+- [ ] Images (+ description) persisted and returned on opportunity detail API
+- [ ] Detail page listing mirror matches buyer expectation (gallery + full text; link out optional)
+- [ ] Document URL expiry / R2 strategy before relying on photos for LLM vision
 
 ---
 

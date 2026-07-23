@@ -88,7 +88,7 @@ Implemented in `src/llm/ymmsPrompt.ts` (`buildYmmsUserPrompt` / `buildCatalogSub
 ```
 
 - `make`/`model`/`style` must be chosen **only** from the provided catalog list — the prompt must say this explicitly and the deterministic gate enforces it regardless.
-- `needsReview: true` (or confidence below a threshold, e.g. 0.5) routes to Unprocessed with the LLM's own reasoning attached, instead of forcing a low-confidence auto-pick.
+- **Item 61 (shipped 2026-07-23):** after `isValidCoxPick`, ingest treats the proposal as **`llm_hit`** when **`confidence > 0.5`** (strictly greater). Claude’s **`needsReview`** flag is **ignored** for ingest trust — it remains in the tool output for audit/tiering only. At or below 0.5 → **`llm_needs_review`** (offline matcher fallback, same as before).
 - `reasoning` is stored for audit/debugging, not shown to buyers.
 
 ### Deterministic gate
@@ -163,7 +163,7 @@ Do not start this until Phase 0–2 below are shipped and the storage prerequisi
 - [x] Confirm Anthropic API key + credits in Worker secrets — key set 2026-07-20; **credit balance added 2026-07-21, blocker cleared**.
 - [x] Actually run it against 100 historical listings once the key/credits existed, and read the results — done 2026-07-21 (`model_variant_missing`, 100 rows): 18 `catalog_not_synced`, 82 real Anthropic calls, 0 errors. Raw: `scripts/_eval-results/llm-ymms-eval-2026-07-21T13-32-26-650Z.json`.
 - [x] **Valid-Cox-token rate** (target ≥99%) — **100% (82/82)**, met. Breakdown: 16 `llm_hit`, 66 `llm_needs_review` (0 `llm_invalid_pick`). The 80% `needs_review` share (mostly confidence 0.3–0.75) means most valid picks are self-flagged uncertain by the model — worth a product call on the auto-accept threshold before this goes anywhere near real traffic.
-- [x] **`--verify-mmr` deliberately skipped (2026-07-21, product call).** Would have required either a locally-recorded copy of `INTEL_WORKER_SECRET` or rotating it — not worth the operational risk for a secondary signal. **Why skipping is safe:** production code (`workerClient.ts`) already only trusts `llm_hit` (valid pick + `needsReview: false`) to actually resolve the catalog — `llm_needs_review` and `llm_invalid_pick` fall straight through to the existing offline matcher/cascade, exactly as if item 57 didn't fire. So the worst case from skipping this check is *less measured lift than hoped*, never a regression or a bad price reaching a buyer.
+- [x] **`--verify-mmr` deliberately skipped (2026-07-21, product call).** Would have required either a locally-recorded copy of `INTEL_WORKER_SECRET` or rotating it — not worth the operational risk for a secondary signal. **Why skipping was safe pre–item 61:** only `llm_hit` resolved the catalog; **`llm_needs_review`** fell through to the offline matcher. **Item 61** widens `llm_hit` to valid picks with **`confidence > 0.5`**, ignoring **`needsReview`** — see §5 ingest trust rule.
 - [ ] **Ship to prod (flip `LLM_YMMS_ENABLED`) only if this shows a real lift** — real lift = real traffic funnel measurement (same cohort methodology as item 55 Phase C), not the offline eval. On this 100-row sample only 16/82 (19.5%) were a confident `llm_hit`; the rest fall back to today's ~49.8% baseline path unchanged. Whether 19.5%-of-misses-become-hits is worth turning on is a product call, not a code gate.
 
 ### Phase 1 — Prod integration behind a flag, text-only, concurrent

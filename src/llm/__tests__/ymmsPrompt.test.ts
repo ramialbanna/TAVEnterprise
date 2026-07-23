@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCatalogSubtreeText,
   buildYmmsUserPrompt,
+  classifyYmmsProposalIngestOutcome,
   isValidCoxPick,
   YMMS_TOOL,
   type YmmsProposal,
@@ -120,6 +121,42 @@ describe("isValidCoxPick", () => {
 
   it("rejects a fully hallucinated pick", () => {
     expect(isValidCoxPick(proposal({ model: "Rebel TRX", style: "Made Up Trim" }), rows)).toBe(false);
+  });
+});
+
+describe("classifyYmmsProposalIngestOutcome", () => {
+  const rows = [row("1500", "4D Crew Cab Big Horn")];
+
+  it("returns llm_hit above 0.5 even when needsReview is true", () => {
+    expect(
+      classifyYmmsProposalIngestOutcome(
+        {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.85,
+          reasoning: "x",
+          needsReview: true,
+        },
+        rows,
+      ),
+    ).toBe("llm_hit");
+  });
+
+  it("returns llm_needs_review at exactly 0.5", () => {
+    expect(
+      classifyYmmsProposalIngestOutcome(
+        {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.5,
+          reasoning: "x",
+          needsReview: false,
+        },
+        rows,
+      ),
+    ).toBe("llm_needs_review");
   });
 });
 

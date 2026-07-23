@@ -165,6 +165,15 @@ function isValidCoxPick(proposal, rows) {
   );
 }
 
+/** Item 61 — mirror src/llm/ymmsPrompt.ts `classifyYmmsProposalIngestOutcome`. */
+const LLM_YMMS_AUTO_ACCEPT_MIN_CONFIDENCE = 0.5;
+
+function classifyYmmsProposalIngestOutcome(proposal, rows) {
+  if (!isValidCoxPick(proposal, rows)) return "llm_invalid_pick";
+  if (proposal.confidence > LLM_YMMS_AUTO_ACCEPT_MIN_CONFIDENCE) return "llm_hit";
+  return "llm_needs_review";
+}
+
 // ── Mirrors src/llm/anthropicClient.ts — keep in sync ───────────────────────
 
 async function callAnthropicForYmms(apiKey, model, userPrompt) {
@@ -349,11 +358,8 @@ async function runOneListing(db, anthropicKey, model, intelBaseUrl, intelSecret,
   }
 
   const { proposal } = callResult;
-  const valid = isValidCoxPick(proposal, rows);
-  let outcome;
-  if (!valid) outcome = "llm_invalid_pick";
-  else if (proposal.needsReview) outcome = "llm_needs_review";
-  else outcome = "llm_hit";
+  const outcome = classifyYmmsProposalIngestOutcome(proposal, rows);
+  const valid = outcome !== "llm_invalid_pick";
 
   let mmrVerifiedHit;
   if (args.verifyMmr && valid) {
@@ -388,7 +394,7 @@ async function main() {
   const supabaseUrl = vars.SUPABASE_URL ?? process.env.SUPABASE_URL;
   const supabaseKey = vars.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   const anthropicKey = vars.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
-  const model = vars.LLM_YMMS_MODEL ?? process.env.LLM_YMMS_MODEL ?? "claude-sonnet-4-5";
+  const model = vars.LLM_YMMS_MODEL ?? process.env.LLM_YMMS_MODEL ?? "claude-sonnet-5";
   const intelBaseUrl =
     vars.INTEL_WORKER_URL ?? process.env.INTEL_WORKER_URL ?? "https://tav-intelligence-worker-production.rami-1a9.workers.dev";
   const intelSecret = vars.INTEL_WORKER_SECRET ?? process.env.INTEL_WORKER_SECRET;
@@ -468,11 +474,8 @@ async function main() {
     }
 
     const { proposal } = callResult;
-    const valid = isValidCoxPick(proposal, rows);
-    let outcome;
-    if (!valid) outcome = "llm_invalid_pick";
-    else if (proposal.needsReview) outcome = "llm_needs_review";
-    else outcome = "llm_hit";
+    const outcome = classifyYmmsProposalIngestOutcome(proposal, rows);
+    const valid = outcome !== "llm_invalid_pick";
     counts[outcome] += 1;
 
     let mmrVerifiedHit;

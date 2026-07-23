@@ -7,7 +7,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     ANTHROPIC_API_KEY: "test-anthropic-key",
     LLM_YMMS_ENABLED: "true",
-    LLM_YMMS_MODEL: "claude-sonnet-4-5",
+    LLM_YMMS_MODEL: "claude-sonnet-5",
     ...overrides,
   } as Env;
 }
@@ -17,7 +17,7 @@ function toolUseResponse(input: unknown) {
     ok: true,
     status: 200,
     json: async () => ({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-5",
       content: [{ type: "tool_use", name: YMMS_TOOL_NAME, id: "toolu_1", input }],
     }),
   };
@@ -57,7 +57,7 @@ describe("callAnthropicForYmms", () => {
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") {
       expect(result.proposal).toEqual(proposal);
-      expect(result.model).toBe("claude-sonnet-4-5");
+      expect(result.model).toBe("claude-sonnet-5");
       expect(typeof result.latencyMs).toBe("number");
     }
   });

@@ -160,7 +160,7 @@ export interface Env {
   LLM_YMMS_ENABLED: string;
 
   /**
-   * Anthropic model id used for Y/M/M/S proposals, e.g. "claude-sonnet-4-5".
+   * Anthropic model id used for Y/M/M/S proposals, e.g. "claude-sonnet-5".
    * Non-secret — set in wrangler.toml [vars] so it can change without a
    * secrets rotation.
    */

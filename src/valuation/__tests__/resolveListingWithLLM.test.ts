@@ -92,7 +92,7 @@ describe("resolveListingWithLLM", () => {
           needsReview: false,
         },
         latencyMs: 1200,
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-5",
       })),
     });
 
@@ -106,12 +106,12 @@ describe("resolveListingWithLLM", () => {
       confidence: 0.9,
       reasoning: "Crew Cab + Big Horn in title",
       latencyMs: 1200,
-      anthropicModel: "claude-sonnet-4-5",
+      anthropicModel: "claude-sonnet-5",
       catalogRowCount: ROWS.length,
     });
   });
 
-  it("returns llm_needs_review for a valid but low-confidence/ambiguous proposal", async () => {
+  it("returns llm_needs_review for a valid pick at or below the auto-accept threshold", async () => {
     const deps = baseDeps({
       callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
         kind: "ok",
@@ -124,12 +124,75 @@ describe("resolveListingWithLLM", () => {
           needsReview: true,
         },
         latencyMs: 900,
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-5",
       })),
     });
 
     const result = await resolveListingWithLLM(INPUT, deps);
     expect(result.kind).toBe("llm_needs_review");
+  });
+
+  it("returns llm_hit for a valid pick above threshold even when needsReview is true (item 61)", async () => {
+    const deps = baseDeps({
+      callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
+        kind: "ok",
+        proposal: {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.85,
+          reasoning: "Big Horn in title; hedging on drivetrain only",
+          needsReview: true,
+        },
+        latencyMs: 900,
+        model: "claude-sonnet-5",
+      })),
+    });
+
+    const result = await resolveListingWithLLM(INPUT, deps);
+    expect(result.kind).toBe("llm_hit");
+  });
+
+  it("returns llm_needs_review at exactly 0.5 confidence (strictly greater than 0.5 required)", async () => {
+    const deps = baseDeps({
+      callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
+        kind: "ok",
+        proposal: {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.5,
+          reasoning: "borderline",
+          needsReview: false,
+        },
+        latencyMs: 900,
+        model: "claude-sonnet-5",
+      })),
+    });
+
+    const result = await resolveListingWithLLM(INPUT, deps);
+    expect(result.kind).toBe("llm_needs_review");
+  });
+
+  it("returns llm_hit at 0.51 confidence", async () => {
+    const deps = baseDeps({
+      callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
+        kind: "ok",
+        proposal: {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.51,
+          reasoning: "just above threshold",
+          needsReview: true,
+        },
+        latencyMs: 900,
+        model: "claude-sonnet-5",
+      })),
+    });
+
+    const result = await resolveListingWithLLM(INPUT, deps);
+    expect(result.kind).toBe("llm_hit");
   });
 
   it("returns llm_invalid_pick when the proposal is not in the given subtree, even if needsReview is false", async () => {
@@ -145,7 +208,7 @@ describe("resolveListingWithLLM", () => {
           needsReview: false,
         },
         latencyMs: 800,
-        model: "claude-sonnet-4-5",
+        model: "claude-sonnet-5",
       })),
     });
 

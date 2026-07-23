@@ -70,7 +70,7 @@ export async function callAnthropicForYmms(args: {
     return { kind: "not_configured" };
   }
 
-  const model = env.LLM_YMMS_MODEL || "claude-sonnet-4-5";
+  const model = env.LLM_YMMS_MODEL || "claude-sonnet-5";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const startedAt = Date.now();

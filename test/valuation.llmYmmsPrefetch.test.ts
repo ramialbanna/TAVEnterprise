@@ -37,7 +37,7 @@ function hit(model: string): LlmYmmsResolution {
     confidence: 0.9,
     reasoning: "x",
     latencyMs: 1,
-    anthropicModel: "claude-sonnet-4-5",
+    anthropicModel: "claude-sonnet-5",
     catalogRowCount: 2,
   };
 }

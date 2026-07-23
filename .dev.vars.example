@@ -75,4 +75,4 @@ ANTHROPIC_API_KEY=replace_me
 # APIFY_WEBHOOK_ENABLED=false  # "true" enables POST /apify-webhook locally
 # SCRAPER_REVIEW_MODE=false    # "true" shows recent no-MMR scrapes under Scraper review tab (item 55)
 # LLM_YMMS_ENABLED=false       # "true" enables the item-57 Claude Y/M/M/S resolver (see docs/LLM-YMMS-Normalization.md)
-# LLM_YMMS_MODEL=claude-sonnet-4-5
+# LLM_YMMS_MODEL=claude-sonnet-5

@@ -20,7 +20,7 @@ import {
 import { hasCoxCatalogTreeForYear, loadCoxCatalogTreeForMake } from "../persistence/coxCatalogTree";
 import type { CoxCatalogTreeRow } from "./matchListingToCoxCatalog";
 import { callAnthropicForYmms, type AnthropicCallResult } from "../llm/anthropicClient";
-import { buildYmmsUserPrompt, isValidCoxPick, type YmmsProposal } from "../llm/ymmsPrompt";
+import { buildYmmsUserPrompt, classifyYmmsProposalIngestOutcome, type YmmsProposal } from "../llm/ymmsPrompt";
 
 export type LlmYmmsResolutionInput = {
   year: number;
@@ -153,11 +153,11 @@ export async function resolveListingWithLLM(
 
   const { proposal } = callResult;
 
-  if (!isValidCoxPick(proposal, rows)) {
+  const ingestOutcome = classifyYmmsProposalIngestOutcome(proposal, rows);
+  if (ingestOutcome === "llm_invalid_pick") {
     return { kind: "llm_invalid_pick", proposal, catalogRowCount: rows.length };
   }
-
-  if (proposal.needsReview) {
+  if (ingestOutcome === "llm_needs_review") {
     return { kind: "llm_needs_review", proposal, catalogRowCount: rows.length };
   }
 
