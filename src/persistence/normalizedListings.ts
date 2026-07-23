@@ -42,6 +42,7 @@ export async function upsertNormalizedListing(
     p_images: listing.images ?? null,
     p_posted_at: listing.postedAt ?? null,
     p_raw_listing_id: rawListingId ?? null,
+    p_description: listing.description ?? null,
   });
 
   if (error) throw error;

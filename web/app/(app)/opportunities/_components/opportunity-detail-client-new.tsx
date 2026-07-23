@@ -30,6 +30,7 @@ import { OpportunityClaimBanner, resolveClaimBannerState } from "./opportunity-c
 import { OpportunityContactInfoBlock } from "./opportunity-contact-info-block";
 import { OpportunityDetailHero } from "./opportunity-detail-hero";
 import { OpportunityListingBlock } from "./opportunity-listing-block";
+import { OpportunityListingMirrorBlock } from "./opportunity-listing-mirror-block";
 import { OpportunityWorkflowStepper } from "./opportunity-workflow-stepper";
 import { OpportunityWorkflowBlock } from "./opportunity-workflow-block";
 import { OpportunityVehicleBlock } from "./opportunity-vehicle-block";
@@ -265,6 +266,14 @@ export function OpportunityDetailClientNew({
       />
 
       <OpportunityClaimBanner state={claimBannerState} />
+
+      <CollapsibleBlock
+        title="Listing from marketplace"
+        description="Photos and seller description from the scrape"
+        defaultOpen
+      >
+        <OpportunityListingMirrorBlock opportunity={opportunity} />
+      </CollapsibleBlock>
 
       {/* Contact + Vehicle side by side on desktop, stacked on mobile — use the
           full page width instead of a narrow single-column form (NEXT_STEPS #58).

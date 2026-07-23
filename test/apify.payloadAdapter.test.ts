@@ -221,6 +221,18 @@ describe("mapRaidrApiItem — sellerName", () => {
   });
 });
 
+describe("mapRaidrApiItem — images (item 62)", () => {
+  it("flattens primaryImage and primary_listing_photo into images[]", () => {
+    const out = mapRaidrApiItem(
+      raidrItem({
+        primaryImage: "https://cdn.example/hero.jpg",
+        primary_listing_photo: { image: { uri: "https://cdn.example/detail.jpg" } },
+      }),
+    ) as Record<string, unknown>;
+    expect(out.images).toEqual(["https://cdn.example/hero.jpg", "https://cdn.example/detail.jpg"]);
+  });
+});
+
 // ── Mileage / VIN tolerated as absent ─────────────────────────────────────────
 
 describe("mapRaidrApiItem — mileage / vin tolerated", () => {
@@ -274,10 +286,8 @@ describe("mapped raidr-api item is consumable by parseFacebookItem", () => {
     expect(r.listing.url).toBe(
       "https://www.facebook.com/marketplace/item/1686857085840236/",
     );
-    // sellerName is mapped onto the raw item by mapRaidrApiItem but is NOT
-    // part of NormalizedListingInput as emitted by parseFacebookItem today
-    // — adapter does not extract seller fields into the listing. Asserted
-    // at the mapper level in the "sellerName" describe block above.
+    expect(r.listing.sellerName).toBe("Dealer Joe");
+    expect(r.listing.images).toEqual(["https://scontent…"]);
   });
 
   it("aircraft listing with a current-era year: clears missing_identifier gate, rejects at missing_ymm", () => {

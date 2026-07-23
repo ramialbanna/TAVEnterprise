@@ -119,6 +119,13 @@ export interface OpportunityDetail extends OpportunityRow {
   actions: OpportunityActionRecord[];
   /** Top Cox catalog paths from ingest matcher (item 55 Phase C-b). */
   catalogMatchSuggestions?: CatalogMatchSuggestion[];
+  /** Item 62 — marketplace listing mirror (from normalized_listings). */
+  listingImages?: string[];
+  listingDescription?: string | null;
+  listingSellerName?: string | null;
+  listingSellerUrl?: string | null;
+  listingCity?: string | null;
+  listingState?: string | null;
 }
 
 export type OpportunitySort =
@@ -191,7 +198,7 @@ export interface ScraperReviewMapOptions {
 }
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, images, description, seller_name, seller_url, city, state";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -563,6 +570,9 @@ function mapToOpportunityDetail(
   catalogMatchSuggestions: CatalogMatchSuggestion[] = [],
 ): OpportunityDetail {
   const reasonCodes = lead?.reason_codes;
+  const listingImages = Array.isArray(listing.images)
+    ? (listing.images as unknown[]).filter((u): u is string => typeof u === "string" && u.length > 0)
+    : [];
   return {
     ...row,
     reasonCodes: Array.isArray(reasonCodes) ? (reasonCodes as string[]) : [],
@@ -572,6 +582,12 @@ function mapToOpportunityDetail(
     mileage: asNumber(listing.mileage),
     actions,
     catalogMatchSuggestions,
+    listingImages,
+    listingDescription: asString(listing.description),
+    listingSellerName: asString(listing.seller_name),
+    listingSellerUrl: asString(listing.seller_url),
+    listingCity: asString(listing.city),
+    listingState: asString(listing.state),
   };
 }
 

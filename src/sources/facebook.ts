@@ -412,6 +412,29 @@ function extractPostedAt(item: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function extractOptionalString(item: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const key of keys) {
+    const raw = item[key];
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return undefined;
+}
+
+function extractListingImages(item: Record<string, unknown>): string[] | undefined {
+  const raw = item.images;
+  if (!Array.isArray(raw)) return undefined;
+  const urls = raw.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+  return urls.length > 0 ? urls : undefined;
+}
+
+function extractStateCode(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 2) return trimmed.toUpperCase();
+  return trimmed;
+}
+
 // ── Schema drift detection ────────────────────────────────────────────────────
 // Fields the Facebook adapter actively reads or recognises as benign.
 // Any top-level key NOT in this set is reported as an unexpected_field drift event.
@@ -461,6 +484,16 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   "min_listing_price",
   "strikethrough_price",
   "primary_listing_photo",
+  "primaryImage",
+  "extraListingMedia",
+  "deliveryTypes",
+  "categoryId",
+  "storyKey",
+  "hasVideo",
+  "listingId",
+  "searchQuery",
+  "_searchLocation",
+  "condition",
   "parent_listing",
   "extraListingData",
   "if_gk_just_listed_tag_on_search_feed",
@@ -543,6 +576,13 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     // payloadAdapter maps listing_date_ms → postedAt before we run; persist so
     // queue "Listed" can show seller post time (item 44).
     const postedAt = extractPostedAt(rec);
+    const sellerName = extractOptionalString(rec, ["sellerName", "seller_name", "seller"]);
+    const sellerUrl = extractOptionalString(rec, ["sellerUrl", "seller_url"]);
+    const description = extractOptionalString(rec, ["description"]);
+    const city = extractOptionalString(rec, ["city"]);
+    const stateRaw = extractOptionalString(rec, ["state"]);
+    const state = stateRaw !== undefined ? extractStateCode(stateRaw) : undefined;
+    const images = extractListingImages(rec);
 
     const listing: NormalizedListingInput = {
       source: "facebook",
@@ -560,6 +600,12 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
       ...(sourceListingId !== undefined && { sourceListingId }),
       ...(vin !== undefined && { vin }),
       ...(postedAt !== undefined && { postedAt }),
+      ...(sellerName !== undefined && { sellerName }),
+      ...(sellerUrl !== undefined && { sellerUrl }),
+      ...(description !== undefined && { description }),
+      ...(city !== undefined && { city }),
+      ...(state !== undefined && { state }),
+      ...(images !== undefined && { images }),
     };
 
     return { ok: true, listing };

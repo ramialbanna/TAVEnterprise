@@ -487,6 +487,12 @@ export const OpportunityDetailSchema = OpportunityRowSchema.extend({
   mileage: z.number().nullable(),
   actions: z.array(OpportunityActionSchema).default([]),
   catalogMatchSuggestions: z.array(CatalogMatchSuggestionSchema).default([]),
+  listingImages: z.array(z.string()).optional(),
+  listingDescription: z.string().nullable().optional(),
+  listingSellerName: z.string().nullable().optional(),
+  listingSellerUrl: z.string().nullable().optional(),
+  listingCity: z.string().nullable().optional(),
+  listingState: z.string().nullable().optional(),
 });
 export type OpportunityDetail = z.output<typeof OpportunityDetailSchema>;
 

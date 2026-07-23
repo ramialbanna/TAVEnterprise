@@ -63,6 +63,8 @@ export interface NormalizedListingInput {
   region?: RegionKey; // TAV region key — validated against REGION_KEYS
   sellerName?: string;
   sellerUrl?: string;
+  /** Seller free-text from Apify detail fetch (item 62 / item 60 Phase B). */
+  description?: string;
   images?: string[];
   postedAt?: string; // ISO string if the source provides it
   scrapedAt: string; // ISO string set by Apify / adapter

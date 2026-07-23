@@ -1,3 +1,5 @@
+import { extractListingImageUrls } from "./listingMedia";
+
 /**
  * Map a raidr-api/facebook-marketplace-vehicle-scraper dataset item into the
  * flat shape that src/sources/facebook.ts expects.
@@ -271,6 +273,10 @@ export function mapRaidrApiItem(item: unknown): unknown {
     const fromSub = extractMileageFromSubtitles(rec.custom_sub_titles_with_rendering_flags);
     if (fromSub !== undefined) out.mileage = fromSub;
   }
+
+  // Item 62 — gallery URLs for normalized_listings.images (FB CDN; may expire).
+  const gallery = extractListingImageUrls(out);
+  if (gallery.length > 0) out.images = gallery;
 
   return out;
 }
