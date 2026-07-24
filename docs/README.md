@@ -38,6 +38,11 @@ current instructions unless an active doc links to it explicitly.
 - [Diagnostics](04-operations/diagnostics.md) — production ingest / lead-creation analysis (living index).
 - [Verification](04-operations/verification.md) — required verification loop.
 
+### Scrapers (ingest producers)
+
+- [Scraper repo guide](scrapers/README.md) — external Craigslist/Cars.com repo, HMAC ingest contract.
+- [Craigslist TAV adapter](scrapers/craigslist-tav-adapter.md) — item **63** implementation context (main repo).
+
 ### 05 — Process
 
 - [GitHub](05-process/github.md) — GitHub workflow and PR rules.

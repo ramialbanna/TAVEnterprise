@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-23 · **Focus:** **61** deployed + soaking; **62** opened (Apify photos on + in-app listing mirror on detail). **60** Phase A shipped. **57** live + Sonnet 5.
+**Last updated:** 2026-07-23 · **Focus:** **62** v1 shipped; **63** opened (Craigslist ingest adapter). **61** deployed + soaking. **60** Phase A shipped. **57** live + Sonnet 5.
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
@@ -126,7 +126,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **59** | **Max buy not shown on Needs action queue rows** — `maxbuySummary` badge is blank for most unclaimed/new leads because Max buy is computed on-demand (detail-page view), not at ingest — see §59 | **High** | [ ] |
 | **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
 | **61** | **LLM auto-accept above 0.50 confidence** — ignore `needsReview`; §61 (**deployed, soak ongoing**) | **High** | [~] |
-| **62** | **In-app listing mirror on detail** — photos + description + seller context from Apify; §62 (**Apify photos ON, app not wired**) | **High** | [ ] |
+| **62** | **In-app listing mirror on detail** — photos + description + seller context; §62 (**v1 shipped**; multi-photo waits on Apify payload) | **High** | [~] |
+| **63** | **Craigslist source adapter + scheduled scraper ingest** — wire `POST /ingest` listings into pipeline; §63 | **High** | [ ] |
 
 **Full status board (incl. shipped):**
 
@@ -154,7 +155,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **59** | **Max buy not shown on Needs action queue rows** — reported 2026-07-21; on-demand Max buy means fresh/unclaimed leads have no cached recommendation to show | **High** | [ ] |
 | **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
 | **61** | **LLM trust threshold — confidence > 0.50, ignore needsReview** — see §61; **deployed, soak ongoing** | **High** | [~] |
-| **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [ ] |
+| **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [~] |
+| **63** | **Craigslist ingest adapter** — scheduled scraper → `POST /ingest`; see §63 | **High** | [ ] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1664,6 +1666,41 @@ The actual gap is **upstream**: a `maxbuy_recommendations` row only gets created
 - [ ] Images (+ description) persisted and returned on opportunity detail API
 - [ ] Detail page listing mirror matches buyer expectation (gallery + full text; link out optional)
 - [ ] Document URL expiry / R2 strategy before relying on photos for LLM vision
+
+---
+
+## 63 — Craigslist source adapter (scheduled scraper → ingest)
+
+**Opened:** 2026-07-23 (scheduled Craigslist scraper running; TAV has no adapter yet)
+
+**Product goal:** Listings from the **Craigslist scraper** (on a schedule, posting to `POST /ingest`) should flow through the same pipeline as Facebook — normalized listings, MMR, scoring, leads, and Opportunities — with source **Craigslist** in the UI.
+
+**Single source of truth for build context:** [`docs/scrapers/craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) — read that first in a fresh chat; this section is the tracker only.
+
+**Current blocker:** `handleIngest.ts` only calls `parseFacebookItem`; any other `source` gets **`unsupported_source`** (items may land in `raw_listings` then `filtered_out` with **`processed: 0`**). There is **no** `src/sources/craigslist.ts`. Apify webhook / `APIFY_TASK_REGION_MAP` are **Facebook-only** — Craigslist is **`POST /ingest` + HMAC**, not `/apify-webhook`.
+
+**Scraper contract (external repo):** [`docs/scrapers/README.md`](scrapers/README.md) §5–§8 (envelope, §8.2 item JSON). As of 2026-07-23, **no** `craigslist` rows observed in production Supabase — confirm scraper `INGEST_URL`, `DRY_RUN`, and HMAC before adapter soak.
+
+### Implementation sketch
+
+1. **`src/sources/craigslist.ts`** — `parseCraigslistItem` → `NormalizedListingInput` (reference: `facebook.ts`; map §8.2 fields including `body_text` → description, `images[]`).
+2. **`handleIngest.ts`** — branch `source === "craigslist"`; optional schema drift helper.
+3. **Tests** — `test/craigslist.adapter.test.ts` + fixtures; ingest integration test with `processed > 0`.
+4. **Soak** — staging `POST /ingest` from scraper; then production. Ingest Monitor / `source_runs` / Opportunities source filter.
+5. **Follow-ups (not v1):** LLM listing text from `body_text` (items **60** / **57**); `parseListingUrl` for CL manual intake.
+
+### Related
+
+- Item **62** — listing mirror works for any source once `images` + `description` persist.
+- Item **54** — never invent mileage on CL ingest.
+- Buy box + source confidence already include `craigslist` in seed data.
+
+### Exit criteria
+
+- [ ] Adapter + ingest wiring merged; Facebook ingest unchanged (regression tests green)
+- [ ] Staging: scraper or fixture POST → **`processed > 0`**, `normalized_listings.source = craigslist`
+- [ ] Production enabled after staging soak
+- [ ] [`craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) updated with ship date and any field deltas from real scraper output
 
 ---
 

@@ -1,5 +1,7 @@
 # TAV Scrapers — Standalone Repository Guide
 
+**TAV Enterprise adapter (Craigslist → ingest):** [`craigslist-tav-adapter.md`](craigslist-tav-adapter.md) — item **63**; read when implementing `src/sources/craigslist.ts` in the main repo.
+
 **Use this file as the only document you need** to bootstrap a blank GitHub repo, build Craigslist/Cars.com scrapers, and POST listings into the TAV ingest pipeline.
 
 **Last updated:** 2026-05-21  
