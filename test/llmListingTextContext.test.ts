@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { mapRaidrApiItem } from "../src/apify/payloadAdapter";
 import {
   extractLlmListingTextFromIngestItem,
+  mergeLlmListingTextContext,
   LLM_LISTING_TEXT_MAX_CHARS,
 } from "../src/llm/listingTextContext";
 import { buildLlmYmmsPrefetchInputs } from "../src/ingest/llmYmmsPrefetchInputs";
@@ -60,6 +61,21 @@ describe("extractLlmListingTextFromIngestItem", () => {
     expect(extractLlmListingTextFromIngestItem({ mileage: 89000 }).listingMileage).toBe(89000);
     expect(extractLlmListingTextFromIngestItem({ mileage: "89000" }).listingMileage).toBeUndefined();
   });
+
+  it("mergeLlmListingTextContext falls back to adapter-parsed listing fields", () => {
+    const merged = mergeLlmListingTextContext(
+      {},
+      {
+        description: "2015 BMW X3 AWD 4dr xDrive28d Automatic",
+        mileage: 92000,
+        city: "Dallas",
+        state: "TX",
+      },
+    );
+    expect(merged.description).toContain("xDrive28d");
+    expect(merged.listingMileage).toBe(92000);
+    expect(merged.location).toBe("Dallas, TX");
+  });
 });
 
 describe("buildLlmYmmsPrefetchInputs", () => {
@@ -77,5 +93,19 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     const input = map.get(0)!;
     expect(input.title).toContain("F-150");
     expect(input.description).toContain("SuperCrew XLT 4x4");
+  });
+
+  it("uses description from parsed listing when raw item omits it", () => {
+    const item = {
+      title: "2015 BMW X3",
+      price: 12000,
+      url: "https://www.facebook.com/marketplace/item/789/",
+      // adapter-only path: description lands on listing via parseFacebookItem field
+      description: "2015 BMW X3 AWD 4dr xDrive28d Automatic",
+    };
+
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
+    expect(map.size).toBe(1);
+    expect(map.get(0)?.description).toContain("xDrive28d");
   });
 });

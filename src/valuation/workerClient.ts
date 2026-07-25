@@ -356,7 +356,18 @@ async function performMmrCall(
     const llmResolution =
       opts?.llmResolution ??
       (await resolveListingWithLLM(
-        { year, make, model, trim: params.trim, title: params.title, price: params.price },
+        {
+          year,
+          make,
+          model,
+          trim: params.trim,
+          title: params.title,
+          price: params.price,
+          description: params.description,
+          condition: params.condition,
+          location: params.location,
+          listingMileage: params.listingMileage,
+        },
         buildLlmYmmsDeps(db, env),
       ));
 

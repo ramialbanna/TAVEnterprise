@@ -3,6 +3,8 @@
  * (Apify-mapped or flat) for the Claude Y/M/M/S prompt. Pure, no I/O.
  */
 
+import type { NormalizedListingInput } from "../types/domain";
+
 export const LLM_LISTING_TEXT_MAX_CHARS = 2000;
 
 export type LlmListingTextContext = {
@@ -74,4 +76,28 @@ export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTe
   else if (state) out.location = state;
 
   return out;
+}
+
+function formatListingLocation(city?: string, state?: string): string | undefined {
+  if (city && state) return `${city}, ${state}`;
+  if (city) return city;
+  if (state) return state;
+  return undefined;
+}
+
+/** Prefer raw-item text; fall back to adapter-normalized listing fields (item 60). */
+export function mergeLlmListingTextContext(
+  fromItem: LlmListingTextContext,
+  listing: Pick<NormalizedListingInput, "description" | "mileage" | "city" | "state">,
+): LlmListingTextContext {
+  const description =
+    fromItem.description ??
+    (listing.description ? capText(listing.description.trim(), LLM_LISTING_TEXT_MAX_CHARS) : undefined);
+
+  return {
+    ...fromItem,
+    ...(description && { description }),
+    listingMileage: fromItem.listingMileage ?? listing.mileage,
+    location: fromItem.location ?? formatListingLocation(listing.city, listing.state),
+  };
 }

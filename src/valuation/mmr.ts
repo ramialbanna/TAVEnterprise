@@ -50,9 +50,15 @@ export interface MmrParams {
    */
   price?: number;
   /**
-   * Item 64 — seller body text for catalog style/variant scoring when title is sparse.
+   * Item 60 / 64 — seller body text for LLM + catalog matchers when title is sparse.
    */
   description?: string;
+  /** Item 60 — Apify/listing condition hint for Claude Y/M/M/S. */
+  condition?: string;
+  /** Item 60 — stated location for Claude Y/M/M/S (city, state). */
+  location?: string;
+  /** Item 60 — stated odometer for Claude prompt only; never invented (item 54). */
+  listingMileage?: number;
 }
 
 const TOKEN_KV_KEY = "manheim:token";

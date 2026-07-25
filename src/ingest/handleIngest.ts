@@ -34,7 +34,7 @@ import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttribut
 import { getMmrValue } from "../valuation/mmr";
 import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerClient";
 import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
-import { buildLlmYmmsPrefetchInputs } from "./llmYmmsPrefetchInputs";
+import { buildLlmYmmsPrefetchInputs, buildLlmYmmsResolutionInput } from "./llmYmmsPrefetchInputs";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
@@ -310,6 +310,7 @@ export async function ingestCore(
           // which getMmrLookupOutcome treats as "resolve it inline" — no
           // behavior change from before this item didn't need the LLM step.
           const llmResolution = await llmPrefetch!.consume(i);
+          const llmText = buildLlmYmmsResolutionInput(item, listing);
           const outcome = await getMmrLookupOutcome(
             {
               vin: listing.vin,
@@ -320,7 +321,10 @@ export async function ingestCore(
               mileage: listing.mileage,
               title: listing.title,
               price: listing.price,
-              description: listing.description,
+              description: llmText.description,
+              condition: llmText.condition,
+              location: llmText.location,
+              listingMileage: llmText.listingMileage,
             },
             env,
             { llmResolution },

@@ -1,6 +1,31 @@
-import { extractLlmListingTextFromIngestItem } from "../llm/listingTextContext";
+import {
+  extractLlmListingTextFromIngestItem,
+  mergeLlmListingTextContext,
+} from "../llm/listingTextContext";
 import { parseFacebookItem, type AdapterContext } from "../sources/facebook";
+import type { NormalizedListingInput } from "../types/domain";
 import type { LlmYmmsResolutionInput } from "../valuation/resolveListingWithLLM";
+
+/** Item 60 — build Claude Y/M/M/S input from raw ingest item + parsed listing. */
+export function buildLlmYmmsResolutionInput(
+  item: unknown,
+  listing: NormalizedListingInput,
+): LlmYmmsResolutionInput {
+  const textContext = mergeLlmListingTextContext(
+    extractLlmListingTextFromIngestItem(item),
+    listing,
+  );
+
+  return {
+    year: listing.year!,
+    make: listing.make!,
+    model: listing.model!,
+    trim: listing.trim,
+    title: listing.title,
+    price: listing.price,
+    ...textContext,
+  };
+}
 
 /**
  * Item 57 §6 / item 60 — pure pre-pass: which batch indices need a prefetched
@@ -21,17 +46,7 @@ export function buildLlmYmmsPrefetchInputs(
     if (listing.vin) return;
     if (listing.year === undefined || !listing.make || !listing.model) return;
 
-    const textContext = extractLlmListingTextFromIngestItem(item);
-
-    inputs.set(i, {
-      year: listing.year,
-      make: listing.make,
-      model: listing.model,
-      trim: listing.trim,
-      title: listing.title,
-      price: listing.price,
-      ...textContext,
-    });
+    inputs.set(i, buildLlmYmmsResolutionInput(item, listing));
   });
 
   return inputs;
