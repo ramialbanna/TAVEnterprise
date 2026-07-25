@@ -3,6 +3,7 @@
  */
 
 import type { CatalogMatchSuggestion } from "./resolveListingToCatalog";
+import { buildListingCatalogEvidenceText } from "./listingCatalogEvidence";
 
 export type CoxCatalogTreeRow = {
   year: number;
@@ -19,6 +20,8 @@ export type ListingCatalogMatchInput = {
   model?: string | null;
   trim?: string | null;
   title?: string | null;
+  /** Item 64 — seller body text when title is sparse. */
+  description?: string | null;
 };
 
 export type ListingCatalogMatchResult = {
@@ -93,15 +96,15 @@ function scoreCandidate(
   const modelTokens = tokenSet(row.model);
   const styleTokens = tokenSet(row.style);
   const trimTokens = tokenSet(input.trim ?? "");
-  const title = input.title ?? "";
+  const evidenceText = buildListingCatalogEvidenceText(input);
 
   let score = 0;
   score += overlapScore(listingTokens, makeTokens, 15);
   score += overlapScore(listingTokens, modelTokens, 25);
   score += overlapScore(new Set([...listingTokens, ...trimTokens]), styleTokens, 25);
-  score += signalBonus(title, row.style, row.model, DRIVETRAIN_TOKENS, 15);
-  score += signalBonus(title, row.style, row.model, CAB_BED_TOKENS, 10);
-  score += signalBonus(title, row.style, row.model, BODY_TOKENS, 5);
+  score += signalBonus(evidenceText, row.style, row.model, DRIVETRAIN_TOKENS, 15);
+  score += signalBonus(evidenceText, row.style, row.model, CAB_BED_TOKENS, 10);
+  score += signalBonus(evidenceText, row.style, row.model, BODY_TOKENS, 5);
 
   const coxTokens = new Set([...makeTokens, ...modelTokens, ...styleTokens]);
   for (const token of coxTokens) {
@@ -109,7 +112,7 @@ function scoreCandidate(
     if (!listingTokens.has(token) && !trimTokens.has(token)) score -= 10;
   }
 
-  score -= parserGarbagePenalty(title, input.make ?? "", input.model ?? "");
+  score -= parserGarbagePenalty(evidenceText, input.make ?? "", input.model ?? "");
   return Math.max(0, score);
 }
 
@@ -122,7 +125,7 @@ export function matchListingToCoxCatalog(
   if (!makeRaw || !modelRaw || treeRows.length === 0) return null;
 
   const evidence = normalizeToken(
-    [input.title, input.trim, input.make, input.model].filter(Boolean).join(" "),
+    [buildListingCatalogEvidenceText(input), input.make, input.model].filter(Boolean).join(" "),
   );
   const listingTokens = tokenSet(evidence);
 

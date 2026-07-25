@@ -33,11 +33,14 @@ const IntelCatalogEnvelopeSchema = z.object({
   }),
 });
 
-/** Cox years synced into `tav.cox_catalog_tree` (current − 10 … current + 1). */
+/** Item 64 — buyer inventory includes 2013–2015; Cox tree must cover this floor. */
+export const COX_CATALOG_MIN_YEAR = 2013;
+
+/** Cox years synced into `tav.cox_catalog_tree` (2013 … current + 1). */
 export function buildCoxCatalogYearRange(): number[] {
   const currentYear = new Date().getFullYear();
   const years: number[] = [];
-  for (let year = currentYear - 10; year <= currentYear + 1; year += 1) {
+  for (let year = COX_CATALOG_MIN_YEAR; year <= currentYear + 1; year += 1) {
     years.push(year);
   }
   return years;

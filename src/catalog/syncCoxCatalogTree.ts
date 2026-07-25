@@ -76,9 +76,19 @@ export async function runCoxCatalogSync(
   const syncedYears: number[] = [];
   let skippedModels = 0;
 
+  let skippedYears = 0;
+
   try {
     for (const year of years) {
-      const makes = await fetchIntelCatalogItems(env, buildIntelCatalogPath(year));
+      let makes: string[];
+      try {
+        makes = await fetchIntelCatalogItems(env, buildIntelCatalogPath(year));
+      } catch (err) {
+        skippedYears += 1;
+        log("catalog.sync.year_skipped", { year, error: serializeError(err) });
+        continue;
+      }
+
       const batch: Array<{ year: number; make: string; model: string; style: string }> = [];
 
       for (const make of makes) {
@@ -120,12 +130,19 @@ export async function runCoxCatalogSync(
       });
     }
 
-    const status = skippedModels > 0 ? "partial" : "completed";
+    const status =
+      skippedModels > 0 || skippedYears > 0 ? "partial" : "completed";
+    const skipNotes = [
+      skippedModels > 0 ? `${skippedModels} model(s) skipped after fetch retries` : null,
+      skippedYears > 0 ? `${skippedYears} year(s) skipped after fetch failure` : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
     await finishCoxCatalogSyncRun(db, runId, {
       status,
       yearsSynced: syncedYears,
       rowCount,
-      errorMessage: skippedModels > 0 ? `${skippedModels} model(s) skipped after fetch retries` : null,
+      errorMessage: skipNotes.length > 0 ? skipNotes : null,
     });
 
     return { runId, status, yearsSynced: syncedYears, rowCount, skippedModels };

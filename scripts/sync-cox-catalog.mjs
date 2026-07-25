@@ -100,15 +100,30 @@ async function main() {
   });
 
   const currentYear = new Date().getFullYear();
+  const COX_CATALOG_MIN_YEAR = 2013;
   const years = [];
-  for (let year = currentYear - 10; year <= currentYear + 1; year += 1) {
+  for (let year = COX_CATALOG_MIN_YEAR; year <= currentYear + 1; year += 1) {
     years.push(year);
+  }
+
+  const { data: existingYears, error: yearsErr } = await db
+    .schema("tav")
+    .from("cox_catalog_tree")
+    .select("year")
+    .gte("year", COX_CATALOG_MIN_YEAR);
+  if (yearsErr) throw yearsErr;
+  const populated = new Set((existingYears ?? []).map((row) => row.year));
+  const yearsToSync = years.filter((year) => !populated.has(year));
+
+  if (yearsToSync.length === 0) {
+    console.log("All catalog years already populated — nothing to sync.");
+    return;
   }
 
   const { data: runRow, error: runErr } = await db
     .schema("tav")
     .from("cox_catalog_sync_runs")
-    .insert({ status: "running", years_synced: years })
+    .insert({ status: "running", years_synced: yearsToSync })
     .select("id")
     .single();
   if (runErr) throw runErr;
@@ -117,13 +132,24 @@ async function main() {
   const syncedYears = [];
   let skippedModels = 0;
 
+  let skippedYears = 0;
+
   try {
-    for (const year of years) {
-      const makes = await fetchCatalog(
-        baseUrl,
-        intelSecret,
-        `/catalog/years/${encodeURIComponent(String(year))}/makes`,
-      );
+    for (const year of yearsToSync) {
+      let makes;
+      try {
+        makes = await fetchCatalog(
+          baseUrl,
+          intelSecret,
+          `/catalog/years/${encodeURIComponent(String(year))}/makes`,
+        );
+      } catch (err) {
+        skippedYears += 1;
+        console.warn(
+          `Skipped year ${year}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        continue;
+      }
 
       const batch = [];
       for (const make of makes) {
@@ -172,7 +198,7 @@ async function main() {
       console.log(`Synced ${year}: ${batch.length} styles (${rowCount} total)`);
     }
 
-    const status = skippedModels > 0 ? "partial" : "completed";
+    const status = skippedModels > 0 || skippedYears > 0 ? "partial" : "completed";
     await db
       .schema("tav")
       .from("cox_catalog_sync_runs")
@@ -181,13 +207,17 @@ async function main() {
         years_synced: syncedYears,
         row_count: rowCount,
         finished_at: new Date().toISOString(),
-        error_message:
+        error_message: [
           skippedModels > 0 ? `${skippedModels} model(s) skipped after fetch retries` : null,
+          skippedYears > 0 ? `${skippedYears} year(s) skipped after fetch failure` : null,
+        ]
+          .filter(Boolean)
+          .join("; ") || null,
       })
       .eq("id", runRow.id);
 
     console.log(
-      `Done (${status}). ${rowCount} rows across ${syncedYears.length} years; ${skippedModels} model(s) skipped.`,
+      `Done (${status}). ${rowCount} rows across ${syncedYears.length} years; ${skippedModels} model(s), ${skippedYears} year(s) skipped.`,
     );
   } catch (err) {
     await db

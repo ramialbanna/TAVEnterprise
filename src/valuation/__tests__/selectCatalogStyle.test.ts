@@ -54,4 +54,16 @@ describe("selectCatalogStyleForListing", () => {
     expect(selected?.matchedSignals).toEqual([]);
     expect(selected?.isEstimated).toBe(true);
   });
+
+  it("item 64: resolves style from description when title is sparse", () => {
+    const selected = selectCatalogStyleForListing({
+      title: "2016 Ford F-150 · Short Bed",
+      trim: null,
+      description:
+        "2016 Ford F-150 SuperCrew XLT 4x4, 5.0L V8, short bed, clean title, 89k miles.",
+      styles: ["4D CREW CAB XLT", "4D CREW CAB XL", "4D REGULAR CAB XL"],
+    });
+
+    expect(selected?.style).toBe("4D CREW CAB XLT");
+  });
 });

@@ -2,6 +2,8 @@ export interface CatalogStyleSelectionInput {
   styles: readonly string[];
   title?: string | null;
   trim?: string | null;
+  /** Item 64 — seller body text when title is sparse. */
+  description?: string | null;
 }
 
 export interface CatalogStyleSelection {
@@ -116,8 +118,12 @@ function hasPhrase(haystack: string, phrase: string): boolean {
   return new RegExp(`(?:^| )${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: |$)`).test(haystack);
 }
 
-function collectSignals(title?: string | null, trim?: string | null): string[] {
-  const evidence = normalizeToken([title, trim].filter(Boolean).join(" "));
+function collectSignals(
+  title?: string | null,
+  trim?: string | null,
+  description?: string | null,
+): string[] {
+  const evidence = normalizeToken([title, trim, description].filter(Boolean).join(" "));
   const signals: string[] = [];
   const explicitTrim = normalizeToken(trim ?? "");
   if (explicitTrim) signals.push(explicitTrim);
@@ -156,7 +162,7 @@ export function selectCatalogStyleForListing(
   const styles = input.styles.filter((style) => style.trim().length > 0);
   if (styles.length === 0) return null;
 
-  const signals = collectSignals(input.title, input.trim);
+  const signals = collectSignals(input.title, input.trim, input.description);
   if (signals.length === 0) {
     return { style: styles[0]!, matchedSignals: [], isEstimated: true };
   }
@@ -184,7 +190,7 @@ export function rankCatalogStylesForListing(
   const styles = input.styles.filter((style) => style.trim().length > 0);
   if (styles.length === 0) return [];
 
-  const signals = collectSignals(input.title, input.trim);
+  const signals = collectSignals(input.title, input.trim, input.description);
   if (signals.length === 0) return [];
 
   return styles

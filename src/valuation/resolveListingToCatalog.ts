@@ -4,6 +4,7 @@
  */
 
 import { extractTitleTrim } from "./extractTitleTrim";
+import { buildListingCatalogEvidenceText } from "./listingCatalogEvidence";
 import { matchCatalogOption, pickCatalogOptionFuzzy } from "./matchCatalogOption";
 import {
   selectCatalogModelVariantForListing,
@@ -31,6 +32,8 @@ export type IngestListingCatalogInput = {
   model?: string | null;
   trim?: string | null;
   title?: string | null;
+  /** Item 64 — seller body text when title is sparse. */
+  description?: string | null;
 };
 
 export type CatalogMatchSuggestion = {
@@ -102,7 +105,14 @@ async function tryOfflineIngestCatalogResolution(
   if (treeRows.length === 0) return null;
 
   const offline = matchListingToCoxCatalog(
-    { year: input.year, make: makeRaw, model: modelRaw, trim: styleRaw, title },
+    {
+      year: input.year,
+      make: makeRaw,
+      model: modelRaw,
+      trim: styleRaw,
+      title,
+      description: input.description,
+    },
     treeRows,
   );
   if (!offline) return null;
@@ -178,10 +188,15 @@ async function resolveAmbiguousModelVariants(
     modelRaw: string;
     styleRaw: string;
     title: string;
+    description: string;
     variants: readonly string[];
   },
 ): Promise<ModelResolution> {
-  const trimEvidence = args.styleRaw || extractTitleTrim(args.title) || "";
+  const trimEvidence =
+    args.styleRaw ||
+    extractTitleTrim(args.title) ||
+    extractTitleTrim(args.description) ||
+    "";
   const candidates: Array<{
     model: string;
     style: string | null;
@@ -203,6 +218,7 @@ async function resolveAmbiguousModelVariants(
       styles: stylesRes.items,
       title: args.title,
       trim: trimEvidence || args.styleRaw || null,
+      description: args.description,
     });
 
     if (ranked.length === 0) {
@@ -286,6 +302,7 @@ async function resolveModel(
     modelRaw: string;
     styleRaw: string;
     title: string;
+    description: string;
   },
 ): Promise<ModelResolution> {
   const modelsRes = await fetchCatalog(
@@ -307,6 +324,7 @@ async function resolveModel(
       sourceModel: args.modelRaw,
       title: args.title,
       trim: args.styleRaw || null,
+      description: args.description,
     });
     if (variant) matchedModel = variant.model;
   }
@@ -335,6 +353,7 @@ async function resolveModel(
           sourceModel: candidate,
           title: args.title,
           trim: args.styleRaw || leftoverStyleEvidence || null,
+          description: args.description,
         });
         if (variant) matchedModel = variant.model;
       }
@@ -350,6 +369,7 @@ async function resolveModel(
         modelRaw: args.modelRaw,
         styleRaw: args.styleRaw,
         title: args.title,
+        description: args.description,
         variants,
       });
     }
@@ -365,7 +385,11 @@ async function resolveModel(
   }
 
   const trimEvidence =
-    args.styleRaw || leftoverStyleEvidence || extractTitleTrim(args.title) || "";
+    args.styleRaw ||
+    leftoverStyleEvidence ||
+    extractTitleTrim(args.title) ||
+    extractTitleTrim(args.description) ||
+    "";
 
   return { model: matchedModel, trimEvidence, modelVariantAmbiguous: false };
 }
@@ -385,6 +409,8 @@ export async function resolveListingToCatalogForIngest(
   const modelRaw = input.model?.trim() ?? "";
   const styleRaw = input.trim?.trim() ?? "";
   const title = input.title?.trim() ?? "";
+  const description = input.description?.trim() ?? "";
+  const listingEvidence = buildListingCatalogEvidenceText(input);
 
   if (!makeRaw) {
     return {
@@ -447,6 +473,7 @@ export async function resolveListingToCatalogForIngest(
       modelRaw,
       styleRaw,
       title,
+      description,
     });
 
     if (!matchedModel) {
@@ -505,11 +532,12 @@ export async function resolveListingToCatalogForIngest(
       };
     }
 
-    if (title) {
+    if (listingEvidence) {
       const titleSelected = selectCatalogStyleForListing({
         styles: stylesRes.items,
         title,
         trim: trimEvidence || styleRaw || null,
+        description,
       });
       if (titleSelected && !titleSelected.isEstimated) {
         return {
@@ -559,6 +587,7 @@ export async function resolveListingToCatalogForIngest(
       styles: stylesRes.items,
       title,
       trim: trimEvidence || styleRaw || null,
+      description,
     });
     if (!selected) {
       if (evidenceStyle) {

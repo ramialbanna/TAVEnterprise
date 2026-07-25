@@ -393,6 +393,7 @@ async function performMmrCall(
               model,
               trim: params.trim,
               title: params.title,
+              description: params.description,
             },
             catalogFetch,
             offlineDeps,
@@ -400,7 +401,15 @@ async function performMmrCall(
     catalogMatchSuggestions = catalogResolved.catalogMatchSuggestions;
     const ref = await loadMmrReferenceData(db);
     const normalized = normalizeMmrParams(
-      { make, model, trim: params.trim?.trim() || extractTitleTrim(params.title) || "" },
+      {
+        make,
+        model,
+        trim:
+          params.trim?.trim() ||
+          extractTitleTrim(params.title) ||
+          extractTitleTrim(params.description) ||
+          "",
+      },
       ref,
     );
 
@@ -438,7 +447,8 @@ async function performMmrCall(
     const lookupTrimEstimated = catalogResolved.style ? catalogResolved.styleEstimated : false;
 
     if (!sendTrim) {
-      const derived = extractTitleTrim(params.title);
+      const derived =
+        extractTitleTrim(params.title) ?? extractTitleTrim(params.description);
       if (derived) {
         sendTrim = derived;
         log("ingest.mmr_trim_from_title", { derived_trim: derived });

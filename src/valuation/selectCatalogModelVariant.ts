@@ -3,6 +3,8 @@ export interface CatalogModelVariantSelectionInput {
   sourceModel: string;
   title?: string | null;
   trim?: string | null;
+  /** Item 64 — seller body text when title is sparse. */
+  description?: string | null;
 }
 
 export interface CatalogModelVariantSelection {
@@ -45,8 +47,9 @@ function collectMatchedSignalGroups(
   groups: ReadonlyArray<{ signal: string; aliases: readonly string[] }>,
   title?: string | null,
   trim?: string | null,
+  description?: string | null,
 ): Array<{ signal: string; aliases: readonly string[] }> {
-  const evidence = normalizeToken([title, trim].filter(Boolean).join(" "));
+  const evidence = normalizeToken([title, trim, description].filter(Boolean).join(" "));
   if (!evidence) return [];
 
   const matched: Array<{ signal: string; aliases: readonly string[] }> = [];
@@ -107,8 +110,18 @@ export function selectCatalogModelVariantForListing(
   const exact = variants.find((model) => normalizeToken(model) === normalizeToken(input.sourceModel));
   if (exact) return { model: exact, matchedSignals: ["EXACT_MODEL"] };
 
-  const drivetrainGroups = collectMatchedSignalGroups(DRIVETRAIN_SIGNALS, input.title, input.trim);
-  const cabBedBodyGroups = collectMatchedSignalGroups(CAB_BED_BODY_SIGNALS, input.title, input.trim);
+  const drivetrainGroups = collectMatchedSignalGroups(
+    DRIVETRAIN_SIGNALS,
+    input.title,
+    input.trim,
+    input.description,
+  );
+  const cabBedBodyGroups = collectMatchedSignalGroups(
+    CAB_BED_BODY_SIGNALS,
+    input.title,
+    input.trim,
+    input.description,
+  );
   if (drivetrainGroups.length === 0 && cabBedBodyGroups.length === 0) return null;
 
   const scored = variants

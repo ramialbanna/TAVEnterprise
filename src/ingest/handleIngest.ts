@@ -311,7 +311,17 @@ export async function ingestCore(
           // behavior change from before this item didn't need the LLM step.
           const llmResolution = await llmPrefetch!.consume(i);
           const outcome = await getMmrLookupOutcome(
-            { vin: listing.vin, year: listing.year, make: listing.make, model: listing.model, trim: listing.trim, mileage: listing.mileage, title: listing.title, price: listing.price },
+            {
+              vin: listing.vin,
+              year: listing.year,
+              make: listing.make,
+              model: listing.model,
+              trim: listing.trim,
+              mileage: listing.mileage,
+              title: listing.title,
+              price: listing.price,
+              description: listing.description,
+            },
             env,
             { llmResolution },
           );

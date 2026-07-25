@@ -196,4 +196,37 @@ describe("resolveListingToCatalogForIngest", () => {
     expect(result.modelVariantAmbiguous).toBe(true);
     expect(result.catalogMatchSuggestions).toHaveLength(2);
   });
+
+  it("item 64: picks style from description when title is sparse", async () => {
+    const fetchCatalog = mockCatalog({
+      "/catalog/years/2016/makes": {
+        catalogState: "connected",
+        items: ["Ford"],
+      },
+      "/catalog/years/2016/makes/Ford/models": {
+        catalogState: "connected",
+        items: ["F-150"],
+      },
+      "/catalog/years/2016/makes/Ford/models/F-150/styles": {
+        catalogState: "connected",
+        items: ["4D CREW CAB XLT", "4D CREW CAB XL", "4D REGULAR CAB XL"],
+      },
+    });
+
+    const result = await resolveListingToCatalogForIngest(
+      {
+        year: 2016,
+        make: "Ford",
+        model: "F-150",
+        title: "2016 Ford F-150 · Short Bed",
+        description:
+          "2016 Ford F-150 SuperCrew XLT 4x4, 5.0L V8, short bed, clean title, 89k miles.",
+      },
+      fetchCatalog,
+    );
+
+    expect(result.make).toBe("Ford");
+    expect(result.model).toBe("F-150");
+    expect(result.style).toBe("4D CREW CAB XLT");
+  });
 });

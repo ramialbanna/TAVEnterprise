@@ -49,6 +49,10 @@ export interface MmrParams {
    * resolver only; never used for MMR lookup itself.
    */
   price?: number;
+  /**
+   * Item 64 — seller body text for catalog style/variant scoring when title is sparse.
+   */
+  description?: string;
 }
 
 const TOKEN_KV_KEY = "manheim:token";

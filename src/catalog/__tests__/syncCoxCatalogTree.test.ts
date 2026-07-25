@@ -57,15 +57,22 @@ describe("runCoxCatalogSync", () => {
     );
   });
 
-  it("records partial progress when a fetch fails mid-run", async () => {
+  it("records partial progress when a year fetch fails", async () => {
     vi.mocked(fetchIntelCatalogItems).mockRejectedValueOnce(new Error("HTTP 503"));
 
-    await expect(runCoxCatalogSync(env, db)).rejects.toThrow("HTTP 503");
+    const result = await runCoxCatalogSync(env, db);
 
+    expect(result).toEqual({
+      runId: "run-1",
+      status: "partial",
+      yearsSynced: [],
+      rowCount: 0,
+      skippedModels: 0,
+    });
     expect(finishCoxCatalogSyncRun).toHaveBeenCalledWith(
       db,
       "run-1",
-      expect.objectContaining({ status: "failed", rowCount: 0 }),
+      expect.objectContaining({ status: "partial", rowCount: 0 }),
     );
   });
 });
