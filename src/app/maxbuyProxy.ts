@@ -5,6 +5,9 @@ import { log, serializeError } from "../logging/logger";
 
 const MAXBUY_SERVICE_BINDING_BASE = "https://maxbuy-worker.internal";
 
+/** Sentinel user id for ingest-time Max buy evaluations (item 59). */
+export const INGEST_MAXBUY_USER_ID = "ingest-system";
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

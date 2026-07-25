@@ -47,6 +47,10 @@ import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import { sendExcellentLeadSummary } from "../alerts/alerts";
 import type { ExcellentLeadSummary } from "../alerts/alerts";
+import {
+  buildIngestMaxbuyEvaluateBody,
+  scheduleIngestMaxbuyEvaluate,
+} from "./ingestMaxbuyEvaluate";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const BATCH_TIMEOUT_MS = 25_000;
@@ -394,6 +398,16 @@ export async function ingestCore(
           } catch (err) {
             logError("valuation", "ingest.normalization_enrichment_failed", err, listingCtx);
           }
+        }
+
+        // Item 59 — background Max buy evaluate on MMR hit (non-blocking via waitUntil).
+        const maxbuyBody = buildIngestMaxbuyEvaluateBody({
+          normalizedListingId: normResult.id,
+          listing,
+          mmrResult,
+        });
+        if (maxbuyBody) {
+          scheduleIngestMaxbuyEvaluate(execCtx, env, maxbuyBody);
         }
       }
 

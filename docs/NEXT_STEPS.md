@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-23 · **Focus:** **62** v1 shipped; **63** opened (Craigslist ingest adapter). **61** deployed + soaking. **60** Phase A shipped. **57** live + Sonnet 5.
+**Last updated:** 2026-07-25 · **Focus:** **62** v1 shipped; **63** opened (Craigslist ingest adapter). **61** deployed + soaking. **60** Phase A shipped. **57** live + Sonnet 5. **59** expanded — Max buy / YMMS linkage analysis (§59).
 
 > **Fresh chat prompt:**
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
@@ -14,6 +14,8 @@
 > **2026-07-21 (later):** Considered running `--verify-mmr` for the real would-have-hit-MMR number, but it requires `INTEL_WORKER_SECRET` and the local `.dev.vars` copy is still `replace_me` — Cloudflare secrets can't be read back once set, so the only paths were (a) someone had a recorded copy (nobody did) or (b) rotate the shared secret between `tav-aip-*` and `tav-intelligence-worker-*`. **Decision: skip `--verify-mmr` entirely** rather than touch a live shared secret for a secondary signal. This is safe, not a corner cut: `workerClient.ts` (§Phase 1, already deployed) only ever trusts a confident `llm_hit` to actually resolve the catalog — `llm_needs_review` and `llm_invalid_pick` fall straight through to the unchanged existing offline-matcher path, so skipping the verify step can only under-measure the lift, never cause a bad price to reach a buyer. **Where this leaves item 57:** code-wise there is nothing left to build for Phase 0/1. The only remaining question is a product one — is a ~19.5% (16/82) confident-hit rate on this sample worth flipping `LLM_YMMS_ENABLED="true"` on **staging only** for a real funnel soak (same cohort methodology as item 55 Phase C) before ever touching production — **not decided, flag is still `"false"` everywhere.**
 
 > **2026-07-23 (later):** On the live **custom-vehicle-scraper** Apify task(s), ops turned on **Fetch Listing Photos & Videos** (and **Fetch Detailed Item Info** where applicable) so datasets include full seller text + media, not search-feed thumbnails only. **Product note → item 62:** replicate the Facebook listing on the **opportunity detail page** (photo gallery, description, price/location/seller) so closers triage without opening Facebook. Ingest/DB/UI **not built yet** — today `raw_listings.raw_item` often has `primaryImage` only; `normalized_listings.images` is still empty and detail has no listing mirror block. See §62; ties to item **60** (persist description), item **57** Phase 2 (vision follow-up on low-confidence Y/M/M/S), and [`docs/04-operations/apify.md`](04-operations/apify.md) (refresh task config note when verified on Dallas/Oklahoma tasks).
+>
+> **2026-07-25:** Production analysis (since 2026-07-23 17:00 local) confirms **Y/M/M/S → MMR is mostly working** (~68% hit; Cox `lookup_trim` stored on every hit) but **Y/M/M/S is not linked to Max buy**. Ingest never calls Max buy; detail auto-run requires `opportunity.style` from `listing.trim` (null on **66%** of MMR hits) even though `valuation_snapshots.lookup_trim` has the Cox style; Max buy re-MMRs with parsed listing fields / `"base"`, not ingest's resolved Cox tokens. **0 / 3,537** new listings got a `maxbuy_recommendations` row. Full breakdown → §59.
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -123,7 +125,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
-| **59** | **Max buy not shown on Needs action queue rows** — `maxbuySummary` badge is blank for most unclaimed/new leads because Max buy is computed on-demand (detail-page view), not at ingest — see §59 | **High** | [ ] |
+| **59** | **Max buy not shown / YMMS not linked** — no ingest-time evaluate; `lookup_trim` not exposed as `style`; detail + Max buy worker use `listing.trim` not Cox tokens — see §59 | **High** | [ ] |
 | **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
 | **61** | **LLM auto-accept above 0.50 confidence** — ignore `needsReview`; §61 (**deployed, soak ongoing**) | **High** | [~] |
 | **62** | **In-app listing mirror on detail** — photos + description + seller context; §62 (**v1 shipped**; multi-photo waits on Apify payload) | **High** | [~] |
@@ -152,7 +154,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 | **57** | **LLM Y/M/M/S normalization via Claude API** — Phase 0/1 built + deployed (flag off); blocked on Anthropic credits; ingest concurrency fix (§6 Phase 1) done | **Critical** | [~] |
 | **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
-| **59** | **Max buy not shown on Needs action queue rows** — reported 2026-07-21; on-demand Max buy means fresh/unclaimed leads have no cached recommendation to show | **High** | [ ] |
+| **59** | **Max buy not shown / YMMS not linked to Max buy** — reported 2026-07-21; expanded 2026-07-25 with production funnel + identity gap analysis — see §59 | **High** | [ ] |
 | **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
 | **61** | **LLM trust threshold — confidence > 0.50, ignore needsReview** — see §61; **deployed, soak ongoing** | **High** | [~] |
 | **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [~] |
@@ -1531,9 +1533,10 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 
 ---
 
-## 59 — Max buy not shown on Needs action queue rows
+## 59 — Max buy not shown; Y/M/M/S not linked to Max buy
 
-**Reported:** 2026-07-21 (buyer feedback, production `/opportunities` — Needs action tab)
+**Reported:** 2026-07-21 (buyer feedback, production `/opportunities` — Needs action tab)  
+**Expanded:** 2026-07-25 (production funnel analysis — YMMS → MMR works; YMMS → Max buy does not)
 
 **Symptom:** Deals sitting in the **Needs action** tab mostly show no Max buy badge at all in the queue row (`OpportunityVehicleCellNew` renders nothing, or the muted **"MaxBuy: add VIN"** hint) — buyers can't see a Max buy verdict/number to help triage which unclaimed leads to work first.
 
@@ -1548,23 +1551,65 @@ The actual gap is **upstream**: a `maxbuy_recommendations` row only gets created
 
 **Needs action** is specifically the tab of unassigned/unclaimed/freshest leads — by definition, the rows least likely to have been opened by anyone yet. So the one tab where a buyer most wants an at-a-glance signal for triage is structurally the one least likely to have a cached Max buy verdict. `MAXBUY_EVALUATE_ENABLED` is already `"true"` in both staging and production, so this isn't a flag/config gap — it's a "nobody has clicked in yet" gap.
 
+### Production analysis — Y/M/M/S not linked to Max buy (2026-07-25)
+
+Supabase + Apify ingest review since **2026-07-23 17:00** local (Dallas + Oklahoma Facebook tasks). **No code changes** — analysis only.
+
+**What works (ingest → MMR):**
+
+| Metric | Value |
+|--------|-------|
+| New listings | 3,537 |
+| Parsed Y/M/M from title | 100% |
+| MMR hit | ~68% (2,402) |
+| MMR hits with Cox `lookup_trim` | 100% of hits |
+| LLM decisions (`llm_hit` / `needs_review`) | 3,159 / 676 |
+
+Ingest resolves ambiguous titles to Cox style tokens for MMR (alias → LLM → offline matcher → live catalog). Resolved style lives on **`valuation_snapshots.lookup_trim`**, not on `normalized_listings.trim`.
+
+**Top MMR miss reasons:** `model_variant_missing` (757), `cox_no_data` (699), `llm_unavailable` (465), `trim_missing` (324).
+
+**What does not work (ingest YMMS → Max buy):**
+
+| Gap | Detail |
+|-----|--------|
+| **No ingest-time Max buy** | `handleIngest.ts` writes `valuation_snapshots` only — never calls `runEvaluate`. **0 / 3,537** new listings have a `maxbuy_recommendations` row. All-time: 1,912 Max buy rows, only **4** linked to a listing (rest = MMR Lab manual). |
+| **`lookup_trim` not on opportunity** | `listOpportunities` sets `style: listing.trim` (`opportunities.ts`). **66%** of MMR hits have `lookup_trim` but **null** `listing.trim` → `sessionFromOpportunity()` returns null → **no auto-run MMR or Max buy** on detail open (`opportunity-valuation-block.tsx` requires `style` for YMM path). |
+| **Max buy re-MMRs with wrong identity** | `runEvaluate` / `resolveVehicleContext` read `normalized_listings.year/make/model/trim` — **not** `valuation_snapshots.lookup_trim`. Trim defaults to `"base"`. Even when listing trim exists it is often a partial Facebook token (`"sport"`, `"denali"`) not the Cox bodyname that got the ingest MMR hit (`"4D SUV BADLANDS"`). |
+
+**Detail-page behavior today:**
+
+| Listing profile | Ingest MMR | Detail auto-run Max buy |
+|-----------------|------------|-------------------------|
+| MMR hit, no `listing.trim` (~66%) | Saved | **Blocked** — no session |
+| MMR hit, has trim (~34%) | Saved | Possible, but may re-MMR with weaker trim |
+| MMR miss | None | Blocked until manual Y/M/M/S |
+| Has VIN | N/A | Best path — scraper sends **0** VINs |
+
+**YMMS linkage is correct for MMR at ingest; it does not flow through to Max buy** because Max buy is a separate on-demand path that ignores ingest's Cox-resolved tokens.
+
 ### Fix direction (not started — needs product confirmation on cost/latency tradeoff)
 
-- Most direct: run Max buy evaluation as part of ingest (alongside the existing MMR lookup in `handleIngest.ts`) whenever identity is complete enough (VIN decodes or full Y/M/M/S resolves) — mirrors how `resolveListingToCatalogForIngest` (item 55 Phase B) already runs pre-MMR in the same loop. Needs a batch-budget check similar to item 57 §6 (Max buy calls go to `maxbuy-worker`, adds another per-item round trip to the same `BATCH_TIMEOUT_MS` budget).
+- Most direct: run Max buy evaluation as part of ingest (alongside the existing MMR lookup in `handleIngest.ts`) whenever MMR hits — pass **`lookup_make` / `lookup_model` / `lookup_trim`** from the MMR result (or reuse ingest MMR value), not parsed `listing.trim`. Needs a batch-budget check similar to item 57 §6 (Max buy calls go to `maxbuy-worker`, adds another per-item round trip to the same `BATCH_TIMEOUT_MS` budget).
+- **Identity bridge (detail + Max buy worker):** expose Cox-resolved style on opportunities when `listing.trim` is empty — e.g. `style` ← `lookup_trim` from latest valuation snapshot; or persist resolved Cox tokens on `normalized_listings` at ingest. Unblocks `sessionFromOpportunity()` and stops Max buy from re-MMRing with `"base"` / wrong trim.
 - Cheaper alternative: a small cron/backfill that evaluates Max buy only for rows currently in `needs_action` (bounded set, not every ingest) — lower cost, but still stale between cron runs and does nothing for items 40/41-style "brand new lead" freshness.
 - Do not invent mileage/trim to force an evaluation (item **54** rule still applies) — rows without enough identity should keep showing the existing **"MaxBuy: add VIN"** hint, not a fabricated number.
 
 ### Primary files
 
 - `src/ingest/handleIngest.ts` — where an ingest-time Max buy call would be added
-- `src/maxbuy/handlers/evaluate.ts`, `src/maxbuy/evaluateRun.ts` — existing on-demand evaluation path to reuse
-- `src/persistence/opportunities.ts` (`fetchMaxbuySummaries`, `listOpportunities`)
+- `src/valuation/workerClient.ts` — MMR result carries `lookupTrim` / `lookupMake` / `lookupModel` (not forwarded to Max buy today)
+- `src/maxbuy/handlers/evaluate.ts`, `src/maxbuy/evaluateRun.ts` — existing on-demand evaluation path to reuse; `resolveVehicleContext` reads listing fields only
+- `src/persistence/opportunities.ts` (`fetchMaxbuySummaries`, `listOpportunities`) — `style` from `listing.trim`, not `lookup_trim`
+- `src/persistence/valuationSnapshots.ts` — `lookup_trim` stored here on MMR hit
+- `web/app/(app)/opportunities/_components/opportunity-valuation-block.tsx` (`sessionFromOpportunity`, `shouldAutoRunMaxbuy`)
 - `web/app/(app)/opportunities/_components/opportunity-vehicle-cell-new.tsx` (`MaxBuyBadge`, `showAddVinHint`)
 - `wrangler.toml` (`MAXBUY_EVALUATE_ENABLED`, `MAXBUY_WORKER_URL`) — already on in staging/production, just unused at ingest time
 
 ### Exit criteria
 
 - [ ] Product decision: evaluate Max buy at ingest time vs. needs-action-only backfill vs. something else
+- [ ] Cox-resolved Y/M/M/S from ingest (`lookup_trim` at minimum) flows to opportunity detail + Max buy evaluate — not only parsed `listing.trim`
 - [ ] Needs action tab shows a Max buy badge (or an honest "add VIN" hint) for the large majority of rows, not just previously-opened ones
 - [ ] No invented mileage/trim to force an evaluation (item 54)
 - [ ] No regression to ingest batch timing (same budget concern as item 57 §6)

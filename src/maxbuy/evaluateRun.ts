@@ -272,6 +272,13 @@ export async function runEvaluate(
         baseCtx.region = listingCtx.region !== "unknown" ? listingCtx.region : baseCtx.region;
         baseCtx.cotCity = listingCtx.cotCity;
         baseCtx.cotState = listingCtx.cotState;
+        // Item 59 — prefer ingest Cox tokens when caller did not supply a real trim.
+        const requestTrim = request.trim?.trim().toLowerCase();
+        if (!requestTrim || requestTrim === "base") {
+          baseCtx.make = listingCtx.make;
+          baseCtx.model = listingCtx.model;
+          baseCtx.trim = listingCtx.trim;
+        }
       }
     }
 

@@ -6,6 +6,7 @@ import {
   upsertMmrStyleAlias,
 } from "./mmrStyleAliases";
 import { buildListingDiagnostics } from "./ingestRuns";
+import { resolveOpportunityStyle } from "./opportunityStyle";
 import { computeDealScore } from "../scoring/deal";
 import type { AppUser } from "./users";
 import {
@@ -510,7 +511,7 @@ function mapToOpportunityRow(
     year: asNumber(listing.year),
     make: asString(listing.make),
     model: asString(listing.model),
-    style: asString(listing.trim),
+    style: resolveOpportunityStyle(asString(listing.trim), diagnostic.valuation_style),
     vin: asString(listing.vin),
     price,
     mmrValue,

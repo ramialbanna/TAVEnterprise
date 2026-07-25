@@ -73,6 +73,58 @@ export type VehicleContext = {
   cotState: string | null;
 };
 
+type ListingIdentityRow = {
+  year: number | string;
+  make: string;
+  model: string;
+  trim: string | null;
+  region: string | null;
+};
+
+type ValuationIdentityRow = {
+  lookup_make: string | null;
+  lookup_model: string | null;
+  lookup_trim: string | null;
+};
+
+/** Item 59 — prefer Cox tokens from latest MMR hit over parsed listing trim. */
+export function mergeListingWithValuationIdentity(
+  listing: ListingIdentityRow,
+  valuation: ValuationIdentityRow | null | undefined,
+  fallbackRegion?: string,
+): VehicleContext {
+  const listingTrim = listing.trim?.trim() || null;
+  const coxMake = valuation?.lookup_make?.trim() || null;
+  const coxModel = valuation?.lookup_model?.trim() || null;
+  const coxTrim = valuation?.lookup_trim?.trim() || null;
+
+  return {
+    year: Number(listing.year),
+    make: (coxMake ?? String(listing.make)).toLowerCase(),
+    model: (coxModel ?? String(listing.model)).toLowerCase(),
+    trim: (coxTrim ?? listingTrim ?? "base").toLowerCase(),
+    region: String(listing.region ?? fallbackRegion ?? "unknown").toLowerCase(),
+    cotCity: null,
+    cotState: null,
+  };
+}
+
+async function fetchLatestValuationIdentity(
+  db: SupabaseClient,
+  normalizedListingId: string,
+): Promise<ValuationIdentityRow | null> {
+  const { data, error } = await db
+    .from("valuation_snapshots")
+    .select("lookup_make, lookup_model, lookup_trim")
+    .eq("normalized_listing_id", normalizedListingId)
+    .not("mmr_value", "is", null)
+    .order("fetched_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ValuationIdentityRow | null) ?? null;
+}
+
 export async function resolveVehicleContext(
   db: SupabaseClient,
   input: {
@@ -91,37 +143,32 @@ export async function resolveVehicleContext(
       .maybeSingle();
     if (error) throw error;
     if (data?.year && data.make && data.model) {
-      return {
-        year: Number(data.year),
-        make: String(data.make).toLowerCase(),
-        model: String(data.model).toLowerCase(),
-        trim: String(data.trim ?? "base").toLowerCase(),
-        region: String(data.region ?? input.region ?? "unknown").toLowerCase(),
-        cotCity: null,
-        cotState: null,
-      };
+      const valuation = await fetchLatestValuationIdentity(db, input.normalizedListingId);
+      return mergeListingWithValuationIdentity(
+        data as ListingIdentityRow,
+        valuation,
+        input.region,
+      );
     }
   }
 
   if (input.vin) {
     const { data: listing, error: listingError } = await db
       .from("normalized_listings")
-      .select("year, make, model, trim, region")
+      .select("id, year, make, model, trim, region")
       .eq("vin", input.vin)
       .order("last_seen_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (listingError) throw listingError;
     if (listing?.year && listing.make && listing.model) {
-      return {
-        year: Number(listing.year),
-        make: String(listing.make).toLowerCase(),
-        model: String(listing.model).toLowerCase(),
-        trim: String(listing.trim ?? "base").toLowerCase(),
-        region: String(listing.region ?? input.region ?? "unknown").toLowerCase(),
-        cotCity: null,
-        cotState: null,
-      };
+      const listingId = listing.id as string;
+      const valuation = await fetchLatestValuationIdentity(db, listingId);
+      return mergeListingWithValuationIdentity(
+        listing as ListingIdentityRow,
+        valuation,
+        input.region,
+      );
     }
 
     const { data: outcome, error: outcomeError } = await db
