@@ -21,6 +21,7 @@ import {
   type LlmYmmsResolutionInput,
 } from "./resolveListingWithLLM";
 import { insertLlmYmmsDecision } from "../persistence/llmYmmsDecisions";
+import { maybeLearnIngestStyleAlias } from "./learnIngestStyleAlias";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -302,6 +303,8 @@ async function performMmrCall(
       }
     | undefined;
   let catalogMatchSuggestions: CatalogMatchSuggestion[] | undefined;
+  /** Set on the Y/M/M path when Claude returns an accepted pick (item 65). */
+  let llmResolutionForLearn: LlmYmmsResolution | undefined;
   // Item 54: never invent odometer. Only forward listing-actual miles to intel;
   // when absent, omit mileage so Cox prices at segment average.
   const actualMileage =
@@ -370,6 +373,7 @@ async function performMmrCall(
         },
         buildLlmYmmsDeps(db, env),
       ));
+    llmResolutionForLearn = llmResolution;
 
     if (llmResolution.kind !== "fallback") {
       try {
@@ -664,6 +668,22 @@ async function performMmrCall(
         ? { mileageMethod: "actual" as const }
         : {}),
   };
+
+  // Item 65 — best-effort alias learning after a trusted LLM pick produces MMR.
+  if (llmResolutionForLearn?.kind === "llm_hit" && make && model) {
+    try {
+      const learnDb = getSupabaseClient(env);
+      await maybeLearnIngestStyleAlias(learnDb, {
+        listingMake: make,
+        listingModel: model,
+        listingTrim: params.trim,
+        llmResolution: llmResolutionForLearn,
+      });
+    } catch (err) {
+      logError("valuation", "ingest.llm_alias_learn_failed", err);
+    }
+  }
+
   return {
     kind: "hit",
     result,

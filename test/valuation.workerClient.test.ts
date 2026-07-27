@@ -9,6 +9,7 @@ import {
 import { EMPTY_REFERENCE, type ReferenceData } from "../src/valuation/normalizeMmrParams";
 import { loadMmrReferenceData } from "../src/valuation/loadMmrReferenceData";
 import type { Env } from "../src/types/env";
+import { upsertMmrStyleAlias } from "../src/persistence/mmrStyleAliases";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -45,6 +46,18 @@ function makeSupabaseMock() {
 
 vi.mock("../src/persistence/supabase", () => ({
   getSupabaseClient: vi.fn(() => makeSupabaseMock()),
+}));
+
+vi.mock("../src/persistence/mmrStyleAliases", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/mmrStyleAliases")>();
+  return {
+    ...actual,
+    upsertMmrStyleAlias: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock("../src/persistence/llmYmmsDecisions", () => ({
+  insertLlmYmmsDecision: vi.fn().mockResolvedValue(undefined),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -1031,6 +1044,31 @@ describe("item 57 §6 — precomputed llmResolution opt (batched ingest path)", 
     const sentBody = JSON.parse(ymmInit.body as string) as Record<string, unknown>;
     expect(sentBody.model).toBe("1500");
     expect(sentBody.trim).toBe("4D Crew Cab Big Horn");
+    expect(upsertMmrStyleAlias).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        aliasKey: "ram|1500 bighorn|big horn",
+        canonicalMake: "Ram",
+        canonicalModel: "1500",
+        canonicalStyle: "4D Crew Cab Big Horn",
+        source: "ingest_learned",
+      }),
+    );
+  });
+
+  it("does not learn an alias when llmResolution is alias_hit", async () => {
+    vi.mocked(upsertMmrStyleAlias).mockClear();
+    const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    await getMmrLookupOutcome(
+      { year: 2022, make: "Ram", model: "1500 Bighorn", trim: "big horn", mileage: 30_000 },
+      BASE_ENV,
+      { llmResolution: { kind: "alias_hit", make: "Ram", model: "1500", style: "4D Crew Cab Big Horn" } },
+    );
+
+    expect(upsertMmrStyleAlias).not.toHaveBeenCalled();
   });
 
   it("falls through to the normal catalog cascade when llmResolution is a fallback (e.g. llm_disabled)", async () => {

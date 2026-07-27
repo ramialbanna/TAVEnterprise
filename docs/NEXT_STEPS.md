@@ -1,8 +1,10 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-25 · **Focus:** **62** v1 shipped; **63** opened (Craigslist ingest adapter). **61** deployed + soaking. **60** Phase A shipped. **57** live + Sonnet 5. **59** expanded — Max buy / YMMS linkage analysis (§59).
+**Last updated:** 2026-07-27 · **Focus:** **64** shipped + soaked (`b0eda58`); **65** opened (LLM → offline matcher learning). **59** Max buy ingest **100%** post-deploy (§59 gap closed). **63** Craigslist next build. Refill Anthropic credits before next ingest soak.
 
 > **Fresh chat prompt:**
+> **2026-07-27 (current):** **64** shipped (`b0eda58`) — catalog **2013–2027**, description in offline/live matcher. **2-day soak** (excluding `llm_unavailable` from credit outage): overall MMR **~73%** (flat vs prior 2d); pre-2016 **~58%** (+4 pts); `model_variant_missing` / `trim_missing` down ~30–48%. **`catalog_not_synced` = 0.** Credit outage 7/26–27 tanked raw funnel — refill before re-judging. **59** ingest Max buy **100%** on MMR hits after deploy (`c49c49f` ~14:43 UTC 7/25); 7/25 partial day only explains the earlier ~76% headline. **65** opened — harvest `llm_ymms_decisions` into `mmr_style_aliases` + offline scorer tuning (not building yet). **Next build: item 63** (Craigslist adapter). See §64 soak notes, §65, §59 Max buy gap.
+>
 > Sprint through **2026-07-16**: **55** Phase C shipped including catalog **2016–2027**. Worker **`9e4d2765`** (missing-years cron sync + skip-on-502). Web **deployed** (`tav-enterprise.vercel.app` — suggestions UI live). **`cox_catalog_tree`:** **35,978 rows** (2016–2027; +2,692 on 2026-07-16, 1 model skipped). Daily cron syncs **missing years only**. **Funnel (live ingests):** post-Phase C ~**49.8%** MMR hit vs **48.7%** post-Phase B; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak for offline-matcher lift. **`SCRAPER_REVIEW_MODE` permanent.** **51** buyer checklist. See §55 Phase C.
 >
 > **2026-07-18:** Claude API access unblocked (in principle). Decided to replace/augment **55**'s offline matcher with an LLM (Claude) call per listing — full plan, locked decisions, and rollout phases live in [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md). **Read that doc first**, this file's item **57** below is just the tracker entry. **Same day:** built and merged all of Phase 0 (`scripts/eval-llm-ymms.mjs`) and Phase 1's code (`src/llm/*`, `src/valuation/resolveListingWithLLM.ts`, migration `0066`, wired into `workerClient.ts` behind `LLM_YMMS_ENABLED="false"`, 30 new unit tests, full suite green at 1252 tests). **Nothing has actually run against real data** — no `ANTHROPIC_API_KEY` is configured anywhere yet, and the ingest batch-concurrency fix (doc §6) is still not done, so the flag must stay off. Next actual work: get the real key into `.dev.vars`, run `npm run eval:llm-ymms`, read the results.
@@ -15,7 +17,9 @@
 
 > **2026-07-23 (later):** On the live **custom-vehicle-scraper** Apify task(s), ops turned on **Fetch Listing Photos & Videos** (and **Fetch Detailed Item Info** where applicable) so datasets include full seller text + media, not search-feed thumbnails only. **Product note → item 62:** replicate the Facebook listing on the **opportunity detail page** (photo gallery, description, price/location/seller) so closers triage without opening Facebook. Ingest/DB/UI **not built yet** — today `raw_listings.raw_item` often has `primaryImage` only; `normalized_listings.images` is still empty and detail has no listing mirror block. See §62; ties to item **60** (persist description), item **57** Phase 2 (vision follow-up on low-confidence Y/M/M/S), and [`docs/04-operations/apify.md`](04-operations/apify.md) (refresh task config note when verified on Dallas/Oklahoma tasks).
 >
-> **2026-07-25:** Production analysis (since 2026-07-23 17:00 local) confirms **Y/M/M/S → MMR is mostly working** (~68% hit; Cox `lookup_trim` stored on every hit) but **Y/M/M/S is not linked to Max buy**. Ingest never calls Max buy; detail auto-run requires `opportunity.style` from `listing.trim` (null on **66%** of MMR hits) even though `valuation_snapshots.lookup_trim` has the Cox style; Max buy re-MMRs with parsed listing fields / `"base"`, not ingest's resolved Cox tokens. **0 / 3,537** new listings got a `maxbuy_recommendations` row. Full breakdown → §59.
+> **2026-07-25:** Production analysis (since 2026-07-23 17:00 local) confirms **Y/M/M/S → MMR is mostly working** (~68% hit; Cox `lookup_trim` stored on every hit) but **Y/M/M/S is not linked to Max buy**. Ingest never calls Max buy; detail auto-run requires `opportunity.style` from `listing.trim` (null on **66%** of MMR hits) even though `valuation_snapshots.lookup_trim` has the Cox style; Max buy re-MMRs with parsed listing fields / `"base"`, not ingest's resolved Cox tokens. **0 / 3,537** new listings got a `maxbuy_recommendations` row. Full breakdown → §59. *(Update same day: item **59** shipped — ingest-time Max buy + identity bridge; `c49c49f`, prod `c244a655`.)*
+>
+> **2026-07-25 (evening):** Buyer case — **2015 BMW X3 xDrive28d** (`a36595cc…`): rich **description** in DB (*"xDrive28d"*, diesel) but title sparse (`2015 BMW X3`), ingest **`trim_missing`**, no LLM call. Root cause: **`cox_catalog_tree` starts at 2016** → item **57** LLM returns `catalog_not_synced` before Claude runs; offline matcher also skipped; live catalog fallback uses **title + trim only**, not description. MMR Lab worked only via **manual** Cox pick (`X SERIES` / `X3 4D SUV 28D XDRIVE`). **44×** `trim_missing` on **2015** listings in recent cohort alone. → **Item 64:** extend offline catalog + LLM gates to **2013**; improve overall **MMR hit rate** (~**68%** today — target higher; see §64).
 
 **Legend:** `[x]` done Â· `[~]` in progress Â· `[ ]` not done
 
@@ -125,11 +129,13 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
-| **59** | **Max buy not shown / YMMS not linked** — no ingest-time evaluate; `lookup_trim` not exposed as `style`; detail + Max buy worker use `listing.trim` not Cox tokens — see §59 | **High** | [ ] |
+| **59** | **Max buy / YMMS linkage at ingest** — identity bridge + background evaluate on MMR hit; §59 (**shipped** `c49c49f`, prod `c244a655`; soak ongoing) | **High** | [~] |
 | **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
 | **61** | **LLM auto-accept above 0.50 confidence** — ignore `needsReview`; §61 (**deployed, soak ongoing**) | **High** | [~] |
 | **62** | **In-app listing mirror on detail** — photos + description + seller context; §62 (**v1 shipped**; multi-photo waits on Apify payload) | **High** | [~] |
 | **63** | **Craigslist source adapter + scheduled scraper ingest** — wire `POST /ingest` listings into pipeline; §63 | **High** | [ ] |
+| **64** | **Catalog 2013–2027 + MMR hit-rate lift** — shipped `b0eda58`; soak done (modest pre-2016 lift, overall flat ~73%); §64 | **Critical** | [~] |
+| **65** | **LLM → offline matcher learning loop** — Phase 1 alias write shipped in code; §65 | **Medium** | [~] |
 
 **Full status board (incl. shipped):**
 
@@ -154,11 +160,13 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 | **57** | **LLM Y/M/M/S normalization via Claude API** — Phase 0/1 built + deployed (flag off); blocked on Anthropic credits; ingest concurrency fix (§6 Phase 1) done | **Critical** | [~] |
 | **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
-| **59** | **Max buy not shown / YMMS not linked to Max buy** — reported 2026-07-21; expanded 2026-07-25 with production funnel + identity gap analysis — see §59 | **High** | [ ] |
+| **59** | **Max buy / YMMS linkage at ingest** — identity bridge + background evaluate; §59 (**shipped** `c49c49f`; soak ongoing) | **High** | [~] |
 | **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
 | **61** | **LLM trust threshold — confidence > 0.50, ignore needsReview** — see §61; **deployed, soak ongoing** | **High** | [~] |
 | **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [~] |
 | **63** | **Craigslist ingest adapter** — scheduled scraper → `POST /ingest`; see §63 | **High** | [ ] |
+| **64** | **Extend Cox catalog to 2013 + improve MMR hit rate** — shipped `b0eda58`; soak §64 | **Critical** | [~] |
+| **65** | **LLM → offline matcher learning** — Phase 1 alias on `llm_hit`+MMR shipped; scorer tuning backlog §65 | **Medium** | [~] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1608,11 +1616,26 @@ Ingest resolves ambiguous titles to Cox style tokens for MMR (alias → LLM → 
 
 ### Exit criteria
 
-- [ ] Product decision: evaluate Max buy at ingest time vs. needs-action-only backfill vs. something else
-- [ ] Cox-resolved Y/M/M/S from ingest (`lookup_trim` at minimum) flows to opportunity detail + Max buy evaluate — not only parsed `listing.trim`
+- [x] Product decision: evaluate Max buy at ingest time vs. needs-action-only backfill vs. something else — **ingest-time on MMR hit** (`c49c49f`)
+- [x] Cox-resolved Y/M/M/S from ingest (`lookup_trim` at minimum) flows to opportunity detail + Max buy evaluate — not only parsed `listing.trim`
 - [ ] Needs action tab shows a Max buy badge (or an honest "add VIN" hint) for the large majority of rows, not just previously-opened ones
-- [ ] No invented mileage/trim to force an evaluation (item 54)
-- [ ] No regression to ingest batch timing (same budget concern as item 57 §6)
+- [x] No invented mileage/trim to force an evaluation (item 54)
+- [x] No regression to ingest batch timing (same budget concern as item 57 §6)
+
+### Max buy coverage gap — investigated 2026-07-27 (not a bug)
+
+**Question:** Since 7/25 deploy, only **~76%** of MMR-hit listings had a `maxbuy_recommendations` row — expected ~100%.
+
+**Finding:** **100% after deploy.** The gap is entirely the **partial deploy day** on 2026-07-25.
+
+| Day / bucket | MMR-hit listings | With Max buy | Coverage |
+|--------------|------------------|--------------|----------|
+| 7/25 **before** deploy (~14:43 UTC) | 598 | 10 | ~2% (pre-ship ingests) |
+| 7/25 **after** deploy | 669 | 669 | **100%** |
+| 7/26 | 745 | 745 | **100%** |
+| 7/27 | 451 | 451 | **100%** |
+
+All 588 “missing” rows are 7/25 pre-deploy MMR hits (no `scheduleIngestMaxbuyEvaluate` yet). None had missing price/region/YMM — `buildIngestMaxbuyEvaluateBody` gates were not the cause. **No code fix needed**; optional one-time backfill for pre-deploy 7/25 MMR hits if buyers want badges on those rows.
 
 ---
 
@@ -1746,6 +1769,101 @@ Ingest resolves ambiguous titles to Cox style tokens for MMR (alias → LLM → 
 - [ ] Staging: scraper or fixture POST → **`processed > 0`**, `normalized_listings.source = craigslist`
 - [ ] Production enabled after staging soak
 - [ ] [`craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) updated with ship date and any field deltas from real scraper output
+
+---
+
+## 64 — Extend Cox catalog to 2013 + improve MMR hit rate
+
+**Opened:** 2026-07-25 (buyer case: **2015 BMW X3 xDrive28d** — description had full trim/diesel; ingest **`trim_missing`**; MMR only after manual MMR Lab Cox pick)
+
+**Problem:** Live-ingest **MMR hit rate ~68%** (3,530 listings since 2026-07-23 17:00 local). **~32%** land in Scraper review / no MMR. Buyer inventory includes **2013–2015** vehicles; today’s offline path does not cover them well.
+
+### Current catalog floor (2026-07-25)
+
+| Layer | Year range today | Effect on pre-2016 |
+|-------|------------------|---------------------|
+| **`tav.cox_catalog_tree`** | **2016–2027** (`buildCoxCatalogYearRange`: current−10 … current+1) | No rows for **2013–2015** |
+| **Item 57 LLM** | Gated on `hasCoxCatalogTreeForYear` | **`catalog_not_synced`** — Claude **never called** (description unused) |
+| **Offline matcher (item 55)** | Same tree gate | Skipped |
+| **Live catalog fallback** | Cox API supports older years | Uses **title + trim only** — not **description** |
+
+**Example (production):** Listing `a36595cc…` — title `2015 BMW X3`, description *"2015 BMW X3 AWD 4dr xDrive28d Automatic"* + diesel; Cox style for MMR Lab = `X3 4D SUV 28D XDRIVE` under model `X SERIES`. Ingest: **`trim_missing`**, no `lookup_trim`. **44** listings with **`trim_missing`** on **2015** alone in recent cohort.
+
+### Goal
+
+1. **Extend Cox catalog options through 2013** — sync **`cox_catalog_tree`** for **2013–2027** (buyer request: **down to 2013**).
+2. **Raise ingest MMR hit rate** — from ~**68%** toward a higher sustained target (measure on live ingests, same cohort rules as item **55** Phase C).
+
+### Implementation sketch
+
+1. **Catalog sync** — widen `buildCoxCatalogYearRange()` (or set explicit floor **2013**) in `src/catalog/intelCatalogClient.ts`; run admin/cron sync for **2013, 2014, 2015** (and any other missing years). Update item **55** Phase C docs / cron behavior (`missing`-years mode should pick these up once range widens).
+2. **LLM (item 57)** — after tree populated, pre-2016 listings get Claude + full Cox subtree; item **60** description already wired in prefetch.
+3. **Live matcher gap (follow-up)** — pass **description** (and/or enriched title) into `resolveListingToCatalogForIngest` / `rankCatalogStylesForListing` when title is sparse — item **60** alone does not help when LLM is tree-gated.
+4. **Measure** — re-run funnel on live ingests: overall MMR hit %, `trim_missing` / `model_variant_missing` / `catalog_not_synced` shares, pre-2016 sub-cohort.
+
+### Related
+
+- Item **55** / **57** / **60** — catalog tree, LLM, listing text
+- Item **59** — Max buy depends on ingest MMR hit + Cox tokens
+- [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) — item **61** noted pre-2016 gap
+
+### Exit criteria
+
+- [x] `cox_catalog_tree` populated for **2013–2015** (verify row counts per year/make) — **~2.6k / ~2.9k / ~3.2k rows** per year; **44,675** total tree rows (2026-07-27)
+- [x] LLM + offline matcher run for **2013+** listings (no `catalog_not_synced` solely due to year floor) — **0** `catalog_not_synced` in 4-day window
+- [ ] **2015 BMW X3**-class re-ingest: Cox style resolved from description → **ingest MMR hit** (not manual MMR Lab) — no matching ingests in soak window
+- [ ] Live-ingest **MMR hit rate** measurably above ~**68%** baseline — **not met overall**; **~73%** when excluding `llm_unavailable` (credit outage), flat vs prior 2d; pre-2016 **~58%** (+4 pts)
+- [x] Top miss reasons (`model_variant_missing`, `trim_missing`, `cox_no_data`) down vs 2026-07-25 baseline — **`model_variant_missing`** 766→398, **`trim_missing`** 334→229 (clean 2d compare); `cox_no_data` slightly up
+
+### Soak notes (2026-07-27, 4-day window)
+
+Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on comparison (Anthropic credits ran out 7/26).
+
+| Metric | Prior 2d (clean) | Last 2d (clean) |
+|--------|------------------|-----------------|
+| Overall MMR hit | **73.7%** | **72.1%** |
+| Pre-2016 (2013–15) | **54.0%** | **58.3%** |
+| 2015 only | 47.6% | **55.9%** |
+
+**Verdict:** Catalog extension + description-in-matcher = **modest pre-2016 win**, not a big overall lift. Refill credits and re-soak before closing item.
+
+---
+
+## 65 — LLM → offline matcher learning loop
+
+**Opened:** 2026-07-27 (buyer question: can production `llm_ymms_decisions` improve the pre-LLM CF Worker path?)
+
+**Problem:** Item **57** Claude calls cost money and fail when credits run out (`llm_unavailable` → ~45% of misses during outage). Item **55** offline matcher (`matchListingToCoxCatalog.ts`) still runs as fallback but does not learn from Claude's successful picks. **`mmr_style_aliases` has 0 rows** — the alias fast-path and `ingest_learned` write path exist in code but nothing populates them from production traffic.
+
+**Goal:** Use LLM selections as a **teacher** for the deterministic ingest path — reduce repeat Claude calls, improve offline fallback when LLM is down, without trying to replicate full LLM reasoning in heuristics.
+
+**What production data offers (7-day sample, pre-outage):**
+
+| Signal | Count | Use |
+|--------|-------|-----|
+| `llm_hit` (avg conf **0.81**) | ~5,500 | High-trust `(title/make/model/trim) → Cox style` mappings |
+| `llm_needs_review` (avg conf **0.49**) | ~2,100 | Candidate aliases only when MMR also hit or buyer confirmed |
+| `llm_invalid_pick` | ~20 | Negative examples — do not learn |
+
+**Implementation sketch (when picked up — read [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) §Phase 3 first):**
+
+1. **Alias learning (highest ROI) — Phase 1 shipped in code 2026-07-27:** After ingest `llm_hit` + MMR hit, `maybeLearnIngestStyleAlias` (`src/valuation/learnIngestStyleAlias.ts`) upserts `mmr_style_aliases` (`source: "ingest_learned"`) keyed on raw `(make, model, trim)` → Cox tokens from the LLM pick. Wired in `performMmrCall` (`workerClient.ts`); best-effort, never blocks ingest. **Not yet deployed / no historical backfill** — aliases populate forward on new ingests only until optional backfill script.
+2. **Offline scorer tuning** — Mine `llm_ymms_decisions` for systematic offline-matcher misses: variant parser gaps (`"cherokee latitude"` → `CHEROKEE FWD V6`), hybrid model splits (`SONATA HYBRID`), truck cab/bed tokens. Update `selectCatalogModelVariant.ts`, signal bonuses in `matchListingToCoxCatalog.ts`, and item **64** `listingCatalogEvidence.ts` — not open-ended ML.
+3. **Eval harness** — Extend `scripts/eval-llm-ymms.mjs` (or new script) to score offline matcher **before vs after** alias/rules against historical `llm_hit` rows; target ≥X% recall on repeat combos without Claude.
+4. **Trust rules** — Do **not** auto-learn from `llm_invalid_pick`, sub-0.5 confidence, or picks with no MMR hit. Buyer detail **Apply** on suggested match remains gold-label override (existing item **46** loop).
+5. **Known offline bug** — Fix `parserGarbagePenalty` regex in `matchListingToCoxCatalog.ts` (line ~83 — `${...}` inside non-template regex literal) if fallback path stays active.
+
+**Related:** item **57** (LLM resolver, alias fast-path already wired in `resolveListingWithLLM.ts`), item **55** (offline matcher), item **46** (manual Apply → alias), item **64** (description evidence).
+
+**Not in scope:** Replacing Claude with offline-only; vision tier; seller classification.
+
+### Exit criteria
+
+- [x] Accepted LLM picks (`llm_hit` + MMR hit) persist to `mmr_style_aliases` (`ingest_learned`) — code shipped; deploy + forward soak pending
+- [ ] Repeat listing combos resolve via alias fast-path without Claude call (measure skip rate)
+- [ ] Offline matcher recall improves on held-out `llm_hit` sample (document baseline + after)
+- [ ] No bad aliases from low-confidence or MMR-miss picks (guardrails tested)
+- [ ] `LLM-YMMS-Normalization.md` §Phase 3 updated when shipped
 
 ---
 
