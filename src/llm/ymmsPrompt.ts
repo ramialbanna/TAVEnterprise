@@ -101,10 +101,39 @@ export function buildCatalogSubtreeText(rows: readonly CoxCatalogTreeRow[]): str
     .join("\n");
 }
 
-export function buildYmmsUserPrompt(input: YmmsPromptListingInput, rows: readonly CoxCatalogTreeRow[]): string {
+/** Item 66 — Anthropic `cache_control` for the stable (year, make) catalog prefix. */
+export const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral" as const };
+
+/** Split prompt for item 66 prompt caching — catalog first, listing evidence second. */
+export type YmmsAnthropicPrompt = {
+  /** Stable per (year, make); marked with `cache_control` in the Messages API payload. */
+  catalogCacheText: string;
+  /** Per-listing fields; sent after the cached catalog block. */
+  listingEvidenceText: string;
+};
+
+/**
+ * Stable Cox catalog subtree for a year+make — identical across all listings in
+ * the same batch that share those tokens (item 66 prompt-cache prefix).
+ */
+export function buildYmmsCatalogCacheText(
+  input: Pick<YmmsPromptListingInput, "year" | "make">,
+  rows: readonly CoxCatalogTreeRow[],
+): string {
   const lines: string[] = [];
   lines.push(`Year: ${input.year}`);
   lines.push(`Make (already resolved, do not change): ${input.make}`);
+  lines.push("");
+  lines.push(
+    `All Cox models + styles that exist for ${input.year} ${input.make} (pick model and style verbatim from this list):`,
+  );
+  lines.push(buildCatalogSubtreeText(rows));
+  return lines.join("\n");
+}
+
+/** Per-listing evidence — changes on every ingest call. */
+export function buildYmmsListingEvidenceText(input: YmmsPromptListingInput): string {
+  const lines: string[] = [];
   lines.push(
     "Parser year/make/model/trim below are automated guesses (hypothesis only) — " +
       "prefer listing title and seller description as primary evidence.",
@@ -130,12 +159,23 @@ export function buildYmmsUserPrompt(input: YmmsPromptListingInput, rows: readonl
   if (input.location?.trim()) {
     lines.push(`Listing location: ${input.location.trim()}`);
   }
-  lines.push("");
-  lines.push(
-    `All Cox models + styles that exist for ${input.year} ${input.make} (pick model and style verbatim from this list):`,
-  );
-  lines.push(buildCatalogSubtreeText(rows));
   return lines.join("\n");
+}
+
+export function buildYmmsAnthropicPrompt(
+  input: YmmsPromptListingInput,
+  rows: readonly CoxCatalogTreeRow[],
+): YmmsAnthropicPrompt {
+  return {
+    catalogCacheText: buildYmmsCatalogCacheText(input, rows),
+    listingEvidenceText: buildYmmsListingEvidenceText(input),
+  };
+}
+
+/** Flat join for tests/eval — catalog block precedes listing evidence (item 66 order). */
+export function buildYmmsUserPrompt(input: YmmsPromptListingInput, rows: readonly CoxCatalogTreeRow[]): string {
+  const { catalogCacheText, listingEvidenceText } = buildYmmsAnthropicPrompt(input, rows);
+  return `${catalogCacheText}\n\n${listingEvidenceText}`;
 }
 
 export type YmmsProposal = {

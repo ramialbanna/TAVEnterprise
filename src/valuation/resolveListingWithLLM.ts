@@ -20,7 +20,12 @@ import {
 import { hasCoxCatalogTreeForYear, loadCoxCatalogTreeForMake } from "../persistence/coxCatalogTree";
 import type { CoxCatalogTreeRow } from "./matchListingToCoxCatalog";
 import { callAnthropicForYmms, type AnthropicCallResult } from "../llm/anthropicClient";
-import { buildYmmsUserPrompt, classifyYmmsProposalIngestOutcome, type YmmsProposal } from "../llm/ymmsPrompt";
+import {
+  buildYmmsAnthropicPrompt,
+  classifyYmmsProposalIngestOutcome,
+  type YmmsAnthropicPrompt,
+  type YmmsProposal,
+} from "../llm/ymmsPrompt";
 
 export type LlmYmmsResolutionInput = {
   year: number;
@@ -66,7 +71,7 @@ export type LlmYmmsResolution =
 
 export type LlmYmmsDeps = {
   enabled: boolean;
-  callAnthropic: (userPrompt: string) => Promise<AnthropicCallResult>;
+  callAnthropic: (prompt: YmmsAnthropicPrompt) => Promise<AnthropicCallResult>;
   lookupStyleAlias: (aliasKey: string) => Promise<MmrStyleAlias | null>;
   hasTreeForYear: (year: number) => Promise<boolean>;
   loadTreeRows: (year: number, make: string) => Promise<CoxCatalogTreeRow[]>;
@@ -76,7 +81,7 @@ export type LlmYmmsDeps = {
 export function buildLlmYmmsDeps(db: SupabaseClient, env: Env): LlmYmmsDeps {
   return {
     enabled: env.LLM_YMMS_ENABLED === "true",
-    callAnthropic: (userPrompt: string) => callAnthropicForYmms({ env, userPrompt }),
+    callAnthropic: (prompt: YmmsAnthropicPrompt) => callAnthropicForYmms({ env, prompt }),
     lookupStyleAlias: (aliasKey: string) => lookupMmrStyleAlias(db, aliasKey),
     hasTreeForYear: (year: number) => hasCoxCatalogTreeForYear(db, year),
     loadTreeRows: (year: number, make: string) => loadCoxCatalogTreeForMake(db, year, make),
@@ -128,7 +133,7 @@ export async function resolveListingWithLLM(
   const rows = await deps.loadTreeRows(input.year, makeRaw);
   if (rows.length === 0) return { kind: "fallback", reason: "catalog_not_synced" };
 
-  const userPrompt = buildYmmsUserPrompt(
+  const prompt = buildYmmsAnthropicPrompt(
     {
       year: input.year,
       make: makeRaw,
@@ -145,7 +150,7 @@ export async function resolveListingWithLLM(
     rows,
   );
 
-  const callResult = await deps.callAnthropic(userPrompt);
+  const callResult = await deps.callAnthropic(prompt);
 
   if (callResult.kind !== "ok") {
     return { kind: "fallback", reason: FALLBACK_REASON_BY_CALL_KIND[callResult.kind] };

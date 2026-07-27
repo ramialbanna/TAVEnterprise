@@ -1,6 +1,6 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-27 · **Focus:** **64** shipped + soaked (`b0eda58`); **65** opened (LLM → offline matcher learning). **59** Max buy ingest **100%** post-deploy (§59 gap closed). **63** Craigslist next build. Refill Anthropic credits before next ingest soak.
+**Last updated:** 2026-07-27 · **Focus:** **66** shipped (prompt caching; prod `aadd46ef`). **63** Craigslist next build.
 
 > **Fresh chat prompt:**
 > **2026-07-27 (current):** **64** shipped (`b0eda58`) — catalog **2013–2027**, description in offline/live matcher. **2-day soak** (excluding `llm_unavailable` from credit outage): overall MMR **~73%** (flat vs prior 2d); pre-2016 **~58%** (+4 pts); `model_variant_missing` / `trim_missing` down ~30–48%. **`catalog_not_synced` = 0.** Credit outage 7/26–27 tanked raw funnel — refill before re-judging. **59** ingest Max buy **100%** on MMR hits after deploy (`c49c49f` ~14:43 UTC 7/25); 7/25 partial day only explains the earlier ~76% headline. **65** opened — harvest `llm_ymms_decisions` into `mmr_style_aliases` + offline scorer tuning (not building yet). **Next build: item 63** (Craigslist adapter). See §64 soak notes, §65, §59 Max buy gap.
@@ -136,6 +136,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **63** | **Craigslist source adapter + scheduled scraper ingest** — wire `POST /ingest` listings into pipeline; §63 | **High** | [ ] |
 | **64** | **Catalog 2013–2027 + MMR hit-rate lift** — shipped `b0eda58`; soak done (modest pre-2016 lift, overall flat ~73%); §64 | **Critical** | [~] |
 | **65** | **LLM → offline matcher learning loop** — Phase 1 alias write shipped in code; §65 | **Medium** | [~] |
+| **66** | **Anthropic prompt caching for item 57 Y/M/M/S** — shipped prod `aadd46ef`; cost soak pending; §66 | **High** | [~] |
 
 **Full status board (incl. shipped):**
 
@@ -167,6 +168,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **63** | **Craigslist ingest adapter** — scheduled scraper → `POST /ingest`; see §63 | **High** | [ ] |
 | **64** | **Extend Cox catalog to 2013 + improve MMR hit rate** — shipped `b0eda58`; soak §64 | **Critical** | [~] |
 | **65** | **LLM → offline matcher learning** — Phase 1 alias on `llm_hit`+MMR shipped; scorer tuning backlog §65 | **Medium** | [~] |
+| **66** | **LLM prompt caching (item 57 cost)** — shipped prod `aadd46ef`; §66 | **High** | [~] |
 
 **Buyer email 2026-07-09 → item map:** #1→47 (+45) · #2→48 (+46) · #3→49 · #4→50 · #5→51 · #6→52 (+43) · #7→53
 
@@ -1864,6 +1866,38 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 - [ ] Offline matcher recall improves on held-out `llm_hit` sample (document baseline + after)
 - [ ] No bad aliases from low-confidence or MMR-miss picks (guardrails tested)
 - [ ] `LLM-YMMS-Normalization.md` §Phase 3 updated when shipped
+
+---
+
+## 66 — Anthropic prompt caching for item 57 Y/M/M/S
+
+**Opened:** 2026-07-27 (buyer feedback: ~**$200** Anthropic spend in ~4 days at current ingest volume)
+
+**Status:** **Shipped 2026-07-27** — staging `150eb51b`, production `aadd46ef`. Cost/funnel soak pending.
+
+**Problem:** Every ingest Y/M/M/S call sends the **full Cox catalog subtree** for `(year, make)` in the user prompt (~**175** rows median, **429** p90; Ford/Chevy **300–450+**). That block is **identical** across thousands of listings for the same year+make, but today `callAnthropicForYmms` (`src/llm/anthropicClient.ts`) sends it as uncached input every time — the dominant token cost driver alongside **`claude-sonnet-5`** on **every** listing (item **57**).
+
+**Goal:** Add Anthropic **prompt caching** so the stable prefix (system prompt + catalog subtree for a given year+make) is cached and reused across ingests — **lower cost with no change** to prompt content, model, or deterministic Cox gate.
+
+**Spec / API reference:** [`docs/03-api/claude-prompt-caching.md`](03-api/claude-prompt-caching.md) — read first in a fresh chat.
+
+**Implementation sketch (when picked up):**
+
+1. **Restructure the Messages API payload** in `anthropicClient.ts` — split user content into cacheable vs per-listing blocks (catalog via `buildCatalogSubtreeText` from `ymmsPrompt.ts` should be a stable prefix keyed by `(year, make)`).
+2. **Apply `cache_control`** — explicit breakpoint on the catalog block (or automatic caching at request level if sufficient); keep listing title/description as the uncached tail.
+3. **Eval + cost measure** — compare Anthropic usage before/after on the same ingest volume; confirm MMR hit rate / `llm_hit` rate unchanged (same cohort rules as item **64** soak).
+4. **Optional:** log cache read/write token counts on `llm_ymms_decisions` or structured logs for dashboards.
+
+**Related:** item **57** (LLM resolver), item **65** (alias skip — complementary cost lever), [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) §cost discipline.
+
+**Not in scope here:** Model downgrade (Haiku tiering), offline-first gating, catalog pre-filter — separate items if needed.
+
+### Exit criteria
+
+- [x] `callAnthropicForYmms` uses prompt caching for the `(year, make)` catalog prefix
+- [ ] Production ingest: measurable reduction in Anthropic input cost per listing (document baseline + after)
+- [ ] No regression in MMR hit rate or valid-Cox-token rate vs pre-cache baseline
+- [ ] `LLM-YMMS-Normalization.md` updated with ship date / cache strategy
 
 ---
 

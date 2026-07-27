@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCatalogSubtreeText,
+  buildYmmsAnthropicPrompt,
+  buildYmmsCatalogCacheText,
+  buildYmmsListingEvidenceText,
   buildYmmsUserPrompt,
   classifyYmmsProposalIngestOutcome,
   isValidCoxPick,
@@ -40,8 +43,54 @@ describe("buildCatalogSubtreeText", () => {
   });
 });
 
+describe("buildYmmsCatalogCacheText", () => {
+  it("includes year, make, and the full catalog subtree only", () => {
+    const rows = [row("1500", "4D Crew Cab Big Horn")];
+    const text = buildYmmsCatalogCacheText({ year: 2022, make: "Ram" }, rows);
+
+    expect(text).toContain("Year: 2022");
+    expect(text).toContain("Make (already resolved, do not change): Ram");
+    expect(text).toContain("4D Crew Cab Big Horn");
+    expect(text).not.toContain("Listing title");
+    expect(text).not.toContain("hypothesis");
+  });
+});
+
+describe("buildYmmsListingEvidenceText", () => {
+  it("includes per-listing evidence without the catalog subtree", () => {
+    const text = buildYmmsListingEvidenceText({
+      year: 2022,
+      make: "Ram",
+      model: "1500",
+      trim: "bighorn",
+      title: "2022 Ram 1500 Big Horn Crew Cab 4x4",
+      description: "Clean title",
+      price: 32000,
+      priorMissReason: "model_variant_missing",
+    });
+
+    expect(text).toContain("hypothesis");
+    expect(text).toContain("2022 Ram 1500 Big Horn Crew Cab 4x4");
+    expect(text).toContain("Clean title");
+    expect(text).not.toContain("All Cox models + styles");
+  });
+});
+
+describe("buildYmmsAnthropicPrompt", () => {
+  it("splits catalog cache from listing evidence", () => {
+    const rows = [row("1500", "4D Crew Cab Big Horn")];
+    const parts = buildYmmsAnthropicPrompt(
+      { year: 2022, make: "Ram", title: "2022 Ram 1500" },
+      rows,
+    );
+
+    expect(parts.catalogCacheText).toContain("4D Crew Cab Big Horn");
+    expect(parts.listingEvidenceText).toContain("2022 Ram 1500");
+  });
+});
+
 describe("buildYmmsUserPrompt", () => {
-  it("includes listing evidence and the full catalog subtree", () => {
+  it("includes listing evidence and the full catalog subtree (catalog first)", () => {
     const rows = [row("1500", "4D Crew Cab Big Horn")];
     const prompt = buildYmmsUserPrompt(
       {
@@ -57,13 +106,16 @@ describe("buildYmmsUserPrompt", () => {
       rows,
     );
 
+    const catalogIdx = prompt.indexOf("4D Crew Cab Big Horn");
+    const titleIdx = prompt.indexOf("2022 Ram 1500 Big Horn Crew Cab 4x4");
+    expect(catalogIdx).toBeGreaterThan(-1);
+    expect(titleIdx).toBeGreaterThan(catalogIdx);
+
     expect(prompt).toContain("Year: 2022");
     expect(prompt).toContain("Make (already resolved, do not change): Ram");
-    expect(prompt).toContain("2022 Ram 1500 Big Horn Crew Cab 4x4");
     expect(prompt).toContain("hypothesis");
     expect(prompt).toContain("Listing price: $32000");
     expect(prompt).toContain("model_variant_missing");
-    expect(prompt).toContain("4D Crew Cab Big Horn");
   });
 
   it("falls back to (none) placeholders when title/description are absent", () => {

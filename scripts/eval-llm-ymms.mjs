@@ -134,26 +134,49 @@ function buildCatalogSubtreeText(rows) {
     .join("\n");
 }
 
-function buildYmmsUserPrompt(input, rows) {
+const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral" };
+
+function buildYmmsCatalogCacheText(input, rows) {
   const lines = [];
   lines.push(`Year: ${input.year}`);
   lines.push(`Make (already resolved, do not change): ${input.make}`);
-  if (input.model) lines.push(`Parser-guessed model (may be wrong/incomplete): ${input.model}`);
-  if (input.trim) lines.push(`Parser-guessed trim (may be wrong/missing): ${input.trim}`);
-  if (typeof input.price === "number") lines.push(`Listing price: $${input.price}`);
-  if (input.priorMissReason) lines.push(`Why rules-based matching failed before: ${input.priorMissReason}`);
-  lines.push("");
-  lines.push("Listing title:");
-  lines.push(input.title?.trim() || "(none)");
-  lines.push("");
-  lines.push("Listing description:");
-  lines.push(input.description?.trim() || "(none)");
   lines.push("");
   lines.push(
     `All Cox models + styles that exist for ${input.year} ${input.make} (pick model and style verbatim from this list):`,
   );
   lines.push(buildCatalogSubtreeText(rows));
   return lines.join("\n");
+}
+
+function buildYmmsListingEvidenceText(input) {
+  const lines = [];
+  lines.push(
+    "Parser year/make/model/trim below are automated guesses (hypothesis only) — " +
+      "prefer listing title and seller description as primary evidence.",
+  );
+  if (input.model) lines.push(`Parser-guessed model (hypothesis): ${input.model}`);
+  if (input.trim) lines.push(`Parser-guessed trim (hypothesis): ${input.trim}`);
+  if (typeof input.price === "number") lines.push(`Listing price: $${input.price}`);
+  if (input.priorMissReason) lines.push(`Why rules-based matching failed before: ${input.priorMissReason}`);
+  lines.push("");
+  lines.push("Listing title (evidence):");
+  lines.push(input.title?.trim() || "(none)");
+  lines.push("");
+  lines.push("Listing description (evidence):");
+  lines.push(input.description?.trim() || "(none)");
+  return lines.join("\n");
+}
+
+function buildYmmsAnthropicPrompt(input, rows) {
+  return {
+    catalogCacheText: buildYmmsCatalogCacheText(input, rows),
+    listingEvidenceText: buildYmmsListingEvidenceText(input),
+  };
+}
+
+function buildYmmsUserPrompt(input, rows) {
+  const { catalogCacheText, listingEvidenceText } = buildYmmsAnthropicPrompt(input, rows);
+  return `${catalogCacheText}\n\n${listingEvidenceText}`;
 }
 
 function isValidCoxPick(proposal, rows) {
@@ -176,7 +199,7 @@ function classifyYmmsProposalIngestOutcome(proposal, rows) {
 
 // ── Mirrors src/llm/anthropicClient.ts — keep in sync ───────────────────────
 
-async function callAnthropicForYmms(apiKey, model, userPrompt) {
+async function callAnthropicForYmms(apiKey, model, prompt) {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -187,9 +210,17 @@ async function callAnthropicForYmms(apiKey, model, userPrompt) {
     body: JSON.stringify({
       model,
       max_tokens: 1024,
-      system: YMMS_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userPrompt }],
-      tools: [YMMS_TOOL],
+      system: [{ type: "text", text: YMMS_SYSTEM_PROMPT, cache_control: YMMS_PROMPT_CACHE_CONTROL }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt.catalogCacheText, cache_control: YMMS_PROMPT_CACHE_CONTROL },
+            { type: "text", text: prompt.listingEvidenceText },
+          ],
+        },
+      ],
+      tools: [{ ...YMMS_TOOL, cache_control: YMMS_PROMPT_CACHE_CONTROL }],
       tool_choice: { type: "tool", name: YMMS_TOOL_NAME },
     }),
   });
@@ -214,7 +245,16 @@ async function callAnthropicForYmms(apiKey, model, userPrompt) {
   ) {
     return { kind: "invalid_response", detail: "tool_use input missing required fields" };
   }
-  return { kind: "ok", proposal: p };
+  const usage = data.usage ?? {};
+  return {
+    kind: "ok",
+    proposal: p,
+    cacheUsage: {
+      cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+      cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+      uncachedInputTokens: usage.input_tokens ?? 0,
+    },
+  };
 }
 
 // ── Eval harness ─────────────────────────────────────────────────────────────
@@ -333,7 +373,7 @@ async function runOneListing(db, anthropicKey, model, intelBaseUrl, intelSecret,
     return out;
   }
 
-  const userPrompt = buildYmmsUserPrompt(
+  const prompt = buildYmmsAnthropicPrompt(
     {
       year: input.year,
       make: input.make,
@@ -350,7 +390,7 @@ async function runOneListing(db, anthropicKey, model, intelBaseUrl, intelSecret,
   console.log(`Catalog rows for ${input.year} ${input.make}: ${rows.length}`);
   console.log("Calling Anthropic...\n");
 
-  const callResult = await callAnthropicForYmms(anthropicKey, model, userPrompt);
+  const callResult = await callAnthropicForYmms(anthropicKey, model, prompt);
   if (callResult.kind !== "ok") {
     const out = { outcome: "llm_error", input, detail: callResult, catalogRowCount: rows.length };
     console.log(JSON.stringify(out, null, 2));
@@ -443,7 +483,7 @@ async function main() {
       continue;
     }
 
-    const userPrompt = buildYmmsUserPrompt(
+    const prompt = buildYmmsAnthropicPrompt(
       {
         year: row.year,
         make: row.make,
@@ -457,7 +497,7 @@ async function main() {
     );
 
     counts.llm_calls += 1;
-    const callResult = await callAnthropicForYmms(anthropicKey, model, userPrompt);
+    const callResult = await callAnthropicForYmms(anthropicKey, model, prompt);
 
     if (callResult.kind !== "ok") {
       counts.llm_error += 1;

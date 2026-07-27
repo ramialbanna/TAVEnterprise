@@ -1,5 +1,6 @@
 /**
  * Item 57 — LLM Y/M/M/S normalization: Worker-side Claude caller.
+ * Item 66 — prompt caching on the stable (year, make) catalog prefix.
  *
  * Single structured-output completion per call — no multi-turn tool loop, no
  * agent, no model-initiated follow-up requests (see
@@ -10,7 +11,14 @@ import { z } from "zod";
 import type { Env } from "../types/env";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log } from "../logging/logger";
-import { YMMS_TOOL, YMMS_TOOL_NAME, YMMS_SYSTEM_PROMPT, type YmmsProposal } from "./ymmsPrompt";
+import {
+  YMMS_TOOL,
+  YMMS_TOOL_NAME,
+  YMMS_PROMPT_CACHE_CONTROL,
+  YMMS_SYSTEM_PROMPT,
+  type YmmsAnthropicPrompt,
+  type YmmsProposal,
+} from "./ymmsPrompt";
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -33,8 +41,20 @@ const YmmsProposalSchema = z.object({
   needsReview: z.boolean(),
 });
 
+export type AnthropicPromptCacheUsage = {
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  uncachedInputTokens: number;
+};
+
 export type AnthropicCallResult =
-  | { kind: "ok"; proposal: YmmsProposal; latencyMs: number; model: string }
+  | {
+      kind: "ok";
+      proposal: YmmsProposal;
+      latencyMs: number;
+      model: string;
+      cacheUsage?: AnthropicPromptCacheUsage;
+    }
   | { kind: "not_configured" }
   | { kind: "timeout" }
   | { kind: "rate_limited" }
@@ -48,9 +68,44 @@ interface AnthropicMessageContentBlock {
   input?: unknown;
 }
 
+interface AnthropicUsage {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 interface AnthropicMessageResponse {
   content: AnthropicMessageContentBlock[];
   model?: string;
+  usage?: AnthropicUsage;
+}
+
+function parsePromptCacheUsage(usage: AnthropicUsage | undefined): AnthropicPromptCacheUsage | undefined {
+  if (!usage) return undefined;
+  return {
+    cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+    uncachedInputTokens: usage.input_tokens ?? 0,
+  };
+}
+
+function buildYmmsMessagesPayload(prompt: YmmsAnthropicPrompt): unknown[] {
+  return [
+    {
+      role: "user",
+      content: [
+        {
+          type: "text",
+          text: prompt.catalogCacheText,
+          cache_control: YMMS_PROMPT_CACHE_CONTROL,
+        },
+        {
+          type: "text",
+          text: prompt.listingEvidenceText,
+        },
+      ],
+    },
+  ];
 }
 
 /**
@@ -62,9 +117,10 @@ interface AnthropicMessageResponse {
 export async function callAnthropicForYmms(args: {
   env: Env;
   systemPrompt?: string;
-  userPrompt: string;
+  prompt: YmmsAnthropicPrompt;
 }): Promise<AnthropicCallResult> {
-  const { env, userPrompt } = args;
+  const { env, prompt } = args;
+  const systemText = args.systemPrompt ?? YMMS_SYSTEM_PROMPT;
 
   if (!isConfiguredSecret(env.ANTHROPIC_API_KEY)) {
     return { kind: "not_configured" };
@@ -87,9 +143,15 @@ export async function callAnthropicForYmms(args: {
       body: JSON.stringify({
         model,
         max_tokens: MAX_TOKENS,
-        system: args.systemPrompt ?? YMMS_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt }],
-        tools: [YMMS_TOOL],
+        system: [
+          {
+            type: "text",
+            text: systemText,
+            cache_control: YMMS_PROMPT_CACHE_CONTROL,
+          },
+        ],
+        messages: buildYmmsMessagesPayload(prompt),
+        tools: [{ ...YMMS_TOOL, cache_control: YMMS_PROMPT_CACHE_CONTROL }],
         tool_choice: { type: "tool", name: YMMS_TOOL_NAME },
       }),
       signal: controller.signal,
@@ -140,6 +202,15 @@ export async function callAnthropicForYmms(args: {
   }
 
   const message = data as AnthropicMessageResponse;
+  const cacheUsage = parsePromptCacheUsage(message.usage);
+  if (cacheUsage) {
+    log("llm_ymms.anthropic_cache_usage", {
+      model,
+      latency_ms: latencyMs,
+      ...cacheUsage,
+    });
+  }
+
   const toolUseBlock = Array.isArray(message.content)
     ? message.content.find((block) => block.type === "tool_use" && block.name === YMMS_TOOL_NAME)
     : undefined;
@@ -164,5 +235,6 @@ export async function callAnthropicForYmms(args: {
     proposal: parsed.data,
     latencyMs,
     model: message.model ?? model,
+    cacheUsage,
   };
 }
