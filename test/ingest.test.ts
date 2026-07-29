@@ -169,6 +169,24 @@ const VALID_PAYLOAD = JSON.stringify({
   items: [{ url: "https://fb.com/item/123", title: "2020 Toyota Camry SE, 62k miles, $18,500" }],
 });
 
+const CRAIGSLIST_PAYLOAD = JSON.stringify({
+  source: "craigslist",
+  run_id: "run-cl-001",
+  region: "dallas_tx",
+  scraped_at: new Date().toISOString(),
+  items: [{
+    url: "https://dallas.craigslist.org/ftw/cto/d/dallas-2019-honda-accord-sport/1234567890.html",
+    title: "2019 Honda Accord Sport - low miles",
+    year: 2019,
+    make: "honda",
+    model: "accord",
+    trim: "sport",
+    price: 18500,
+    mileage: 62000,
+    body_text: "Garage kept, one owner.",
+  }],
+});
+
 describe("POST /ingest", () => {
   it("returns 200 with item counts for a valid request", async () => {
     const sig = await sign(VALID_PAYLOAD, SECRET);
@@ -182,6 +200,29 @@ describe("POST /ingest", () => {
     expect(body.processed).toBe(1); // 1 item successfully inserted
     expect(body.rejected).toBe(0);
     expect(body.created_leads).toBe(0);
+  });
+
+  it("returns 200 with processed > 0 for craigslist source", async () => {
+    const sig = await sign(CRAIGSLIST_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(CRAIGSLIST_PAYLOAD, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.source).toBe("craigslist");
+    expect(body.processed).toBe(1);
+    expect(body.rejected).toBe(0);
+    expect(vi.mocked(upsertNormalizedListing)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        source: "craigslist",
+        make: "honda",
+        model: "accord",
+        description: "Garage kept, one owner.",
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("returns stored counters for a completed run (idempotency gate)", async () => {

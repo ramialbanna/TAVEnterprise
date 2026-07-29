@@ -18,6 +18,7 @@ import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
 import { upsertLead } from "../persistence/leads";
 import { writeValuationMissSnapshot } from "../persistence/valuationSnapshots";
 import { parseFacebookItem, detectFacebookDrift } from "../sources/facebook";
+import { parseCraigslistItem, detectCraigslistDrift } from "../sources/craigslist";
 import type { AdapterContext } from "../sources/facebook";
 import { writeSchemaDrift } from "../persistence/schemaDrift";
 import { computeIdentityKey } from "../dedupe/fingerprint";
@@ -215,13 +216,22 @@ export async function ingestCore(
       }
 
       // B: adapter
-      const adapterResult = source === "facebook"
-        ? parseFacebookItem(item, adapterCtx)
-        : { ok: false as const, reason: "unsupported_source", details: { source } };
+      const adapterResult =
+        source === "facebook"
+          ? parseFacebookItem(item, adapterCtx)
+          : source === "craigslist"
+            ? parseCraigslistItem(item, adapterCtx)
+            : { ok: false as const, reason: "unsupported_source", details: { source } };
 
       // B.1: schema drift detection — runs regardless of adapter result, never blocks
-      if (source === "facebook" && typeof item === "object" && item !== null && !Array.isArray(item)) {
-        const driftEvents = detectFacebookDrift(item as Record<string, unknown>);
+      if (typeof item === "object" && item !== null && !Array.isArray(item)) {
+        const itemRec = item as Record<string, unknown>;
+        const driftEvents =
+          source === "facebook"
+            ? detectFacebookDrift(itemRec)
+            : source === "craigslist"
+              ? detectCraigslistDrift(itemRec)
+              : [];
         if (driftEvents.length > 0) {
           try {
             await Promise.all(

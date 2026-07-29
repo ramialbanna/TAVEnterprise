@@ -1,0 +1,21 @@
+{
+  "url": "https://dallas.craigslist.org/ftw/cto/d/dallas-2019-honda-accord-sport/1234567890.html",
+  "title": "2019 Honda Accord Sport - low miles",
+  "source_listing_id": "1234567890",
+  "price": 18500,
+  "price_raw": "$18,500",
+  "year": 2019,
+  "make": "honda",
+  "model": "accord",
+  "trim": "sport",
+  "mileage": 62000,
+  "mileage_raw": "62,000 mi",
+  "vin": null,
+  "city": "Dallas",
+  "state": "TX",
+  "posted_at": "2026-05-20T10:15:00.000Z",
+  "seller_name": "private",
+  "seller_type": "owner",
+  "images": ["https://images.craigslist.org/00E0E0example_600x450.jpg"],
+  "body_text": "Full listing description with garage kept and one owner notes."
+}
