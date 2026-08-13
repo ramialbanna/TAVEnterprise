@@ -60,6 +60,25 @@ vi.mock("../src/persistence/llmYmmsDecisions", () => ({
   insertLlmYmmsDecision: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/persistence/coxCatalogTree", () => ({
+  loadCoxCatalogTreeForMake: vi.fn(async (_db, _year, make: string) => {
+    if (make.toUpperCase().includes("RAM")) {
+      return [
+        {
+          year: 2022,
+          make: "RAM",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          searchText: "",
+          variantKind: null,
+        },
+      ];
+    }
+    return [];
+  }),
+  hasCoxCatalogTreeForYear: vi.fn().mockResolvedValue(true),
+}));
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const BASE_ENV: Env = {
