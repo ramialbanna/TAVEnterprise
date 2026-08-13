@@ -2393,7 +2393,9 @@ Build **50–100 buyer-labeled listings** (dealer / private / curbstoner) from d
 ## 72 — MMR quality: identity accuracy over alias speed
 
 **Opened:** 2026-08-13  
-**Status:** [~] **Phase 0 (year-floor alignment) in code — not deployed;** Phases 1–5 not started
+**Status:** [~] **Phases 0–1 shipped to production 2026-08-13** (`1b75ab3`; staging `7ade46ca` + production `c7a3341a`) — post-deploy validation pending; Phases 2–5 not started
+
+**Watch after this deploy (§68 playbook):** `ingest.mmr_no_data_retry` recovery rate, Anthropic spend (the retry roughly doubles Claude calls — ~2.2k `cox_no_data`/day each now costing one extra Claude + one extra Manheim call), `cox_rate_limited` trend, and MMR hit on eligible inventory. Roll back by redeploying the prior version if rate limiting climbs materially.
 
 **Product goal:** **Near-universal MMR evaluation on eligible vehicle inventory** — every real private-party listing that Manheim can price should get a wholesale number at ingest. **~59% MMR hit today is unacceptable.** Target: **85–90%+** on Dallas FB eligible inventory in weeks (not “stable at 60%”).
 
@@ -2469,7 +2471,7 @@ parse listing (title, description, photos when available)
 
 ### Implementation phases
 
-**Phase 0 — Year-floor alignment (done in code 2026-08-13; not deployed)**
+**Phase 0 — Year-floor alignment (shipped 2026-08-13; commit `1b75ab3`, staging `7ade46ca` + production `c7a3341a`)**
 
 Denominator hygiene, done before the alias work so Phase 1–2 lift is measured against eligible inventory only. Two changes, in opposite directions:
 
@@ -2480,7 +2482,7 @@ Measured Dallas FB, 24h to 2026-08-13: raw hit **60.6%**; eligible-only (2011+ o
 
 **Still to do for Phase 0:** run the catalog sync for **2011–2012** (cron picks up missing years once deployed; verify row counts), then deploy Worker to staging → production and re-measure per the §68 playbook. Report MMR hit on eligible inventory from here on, excluding `year_below_valuation_floor`.
 
-**Phase 1 — Alias failure recovery (P0, highest ROI) — done in code 2026-08-13; not deployed**
+**Phase 1 — Alias failure recovery (P0, highest ROI) — shipped 2026-08-13; commit `1b75ab3`, staging `7ade46ca` + production `c7a3341a`**
 
 On `cox_no_data` from the Y/M/M path, `performMmrCall` now retires the alias behind the pick (when the resolution was `alias_hit`), re-asks Claude with `skipShortcuts` and the rejected `model / style` named in the prompt, and re-prices once. Recovered picks are marked `confidence: "low"` / `normalizationConfidence: "partial"` and are deliberately **not** fed back into item 65 alias learning.
 
