@@ -131,6 +131,10 @@ export type MmrLookupOutcome =
       mileageUsed?: number | null;
       isInferredMileage?: boolean;
       catalogMatchSuggestions?: CatalogMatchSuggestion[];
+      /** Item 72 — Cox tokens actually sent, when the attempt reached Manheim. */
+      lookupMake?: string | null;
+      lookupModel?: string | null;
+      lookupTrim?: string | null;
     };
 
 // tav-intelligence-worker wraps every successful response as
@@ -287,20 +291,11 @@ export type MmrLookupOutcomeOpts = {
    */
   llmResolution?: LlmYmmsResolution;
   /**
-   * Item 72 — epoch ms the caller's batch must finish by. The `cox_no_data`
-   * retry costs a Claude call plus a second Manheim call, so it is skipped
-   * when the remaining budget cannot absorb both. Omit to disable the retry.
+   * Item 72 — set by the `cox_no_data` retry pass. A corrected second pick is
+   * one listing's answer, not a pattern worth caching for every future listing.
    */
-  retryDeadlineMs?: number;
+  skipAliasLearning?: boolean;
 };
-
-/** Worst-case cost of one retry: Claude round-trip plus a second MMR call. */
-const RETRY_BUDGET_MS = 10_000;
-
-function hasRetryBudget(deadlineMs: number | undefined): boolean {
-  if (deadlineMs === undefined) return false;
-  return Date.now() + RETRY_BUDGET_MS <= deadlineMs;
-}
 
 async function performMmrCall(
   params: MmrParams,
@@ -566,27 +561,21 @@ async function performMmrCall(
   const wire = await sendMmrRequest(endpoint, body);
   if (wire.kind === "miss") return wire.outcome;
 
-  let envelope = wire.envelope;
-
-  // Item 72 — `cox_no_data` on the Y/M/M path usually means we sent the wrong
-  // Cox tokens, not that Manheim has no book for the car: 65% of these misses
-  // are for a year/make/model that prices fine on other listings. Retire the
-  // alias that produced the bad pick, then give Claude one attempt with the
-  // rejected combination named so it can choose a different drivetrain/engine.
-  if (
-    !envelope.ok ||
-    envelope.mmr_value === null
-  ) {
-    const retried = await retryYmmAfterNoData();
-    if (retried) envelope = retried;
-  }
+  const envelope = wire.envelope;
 
   if (!envelope.ok || envelope.mmr_value === null) {
     return {
       kind: "miss",
       reason: "cox_no_data",
       method,
-      ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+      ...(normalizationMeta && {
+        normalizationConfidence: normalizationMeta.normalizationConfidence,
+        // Item 72 — the exact tokens Manheim refused. Persisted on the miss
+        // snapshot for triage, and used as the rejected pick by the retry pass.
+        lookupMake: normalizationMeta.lookupMake,
+        lookupModel: normalizationMeta.lookupModel,
+        lookupTrim: normalizationMeta.lookupTrim,
+      }),
       mileageUsed: envelope.mileage_used ?? mileageMeta.mileageUsed,
       isInferredMileage: envelope.is_inferred_mileage ?? false,
     };
@@ -608,7 +597,10 @@ async function performMmrCall(
   };
 
   // Item 65 — best-effort alias learning after a trusted pick produces MMR.
+  // Item 72 — suppressed on a retry: a corrected second pick is one listing's
+  // answer, not a pattern confirmed enough to cache for every future listing.
   if (
+    !opts?.skipAliasLearning &&
     (llmResolutionForLearn?.kind === "llm_hit" || llmResolutionForLearn?.kind === "offline_hit") &&
     make &&
     model &&
@@ -757,146 +749,136 @@ async function performMmrCall(
     return { kind: "envelope", envelope: wrapped.data.data };
   }
 
-  /**
-   * Item 72 — second and final identity attempt after Manheim returned no book
-   * value on the Y/M/M path. Retires the alias behind the bad pick, re-asks
-   * Claude with that pick named as already-rejected, and re-prices on a
-   * different one. Returns the new envelope only when it carries a value, so a
-   * failed retry leaves the original `cox_no_data` untouched.
-   */
-  async function retryYmmAfterNoData(): Promise<IntelMmrEnvelope | null> {
-    if (method !== "year_make_model") return null;
-    if (year === undefined || !make || !model) return null;
+}
 
-    const rejectedModel = normalizationMeta?.lookupModel;
-    const rejectedStyle = normalizationMeta?.lookupTrim;
-    if (!rejectedModel || !rejectedStyle) return null;
+/**
+ * Item 72 — second and final identity attempt after Manheim returned no book
+ * value on the Y/M/M path.
+ *
+ * Runs *outside* the ingest item loop (see coxNoDataRetryPass.ts). The first
+ * cut did this inline and it almost never fired: the batch already spends its
+ * full 23.5s budget and truncates, so the headroom check rejected nearly every
+ * candidate (`ingest.mmr_no_data_retry_skipped`, `reason: batch_deadline`).
+ *
+ * Retires the alias behind the rejected pick, re-asks Claude with that pick
+ * named as already-wrong, then re-prices by handing the new resolution back to
+ * performMmrCall as a precomputed `llmResolution` — so the send, envelope
+ * parsing, and miss classification all stay on one code path. Alias learning is
+ * suppressed: a corrected second pick is one listing's answer, not a confirmed
+ * pattern.
+ */
+export async function retryMmrAfterCoxNoData(
+  params: MmrParams,
+  env: Env,
+  rejected: { make?: string | null; model: string; style: string },
+): Promise<MmrLookupOutcome & { retried: boolean }> {
+  const { year, make, model } = params;
+  const notRetried = { kind: "miss", reason: "cox_no_data", method: "year_make_model", retried: false } as const;
 
-    if (!hasRetryBudget(opts?.retryDeadlineMs)) {
-      log("ingest.mmr_no_data_retry_skipped", {
-        year,
-        make,
-        model: rejectedModel,
-        style: rejectedStyle,
-        reason: "batch_deadline",
+  if (year === undefined || !make || !model) return notRetried;
+
+  const db = getSupabaseClient(env);
+
+  // The alias produced tokens Manheim will not price. Leaving it in place
+  // re-fails every future listing with the same make/model/trim and pays for
+  // this retry each time (item 65 learned it; item 72 retires it).
+  if (rejected.make) {
+    try {
+      await deleteMmrStyleAlias(db, {
+        aliasKey: buildListingStyleAliasKey(make, model, params.trim),
+        canonicalMake: rejected.make,
+        canonicalModel: rejected.model,
       });
-      return null;
-    }
-
-    const db = getSupabaseClient(env);
-
-    // The alias produced tokens Manheim will not price. Leaving it in place
-    // would re-fail every future listing with the same make/model/trim and pay
-    // for this retry each time (item 65 learned it; item 72 retires it).
-    if (llmResolutionForLearn?.kind === "alias_hit") {
-      try {
-        await deleteMmrStyleAlias(db, {
-          aliasKey: buildListingStyleAliasKey(make, model, params.trim),
-          canonicalMake: llmResolutionForLearn.make,
-          canonicalModel: llmResolutionForLearn.model,
-        });
-        log("ingest.mmr_alias_retired_after_no_data", {
-          year,
-          listing_make: make,
-          listing_model: model,
-          alias_model: llmResolutionForLearn.model,
-          alias_style: llmResolutionForLearn.style,
-          kpi: true,
-        });
-      } catch (err) {
-        logError("valuation", "ingest.mmr_alias_retire_failed", err);
-      }
-    }
-
-    const retryResolution = await resolveListingWithLLM(
-      {
+      log("ingest.mmr_alias_retired_after_no_data", {
         year,
-        make,
-        model,
-        trim: params.trim,
-        title: params.title,
-        price: params.price,
-        description: params.description,
-        condition: params.condition,
-        location: params.location,
-        listingMileage: params.listingMileage,
-        priorMissReason: "cox_no_data",
-        skipShortcuts: true,
-        rejectedPicks: [{ model: rejectedModel, style: rejectedStyle }],
-      },
-      buildLlmYmmsDeps(db, env),
-    );
-
-    if (retryResolution.kind !== "fallback") {
-      try {
-        await insertLlmYmmsDecision(db, {
-          year,
-          inputMake: make,
-          inputModel: model,
-          inputTrim: params.trim,
-          inputTitle: params.title,
-          ...llmResolutionToAuditFields(retryResolution),
-        });
-      } catch (err) {
-        logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
-      }
-    }
-
-    if (retryResolution.kind !== "llm_hit") return null;
-
-    const samePick =
-      retryResolution.model.trim().toLowerCase() === rejectedModel.trim().toLowerCase() &&
-      retryResolution.style.trim().toLowerCase() === rejectedStyle.trim().toLowerCase();
-    if (samePick) {
-      log("ingest.mmr_no_data_retry_skipped", {
-        year,
-        make,
-        model: rejectedModel,
-        style: rejectedStyle,
-        reason: "same_pick",
+        listing_make: make,
+        listing_model: model,
+        alias_model: rejected.model,
+        alias_style: rejected.style,
+        kpi: true,
       });
-      return null;
+    } catch (err) {
+      logError("valuation", "ingest.mmr_alias_retire_failed", err);
     }
+  }
 
-    const retryWire = await sendMmrRequest(endpoint, {
-      ...body,
-      make: retryResolution.make,
-      model: retryResolution.model,
-      trim: retryResolution.style,
-    });
-
-    const retried = retryWire.kind === "envelope" ? retryWire.envelope : null;
-    const recovered = retried !== null && retried.ok && retried.mmr_value !== null;
-
-    log("ingest.mmr_no_data_retry", {
+  const retryResolution = await resolveListingWithLLM(
+    {
       year,
       make,
-      rejected_model: rejectedModel,
-      rejected_style: rejectedStyle,
-      retry_model: retryResolution.model,
-      retry_style: retryResolution.style,
-      retry_confidence: retryResolution.confidence,
-      recovered,
-      kpi: true,
-    });
+      model,
+      trim: params.trim,
+      title: params.title,
+      price: params.price,
+      description: params.description,
+      condition: params.condition,
+      location: params.location,
+      listingMileage: params.listingMileage,
+      priorMissReason: "cox_no_data",
+      skipShortcuts: true,
+      rejectedPicks: [{ model: rejected.model, style: rejected.style }],
+    },
+    buildLlmYmmsDeps(db, env),
+  );
 
-    if (!recovered) return null;
-
-    // The first pick was wrong, so the second is a corrected guess rather than a
-    // clean match — surface that to closers instead of implying exact identity.
-    confidence = "low";
-    normalizationMeta = {
-      lookupMake: retryResolution.make,
-      lookupModel: retryResolution.model,
-      lookupTrim: retryResolution.style,
-      normalizationConfidence: "partial",
-    };
-    // Do not feed a recovered pick back into item 65 alias learning: it is the
-    // second answer for this listing, not a pattern we have confirmed twice.
-    llmResolutionForLearn = undefined;
-
-    return retried;
+  if (retryResolution.kind !== "fallback") {
+    try {
+      await insertLlmYmmsDecision(db, {
+        year,
+        inputMake: make,
+        inputModel: model,
+        inputTrim: params.trim,
+        inputTitle: params.title,
+        ...llmResolutionToAuditFields(retryResolution),
+      });
+    } catch (err) {
+      logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
+    }
   }
+
+  if (retryResolution.kind !== "llm_hit") {
+    log("ingest.mmr_no_data_retry_skipped", {
+      year,
+      make,
+      model: rejected.model,
+      style: rejected.style,
+      reason: retryResolution.kind === "fallback" ? retryResolution.reason : retryResolution.kind,
+    });
+    return notRetried;
+  }
+
+  const samePick =
+    retryResolution.model.trim().toLowerCase() === rejected.model.trim().toLowerCase() &&
+    retryResolution.style.trim().toLowerCase() === rejected.style.trim().toLowerCase();
+  if (samePick) {
+    log("ingest.mmr_no_data_retry_skipped", {
+      year,
+      make,
+      model: rejected.model,
+      style: rejected.style,
+      reason: "same_pick",
+    });
+    return notRetried;
+  }
+
+  const outcome = await getMmrLookupOutcome(params, env, {
+    llmResolution: retryResolution,
+    skipAliasLearning: true,
+  });
+
+  log("ingest.mmr_no_data_retry", {
+    year,
+    make,
+    rejected_model: rejected.model,
+    rejected_style: rejected.style,
+    retry_model: retryResolution.model,
+    retry_style: retryResolution.style,
+    retry_confidence: retryResolution.confidence,
+    recovered: outcome.kind === "hit",
+    kpi: true,
+  });
+
+  return { ...outcome, retried: true };
 }
 
 /**
@@ -928,6 +910,9 @@ export async function getMmrLookupOutcome(
     ...(raw.mileageUsed !== undefined && { mileageUsed: raw.mileageUsed }),
     ...(raw.isInferredMileage !== undefined && { isInferredMileage: raw.isInferredMileage }),
     ...(raw.catalogMatchSuggestions && { catalogMatchSuggestions: raw.catalogMatchSuggestions }),
+    ...(raw.lookupMake !== undefined && { lookupMake: raw.lookupMake }),
+    ...(raw.lookupModel !== undefined && { lookupModel: raw.lookupModel }),
+    ...(raw.lookupTrim !== undefined && { lookupTrim: raw.lookupTrim }),
   };
 }
 

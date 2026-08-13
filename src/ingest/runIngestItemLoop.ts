@@ -59,6 +59,10 @@ import {
   buildIngestMaxbuyEvaluateBody,
   scheduleIngestMaxbuyEvaluate,
 } from "./ingestMaxbuyEvaluate";
+import {
+  runCoxNoDataRetryPass,
+  type CoxNoDataRetryCandidate,
+} from "./coxNoDataRetryPass";
 import type { IngestRequest } from "../validate";
 
 /** Wall-clock budget per ingest slice (single /ingest call or one Apify chunk). */
@@ -148,6 +152,7 @@ export async function runIngestItemLoop(
   let truncated = false;
   let itemsSkipped = 0;
   const excellentLeads: ExcellentLeadSummary[] = [];
+  const retryCandidates: CoxNoDataRetryCandidate[] = [];
 
   for (const item of items) {
     const i = itemIndexOffset + localIndex++;
@@ -315,7 +320,12 @@ export async function runIngestItemLoop(
       normalizationConfidence?: NormalizationConfidence;
       mileageUsed?: number | null;
       isInferredMileage?: boolean;
+      lookupMake?: string | null;
+      lookupModel?: string | null;
+      lookupTrim?: string | null;
     } | null = null;
+    let llmTextForRetry: ReturnType<typeof buildLlmYmmsResolutionInput> | null = null;
+    let resolvedAliasMake: string | null = null;
 
     const prefetchIndex = localIndex - 1;
 
@@ -346,6 +356,8 @@ export async function runIngestItemLoop(
       try {
         const llmResolution = await llmPrefetch!.consume(prefetchIndex);
         const llmText = buildLlmYmmsResolutionInput(item, listing);
+        llmTextForRetry = llmText;
+        resolvedAliasMake = llmResolution?.kind === "alias_hit" ? llmResolution.make : null;
         const outcome = await getMmrLookupOutcome(
           {
             vin: listing.vin,
@@ -362,7 +374,7 @@ export async function runIngestItemLoop(
             listingMileage: llmText.listingMileage ?? undefined,
           },
           env,
-          { llmResolution, retryDeadlineMs: loopDeadline },
+          { llmResolution },
         );
         if (outcome.kind === "hit") {
           mmrResult = outcome.result;
@@ -378,6 +390,9 @@ export async function runIngestItemLoop(
             ...(outcome.isInferredMileage !== undefined && {
               isInferredMileage: outcome.isInferredMileage,
             }),
+            ...(outcome.lookupMake !== undefined && { lookupMake: outcome.lookupMake }),
+            ...(outcome.lookupModel !== undefined && { lookupModel: outcome.lookupModel }),
+            ...(outcome.lookupTrim !== undefined && { lookupTrim: outcome.lookupTrim }),
           };
           catalogMatchSuggestions = outcome.catalogMatchSuggestions;
         }
@@ -409,12 +424,40 @@ export async function runIngestItemLoop(
           ...(workerMiss.isInferredMileage !== undefined && {
             isInferredMileage: workerMiss.isInferredMileage,
           }),
+          // Item 72 — the Cox tokens we actually sent, so a miss can be triaged
+          // without re-deriving them from logs.
+          ...(workerMiss.lookupMake !== undefined && { lookupMake: workerMiss.lookupMake }),
+          ...(workerMiss.lookupModel !== undefined && { lookupModel: workerMiss.lookupModel }),
+          ...(workerMiss.lookupTrim !== undefined && { lookupTrim: workerMiss.lookupTrim }),
         });
         log(
           "valuation.miss",
           { missing_reason: workerMiss.reason, method: workerMiss.method, kpi: true },
           listingCtx,
         );
+
+        // Item 72 — queue a second identity attempt outside the batch deadline.
+        if (
+          workerMiss.reason === "cox_no_data" &&
+          !listing.vin &&
+          workerMiss.lookupModel &&
+          workerMiss.lookupTrim
+        ) {
+          retryCandidates.push({
+            normalizedListingId: normResult.id,
+            ...(vcId && { vehicleCandidateId: vcId }),
+            listing,
+            llmText: {
+              description: llmTextForRetry?.description ?? undefined,
+              condition: llmTextForRetry?.condition ?? undefined,
+              location: llmTextForRetry?.location ?? undefined,
+              listingMileage: llmTextForRetry?.listingMileage ?? undefined,
+            },
+            rejectedModel: workerMiss.lookupModel,
+            rejectedStyle: workerMiss.lookupTrim,
+            rejectedAliasMake: resolvedAliasMake,
+          });
+        }
       } catch (err) {
         logError("valuation", "ingest.miss_snapshot_failed", err, listingCtx);
       }
@@ -631,6 +674,17 @@ export async function runIngestItemLoop(
     }
 
     rawInserted++;
+  }
+
+  // Item 72 — the second identity attempt runs after the loop, outside the
+  // batch deadline. Inline it never fired: ingest already uses its full budget
+  // and truncates, so the headroom check rejected every candidate.
+  if (retryCandidates.length > 0) {
+    execCtx.waitUntil(
+      runCoxNoDataRetryPass({ db, env, execCtx, candidates: retryCandidates, ctx }).catch((err) => {
+        logError("valuation", "ingest.cox_no_data_retry_pass_failed", err, ctx);
+      }),
+    );
   }
 
   return {

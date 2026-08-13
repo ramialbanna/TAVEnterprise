@@ -2484,25 +2484,46 @@ Measured Dallas FB, 24h to 2026-08-13: raw hit **60.6%**; eligible-only (2011+ o
 
 **Phase 1 — Alias failure recovery (P0, highest ROI) — shipped 2026-08-13; commit `1b75ab3`, staging `7ade46ca` + production `c7a3341a`**
 
-On `cox_no_data` from the Y/M/M path, `performMmrCall` now retires the alias behind the pick (when the resolution was `alias_hit`), re-asks Claude with `skipShortcuts` and the rejected `model / style` named in the prompt, and re-prices once. Recovered picks are marked `confidence: "low"` / `normalizationConfidence: "partial"` and are deliberately **not** fed back into item 65 alias learning.
+On `cox_no_data` from the Y/M/M path, ingest retires the alias behind the pick (when the resolution was `alias_hit`), re-asks Claude with `skipShortcuts` and the rejected `model / style` named in the prompt, and re-prices once. Recovered picks are marked `confidence: "low"` / `normalizationConfidence: "partial"` and are deliberately **not** fed back into item 65 alias learning.
+
+> ### ⚠ The retry must not run inside the ingest item loop
+>
+> **First cut ran inline and never fired in production.** It required 10s of remaining batch budget before retrying. But ingest already spends its full `BATCH_TIMEOUT_MS` (23.5s effective) on 7 listings and truncates — the same 5-minute window that produced the evidence below also logged `ingest.batch_deadline_hit` and `ingest.chunked.slice_truncated`. Every candidate was rejected with `reason: batch_deadline`:
+>
+> ```
+> ingest.mmr_no_data_retry_skipped
+>   year: 2012, make: dodge
+>   model: "CHARGER 2WD V6", style: "4D SEDAN POLICE"
+>   reason: "batch_deadline"
+> ```
+>
+> (A civilian Charger priced as a police interceptor — exactly the failure the retry exists to fix.) **Anything added to the per-item path competes with a budget that is already exhausted.** The retry now runs after the loop via `execCtx.waitUntil`, outside the deadline.
 
 | Guard | Behaviour |
 |-------|-----------|
-| Budget | One retry per listing; skipped unless `retryDeadlineMs − now ≥ 10s` (`ingest.mmr_no_data_retry_skipped`, `reason: batch_deadline`) |
-| No deadline passed | No retry — non-ingest callers unchanged |
-| Claude repeats the pick | No second Manheim call (`reason: same_pick`) |
-| Retry also has no book | Original `cox_no_data` miss preserved |
+| Placement | Runs post-loop via `waitUntil` — no batch-deadline competition |
+| Cap | `MAX_RETRIES_PER_SLICE = 10` per ingest slice |
+| Claude repeats the pick | No Manheim call (`ingest.mmr_no_data_retry_skipped`, `reason: same_pick`) |
+| Claude unavailable | No Manheim call; reason is the fallback kind |
+| Retry also has no book | Original `cox_no_data` miss stands |
+| Alias learning | Suppressed via `skipAliasLearning` |
 | Prompt caching | Rejected pick goes in the per-listing evidence block, never the cached catalog prefix (item 66 still hits) |
 
-Logs: `ingest.mmr_no_data_retry` (`recovered` true/false, kpi), `ingest.mmr_alias_retired_after_no_data` (kpi), `ingest.mmr_no_data_retry_skipped`.
+Recovered listings **append** a hit snapshot; `buildListingDiagnostics` keeps the newest `fetched_at` per listing, so the hit supersedes the miss with both kept for audit. Max buy is scheduled for recovered listings so they don't reach the queue without a number (item 59 parity).
 
-Files: `workerClient.ts` (wire call extracted to `sendMmrRequest` so it can run twice; `retryYmmAfterNoData`), `resolveListingWithLLM.ts` (`skipShortcuts`, `rejectedPicks`), `ymmsPrompt.ts`, `mmrStyleAliases.ts` (`deleteMmrStyleAlias`), `runIngestItemLoop.ts` (passes `loopDeadline`). Tests: `test/valuation.mmrNoDataRetry.test.ts` (7), suite 1,364 green.
+Logs: `ingest.mmr_no_data_retry` (`recovered`, kpi), `valuation.recovered_after_no_data` (kpi), `ingest.cox_no_data_retry_pass` (candidates/attempted/recovered, kpi), `ingest.mmr_alias_retired_after_no_data` (kpi), `ingest.mmr_no_data_retry_skipped`.
+
+**Also closes a Phase 3 observability gap:** `lookup_make/model/trim` are now persisted on `cox_no_data` miss snapshots, so a miss can be triaged without re-deriving the sent tokens from logs.
+
+Files: `coxNoDataRetryPass.ts` (new), `workerClient.ts` (`retryMmrAfterCoxNoData`, `skipAliasLearning`, lookup tokens on miss), `resolveListingWithLLM.ts` (`skipShortcuts`, `rejectedPicks`), `ymmsPrompt.ts`, `mmrStyleAliases.ts` (`deleteMmrStyleAlias`), `runIngestItemLoop.ts`. Tests: `valuation.mmrNoDataRetry.test.ts` (7) + ingest wiring tests; suite 1,367 green.
 
 **Root-cause correction (2026-08-13):** the failing cohort is **not** mainly wrong *trim* (Corolla Sport → SE). It is Cox models split by **engine or drivetrain** where the listing text does not state either — `CAMRY 4C` vs `CAMRY V6`, `YUKON 2WD FFV` vs `4WD`, `ACADIA AWD` vs `FWD`. Clean 24h window (the earlier 7-day read was skewed by the Aug 11 credit outage): **GMC 44.5%**, **Toyota 57.2%**, while **Ford 78.5%**, **RAM 78.2%**, **Cadillac 80.5%** are healthy. Worst offenders: `gmc sierra 1500` 17/95, `toyota camry` 18/90, `gmc yukon` 17/70, `toyota tacoma double` 6/54, `gmc acadia` 2/34 — against `toyota rav4` 69/74 and `highlander` 19/23, which the listing text disambiguates.
 
 **Rejected alternative:** blind sibling-variant retry (walk the catalog for models sharing a style). Cheaper and needs no Claude call, but siblings sharing a style include genuinely different vehicles (`YUKON` vs `YUKON XL`, `2500HD SIERRA` vs `3500 SIERRA`) and different powertrains, so "first variant Manheim books" can return a **wrong price** — worse than no price under the never-mislead-a-buyer principle. Claude re-ask keeps the pick evidence-based.
 
-**Still to do:** deploy staging → production, then measure `ingest.mmr_no_data_retry` recovery rate and MMR hit lift per the §68 playbook.
+**Observability:** `[observability]` was **not** enabled on this Worker — every structured `log()` event was being written to nowhere. Added to top level + both envs in `wrangler.toml` (commit `bea3556`). Note environments do not inherit it, same as `[vars]`. Without this none of the KPI events above are queryable.
+
+**Still to do:** measure `ingest.cox_no_data_retry_pass` recovery rate and MMR hit lift on eligible inventory per the §68 playbook.
 
 **Phase 2 — Stricter alias acceptance (P0)**
 

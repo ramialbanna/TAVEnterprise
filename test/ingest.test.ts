@@ -77,6 +77,11 @@ vi.mock("../src/persistence/vehicleEnrichments", () => ({
   writeVehicleEnrichment: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../src/ingest/coxNoDataRetryPass", () => ({
+  runCoxNoDataRetryPass: vi.fn().mockResolvedValue({ attempted: 0, recovered: 0 }),
+  MAX_RETRIES_PER_SLICE: 10,
+}));
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof LeadScoringModule>("../src/scoring/lead");
@@ -97,6 +102,7 @@ import { insertBuyBoxScoreAttribution } from "../src/persistence/buyBoxScoreAttr
 import { getMmrValueFromWorker, getMmrLookupOutcome } from "../src/valuation/workerClient";
 import { writeValuationSnapshot, writeValuationMissSnapshot } from "../src/persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
+import { runCoxNoDataRetryPass } from "../src/ingest/coxNoDataRetryPass";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -597,6 +603,69 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
   });
 
+  it("item 72: persists the Cox tokens Manheim refused on the miss snapshot", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+      kind: "miss",
+      reason: "cox_no_data",
+      method: "year_make_model",
+      lookupMake: "TOYOTA",
+      lookupModel: "CAMRY V6",
+      lookupTrim: "4D SEDAN LE",
+    });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        missingReason: "cox_no_data",
+        lookupMake: "TOYOTA",
+        lookupModel: "CAMRY V6",
+        lookupTrim: "4D SEDAN LE",
+      }),
+    );
+  });
+
+  it("item 72: schedules the retry pass outside the batch on a cox_no_data miss", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+      kind: "miss",
+      reason: "cox_no_data",
+      method: "year_make_model",
+      lookupMake: "TOYOTA",
+      lookupModel: "CAMRY V6",
+      lookupTrim: "4D SEDAN LE",
+    });
+    const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    // Inline retry never fired in production because the batch had no headroom
+    // left; the pass must be handed to waitUntil so it runs past the deadline.
+    expect(vi.mocked(runCoxNoDataRetryPass)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [
+          expect.objectContaining({
+            rejectedModel: "CAMRY V6",
+            rejectedStyle: "4D SEDAN LE",
+          }),
+        ],
+      }),
+    );
+    expect(waitUntilSpy).toHaveBeenCalled();
+  });
+
+  it("item 72: does not schedule a retry pass for non-cox_no_data misses", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+      kind: "miss",
+      reason: "trim_missing",
+      method: "year_make_model",
+    });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(runCoxNoDataRetryPass)).not.toHaveBeenCalled();
+  });
+
   it("miss-snapshot persistence failure does not fail ingest", async () => {
     vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_no_data", method: "vin" });
     vi.mocked(writeValuationMissSnapshot).mockRejectedValueOnce(new Error("db constraint"));
@@ -622,11 +691,7 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledWith(
       expect.anything(),
       workerEnv,
-      {
-        llmResolution: { kind: "fallback", reason: "llm_disabled" },
-        // Item 72 — batch deadline the cox_no_data retry must fit inside.
-        retryDeadlineMs: expect.any(Number),
-      },
+      { llmResolution: { kind: "fallback", reason: "llm_disabled" } },
     );
   });
 
