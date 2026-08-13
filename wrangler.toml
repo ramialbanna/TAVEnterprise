@@ -18,6 +18,14 @@ preview_id = "00464744d6e140799a9a88fe3247cc17"
 [triggers]
 crons = ["0 6 * * *"]
 
+# Workers Logs. Required to read the structured `log()` events this codebase
+# already emits (ingest.*, valuation.*, llm_ymms.*) — without it every KPI log
+# is written to nowhere and post-deploy validation has no source. As with
+# [vars], environments do not inherit this, so each env repeats it below.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 HYBRID_BUYBOX_ENABLED = "true"
 MANHEIM_LOOKUP_MODE = "direct"
@@ -86,6 +94,9 @@ service = "tav-intelligence-worker-staging"
 [[env.staging.services]]
 binding = "MAXBUY_WORKER"
 service = "maxbuy-worker-staging"
+[env.staging.observability]
+enabled = true
+head_sampling_rate = 1
 
 [env.production]
 name = "tav-aip-production"
@@ -118,3 +129,8 @@ service = "tav-intelligence-worker-production"
 [[env.production.services]]
 binding = "MAXBUY_WORKER"
 service = "maxbuy-worker-production"
+# Full sampling while item 72 is validated. Reduce head_sampling_rate if log
+# volume becomes a cost concern once the retry recovery rate is established.
+[env.production.observability]
+enabled = true
+head_sampling_rate = 1
