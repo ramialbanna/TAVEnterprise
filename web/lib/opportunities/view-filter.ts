@@ -10,12 +10,19 @@ export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 export const SCRAPER_REVIEW_BADGE = "Scraper review";
 
+/** Mirrors Worker `SCRAPER_REVIEW_MIN_YEAR` — Unprocessed Leads floor. */
+export const SCRAPER_REVIEW_MIN_YEAR = 2011;
+
+function isScraperReviewYearEligible(year: number | null | undefined): boolean {
+  return year != null && year >= SCRAPER_REVIEW_MIN_YEAR;
+}
+
 export function isScraperReviewOnly(row: Pick<OpportunityRow, "type" | "badges">): boolean {
   return row.type === "scraper_review" || row.badges.includes(SCRAPER_REVIEW_BADGE);
 }
 
-export function matchesScraperReview(row: Pick<OpportunityRow, "type" | "badges">): boolean {
-  return isScraperReviewOnly(row);
+export function matchesScraperReview(row: Pick<OpportunityRow, "type" | "badges" | "year">): boolean {
+  return isScraperReviewOnly(row) && isScraperReviewYearEligible(row.year);
 }
 
 function isClaimActive(claimExpiresAt: string | null, now: Date): boolean {

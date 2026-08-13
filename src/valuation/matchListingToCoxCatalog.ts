@@ -39,6 +39,9 @@ const AUTO_LOOKUP_MIN = 80;
 const ESTIMATED_MIN = 60;
 const SUGGESTION_MIN = 40;
 
+/** §70 — offline-first gate threshold (score ≥ this, not estimated-only). */
+export { AUTO_LOOKUP_MIN };
+
 function normalizeToken(value: string): string {
   return value
     .toLowerCase()
@@ -71,20 +74,35 @@ function hasPhrase(haystack: string, phrase: string): boolean {
 
 const DRIVETRAIN_TOKENS = ["awd", "fwd", "rwd", "4wd", "2wd", "4x4", "4x2"];
 const CAB_BED_TOKENS = ["crew", "cab", "double", "regular", "supercrew", "supercab", "bed", "ft"];
-const BODY_TOKENS = ["sedan", "suv", "pickup", "coupe", "wagon", "minivan", "utility"];
+const BODY_TOKENS = ["sedan", "suv", "pickup", "coupe", "wagon", "minivan", "utility", "2d", "4d"];
 
 function signalBonus(evidence: string, style: string, model: string, tokens: string[], weight: number): number {
   const hay = normalizeToken(`${evidence} ${model} ${style}`);
   return tokens.some((token) => hasPhrase(hay, token)) ? weight : 0;
 }
 
-function parserGarbagePenalty(title: string, make: string, model: string): number {
-  const t = normalizeToken(title);
+function parserGarbagePenalty(evidence: string, make: string, model: string): number {
+  const t = normalizeToken(evidence);
   const m = normalizeToken(model);
   if (t.includes("+") || m.includes("+")) return 30;
   if (/\bbighorn\s+1500\b/.test(t) || /\b1500\s+bighorn\b/.test(t)) return 30;
-  if (/\b${normalizeToken(make)}\s+${normalizeToken(make)}\b/.test(t)) return 30;
+
+  const makeToken = normalizeToken(make);
+  if (makeToken) {
+    const escaped = makeToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\s+${escaped}\\b`).test(t)) return 30;
+  }
   return 0;
+}
+
+function styleEvidenceScore(
+  input: ListingCatalogMatchInput,
+  row: CoxCatalogTreeRow,
+  listingTokens: Set<string>,
+): number {
+  const trimTokens = tokenSet(input.trim ?? "");
+  const styleTokens = tokenSet(row.style);
+  return overlapScore(new Set([...listingTokens, ...trimTokens]), styleTokens, 25);
 }
 
 function scoreCandidate(
@@ -133,9 +151,19 @@ export function matchListingToCoxCatalog(
     .map((row) => ({
       row,
       score: scoreCandidate(input, row, listingTokens),
+      styleScore: 0,
+    }))
+    .map((entry) => ({
+      ...entry,
+      styleScore: styleEvidenceScore(input, entry.row, listingTokens),
     }))
     .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || b.row.style.localeCompare(a.row.style));
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.styleScore - a.styleScore ||
+        b.row.style.localeCompare(a.row.style),
+    );
 
   if (scored.length === 0) return null;
 
@@ -151,7 +179,10 @@ export function matchListingToCoxCatalog(
   const [best, second] = scored;
   if (!best) return null;
 
-  const tied = second && second.score === best.score;
+  const tied =
+    second &&
+    second.score === best.score &&
+    second.styleScore === best.styleScore;
   const autoLookup = !tied && best.score >= AUTO_LOOKUP_MIN;
   const estimatedLookup = !tied && !autoLookup && best.score >= ESTIMATED_MIN;
 
@@ -191,6 +222,20 @@ export function matchListingToCoxCatalog(
     autoLookup: autoLookup || estimatedLookup,
     suggestions,
   };
+}
+
+/** §70 — true when offline matcher is confident enough to skip Claude (score ≥ 80, not estimated-only). */
+export function isOfflineConfidentCatalogMatch(
+  result: ListingCatalogMatchResult | null,
+): result is ListingCatalogMatchResult & { make: string; model: string; style: string } {
+  return (
+    result != null &&
+    result.autoLookup &&
+    !result.styleEstimated &&
+    result.make != null &&
+    result.model != null &&
+    result.style != null
+  );
 }
 
 export function buildCoxCatalogSearchText(

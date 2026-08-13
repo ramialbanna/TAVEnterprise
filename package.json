@@ -23,6 +23,7 @@
     "test:int": "vitest run --config vitest.int.config.ts",
     "sync:cox-catalog": "node scripts/sync-cox-catalog.mjs",
     "eval:llm-ymms": "node scripts/eval-llm-ymms.mjs",
+    "eval:cl-automotive-scraper": "npx vite-node scripts/eval-cl-automotive-scraper.ts",
     "try:llm-ymms-one": "node scripts/eval-llm-ymms.mjs --one",
     "try:apify-llm-one": "node scripts/try-apify-llm-one.mjs"
   },

@@ -156,9 +156,6 @@ export function buildYmmsListingEvidenceText(input: YmmsPromptListingInput): str
   if (typeof input.listingMileage === "number" && Number.isFinite(input.listingMileage)) {
     lines.push(`Listing odometer when stated (evidence): ${input.listingMileage} mi`);
   }
-  if (input.location?.trim()) {
-    lines.push(`Listing location: ${input.location.trim()}`);
-  }
   return lines.join("\n");
 }
 

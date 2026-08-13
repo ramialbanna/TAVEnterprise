@@ -4,17 +4,17 @@ import {
   loadCoxCatalogTreeForMake,
 } from "../persistence/coxCatalogTree";
 import {
-  buildListingStyleAliasKey,
-  lookupMmrStyleAlias,
+  lookupMmrStyleAliasWithFallback,
 } from "../persistence/mmrStyleAliases";
 import type { IngestCatalogOfflineDeps } from "./resolveListingToCatalog";
 
 export function buildIngestCatalogOfflineDeps(db: SupabaseClient): IngestCatalogOfflineDeps {
   return {
-    lookupStyleAlias: (aliasKey: string) => lookupMmrStyleAlias(db, aliasKey),
+    lookupStyleAlias: (make, model, trim, titleTrim) =>
+      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim),
     loadTreeRows: (year: number, make: string) => loadCoxCatalogTreeForMake(db, year, make),
     hasTreeForYear: (year: number) => hasCoxCatalogTreeForYear(db, year),
   };
 }
 
-export { buildListingStyleAliasKey };
+export { buildListingStyleAliasKey } from "../persistence/mmrStyleAliases";

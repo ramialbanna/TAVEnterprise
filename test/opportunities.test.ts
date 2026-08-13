@@ -198,6 +198,22 @@ describe("scraper review helpers (item 55)", () => {
         model: "Civic",
       }),
     ).toBe(false);
+    expect(
+      isScraperReviewNoMmrEligible({
+        freshnessStatus: "new",
+        year: 2010,
+        make: "Jeep",
+        model: "Wrangler",
+      }),
+    ).toBe(false);
+    expect(
+      isScraperReviewNoMmrEligible({
+        freshnessStatus: "new",
+        year: 2011,
+        make: "Jeep",
+        model: "Wrangler",
+      }),
+    ).toBe(true);
   });
 
   it("buildOpportunityBadges marks scraper review and no MMR", () => {

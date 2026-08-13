@@ -5,7 +5,7 @@
 
 import type { NormalizedListingInput } from "../types/domain";
 
-export const LLM_LISTING_TEXT_MAX_CHARS = 2000;
+export const LLM_LISTING_TEXT_MAX_CHARS = 1000;
 
 export type LlmListingTextContext = {
   description?: string;
@@ -39,7 +39,7 @@ export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTe
   const rec = item as Record<string, unknown>;
   const out: LlmListingTextContext = {};
 
-  let description = readString(rec.description);
+  let description = readString(rec.description) ?? readString(rec.body_text);
   let condition = readString(rec.condition);
   let city = readString(rec.city);
   let state = readString(rec.state);

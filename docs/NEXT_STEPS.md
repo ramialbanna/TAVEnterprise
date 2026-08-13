@@ -1,9 +1,18 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-07-28 · **Focus:** **66** shipped (prompt caching; prod `aadd46ef`). **63** Craigslist next build.
+**Last updated:** 2026-08-11 · **Focus:** **68–70** — Facebook Dallas throughput + dealer pre-filter + LLM token efficiency (shipped). Craigslist **67** deprioritized (chunked ingest shipped; schedule still off).
 
 > **Fresh chat prompt:**
-> **2026-07-28 (current):** **66** shipped (`bdf3e20`, prod `aadd46ef`) — Anthropic `cache_control` on system + tool + `(year, make)` catalog prefix; per-listing evidence is the uncached tail. Worker logs `llm_ymms.anthropic_cache_usage` (read/write/uncached tokens). **Cost + funnel soak pending** — confirm `cacheReadInputTokens` on repeat makes and no MMR regression. **65** Phase 1 alias write **deployed** same prod cut (`834c9ac` in `aadd46ef`); **`mmr_style_aliases` forward-fill soak pending** (0 rows until repeat `llm_hit`+MMR ingests). **Next build: item 63** (Craigslist adapter). Refill Anthropic credits if `llm_unavailable` still elevated post 7/26–27 outage. See §66, §65, §63.
+> **2026-08-11 (current):** **Priority shift** — main focus is **Facebook Dallas** (`dallas-nick-task` `ZQEsd3nHcLAs5kLwL` → `dallas_tx`), not Craigslist. Goals: **better ingest results fast**, **least validation soak time** (hours / single-run metrics — not 1–3 day soaks when shipping changes). Three tracks — see §68, §69, §70:
+> 1. **§68** — Dallas FB scraper throughput + fast validation playbook.
+> 2. **§69** — **Dealer seller blacklist**: when a buyer dismisses with reason **`dealer`**, **auto-add** seller to a blocklist; filter **before ingest** (before LLM/MMR) so tokens aren’t wasted. **Scope v1:** `source=facebook` + `region=dallas_tx` only. **Blocked on scraper:** `seller_url` / `seller_name` not in Apify payloads yet (0 rows in `blocked_sellers`).
+> 3. **§70** — **Token efficiency — shipped 2026-08-11** (offline-first, Ford/Chevy catalog prune, prefetch sort, evidence trim, alias learning fix, token columns). Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md). Worker staging `46ac09a2` + production `7cbd9844`. **Anthropic credits out** — `llm_unavailable` dominates misses; offline-first + alias paths still work.
+>
+> **2026-08-11 (same session):** **§55 Phase D** offline matcher — `parserGarbagePenalty` regex fix, style tie-break, `2d`/`4d` body tokens, offline alias fallback. Worker staging `57cafd1c` + production `64c6ea94`. Migrations **`0068_blocked_sellers`**, **`0069_llm_ymms_token_usage`** applied Supabase.
+>
+> **2026-08-08:** **67** chunked Apify ingest shipped prod `467021c6` — synchronous multi-chunk path; verification run `FuPxo5UyEbqDA6jtt` **19/20 processed** (was 7/20). Schedule `HIb0Pg9Gg3Pn7RNfD` still **disabled**; item **67** on hold until FB Dallas wins. See §67.
+>
+> **2026-07-28:** **66** shipped (`bdf3e20`, prod `aadd46ef`) — Anthropic `cache_control` on system + tool + `(year, make)` catalog prefix; per-listing evidence is the uncached tail. Worker logs `llm_ymms.anthropic_cache_usage` (read/write/uncached tokens). **Cost + funnel soak pending** — confirm `cacheReadInputTokens` on repeat makes and no MMR regression. **65** Phase 1 alias write **deployed** same prod cut (`834c9ac` in `aadd46ef`); **`mmr_style_aliases` forward-fill soak pending** (0 rows until repeat `llm_hit`+MMR ingests). **63** Craigslist adapter shipped `bc09841`. See §66, §65, §63.
 >
 > **2026-07-27:** **64** shipped (`b0eda58`) — catalog **2013–2027**, description in offline/live matcher. **2-day soak** (excluding `llm_unavailable` from credit outage): overall MMR **~73%** (flat vs prior 2d); pre-2016 **~58%** (+4 pts); `model_variant_missing` / `trim_missing` down ~30–48%. **`catalog_not_synced` = 0.** Credit outage 7/26–27 tanked raw funnel — refill before re-judging. **59** ingest Max buy **100%** on MMR hits after deploy (`c49c49f` ~14:43 UTC 7/25). **65** Phase 1 alias code shipped (`834c9ac`). **66** opened then shipped same day. See §64 soak notes, §65, §59.
 >
@@ -70,7 +79,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** **55** Phase C shipped; catalog **2016–2027** synced 2026-07-16. Worker `9e4d2765`; web live at `tav-enterprise.vercel.app`. Item **55** stays `[~]` until funnel shows offline-matcher lift (multi-day soak). **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**.
+**This doc:** **Priority shift 2026-08-11** — **68** (FB Dallas throughput + partial validation), **69** (dealer blacklist — deployed, scraper-blocked), **70** (token efficiency — shipped), **55** Phase D (offline matcher fixes). Craigslist **67** chunked ingest shipped 2026-08-08; schedule still off. **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**, funnel soak items.
 
 | Area | Path |
 |------|------|
@@ -128,14 +137,18 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
+| **68** | **Facebook Dallas throughput + fast validation** — main scraper focus; hours-not-days sign-off; §68 | **Critical** | [~] baseline + partial validation 2026-08-11 |
+| **69** | **Dealer seller blacklist (pre-ingest)** — auto-add on `dealer` dismiss; Dallas FB only; **blocked on scraper seller fields**; §69 | **Critical** | [~] deployed `c786c54b`; verify blocked |
+| **70** | **LLM token efficiency** — §70 shipped (offline-first, prune, tokens); staging `46ac09a2` prod `7cbd9844` | **High** | [~] credits out; partial §68 validation |
+| **55** | **Scraper review / ingest YMMS** — Phase D offline matcher 2026-08-11; staging `57cafd1c` prod `64c6ea94` | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
 | **59** | **Max buy / YMMS linkage at ingest** — identity bridge + background evaluate on MMR hit; §59 (**shipped** `c49c49f`, prod `c244a655`; soak ongoing) | **High** | [~] |
 | **60** | **LLM listing context (description + Apify fields)** — Phase A wired in code (description/condition/miles/location → Claude); deploy + funnel measure pending | **High** | [~] |
 | **61** | **LLM auto-accept above 0.50 confidence** — ignore `needsReview`; §61 (**deployed, soak ongoing**) | **High** | [~] |
 | **62** | **In-app listing mirror on detail** — photos + description + seller context; §62 (**v1 shipped**; multi-photo waits on Apify payload) | **High** | [~] |
-| **63** | **Craigslist source adapter + scheduled scraper ingest** — wire `POST /ingest` listings into pipeline; §63 | **High** | [ ] |
+| **63** | **Craigslist source adapter** — `parseCraigslistItem` + ingest routing shipped `bc09841`; scheduled ingest soak → §67 | **Medium** | [~] |
+| **67** | **Apify CL automotive-scraper** — chunked ingest shipped; schedule still off; **deprioritized** vs §68; §67 | **Medium** | [~] |
 | **64** | **Catalog 2013–2027 + MMR hit-rate lift** — shipped `b0eda58`; soak done (modest pre-2016 lift, overall flat ~73%); §64 | **Critical** | [~] |
 | **65** | **LLM → offline matcher learning loop** — Phase 1 deployed prod `aadd46ef` (`834c9ac`); alias soak pending; §65 | **Medium** | [~] |
 | **66** | **Anthropic prompt caching for item 57 Y/M/M/S** — shipped prod `aadd46ef`; cost soak pending; §66 | **High** | [~] |
@@ -159,7 +172,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **52** | **Double-click / app-wide action lag (buyer email #6)** — tabs and actions need 2 clicks; whole-app feel | **Critical** | [x] |
 | **53** | **Salesperson / Appraiser lookup (buyer email #7)** — dropdown + admin add/remove (no free text) | **High** | [x] |
 | **54** | **No guessed miles; persist YMM; optional miles for MMR + Max buy** — inventing odometer misleads deals; detail must show ingest identity + saved wholesale | **Critical** | [x] |
-| **55** | **Scraper review / ingest YMMS** — web + offline matcher live; **2026/2027 catalog synced**; funnel soak ongoing | **High** | [~] |
+| **55** | **Scraper review / ingest YMMS** — Phase D offline matcher 2026-08-11; staging `57cafd1c` prod `64c6ea94`; funnel soak ongoing | **High** | [~] |
 | **56** | **Apify missed-run backfill** — pull Apify datasets from the `unmapped_task` window into TAV (Scraper review; original Received times) | **Critical** | [x] |
 | **57** | **LLM Y/M/M/S normalization via Claude API** — **`LLM_YMMS_ENABLED="true"`** staging + production since 2026-07-22; item **66** prompt caching prod `aadd46ef`; funnel/cost soak ongoing | **Critical** | [~] |
 | **58** | **UI/UX polish** — Opportunities list, detail page, TAV MMR page (see §58) | **Medium** | [ ] |
@@ -167,7 +180,11 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **60** | **LLM listing context — description + Apify text for item 57** — Phase A in code; see §60 | **High** | [~] |
 | **61** | **LLM trust threshold — confidence > 0.50, ignore needsReview** — see §61; **deployed, soak ongoing** | **High** | [~] |
 | **62** | **Listing mirror on opportunity detail** — Facebook-style photos + description in TAV; see §62 | **High** | [~] |
-| **63** | **Craigslist ingest adapter** — scheduled scraper → `POST /ingest`; see §63 | **High** | [ ] |
+| **63** | **Craigslist ingest adapter** — `parseCraigslistItem` shipped `bc09841`; Apify bridge + soak → §67 | **Medium** | [~] |
+| **67** | **Apify CL automotive-scraper eval + bridge** — chunked ingest shipped; schedule off; **deprioritized**; §67 | **Medium** | [~] |
+| **68** | **Facebook Dallas throughput + fast validation** — main scraper focus; §68 | **Critical** | [~] partial validation 2026-08-11 |
+| **69** | **Dealer seller blacklist (pre-ingest filter)** — auto-add on dealer dismiss; Dallas FB v1; scraper blocked; §69 | **Critical** | [~] deployed `c786c54b` |
+| **70** | **LLM token efficiency** — §70 shipped; staging `46ac09a2` prod `7cbd9844` | **High** | [~] credits out; partial validation |
 | **64** | **Extend Cox catalog to 2013 + improve MMR hit rate** — shipped `b0eda58`; soak §64 | **Critical** | [~] |
 | **65** | **LLM → offline matcher learning** — Phase 1 deployed prod `aadd46ef`; alias soak §65 | **Medium** | [~] |
 | **66** | **LLM prompt caching (item 57 cost)** — shipped prod `aadd46ef`; §66 | **High** | [~] |
@@ -686,6 +703,8 @@ Implement **45 + 47 together** as one dismiss/flag feature: same UI, expanded re
 - [x] Cannot submit without a reason
 - [x] Tests: filter exclusion + permission + missing reason → 400
 
+**Follow-up (2026-08-11):** Item **69** — extend `dealer` dismiss to **auto-add seller to pre-ingest blacklist** (Dallas Facebook v1). See §69.
+
 ---
 
 ## 48 — VIN entry populates Y/M/M/S + fresh MMR / Max buy
@@ -1094,7 +1113,7 @@ Deals already in `valuation_snapshots` with invented `mileage` (e.g. 54000) and 
 
 ## 55 — Scraper review mode (see Apify output in the queue)
 
-**Status (2026-07-16):** Phase C **shipped**. Worker `9e4d2765` (missing-years cron sync, skip-on-502). Web **deployed** to `https://tav-enterprise.vercel.app` (Suggested Cox matches + Apply on detail). **`cox_catalog_tree`:** **35,978 rows**, years **2016–2027** (synced 2026-07-16; +2,692 rows, 1 model skipped). Daily cron (`0 6 * * *`) syncs **missing years only**. **Funnel re-measure (live ingests):** post-Phase C **49.8%** MMR hit vs post-Phase B **48.7%**; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak. **`SCRAPER_REVIEW_MODE` permanent.** Item `[~]` until funnel lift confirmed.
+**Status (2026-07-16):** Phase C **shipped**. Worker `9e4d2765` (missing-years cron sync, skip-on-502). Web **deployed** to `https://tav-enterprise.vercel.app` (Suggested Cox matches + Apply on detail). **`cox_catalog_tree`:** **35,978 rows**, years **2016–2027** (synced 2026-07-16; +2,692 rows, 1 model skipped). Daily cron (`0 6 * * *`) syncs **missing years only**. **Funnel re-measure (live ingests):** post-Phase C **49.8%** MMR hit vs post-Phase B **48.7%**; `model_variant_missing` **55.4%** vs **56.3%** of misses — need multi-day soak. **`SCRAPER_REVIEW_MODE` permanent.** **Phase D (2026-08-11):** offline matcher fixes — staging `57cafd1c`, prod `64c6ea94`. Item `[~]` until funnel lift confirmed.
 
 **Reported:** 2026-07-11 (scraper soak — “we need to see what the scraper actually sends before fine-tuning filters”)
 
@@ -1418,6 +1437,22 @@ CREATE TABLE tav.mmr_style_aliases (
 
 **Enable review queue:** `SCRAPER_REVIEW_MODE = "true"` permanent (2026-07-16). Worker: Phase C-b sync cron `9e4d2765` (missing-years daily). Web: `tav-enterprise.vercel.app`.
 
+#### Phase D — offline matcher fixes (2026-08-11)
+
+**Shipped:** Worker staging `57cafd1c-e3a9-416e-856e-3d281f93de2f` + production `64c6ea94-9117-4b25-a9da-a5277e172ef2`.
+
+| Change | File | Notes |
+|--------|------|-------|
+| Fix `parserGarbagePenalty` regex | `src/valuation/matchListingToCoxCatalog.ts` | `${...}` inside non-template regex literal was a no-op; duplicate-make titles (e.g. `honda honda`) now penalized correctly |
+| Style tie-break on equal scores | `matchListingToCoxCatalog.ts` | Prefer style match when variant scores tie |
+| `2d` / `4d` body tokens | `matchListingToCoxCatalog.ts` | Added to `BODY_TOKENS` for coupe/sedan disambiguation |
+| Offline alias fallback | `src/valuation/buildIngestCatalogOfflineDeps.ts` | Uses `lookupMmrStyleAliasWithFallback` (same as LLM path) |
+| Exported helpers | `matchListingToCoxCatalog.ts` | `isOfflineConfidentCatalogMatch`, `AUTO_LOOKUP_MIN` for §70 offline-first gate |
+
+**Tests:** `src/valuation/__tests__/matchListingToCoxCatalog.test.ts` (parser garbage, tie-break, body tokens).
+
+**Validation:** §68 post-§55 run pending (deploy ~2026-08-11 afternoon UTC). Prior §70 window showed **`offline_hit`: 3**, **`alias_hit`: 27** since §70 deploy.
+
 ---
 
 ## 56 — Apify `unmapped_task` outage + missed-lead backfill
@@ -1502,11 +1537,11 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] Ingest batch-concurrency fix (§6 Phase 1) — built and tested 2026-07-20, independent of the credits blocker
 
 ### Later phases (backlog — not yet scoped in detail; expand `LLM-YMMS-Normalization.md` when picked up)
-- [ ] Learning loop — persist accepted Claude picks into `mmr_style_aliases` (`ingest_learned`) so repeats skip the LLM call
+- [x] Learning loop — persist accepted Claude/offline picks into `mmr_style_aliases` (`ingest_learned`) so repeats skip the LLM call — Phase 1 prod `aadd46ef`; §70 extended to `offline_hit` + alias key fix (2026-08-11)
 - [ ] Vision tier — enable Apify photo capture, persist images (R2 or equivalent), low-confidence-triggered vision follow-up call only
 - [ ] Model tiering / prompt caching once Phase 0 data shows an easy/hard listing split worth exploiting
 - [ ] Seller classification (dealer vs private/curbstoner) — RFP FR-3.5 phase 2, text + photos, needs its own labeled eval set (50–100); not started, not blocking item 57
-- [ ] Fix `parserGarbagePenalty` regex bug in `matchListingToCoxCatalog.ts` (line 83 — `${...}` inside a non-template regex literal never interpolates) if that matcher stays alive as the fallback path
+- [x] Fix `parserGarbagePenalty` regex bug in `matchListingToCoxCatalog.ts` — shipped 2026-08-11 (staging `57cafd1c`, prod `64c6ea94`); tie-break + alias fallback same cut
 
 ---
 
@@ -1743,36 +1778,450 @@ All 588 “missing” rows are 7/25 pre-deploy MMR hits (no `scheduleIngestMaxbu
 
 ## 63 — Craigslist source adapter (scheduled scraper → ingest)
 
-**Opened:** 2026-07-23 (scheduled Craigslist scraper running; TAV has no adapter yet)
+**Opened:** 2026-07-23 · **Adapter shipped:** 2026-07-28 (`bc09841`)
 
-**Product goal:** Listings from the **Craigslist scraper** (on a schedule, posting to `POST /ingest`) should flow through the same pipeline as Facebook — normalized listings, MMR, scoring, leads, and Opportunities — with source **Craigslist** in the UI.
+**Product goal:** Listings from **Craigslist** flow through the same pipeline as Facebook — normalized listings, MMR, scoring, leads, and Opportunities — with source **Craigslist** in the UI.
 
 **Single source of truth for build context:** [`docs/scrapers/craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) — read that first in a fresh chat; this section is the tracker only.
 
-**Current blocker:** `handleIngest.ts` only calls `parseFacebookItem`; any other `source` gets **`unsupported_source`** (items may land in `raw_listings` then `filtered_out` with **`processed: 0`**). There is **no** `src/sources/craigslist.ts`. Apify webhook / `APIFY_TASK_REGION_MAP` are **Facebook-only** — Craigslist is **`POST /ingest` + HMAC**, not `/apify-webhook`.
+**Shipped (2026-07-28 · `bc09841`):**
 
-**Scraper contract (external repo):** [`docs/scrapers/README.md`](scrapers/README.md) §5–§8 (envelope, §8.2 item JSON). As of 2026-07-23, **no** `craigslist` rows observed in production Supabase — confirm scraper `INGEST_URL`, `DRY_RUN`, and HMAC before adapter soak.
+- **`src/sources/craigslist.ts`** — `parseCraigslistItem`, `detectCraigslistDrift`
+- **`handleIngest.ts`** — routes `source === "craigslist"`
+- **Tests** — `test/craigslist.adapter.test.ts`, fixtures, ingest integration (`processed > 0`)
 
-### Implementation sketch
-
-1. **`src/sources/craigslist.ts`** — `parseCraigslistItem` → `NormalizedListingInput` (reference: `facebook.ts`; map §8.2 fields including `body_text` → description, `images[]`).
-2. **`handleIngest.ts`** — branch `source === "craigslist"`; optional schema drift helper.
-3. **Tests** — `test/craigslist.adapter.test.ts` + fixtures; ingest integration test with `processed > 0`.
-4. **Soak** — staging `POST /ingest` from scraper; then production. Ingest Monitor / `source_runs` / Opportunities source filter.
-5. **Follow-ups (not v1):** LLM listing text from `body_text` (items **60** / **57**); `parseListingUrl` for CL manual intake.
+**Still open (moved to item 67 for Apify path):** scheduled **`e-commerce/automotive-scraper`** ingest via `/apify-webhook`, production soak, enable Apify schedule. Legacy **solidcode/craigslist-scraper** tasks and direct **`POST /ingest` + HMAC** remain alternate paths — not validated yet.
 
 ### Related
 
-- Item **62** — listing mirror works for any source once `images` + `description` persist.
-- Item **54** — never invent mileage on CL ingest.
-- Buy box + source confidence already include `craigslist` in seed data.
+- Item **67** — Apify `e-commerce/automotive-scraper` eval + bridge (current blocker for CL schedule)
+- Item **62** — listing mirror works for any source once `images` + `description` persist
+- Item **54** — never invent mileage on CL ingest
+- Item **60** / **57** — LLM listing text from description on CL ingest (follow-up)
 
 ### Exit criteria
 
-- [ ] Adapter + ingest wiring merged; Facebook ingest unchanged (regression tests green)
-- [ ] Staging: scraper or fixture POST → **`processed > 0`**, `normalized_listings.source = craigslist`
-- [ ] Production enabled after staging soak
-- [ ] [`craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) updated with ship date and any field deltas from real scraper output
+- [x] Adapter + ingest wiring merged; Facebook ingest unchanged (regression tests green) — **`bc09841`**
+- [ ] Staging/production soak with live scraper → **`processed > 0`**, `normalized_listings.source = craigslist` — **blocked on item 67**
+- [ ] [`craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) updated with ship date and field deltas from real scraper output
+
+---
+
+## 67 — Apify Craigslist automotive-scraper eval + bridge
+
+**Opened:** 2026-08-07 (buyer evaluating **`e-commerce/automotive-scraper`** as replacement for solidcode CL scraper)  
+**Phase 0:** **go** 2026-08-07 — mapper + eval shipped; report `scripts/_eval-results/cl-automotive-scraper-eval-2026-08-07T15-17-07-531Z.json` (4 runs / 170 items: pass **95.9%**, Y/M/M+price among passed **99.4%**).  
+**Phase 1:** **live** 2026-08-07 — staging `cd8033f6` + production `432fef47`.  
+**Status (2026-08-11):** **Deprioritized** — team focus shifted to **Facebook Dallas** (§68). Chunked ingest fix shipped 2026-08-08; schedule still off. Revisit after §68–§70 land.
+
+**Status (2026-08-08):** First production manual ingest **succeeded but truncated**. Chunked Apify ingest shipped same day — verification run **`FuPxo5UyEbqDA6jtt`**: **19/20 processed**, 2 leads (was 7/20 on pre-chunk path). **Do not enable the schedule** until product re-prioritizes Craigslist.
+
+**Product goal:** Decide whether the Apify actor is a **usable** Craigslist source for TAV **before** enabling schedules. “Usable” means: extractable Y/M/M/S + price (+ miles when present), acceptable duplicate behavior across runs, and enough signal to reach **ingest MMR** on a representative sample — not just raw scrape volume.
+
+**Do not conflate with item 63:** item **63** shipped the **`parseCraigslistItem`** adapter for flat Craigslist-shaped payloads. This actor emits **schema.org `Car`**. **`mapAutomotiveScraperItem`** (Phase 0) bridges that shape; Phase 1 wires it through `/apify-webhook`.
+
+### Apify state (2026-08-08)
+
+| Resource | ID | Notes |
+|----------|-----|--------|
+| Actor | `e-commerce/automotive-scraper` (`HqZudyEggO98WZvlN`) | Search-URL input; ~342 fields/listing |
+| Task | `cl-dallas-automotive` (`NMTFTt1C0aEnhEuY9`) | Dallas metro; **`maxResultsPerUrl: 100`** ← too large for one Worker batch today |
+| Webhook | `k44uPe3kKRoXFH9bx` | → `tav-aip-production` `/apify-webhook` — **working** |
+| Schedule | `tav-cl-dallas-automotive` (`HIb0Pg9Gg3Pn7RNfD`) | **`isEnabled: false`** · keep off until truncation fixed |
+
+**Phase 0 eval runs (2026-08-07):** `C1XKAcUiIQUKf0Ck4`, `tdxUXkdtPkaZ6nj7M`, `K3J8fzYvAgNfqOdIS`, `jyAW1nDI7N8I5XpWt`.
+
+### First production ingest (2026-08-07 ~15:27 UTC)
+
+| Field | Value |
+|-------|--------|
+| Apify run | `VGkVS0ITBNTAceGxj` (SUCCEEDED) |
+| Webhook | HTTP **200** — prior run `jyAW…` had been `skipped: unmapped_task` (pre-deploy) |
+| Response | `source=craigslist`, **processed 8**, rejected 1, **created_leads 2**, `truncated: true`, **items_skipped 91** |
+| `tav.source_runs` | `status=truncated`, `item_count=100`, `error_message=batch_truncated:91_items_skipped` |
+| DB | **8** `normalized_listings` with `source=craigslist` |
+| MMR on those 8 | **3 hits / 5 misses** (misses included `model_variant_missing`, `llm_unavailable`, `trim_missing`, `cox_no_data`, plus pre-catalog years) |
+
+**Why 91 dropped:** not bad data. Ingest stops when `BATCH_TIMEOUT_MS` (~25s) is nearly exhausted so the Worker can return cleanly. With Claude Y/M/M/S + MMR per listing, ~100 cars do not fit one webhook call.
+
+### What to do next (before enabling schedule)
+
+Preferred order:
+
+1. **Shrink Apify batch** — set task `maxResultsPerUrl` from **100 → ~20–30**, manual re-run, confirm most items process (`truncated` false or near-zero skips).
+2. **Then** more manual soaks / optional schedule enable at a cadence that matches the smaller batch.
+3. Later options if still needed: cheaper per-listing path (less LLM), or carefully raise Worker time budget (Workers still have hard limits — not a free “2 minutes”).
+
+**Do not enable** schedule `HIb0Pg9Gg3Pn7RNfD` while `maxResultsPerUrl=100` — every scheduled fire would keep throwing away most listings.
+
+### Phase 0 eval result (2026-08-07) — offline only
+
+| Metric | Value |
+|--------|-------|
+| Adapter pass | **163/170 (95.9%)** |
+| Rejects | 7× `invalid_year` (pre-2000) |
+| Y/M/M + price among passed | **99.4%** |
+| Description / images among passed | **100% / 99.4%** |
+| VIN among passed | 25.8% (optional) |
+
+Also fixed: `parseCraigslistItem` parses `priceUsd` directly so structured-YMM rows keep price when Facebook title probe fails.
+
+### Implementation order
+
+**Phase 0 — offline eval:** ✅
+
+1. `src/apify/automotiveScraperAdapter.ts` — `mapAutomotiveScraperItem`
+2. Fixture + tests + `npm run eval:cl-automotive-scraper`
+
+**Phase 1 — webhook bridge:** ✅ deployed
+
+1. `APIFY_TASK_CONFIG` — `NMTFTt1C0aEnhEuY9 → { region: dallas_tx, source: craigslist }`
+2. `webhookHandler.ts` — mapper + envelope by source
+3. `buildLlmYmmsPrefetchInputs` — includes craigslist
+4. Deployed staging + production; first manual run ingested (truncated)
+5. [`docs/04-operations/apify.md`](04-operations/apify.md) updated
+
+**Phase 1b — fix truncation:** [~] chunked ingest shipped prod `467021c6` (2026-08-08)
+
+1. ~~Lower Apify `maxResultsPerUrl` (~25)~~ — superseded by **`dispatchApifyIngest`** / `INGEST_CHUNK_SIZE=7` synchronous multi-chunk path (`src/ingest/chunkedApifyIngest.ts`)
+2. Manual re-run `FuPxo5UyEbqDA6jtt` → **19/20 processed**, status `truncated` (1 chunk timeout)
+3. Clean up stuck `source_runs` rows from pre-chunk `waitUntil` deploy (`cHXv0kVEonbFWDtgS`, etc.) — optional ops
+4. Document MMR / lead quality on non-truncated sample — **on hold** (§68 priority)
+
+**Phase 2 — schedule (only after 1b OK):**
+
+1. Enable schedule **`HIb0Pg9Gg3Pn7RNfD`** (or tune cron)
+2. Multi-day funnel soak vs Facebook Dallas
+
+### Not in scope (yet)
+
+- Oklahoma / other regions
+- Retire **solidcode/craigslist-scraper** (`JFzGvWoMqkLgbA4gz`) until automotive-scraper validated at cadence
+- Direct **`POST /ingest` + HMAC** external scraper path
+- R2 image durability (item **62**)
+
+### Related
+
+- Item **63** — flat Craigslist adapter (shipped)
+- Item **55** / **57** / **60** — Y/M/M/S + description at ingest (drives per-listing cost → truncation)
+- Item **62** — listing mirror
+- Item **54** — never invent mileage
+
+### Exit criteria
+
+- [x] `mapAutomotiveScraperItem` + tests + fixture
+- [x] Eval script run on ≥3 Apify runs; report under `scripts/_eval-results/`
+- [x] Phase 0 go/no-go — **go** 2026-08-07
+- [x] Production webhook ingest **`processed > 0`**, `source = craigslist` — run `VGkVS0ITBNTAceGxj`
+- [x] Non-truncated (or near-full) manual run after shrinking Apify batch — **19/20** on `FuPxo5UyEbqDA6jtt` (chunked path)
+- [ ] Schedule enabled only after truncation fix + soak sign-off — **blocked on priority shift to §68**
+- [x] [`apify.md`](04-operations/apify.md) updated for Phase 1
+- [ ] [`craigslist-tav-adapter.md`](scrapers/craigslist-tav-adapter.md) updated with ship date + real field deltas
+
+---
+
+## 68 — Facebook Dallas throughput + fast validation
+
+**Opened:** 2026-08-11 (priority shift — **main scraper focus**)  
+**Status:** [~] **baseline captured + partial validation** — §70 + §55 Phase D deployed 2026-08-11; full pass blocked on Anthropic credits (`llm_unavailable`)
+
+**Product goal:** Get **more usable Dallas Facebook inventory through ingest faster**, with changes validated in **hours** (single Apify run + `source_runs` row + queue spot-check) — **not** the old 1–3 day multi-day soak bar used for items **55**, **64**, **66**.
+
+### Why this is #1 now
+
+| Signal | Facebook Dallas today |
+|--------|----------------------|
+| Volume | Primary scrape source (~300–500 Apify runs/day on schedule) |
+| Truncation | ~**59%** of runs still `truncated` (same `BATCH_TIMEOUT_MS` + LLM+MMR per listing as Craigslist) |
+| Token cost | Claude Y/M/M/S on **every** listing that reaches ingest (`LLM_YMMS_ENABLED=true`) |
+| Craigslist | Item **67** chunked path works (19/20); schedule off; **deprioritized** |
+
+Chunked ingest (`chunkedApifyIngest.ts`) helps **both** sources but does not fix per-listing cost. **§69** (dealer blacklist) and **§70** (token efficiency) directly reduce wasted work on Dallas FB.
+
+### Apify / region refs
+
+| Resource | ID | Notes |
+|----------|-----|--------|
+| Task | `dallas-nick-task` (`ZQEsd3nHcLAs5kLwL`) | Custom vehicle scraper; `region=dallas_tx`, `source=facebook` |
+| Schedule | `tav-tx-dallas-custom` | ~every 5 min (see [`apify.md`](04-operations/apify.md)) |
+| Adapter | `src/sources/facebook.ts` | `parseFacebookItem`; extracts `sellerName`, `sellerUrl` |
+| Webhook | production `/apify-webhook` | Same ingest path as Craigslist; chunked when batch > 7 |
+
+### Locked decisions (2026-08-11)
+
+1. **Scope:** Facebook **Dallas only** for this sprint — not Oklahoma, not Craigslist.
+2. **Validation cadence:** When shipping a change, sign off on **same-day** metrics — do **not** block on 1–3 day soak windows.
+3. **`SCRAPER_REVIEW_MODE`:** Stays **on** (permanent product decision 2026-07-16). “Fast validation” means **ingest throughput + funnel metrics**, not turning off the review tab.
+
+### Fast validation playbook (use instead of multi-day soak)
+
+After each deploy, within **~1–2 hours**:
+
+| Check | Where | Pass bar (starting point — tune as we learn) |
+|-------|--------|-----------------------------------------------|
+| Run completed | `tav.source_runs` for latest Dallas FB `run_id` | `status=completed` (not stuck `running`) |
+| Process rate | `processed / item_count` | ≥ **90%** on a 20-item sample run |
+| Truncation | `error_message` | No `batch_truncated` or skips ≤ 2 |
+| MMR funnel | `valuation_snapshots` on new listings | MMR hit % not regressed vs prior 24h Dallas cohort |
+| Leads | `created_leads` on run | Non-zero on a representative sample (if inventory allows) |
+| Token signal | Worker logs `llm_ymms.anthropic_cache_usage` | No spike in uncached tokens per listing (after §70 recommendations) |
+
+Optional: trigger one manual Apify run (`ZQEsd3nHcLAs5kLwL`) before relying on schedule traffic alone.
+
+### Baseline captured (2026-08-11 — §68 Phase A)
+
+**Window:** last 24 hours · `source=facebook` · `region=dallas_tx`
+
+| Metric | Value |
+|--------|-------|
+| Apify ingest runs | **231** |
+| Truncated runs | **4 (1.7%)** |
+| Stuck `running` | **6** (532 items claimed — investigate) |
+| Avg process rate (`processed/item_count`) | **95.4%** |
+| Items scraped / processed | 4,707 / 3,997 |
+| Leads created | **309** (~1.37/run) |
+| MMR hit (last 200 listings) | **61.5%** (123/200) |
+
+**Top MMR miss reasons** (among misses in sample):
+
+| Reason | Count |
+|--------|------:|
+| `llm_unavailable` | 46 |
+| `cox_no_data` | 18 |
+| `model_variant_missing` | 7 |
+| `trim_missing` | 6 |
+
+**Notes:** 24h truncation is **much lower** than the ~59% cited from 7-day history — likely smaller FB batch sizes + schedule cadence re-scraping skipped items. **`llm_unavailable` dominates misses** in this window (credit/outage or transient API — worth checking before token-efficiency work). Stuck `running` rows mirror pre-chunk Craigslist pattern on large batches.
+
+**Next step:** §69 blocked on scraper seller fields — vendor contacted. When credits return, re-run §68 playbook for token columns + MMR regression.
+
+### Validation — post §70 deploy (2026-08-11, ~16:07 UTC+ window)
+
+**Production Worker:** `7cbd9844-3cfb-44ab-a218-fd91fab8dfa9` (§70) then `64c6ea94-9117-4b25-a9da-a5277e172ef2` (§55 Phase D).
+
+| Check | Result | Pass? |
+|-------|--------|-------|
+| Latest completed run | `zGSnkc2CAshruebrr` — **4/4 (100%)** processed | ✓ |
+| Truncation on sample | No `batch_truncated` | ✓ |
+| `offline_hit` since deploy | **3** | ✓ (§70 offline-first works) |
+| `alias_hit` since deploy | **27** | ✓ (alias fast-path active) |
+| `mmr_style_aliases` rows | **3** new (`ingest_learned`) | ✓ (alias learning started) |
+| MMR hit (post-deploy sample) | **50.8%** vs baseline **61.5%** | ✗ (depressed by credits) |
+| Top miss reason post-deploy | **`llm_unavailable` (75)** | — credits out |
+| `model_variant_missing` post-deploy | **9** | monitor after §55 |
+| Token columns on `llm_ymms_decisions` | Empty (no successful Claude calls) | pending credits |
+| Stuck `running` runs | **2** (`sp8b79sGtPlStahrv`, `M1TeVfi3u5h1kofFP`) | ✗ ops flag |
+
+**Recommendation (2026-08-11):** Consider `LLM_YMMS_ENABLED=false` until Anthropic credits refill — offline-first + alias paths still resolve listings without Claude.
+
+### Implementation tracks (ordered)
+
+**Phase A — measure baseline (same day):** ✓ done 2026-08-11
+
+**Phase B — throughput wins:** ✓ chunked ingest already wired; §69 deployed but non-functional until scraper sends seller fields
+
+**Phase C — token wins:** ✓ §70 shipped — see §70 for change list and deploy IDs
+
+### Primary files (when implementing)
+
+- `src/ingest/chunkedApifyIngest.ts`, `src/apify/webhookHandler.ts`
+- `src/sources/facebook.ts`, `src/ingest/runIngestItemLoop.ts`
+- `src/llm/*`, `src/valuation/resolveListingWithLLM.ts`
+- [`docs/04-operations/apify.md`](04-operations/apify.md)
+
+### Exit criteria
+
+- [x] Baseline metrics recorded for Dallas FB (24h truncation + MMR hit) — **2026-08-11**
+- [x] At least one post-change manual run meets process-rate bar — **`zGSnkc2CAshruebrr` 4/4 (100%)**
+- [~] Truncation rate materially down vs baseline — **already low (1.7% in 24h window)**; multi-day trend TBD
+- [~] No regression in lead quality — not spot-checked yet
+- [ ] MMR hit ≥ baseline after credits return (token columns + cache metrics populated)
+- [ ] Stuck `running` `source_runs` investigated / cleared
+
+### Related
+
+- Item **67** — Craigslist; deprioritized
+- Item **69** — dealer pre-filter (biggest immediate token + throughput win)
+- Item **70** — token efficiency shipped (offline-first, prune, token columns)
+- Items **57**, **60**, **61**, **66** — LLM ingest path
+
+---
+
+## 69 — Dealer seller blacklist (pre-ingest filter)
+
+**Opened:** 2026-08-11  
+**Status (2026-08-11):** [~] **Phase 0 + Phase 1 deployed** — migration `0068_blocked_sellers` on Supabase; Worker staging `a86c6854-00c3-42c8-9a73-2668358fd751` + production `c786c54b-3a9e-477d-ae0c-d00a1cd68460`. **Non-functional in prod:** Apify payloads for Dallas FB (~135k listings) have **zero** `seller_url` / `seller_name` — filter + dismiss hook cannot match sellers until scraper vendor adds fields. `blocked_sellers` table: **0 rows**. Vendor contacted 2026-08-11.
+
+**Product goal:** When a buyer flags a listing as **Dealer**, **automatically block that Facebook seller** on future scrapes **before** LLM Y/M/M/S and MMR run — saving tokens, Worker time, and queue noise.
+
+### Locked decisions (2026-08-11)
+
+| Decision | Choice |
+|----------|--------|
+| Trigger | **Auto-add** when dismiss/flag reason = **`dealer`** (item **47** UI — no separate admin flow for v1) |
+| Scope v1 | **`source=facebook`** AND **`region=dallas_tx`** only |
+| Seller key | **`seller_url`** primary (Facebook profile URL); **`seller_name`** fallback when URL missing |
+| Filter point | **Before ingest processing** — after `parseFacebookItem`, before `runIngestItemLoop` / LLM / MMR |
+| List population | Manual via existing buyer flag workflow (crowdsourced over time) |
+| Unblock | **Out of scope v1** — no UI to remove from blacklist yet (ops can delete row in DB if needed) |
+
+### Why this makes sense
+
+- Item **47** already captures `dealer` dismiss reason and hides rows from default queue views — but **does not** stop the same seller’s next listing from burning tokens on re-scrape.
+- Dallas FB runs ~every 5 min; dealer inventory repeats; pre-filter compounds savings quickly.
+- Aligns with §68 fast-validation goal: fewer junk listings → higher effective `processed/item_count`.
+
+### Proposed flow
+
+```
+Buyer dismisses lead → reason=dealer
+  → upsert tav.blocked_sellers (seller_url, seller_name, source, region, flagged_by, opportunity_id)
+
+Next Apify webhook → parseFacebookItem
+  → if dallas_tx + facebook + seller matches blocked_sellers → skip (log + count as rejected/skipped, no LLM)
+  → else → normal ingest
+```
+
+### Proposed schema (sketch — migrated as `0068_blocked_sellers`)
+
+```sql
+-- tav.blocked_sellers (name TBD)
+-- seller_url     text        NOT NULL  -- normalized FB profile URL
+-- seller_name    text                  -- denormalized display name at flag time
+-- source         text        NOT NULL  -- 'facebook' for v1
+-- region         text        NOT NULL  -- 'dallas_tx' for v1
+-- reason         text        NOT NULL  -- 'dealer' for v1
+-- flagged_by     uuid        REFERENCES auth.users(id)  -- or app user id
+-- opportunity_id uuid                  -- audit trail
+-- created_at     timestamptz NOT NULL DEFAULT now()
+-- UNIQUE (source, region, seller_url) WHERE seller_url IS NOT NULL
+```
+
+**Normalization rules (to lock in Phase 0):**
+
+- Strip query params / trailing slashes from `seller_url`
+- Case-fold URL path for dedupe
+- If only `seller_name` available: case-fold + trim; weaker key — log when used
+
+### Implementation order
+
+**Phase 0 — schema + dismiss hook:** ✓ shipped 2026-08-11
+
+**Phase 1 — ingest filter:** ✓ shipped 2026-08-11 (`runIngestItemLoop.ts`, `blockedSellers.ts`)
+
+**Phase 2 — metrics (fast validation per §68):** **blocked** — cannot seed blacklist or verify `ingest.dealer_blocked` until scraper sends seller fields
+
+### Primary files (when implementing)
+
+- `src/persistence/opportunityWorkflow.ts` — dismiss handler
+- `src/persistence/opportunities.ts` — read listing seller fields from opportunity
+- `src/ingest/runIngestItemLoop.ts` or `src/sources/facebook.ts` — pre-filter hook
+- `src/apify/webhookHandler.ts` — ensure seller fields present before filter
+- `web/lib/opportunities/dismiss-reasons.ts` — already has `dealer`
+
+### Exit criteria
+
+- [x] Migration applied; table live in Supabase (`0068_blocked_sellers`)
+- [x] Dismiss with `dealer` auto-creates blacklist row (Dallas FB listing with seller URL) — coded + unit test
+- [x] Re-ingest of same seller skipped before LLM — coded in `runIngestItemLoop` + prefetch skip
+- [x] `ingest.dealer_blocked` logged with counts per run
+- [x] **Deploy Worker** — staging `a86c6854` + production `c786c54b` (2026-08-11)
+- [ ] Verify on one manual Dallas FB run after flagging a known dealer (`ingest.dealer_blocked` in logs) — **blocked on scraper seller fields**
+- [x] No filter applied to Oklahoma / Craigslist / other regions in v1
+
+### Related
+
+- Item **47** / **45** — dismiss + dealer reason (shipped)
+- Item **68** — Dallas FB throughput + validation
+- Item **70** — further token reductions after blacklist
+
+---
+
+## 70 — LLM token efficiency
+
+**Opened:** 2026-08-11  
+**Status:** [~] **research + implementation shipped 2026-08-11** — staging `46ac09a2-e979-4d16-ac96-72b5ad4e0ce8` + production `7cbd9844-3cfb-44ab-a218-fd91fab8dfa9`; §68 partial validation done; token-column verification pending Anthropic credits
+
+**Product goal:** Reduce Claude token spend and ingest latency on Dallas FB without regressing MMR hit rate. Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md); implementation followed buyer sign-off on ranked recommendations.
+
+### Sign-off decisions (2026-08-11)
+
+| Approved | Rejected |
+|----------|----------|
+| #1 Offline-first gate before Claude | #2 Fix `needs_review` waste |
+| #3 Catalog pruning (Ford/Chevy subtrees) | #6 Reduce `max_tokens` 1024→256 |
+| #4 Sort prefetch by `(year, make)` | |
+| #5 Trim listing evidence (1000 char cap; drop location from prompt) | |
+| #7 Fix alias learning (model mapping + key strategy) | |
+| #8 Persist token columns on audit rows | |
+
+### Shipped implementation (2026-08-11)
+
+| Change | Primary files |
+|--------|---------------|
+| Offline-first gate (`offline_hit` outcome) | `src/valuation/resolveListingWithLLM.ts`, `workerClient.ts` |
+| Ford/Chevy catalog subtree pruning | `src/llm/pruneCatalogSubtree.ts` (new), `resolveListingWithLLM.ts` |
+| Prefetch sorted by `(year, make)` for cache locality | `src/valuation/workerClient.ts` |
+| Listing evidence cap 2000→1000; location removed from prompt | `src/llm/listingTextContext.ts`, `src/llm/ymmsPrompt.ts` |
+| `output_tokens` in Anthropic usage | `src/llm/anthropicClient.ts` |
+| Token usage helpers | `src/llm/tokenUsage.ts` (new) |
+| Token columns on `llm_ymms_decisions` + fixed `model` audit mapping | `src/persistence/llmYmmsDecisions.ts`, migration `0069_llm_ymms_token_usage.sql` |
+| Alias learning from `offline_hit` + `llm_hit` | `src/valuation/learnIngestStyleAlias.ts` |
+| Offline alias fallback | `src/persistence/mmrStyleAliases.ts` — `lookupMmrStyleAliasWithFallback` |
+
+**Deploy:** staging `46ac09a2` + production `7cbd9844` (2026-08-11).
+
+**Observed post-deploy (§68 window):** `offline_hit` **3**, `alias_hit` **27**, **3** new `mmr_style_aliases` rows; MMR hit **50.8%** vs **61.5%** baseline — dominated by **`llm_unavailable` (75)** with credits out, not a regression signal yet.
+
+### Research phase (completed)
+
+| Section | Content |
+|---------|---------|
+| Current baseline | Tokens per listing today (cache hit vs miss from prod logs); prompt structure inventory |
+| Anthropic official | Prompt caching (item **66** — what's left?), batch API, model choice, `max_tokens`, tool design, structured outputs |
+| Community / industry | Curated tips from Claude docs, Anthropic cookbook, practitioner posts (with links) |
+| Already shipped in TAV | Item **66** caching, **61** auto-accept >0.50, offline matcher fallback — what not to redo |
+| Ranked recommendations | Impact (tokens saved) × effort × risk; each with “fast validation” check from §68 |
+| Explicit non-goals | Things that would hurt MMR accuracy or add multi-day soak dependency |
+
+### Research sources (starting list)
+
+- [Anthropic prompt caching](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
+- [Anthropic batch processing](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing)
+- Item **66** implementation: `src/llm/ymmsPrompt.ts`, cache_control wiring
+- Prod logs: `llm_ymms.anthropic_cache_usage` (read/create/write token breakdown)
+- [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) — Phase 2+ backlog (vision, etc.)
+
+### Candidate themes to evaluate (hypotheses — not decisions)
+
+- Skip LLM when offline matcher is already confident (title + description sufficient)
+- Shorter evidence tail / trim description length caps
+- Narrower catalog tool payload per request
+- Stronger pre-LLM heuristics (dealer blacklist §69, junk title filter)
+- Model downgrade for easy titles vs hard titles (if accuracy holds)
+- Batch API for non-real-time ingest slices (latency tradeoff)
+
+### Implementation order (completed 2026-08-11)
+
+1. ~~Review [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md) with buyer/ops~~ ✓
+2. ~~Implement approved items (#1, #3–#5, #7–#8)~~ ✓
+3. ~~Deploy; measure via §68 playbook~~ partial — credits out blocks token-column verification
+4. **When credits return:** confirm token columns populated, cache read/write ratios, MMR hit ≥ baseline
+
+### Exit criteria
+
+- [x] `docs/LLM-Token-Efficiency.md` drafted with ≥5 ranked recommendations (10 ranked — see doc §5)
+- [x] Buyer sign-off on approved items (#1, #3–#5, #7–#8; rejected #2, #6)
+- [x] Implementation shipped — offline-first, Ford/Chevy prune, prefetch sort, evidence trim, alias fix, token columns
+- [x] Migration `0069_llm_ymms_token_usage` applied to Supabase
+- [x] **Deploy Worker** — staging `46ac09a2` + production `7cbd9844` (2026-08-11)
+- [x] §68 partial validation — `offline_hit` / `alias_hit` / alias rows confirmed; MMR regression check **pending credits**
+
+### Related
+
+- Item **68** — fast validation playbook
+- Item **69** — pre-ingest dealer filter (non-LLM token win)
+- Items **57**, **60**, **61**, **66** — existing LLM ingest stack
 
 ---
 
@@ -1851,11 +2300,11 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 
 **Implementation sketch (when picked up — read [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) §Phase 3 first):**
 
-1. **Alias learning (highest ROI) — Phase 1 shipped + deployed 2026-07-27:** After ingest `llm_hit` + MMR hit, `maybeLearnIngestStyleAlias` (`src/valuation/learnIngestStyleAlias.ts`) upserts `mmr_style_aliases` (`source: "ingest_learned"`) keyed on raw `(make, model, trim)` → Cox tokens from the LLM pick. Wired in `performMmrCall` (`workerClient.ts`); best-effort, never blocks ingest. Code `834c9ac`; prod `aadd46ef`. **No historical backfill** — aliases populate forward on new ingests only until optional backfill script.
+1. **Alias learning (highest ROI) — Phase 1 shipped + deployed 2026-07-27; extended 2026-08-11 (§70):** After ingest `llm_hit` or **`offline_hit`** + MMR hit, `maybeLearnIngestStyleAlias` (`src/valuation/learnIngestStyleAlias.ts`) upserts `mmr_style_aliases` (`source: "ingest_learned"`) keyed on raw `(make, model, trim)` → Cox tokens from the LLM/offline pick. Wired in `performMmrCall` (`workerClient.ts`); best-effort, never blocks ingest. Code `834c9ac`; prod `aadd46ef`; §70 alias fix + offline learning on prod `7cbd9844`. **No historical backfill** — aliases populate forward on new ingests only until optional backfill script.
 2. **Offline scorer tuning** — Mine `llm_ymms_decisions` for systematic offline-matcher misses: variant parser gaps (`"cherokee latitude"` → `CHEROKEE FWD V6`), hybrid model splits (`SONATA HYBRID`), truck cab/bed tokens. Update `selectCatalogModelVariant.ts`, signal bonuses in `matchListingToCoxCatalog.ts`, and item **64** `listingCatalogEvidence.ts` — not open-ended ML.
 3. **Eval harness** — Extend `scripts/eval-llm-ymms.mjs` (or new script) to score offline matcher **before vs after** alias/rules against historical `llm_hit` rows; target ≥X% recall on repeat combos without Claude.
 4. **Trust rules** — Do **not** auto-learn from `llm_invalid_pick`, sub-0.5 confidence, or picks with no MMR hit. Buyer detail **Apply** on suggested match remains gold-label override (existing item **46** loop).
-5. **Known offline bug** — Fix `parserGarbagePenalty` regex in `matchListingToCoxCatalog.ts` (line ~83 — `${...}` inside non-template regex literal) if fallback path stays active.
+5. ~~**Known offline bug** — Fix `parserGarbagePenalty` regex in `matchListingToCoxCatalog.ts`~~ — **fixed 2026-08-11** (§55 Phase D; staging `57cafd1c`, prod `64c6ea94`).
 
 **Related:** item **57** (LLM resolver, alias fast-path already wired in `resolveListingWithLLM.ts`), item **55** (offline matcher), item **46** (manual Apply → alias), item **64** (description evidence).
 
@@ -1864,7 +2313,7 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 ### Exit criteria
 
 - [x] Accepted LLM picks (`llm_hit` + MMR hit) persist to `mmr_style_aliases` (`ingest_learned`) — deployed prod `aadd46ef`; forward soak pending
-- [ ] Repeat listing combos resolve via alias fast-path without Claude call (measure skip rate)
+- [~] Repeat listing combos resolve via alias fast-path without Claude call — **27 `alias_hit` since §70 deploy 2026-08-11**; forward soak ongoing
 - [ ] Offline matcher recall improves on held-out `llm_hit` sample (document baseline + after)
 - [ ] No bad aliases from low-confidence or MMR-miss picks (guardrails tested)
 - [ ] `LLM-YMMS-Normalization.md` §Phase 3 updated when shipped
@@ -1888,11 +2337,11 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 1. **`src/llm/ymmsPrompt.ts`** — split into `buildYmmsCatalogCacheText` (stable per year+make) + `buildYmmsListingEvidenceText` (per listing); catalog block precedes evidence in the API payload.
 2. **`src/llm/anthropicClient.ts`** — `cache_control: { type: "ephemeral" }` on system, tool, and catalog user block; listing evidence uncached.
 3. **Eval script** — `scripts/eval-llm-ymms.mjs` mirrors the same payload shape.
-4. **Observability** — structured log `llm_ymms.anthropic_cache_usage` with read/write/uncached token counts (not yet on `llm_ymms_decisions` rows).
+4. **Observability** — structured log `llm_ymms.anthropic_cache_usage` with read/write/uncached token counts; per-row token columns on `llm_ymms_decisions` via migration **`0069`** (§70, 2026-08-11).
 
 **Related:** item **57** (LLM resolver), item **65** (alias skip — complementary cost lever), [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) §cost discipline.
 
-**Not in scope here:** Model downgrade (Haiku tiering), offline-first gating, catalog pre-filter — separate items if needed.
+**Not in scope here:** Model downgrade (Haiku tiering) — separate item if needed. **Now shipped elsewhere:** offline-first gating (§70), catalog pre-filter/prune (§70), dealer pre-filter (§69 — blocked on scraper).
 
 ### Exit criteria
 

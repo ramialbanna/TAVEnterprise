@@ -144,7 +144,7 @@ describe("buildYmmsUserPrompt", () => {
     expect(prompt).toContain("SuperCrew XLT 4x4");
     expect(prompt).toContain("Listing condition (evidence):\nUSED");
     expect(prompt).toContain("89000 mi");
-    expect(prompt).toContain("Dallas, TX");
+    expect(prompt).not.toContain("Dallas, TX");
   });
 });
 

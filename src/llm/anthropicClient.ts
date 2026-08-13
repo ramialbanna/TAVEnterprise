@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { Env } from "../types/env";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log } from "../logging/logger";
+import type { LlmYmmsTokenUsage } from "./tokenUsage";
 import {
   YMMS_TOOL,
   YMMS_TOOL_NAME,
@@ -41,11 +42,7 @@ const YmmsProposalSchema = z.object({
   needsReview: z.boolean(),
 });
 
-export type AnthropicPromptCacheUsage = {
-  cacheCreationInputTokens: number;
-  cacheReadInputTokens: number;
-  uncachedInputTokens: number;
-};
+export type AnthropicPromptCacheUsage = LlmYmmsTokenUsage;
 
 export type AnthropicCallResult =
   | {
@@ -70,6 +67,7 @@ interface AnthropicMessageContentBlock {
 
 interface AnthropicUsage {
   input_tokens?: number;
+  output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
 }
@@ -86,6 +84,7 @@ function parsePromptCacheUsage(usage: AnthropicUsage | undefined): AnthropicProm
     cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
     cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
     uncachedInputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
   };
 }
 

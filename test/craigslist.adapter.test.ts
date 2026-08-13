@@ -109,6 +109,28 @@ describe("parseCraigslistItem — rejections", () => {
     if (r.ok) return;
     expect(r.reason).toBe("invalid_year");
   });
+  it("keeps priceUsd when structured YMM is present but title is sparse", () => {
+    const r = parseCraigslistItem(
+      {
+        url: "https://dallas.craigslist.org/cto/d/x/7952069789.html",
+        title: "Big Horn available now",
+        year: 2022,
+        make: "Ram",
+        model: "1500",
+        trim: "Big Horn",
+        priceUsd: 30328,
+        mileage: 80430,
+        source_listing_id: "7952069789",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.price).toBe(30328);
+    expect(r.listing.year).toBe(2022);
+    expect(r.listing.make).toBe("ram");
+    expect(r.listing.model).toBe("1500");
+  });
 });
 
 describe("detectCraigslistDrift", () => {

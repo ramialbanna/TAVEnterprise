@@ -391,7 +391,9 @@ async function performMmrCall(
     }
 
     const catalogResolved =
-      llmResolution.kind === "alias_hit" || llmResolution.kind === "llm_hit"
+      llmResolution.kind === "alias_hit" ||
+      llmResolution.kind === "offline_hit" ||
+      llmResolution.kind === "llm_hit"
         ? {
             make: llmResolution.make,
             model: llmResolution.model,
@@ -669,14 +671,22 @@ async function performMmrCall(
         : {}),
   };
 
-  // Item 65 — best-effort alias learning after a trusted LLM pick produces MMR.
-  if (llmResolutionForLearn?.kind === "llm_hit" && make && model) {
+  // Item 65 — best-effort alias learning after a trusted pick produces MMR.
+  if (
+    (llmResolutionForLearn?.kind === "llm_hit" || llmResolutionForLearn?.kind === "offline_hit") &&
+    make &&
+    model &&
+    year !== undefined
+  ) {
     try {
       const learnDb = getSupabaseClient(env);
       await maybeLearnIngestStyleAlias(learnDb, {
+        year,
         listingMake: make,
         listingModel: model,
         listingTrim: params.trim,
+        listingTitle: params.title,
+        listingDescription: params.description,
         llmResolution: llmResolutionForLearn,
       });
     } catch (err) {
@@ -787,7 +797,13 @@ export function createLlmYmmsPrefetch(
 ): LlmYmmsPrefetch {
   const db = getSupabaseClient(env);
   const deps = buildLlmYmmsDeps(db, env);
-  const orderedIndices = [...inputsByIndex.keys()].sort((a, b) => a - b);
+  const orderedIndices = [...inputsByIndex.keys()].sort((a, b) => {
+    const left = inputsByIndex.get(a)!;
+    const right = inputsByIndex.get(b)!;
+    const yearDiff = left.year - right.year;
+    if (yearDiff !== 0) return yearDiff;
+    return left.make.localeCompare(right.make);
+  });
   let nextToStart = 0;
   const inFlight = new Map<number, Promise<LlmYmmsResolution>>();
 

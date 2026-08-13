@@ -1,7 +1,7 @@
 import type { Env } from "../types/env";
 import { IngestRequestSchema, MAX_INGEST_ITEMS, type IngestRequest } from "../validate";
 import { ApifyWebhookPayloadSchema, isSucceededEvent } from "./payloadSchema";
-import { mapApifyTaskToRegion } from "./regionMap";
+import { mapApifyTaskConfig, type ApifyIngestSource } from "./regionMap";
 import {
   fetchApifyDatasetItems,
   fetchApifyRunDefaultDataset,
@@ -10,7 +10,8 @@ import {
   MAX_ITEMS_PER_RUN,
 } from "./datasetFetch";
 import { mapRaidrApiItem } from "./payloadAdapter";
-import { ingestCore } from "../ingest/handleIngest";
+import { mapAutomotiveScraperItem } from "./automotiveScraperAdapter";
+import { dispatchApifyIngest } from "../ingest/chunkedApifyIngest";
 import { isConfiguredSecret } from "../types/envValidation";
 import { verifyBearer } from "../auth/bearerAuth";
 import { log, logError } from "../logging/logger";
@@ -22,6 +23,13 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+function mapDatasetItems(source: ApifyIngestSource, items: unknown[]): unknown[] {
+  if (source === "craigslist") {
+    return items.map(mapAutomotiveScraperItem);
+  }
+  return items.map(mapRaidrApiItem);
+}
+
 /**
  * POST /apify-webhook — bridge from Apify task webhooks to the canonical
  * /ingest pipeline.
@@ -30,11 +38,12 @@ function json(body: unknown, status: number): Response {
  *   1. Feature flag + bearer auth.
  *   2. Validate Apify webhook payload schema (no HMAC — Apify doesn't sign).
  *   3. Filter event type: only ACTOR.RUN.SUCCEEDED triggers ingest; others noop.
- *   4. Map actorTaskId → TAV region; unmapped tasks noop.
+ *   4. Map actorTaskId → TAV region + source; unmapped tasks noop.
  *   5. Resolve datasetId from payload, falling back to GET /actor-runs/{id}.
  *   6. Fetch dataset items (paginated, capped).
  *   7. Empty dataset → noop (matches existing IngestRequestSchema `min(1)`).
- *   8. Build IngestRequest envelope and call ingestCore.
+ *   8. Map items by source (Facebook raidr vs Craigslist automotive-scraper).
+ *   9. Build IngestRequest envelope and call ingestCore.
  *
  * All non-2xx responses log a structured event; secrets and full Apify
  * payloads are never logged.
@@ -90,16 +99,17 @@ export async function handleApifyWebhook(
     return json({ ok: true, skipped: "event_type_ignored", event_type: eventType }, 200);
   }
 
-  // 4. Task → region map.
+  // 4. Task → region + source map.
   if (!actorTaskId) {
     log("apify.bridge.rejected", { reason: "missing_actor_task_id", run_id: runId });
     return json({ ok: false, error: "missing_actor_task_id" }, 400);
   }
-  const region = mapApifyTaskToRegion(actorTaskId);
-  if (region === null) {
+  const taskConfig = mapApifyTaskConfig(actorTaskId);
+  if (taskConfig === null) {
     log("apify.bridge.unmapped_task", { actor_task_id: actorTaskId, run_id: runId });
     return json({ ok: true, skipped: "unmapped_task", actor_task_id: actorTaskId }, 200);
   }
+  const { region, source } = taskConfig;
 
   // 5. Resolve datasetId (payload first, then fallback to run detail).
   let datasetId = resource.defaultDatasetId;
@@ -132,18 +142,13 @@ export async function handleApifyWebhook(
     return json({ ok: true, skipped: "empty_dataset", run_id: runId, dataset_id: datasetId }, 200);
   }
 
-  // 8. Map each raidr-api dataset item into the v1 flat shape the Facebook
-  //    adapter expects. Without this, every item rejects at the adapter's
-  //    extractUrl gate with missing_identifier because the rented actor
-  //    emits Facebook GraphQL fields (marketplace_listing_title,
-  //    listing_price.amount, listing_date_ms, …) instead of url/title/price.
-  const mappedItems = items.map(mapRaidrApiItem);
+  // 8. Map dataset items into the flat shape the source adapter expects.
+  //    Facebook: raidr-api GraphQL → mapRaidrApiItem.
+  //    Craigslist: schema.org Car → mapAutomotiveScraperItem (item 67).
+  const mappedItems = mapDatasetItems(source, items);
 
-  // 9. Enforce the shared ingest contract. The bridge previously handed up to
-  //    MAX_ITEMS_PER_RUN items straight to ingestCore, bypassing
-  //    IngestRequestSchema's MAX_INGEST_ITEMS cap. Cap here, log when we do,
-  //    then validate the envelope through the same schema the HTTP /ingest
-  //    path uses so the bridge can never silently exceed the limit.
+  // 9. Enforce the shared ingest contract. Cap at MAX_INGEST_ITEMS, then
+  //    validate through the same schema as HTTP /ingest.
   const cappedItems =
     mappedItems.length > MAX_INGEST_ITEMS
       ? mappedItems.slice(0, MAX_INGEST_ITEMS)
@@ -161,7 +166,7 @@ export async function handleApifyWebhook(
   // (defensive — finishedAt should always be present on a SUCCEEDED run).
   const scrapedAt = resource.finishedAt ?? new Date().toISOString();
   const candidate = {
-    source:     "facebook",
+    source,
     run_id:     runId,
     region,
     scraped_at: scrapedAt,
@@ -181,11 +186,12 @@ export async function handleApifyWebhook(
   log("apify.bridge.dispatched", {
     run_id:     runId,
     region,
+    source,
     item_count: envelope.items.length,
     dataset_id: datasetId,
   });
 
-  return ingestCore(envelope, env, execCtx);
+  return dispatchApifyIngest(envelope, env, execCtx);
 }
 
 /**

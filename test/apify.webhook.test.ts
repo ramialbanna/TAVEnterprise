@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types/env";
 import type * as DatasetFetchModule from "../src/apify/datasetFetch";
-import type * as HandleIngestModule from "../src/ingest/handleIngest";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -15,11 +14,13 @@ vi.mock("../src/apify/datasetFetch", async () => {
   };
 });
 
-vi.mock("../src/ingest/handleIngest", async () => {
-  const actual = await vi.importActual<typeof HandleIngestModule>("../src/ingest/handleIngest");
+vi.mock("../src/ingest/chunkedApifyIngest", async () => {
+  const actual = await vi.importActual<typeof import("../src/ingest/chunkedApifyIngest")>(
+    "../src/ingest/chunkedApifyIngest",
+  );
   return {
     ...actual,
-    ingestCore: vi.fn().mockResolvedValue(
+    dispatchApifyIngest: vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true, processed: 0, rejected: 0, created_leads: 0 }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -34,7 +35,7 @@ import {
   ApifyAuthError,
   ApifyDatasetFetchError,
 } from "../src/apify/datasetFetch";
-import { ingestCore } from "../src/ingest/handleIngest";
+import { dispatchApifyIngest } from "../src/ingest/chunkedApifyIngest";
 import { MAX_INGEST_ITEMS } from "../src/validate";
 
 const ctx = {
@@ -121,7 +122,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchApifyDatasetItems).mockResolvedValue({ items: [], truncated: false });
   vi.mocked(fetchApifyRunDefaultDataset).mockResolvedValue("ds-fallback-456");
-  vi.mocked(ingestCore).mockResolvedValue(
+  vi.mocked(dispatchApifyIngest).mockResolvedValue(
     new Response(JSON.stringify({ ok: true, processed: 2, rejected: 0, created_leads: 0 }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -142,7 +143,7 @@ describe("POST /apify-webhook — feature flag and auth", () => {
     expect(res.status).toBe(503);
     const body = await res.json() as Record<string, unknown>;
     expect(body.error).toBe("apify_bridge_disabled");
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("returns 503 when APIFY_WEBHOOK_SECRET is unset", async () => {
@@ -159,7 +160,7 @@ describe("POST /apify-webhook — feature flag and auth", () => {
     const req = makeRequest(succeededPayload());
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(401);
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("returns 401 when bearer token does not match (constant-time compare)", async () => {
@@ -167,7 +168,7 @@ describe("POST /apify-webhook — feature flag and auth", () => {
     const req = makeRequest(succeededPayload(), { Authorization: "Bearer wrong-token" });
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(401);
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("returns 401 when scheme is not Bearer", async () => {
@@ -192,7 +193,7 @@ describe("POST /apify-webhook — event type filter", () => {
     });
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
+    expect(vi.mocked(dispatchApifyIngest)).toHaveBeenCalledOnce();
   });
 
   it("noops 200 on ACTOR.RUN.FAILED", async () => {
@@ -204,7 +205,7 @@ describe("POST /apify-webhook — event type filter", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as Record<string, unknown>;
     expect(body.skipped).toBe("event_type_ignored");
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
     expect(vi.mocked(fetchApifyDatasetItems)).not.toHaveBeenCalled();
   });
 
@@ -215,7 +216,7 @@ describe("POST /apify-webhook — event type filter", () => {
     });
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("noops 200 on ACTOR.RUN.TIMED_OUT", async () => {
@@ -225,7 +226,7 @@ describe("POST /apify-webhook — event type filter", () => {
     });
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("noops 200 on ACTOR.RUN.CREATED (started events)", async () => {
@@ -235,7 +236,7 @@ describe("POST /apify-webhook — event type filter", () => {
     });
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 });
 
@@ -252,7 +253,7 @@ describe("POST /apify-webhook — region mapping", () => {
       Authorization: `Bearer ${APIFY_SECRET}`,
     });
     await worker.fetch(req, env, ctx);
-    const call = vi.mocked(ingestCore).mock.calls[0];
+    const call = vi.mocked(dispatchApifyIngest).mock.calls[0];
     expect(call).toBeDefined();
     expect(call![0].region).toBe("oklahoma_city_ok");
   });
@@ -267,7 +268,7 @@ describe("POST /apify-webhook — region mapping", () => {
       Authorization: `Bearer ${APIFY_SECRET}`,
     });
     await worker.fetch(req, env, ctx);
-    const call = vi.mocked(ingestCore).mock.calls[0];
+    const call = vi.mocked(dispatchApifyIngest).mock.calls[0];
     expect(call).toBeDefined();
     expect(call![0].region).toBe("san_antonio_tx");
   });
@@ -282,7 +283,7 @@ describe("POST /apify-webhook — region mapping", () => {
       Authorization: `Bearer ${APIFY_SECRET}`,
     });
     await worker.fetch(req, env, ctx);
-    const call = vi.mocked(ingestCore).mock.calls[0];
+    const call = vi.mocked(dispatchApifyIngest).mock.calls[0];
     expect(call).toBeDefined();
     expect(call![0].region).toBe("lubbock_tx");
   });
@@ -304,7 +305,7 @@ describe("POST /apify-webhook — region mapping", () => {
     const env = makeEnv();
     const req = makeRequest(succeededPayload(), { Authorization: `Bearer ${APIFY_SECRET}` });
     await worker.fetch(req, env, ctx);
-    const call = vi.mocked(ingestCore).mock.calls[0];
+    const call = vi.mocked(dispatchApifyIngest).mock.calls[0];
     expect(call).toBeDefined();
     expect(call![0].region).toBe("dallas_tx");
   });
@@ -347,7 +348,7 @@ describe("POST /apify-webhook — defaultDatasetId fallback", () => {
 // ── 5. Empty dataset ──────────────────────────────────────────────────────────
 
 describe("POST /apify-webhook — empty dataset", () => {
-  it("noops 200 with apify.bridge.empty_dataset and does NOT call ingestCore", async () => {
+  it("noops 200 with apify.bridge.empty_dataset and does NOT call dispatchApifyIngest", async () => {
     vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({ items: [], truncated: false });
     const env = makeEnv();
     const req = makeRequest(succeededPayload(), { Authorization: `Bearer ${APIFY_SECRET}` });
@@ -355,14 +356,14 @@ describe("POST /apify-webhook — empty dataset", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as Record<string, unknown>;
     expect(body.skipped).toBe("empty_dataset");
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 });
 
 // ── 5b. Raidr-api payload mapping ────────────────────────────────────────────
 
 describe("POST /apify-webhook — raidr-api payload mapping", () => {
-  it("maps Apify dataset items through payloadAdapter before ingestCore", async () => {
+  it("maps Apify dataset items through payloadAdapter before dispatchApifyIngest", async () => {
     vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({
       items: [
         {
@@ -385,8 +386,8 @@ describe("POST /apify-webhook — raidr-api payload mapping", () => {
     const res = await worker.fetch(req, env, ctx);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
-    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    expect(vi.mocked(dispatchApifyIngest)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(dispatchApifyIngest).mock.calls[0]!;
     expect(envelope.items).toHaveLength(1);
     const mapped = envelope.items[0] as Record<string, unknown>;
     expect(mapped.url).toBe("https://www.facebook.com/marketplace/item/1686857085840236/");
@@ -403,7 +404,7 @@ describe("POST /apify-webhook — raidr-api payload mapping", () => {
 // ── 6. Happy path ─────────────────────────────────────────────────────────────
 
 describe("POST /apify-webhook — happy path", () => {
-  it("builds the canonical IngestRequest envelope and calls ingestCore", async () => {
+  it("builds the canonical IngestRequest envelope and calls dispatchApifyIngest", async () => {
     const item1 = { url: "https://fb.com/1", title: "2020 Toyota Camry SE", price: "$18,500" };
     const item2 = { url: "https://fb.com/2", title: "2022 Honda Civic Sport", price: "$22,000" };
     vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({
@@ -422,8 +423,8 @@ describe("POST /apify-webhook — happy path", () => {
     const res = await worker.fetch(req, env, ctx);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
-    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    expect(vi.mocked(dispatchApifyIngest)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(dispatchApifyIngest).mock.calls[0]!;
     expect(envelope).toEqual({
       source:     "facebook",
       run_id:     "abcDEF1234567890Z",
@@ -431,6 +432,65 @@ describe("POST /apify-webhook — happy path", () => {
       scraped_at: "2026-05-14T15:00:00.000Z",
       items:      [item1, item2],
     });
+  });
+
+  it("maps Craigslist automotive-scraper task to source craigslist + flat fields", async () => {
+    const TASK_CL = "NMTFTt1C0aEnhEuY9";
+    const schemaCar = {
+      "@type": "Car",
+      name: "2020 FORD FUSION SE",
+      url: "https://www.craigslist.org/view/d/x/abc",
+      brand: { name: "ford" },
+      model: "fusion",
+      vehicleModelDate: "2020",
+      offers: { price: 6999 },
+      mileageFromOdometer: { value: 105000 },
+      description: "Clean title SE",
+      image: ["https://images.craigslist.org/x.jpg"],
+      datePosted: "2026-08-07T07:58:40-0500",
+      additionalProperties: {
+        postingId: 7952046730,
+        requestedUrl: "https://dallas.craigslist.org/cto/d/dallas-2020-ford-fusion-se/7952046730.html",
+        year: 2020,
+        make: "ford",
+        model: "fusion",
+        trim: "SE",
+        city: "Dallas",
+        state: "TX",
+      },
+    };
+    vi.mocked(fetchApifyDatasetItems).mockResolvedValueOnce({
+      items: [schemaCar],
+      truncated: false,
+    });
+
+    const env = makeEnv();
+    const req = makeRequest(
+      succeededPayload({
+        run_id: "clRunABCDEF1234567",
+        actor_task_id: TASK_CL,
+        finished_at: "2026-08-07T18:00:00.000Z",
+      }),
+      { Authorization: `Bearer ${APIFY_SECRET}` },
+    );
+    const res = await worker.fetch(req, env, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(dispatchApifyIngest)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(dispatchApifyIngest).mock.calls[0]!;
+    expect(envelope.source).toBe("craigslist");
+    expect(envelope.region).toBe("dallas_tx");
+    expect(envelope.run_id).toBe("clRunABCDEF1234567");
+    expect(envelope.items).toHaveLength(1);
+    const item = envelope.items[0] as Record<string, unknown>;
+    expect(item.title).toBe("2020 FORD FUSION SE");
+    expect(item.year).toBe(2020);
+    expect(item.make).toBe("ford");
+    expect(item.model).toBe("fusion");
+    expect(item.trim).toBe("SE");
+    expect(item.priceUsd).toBe(6999);
+    expect(item.source_listing_id).toBe("7952046730");
+    expect(String(item.url)).toContain("7952046730.html");
   });
 
   it("falls back to current time when finishedAt is missing", async () => {
@@ -443,7 +503,7 @@ describe("POST /apify-webhook — happy path", () => {
     delete (payload.resource as Record<string, unknown>).finishedAt;
     const req = makeRequest(payload, { Authorization: `Bearer ${APIFY_SECRET}` });
     await worker.fetch(req, env, ctx);
-    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    const [envelope] = vi.mocked(dispatchApifyIngest).mock.calls[0]!;
     expect(envelope.scraped_at).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO timestamp
   });
 });
@@ -459,7 +519,7 @@ describe("POST /apify-webhook — upstream Apify failures", () => {
     expect(res.status).toBe(502);
     const body = await res.json() as Record<string, unknown>;
     expect(body.error).toBe("apify_upstream_auth_failed");
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("returns 502 when Apify dataset fetch returns 5xx", async () => {
@@ -470,7 +530,7 @@ describe("POST /apify-webhook — upstream Apify failures", () => {
     expect(res.status).toBe(502);
     const body = await res.json() as Record<string, unknown>;
     expect(body.error).toBe("apify_upstream_failed");
-    expect(vi.mocked(ingestCore)).not.toHaveBeenCalled();
+    expect(vi.mocked(dispatchApifyIngest)).not.toHaveBeenCalled();
   });
 
   it("returns 502 when run-detail fallback fetch fails", async () => {
@@ -513,7 +573,7 @@ describe("POST /apify-webhook — body validation", () => {
 // ── 9. Ingest contract — bridge must not bypass IngestRequestSchema max ────────
 
 describe("POST /apify-webhook — ingest item cap", () => {
-  it("caps dataset items at MAX_INGEST_ITEMS before calling ingestCore", async () => {
+  it("caps dataset items at MAX_INGEST_ITEMS before calling dispatchApifyIngest", async () => {
     const overflow = Array.from({ length: MAX_INGEST_ITEMS + 1 }, (_, i) => ({
       url: `https://fb.com/${i}`,
       title: `Vehicle ${i}`,
@@ -525,8 +585,8 @@ describe("POST /apify-webhook — ingest item cap", () => {
     const res = await worker.fetch(req, env, ctx);
 
     expect(res.status).toBe(200);
-    expect(vi.mocked(ingestCore)).toHaveBeenCalledOnce();
-    const [envelope] = vi.mocked(ingestCore).mock.calls[0]!;
+    expect(vi.mocked(dispatchApifyIngest)).toHaveBeenCalledOnce();
+    const [envelope] = vi.mocked(dispatchApifyIngest).mock.calls[0]!;
     expect(envelope.items).toHaveLength(MAX_INGEST_ITEMS);
   });
 });

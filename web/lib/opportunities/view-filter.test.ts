@@ -123,6 +123,16 @@ describe("view-filter", () => {
       review,
       softNearMiss,
     ]);
+    const oldReview = row({
+      id: "old",
+      type: "scraper_review",
+      year: 2008,
+      badges: ["Scraper review", "No MMR"],
+      mmrValue: null,
+      spread: null,
+      assignedTo: null,
+    });
+    expect(filterOpportunityRowsByView([oldReview], "scraper_review")).toEqual([]);
   });
 
   it("shouldApplyClientViewFilter only when items exceed total", () => {

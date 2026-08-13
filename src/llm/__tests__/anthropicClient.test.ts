@@ -74,6 +74,7 @@ describe("callAnthropicForYmms", () => {
         cacheCreationInputTokens: 0,
         cacheReadInputTokens: 1800,
         uncachedInputTokens: 42,
+        outputTokens: 0,
       });
     }
   });

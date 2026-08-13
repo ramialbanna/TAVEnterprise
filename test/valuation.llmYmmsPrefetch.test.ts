@@ -152,6 +152,26 @@ describe("createLlmYmmsPrefetch", () => {
     expect(result).toEqual(hit("2500"));
   });
 
+  it("starts indices in (year, make) order for better prompt-cache locality (§70)", async () => {
+    vi.mocked(resolveListingWithLLM).mockResolvedValue({ kind: "fallback", reason: "llm_disabled" });
+
+    createLlmYmmsPrefetch(
+      new Map([
+        [0, { year: 2020, make: "Ford", model: "F-150" }],
+        [1, { year: 2022, make: "Ram", model: "1500" }],
+        [2, { year: 2020, make: "Ford", model: "Explorer" }],
+      ]),
+      ENV,
+      1,
+    );
+
+    expect(resolveListingWithLLM).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ year: 2020, make: "Ford" }),
+      expect.anything(),
+    );
+  });
+
   it("never rejects consume() — a thrown/rejected resolveListingWithLLM call degrades to a fallback resolution", async () => {
     vi.mocked(resolveListingWithLLM).mockRejectedValue(new Error("network blew up"));
 

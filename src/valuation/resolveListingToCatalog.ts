@@ -14,6 +14,7 @@ import {
 import { selectCatalogStyleForListing, rankCatalogStylesForListing } from "./selectCatalogStyle";
 import { resolveCatalogStyleFromEvidence } from "./resolveCatalogStyleFromEvidence";
 import { matchListingToCoxCatalog, type CoxCatalogTreeRow } from "./matchListingToCoxCatalog";
+import { isCatalogAliasValid, normalizeCatalogAliasTokens } from "./catalogAliasValidation";
 import type { MmrStyleAlias } from "../persistence/mmrStyleAliases";
 
 export type CatalogFetchResult = {
@@ -64,7 +65,12 @@ export type IngestListingCatalogResolution = {
 const AUTO_PICK_MIN_STYLE_SCORE = 6;
 
 export type IngestCatalogOfflineDeps = {
-  lookupStyleAlias?: (aliasKey: string) => Promise<MmrStyleAlias | null>;
+  lookupStyleAlias?: (
+    make: string,
+    model: string,
+    trim?: string | null,
+    titleTrim?: string | null,
+  ) => Promise<MmrStyleAlias | null>;
   loadTreeRows?: (year: number, make: string) => Promise<CoxCatalogTreeRow[]>;
   hasTreeForYear?: (year: number) => Promise<boolean>;
 };
@@ -81,14 +87,22 @@ async function tryOfflineIngestCatalogResolution(
   const title = input.title?.trim() ?? "";
   if (!makeRaw || !modelRaw) return null;
 
-  const aliasKey = [makeRaw, modelRaw, styleRaw].map((part) => part.toLowerCase()).join("|");
+  if (!deps.hasTreeForYear || !deps.loadTreeRows) return null;
+  const hasTree = await deps.hasTreeForYear(input.year);
+  if (!hasTree) return null;
+
+  const treeRows = await deps.loadTreeRows(input.year, makeRaw);
+  if (treeRows.length === 0) return null;
+
+  const titleTrim = extractTitleTrim(input.title) ?? extractTitleTrim(input.description);
   if (deps.lookupStyleAlias) {
-    const alias = await deps.lookupStyleAlias(aliasKey);
-    if (alias) {
+    const alias = await deps.lookupStyleAlias(makeRaw, modelRaw, styleRaw || null, titleTrim);
+    if (alias && isCatalogAliasValid(treeRows, alias)) {
+      const tokens = normalizeCatalogAliasTokens(alias);
       return {
-        make: alias.canonicalMake,
-        model: alias.canonicalModel,
-        style: alias.canonicalStyle,
+        make: tokens.make,
+        model: tokens.model,
+        style: tokens.style,
         styleEstimated: false,
         unmatched: [],
         catalogConnected: true,
@@ -96,13 +110,6 @@ async function tryOfflineIngestCatalogResolution(
       };
     }
   }
-
-  if (!deps.hasTreeForYear || !deps.loadTreeRows) return null;
-  const hasTree = await deps.hasTreeForYear(input.year);
-  if (!hasTree) return null;
-
-  const treeRows = await deps.loadTreeRows(input.year, makeRaw);
-  if (treeRows.length === 0) return null;
 
   const offline = matchListingToCoxCatalog(
     {

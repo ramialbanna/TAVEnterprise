@@ -108,4 +108,50 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     expect(map.size).toBe(1);
     expect(map.get(0)?.description).toContain("xDrive28d");
   });
+
+  it("includes Craigslist mapped items with body_text (item 67)", () => {
+    const item = {
+      url: "https://dallas.craigslist.org/cto/d/x/7952046730.html",
+      title: "2020 Ford Fusion SE",
+      year: 2020,
+      make: "ford",
+      model: "fusion",
+      trim: "SE",
+      priceUsd: 6999,
+      body_text: "One owner Fusion SE with clean title and recent tires.",
+      city: "Dallas",
+      state: "TX",
+    };
+
+    const map = buildLlmYmmsPrefetchInputs([item], "craigslist", adapterCtx);
+    expect(map.size).toBe(1);
+    const input = map.get(0)!;
+    expect(input.year).toBe(2020);
+    expect(input.make).toBe("ford");
+    expect(input.model).toBe("fusion");
+    expect(input.description).toContain("clean title");
+  });
+
+  it("skips unknown sources", () => {
+    const map = buildLlmYmmsPrefetchInputs(
+      [{ title: "2020 Ford Fusion", url: "https://x", price: 1 }],
+      "offerup",
+      adapterCtx,
+    );
+    expect(map.size).toBe(0);
+  });
+
+  it("skips blocked Dallas Facebook sellers for LLM prefetch (item 69)", () => {
+    const item = {
+      title: "2020 Toyota Camry",
+      price: 15000,
+      url: "https://www.facebook.com/marketplace/item/999/",
+      sellerUrl: "https://www.facebook.com/marketplace/profile/dealer-abc/",
+    };
+    const blockedLookup = {
+      keys: new Set(["url:https://www.facebook.com/marketplace/profile/dealer-abc"]),
+    };
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx, blockedLookup);
+    expect(map.size).toBe(0);
+  });
 });

@@ -215,6 +215,37 @@ function extractPriceRaw(rec: Record<string, unknown>): unknown {
   return undefined;
 }
 
+/**
+ * Parse listing price without requiring a successful Facebook title/YMM probe.
+ * Mirrors src/sources/facebook.ts `parsePrice` so structured-YMM Craigslist
+ * rows (item 67 automotive-scraper) keep priceUsd when title parse fails.
+ */
+function parseListingPrice(
+  raw: unknown,
+): { price: number } | { price: undefined } | { invalid: true } {
+  if (raw === undefined || raw === null || raw === "") return { price: undefined };
+
+  const s = String(raw).trim().toLowerCase();
+  if (s === "free") return { invalid: true };
+  if (s.startsWith("message") || s.startsWith("make offer")) {
+    return { price: undefined };
+  }
+
+  const cleaned = s.replace(/[$,\s]/g, "").replace(/\.00$/, "");
+  const km = cleaned.match(/^(\d+(?:\.\d+)?)k$/);
+  const kg = km?.[1];
+  if (kg !== undefined) {
+    const n = Math.round(parseFloat(kg) * 1000);
+    if (n < 500 || n > 500_000) return { invalid: true };
+    return { price: n };
+  }
+
+  const n = parseFloat(cleaned);
+  if (isNaN(n) || n <= 0) return { invalid: true };
+  if (n < 500 || n > 500_000) return { invalid: true };
+  return { price: Math.round(n) };
+}
+
 const KNOWN_CRAIGSLIST_FIELDS: ReadonlySet<string> = new Set([
   "url", "listingUrl", "listing_url", "link",
   "source_listing_id", "sourceListingId", "postId", "post_id", "id",
@@ -280,20 +311,11 @@ export function parseCraigslistItem(item: unknown, ctx: AdapterContext): Adapter
     const priceRaw = extractPriceRaw(rec);
     let price: number | undefined;
     if (priceRaw !== undefined) {
-      const fbPriceProbe = parseFacebookItem(
-        { url, title, price: priceRaw },
-        ctx,
-      );
-      if (!fbPriceProbe.ok && fbPriceProbe.reason === "invalid_price") {
+      const priceResult = parseListingPrice(priceRaw);
+      if ("invalid" in priceResult) {
         return fail("invalid_price", { raw: priceRaw });
       }
-      if (fbPriceProbe.ok) {
-        price = fbPriceProbe.listing.price;
-        year ??= fbPriceProbe.listing.year;
-        make ??= fbPriceProbe.listing.make;
-        model ??= fbPriceProbe.listing.model;
-        trim ??= fbPriceProbe.listing.trim;
-      }
+      if (priceResult.price !== undefined) price = priceResult.price;
     }
 
     if (year === undefined || !make || !model) {

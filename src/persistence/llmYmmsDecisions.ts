@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "./supabase";
+import type { LlmYmmsTokenUsage } from "../llm/tokenUsage";
 
-export type LlmYmmsDecisionOutcome = "alias_hit" | "llm_hit" | "llm_needs_review" | "llm_invalid_pick" | "fallback";
+export type LlmYmmsDecisionOutcome =
+  | "alias_hit"
+  | "offline_hit"
+  | "llm_hit"
+  | "llm_needs_review"
+  | "llm_invalid_pick"
+  | "fallback";
 
 export interface LlmYmmsDecisionInput {
   normalizedListingId?: string | null;
@@ -20,6 +27,7 @@ export interface LlmYmmsDecisionInput {
   model?: string | null;
   latencyMs?: number | null;
   accepted?: boolean | null;
+  tokenUsage?: LlmYmmsTokenUsage | null;
 }
 
 /**
@@ -28,6 +36,7 @@ export interface LlmYmmsDecisionInput {
  * observability write in this codebase (e.g. writeSchemaDrift, insertBuyBoxScoreAttribution).
  */
 export async function insertLlmYmmsDecision(db: SupabaseClient, input: LlmYmmsDecisionInput): Promise<void> {
+  const usage = input.tokenUsage;
   const { error } = await db.schema("tav").from("llm_ymms_decisions").insert({
     normalized_listing_id: input.normalizedListingId ?? null,
     year: input.year,
@@ -46,6 +55,10 @@ export async function insertLlmYmmsDecision(db: SupabaseClient, input: LlmYmmsDe
     model: input.model ?? null,
     latency_ms: input.latencyMs ?? null,
     accepted: input.accepted ?? null,
+    cache_read_input_tokens: usage?.cacheReadInputTokens ?? null,
+    cache_creation_input_tokens: usage?.cacheCreationInputTokens ?? null,
+    uncached_input_tokens: usage?.uncachedInputTokens ?? null,
+    output_tokens: usage?.outputTokens ?? null,
   });
   if (error) throw error;
 }

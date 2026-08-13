@@ -40,6 +40,45 @@ export async function lookupMmrStyleAlias(
   };
 }
 
+function buildAliasLookupKeys(
+  make: string,
+  model: string,
+  trim?: string | null,
+  titleTrim?: string | null,
+): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const push = (t: string | null | undefined) => {
+    const key = buildListingStyleAliasKey(make, model, t);
+    if (seen.has(key)) return;
+    seen.add(key);
+    keys.push(key);
+  };
+
+  const explicitTrim = trim?.trim();
+  if (explicitTrim) push(explicitTrim);
+
+  const fromTitle = titleTrim?.trim();
+  if (fromTitle && fromTitle !== explicitTrim) push(fromTitle);
+
+  push(null);
+  return keys;
+}
+
+export async function lookupMmrStyleAliasWithFallback(
+  db: SupabaseClient,
+  make: string,
+  model: string,
+  trim?: string | null,
+  titleTrim?: string | null,
+): Promise<MmrStyleAlias | null> {
+  for (const key of buildAliasLookupKeys(make, model, trim, titleTrim)) {
+    const hit = await lookupMmrStyleAlias(db, key);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export async function upsertMmrStyleAlias(
   db: SupabaseClient,
   input: {
@@ -58,9 +97,9 @@ export async function upsertMmrStyleAlias(
   const { error } = await db.schema("tav").from("mmr_style_aliases").upsert(
     {
       alias: input.aliasKey,
-      canonical_make: input.canonicalMake,
-      canonical_model: input.canonicalModel,
-      canonical_style: input.canonicalStyle,
+      canonical_make: input.canonicalMake.trim().toUpperCase(),
+      canonical_model: input.canonicalModel.trim(),
+      canonical_style: input.canonicalStyle.trim(),
       source: input.source ?? "ingest_learned",
     },
     { onConflict: "alias,canonical_make,canonical_model" },

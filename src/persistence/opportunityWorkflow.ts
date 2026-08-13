@@ -2,6 +2,8 @@ import type { AppUser, UserRole } from "./users";
 import { getActiveUserById } from "./users";
 import type { SupabaseClient } from "./supabase";
 import { getOpportunityDetail, type OpportunityDetail } from "./opportunities";
+import { blockSellerFromDealerDismiss } from "./blockedSellers";
+import { log } from "../logging/logger";
 
 /** Active claim window after POST /app/opportunities/:id/claim. */
 export const CLAIM_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -747,6 +749,25 @@ export async function dismissOpportunity(
       reasonLabel: DISMISS_REASON_LABELS[input.reason],
     },
   });
+
+  if (input.reason === "dealer") {
+    try {
+      const blocked = await blockSellerFromDealerDismiss(db, normalizedListingId, actor.id);
+      if (blocked) {
+        log("ingest.dealer_blacklist.added", {
+          normalizedListingId,
+          sellerKey: blocked.sellerKey,
+          inserted: blocked.inserted,
+          kpi: true,
+        });
+      }
+    } catch (err) {
+      log("ingest.dealer_blacklist.failed", {
+        normalizedListingId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const opportunity = await getOpportunityDetail(db, normalizedListingId, { scraperReviewMode: true });
   if (!opportunity) {

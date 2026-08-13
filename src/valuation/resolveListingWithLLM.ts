@@ -1,25 +1,29 @@
 /**
  * Item 57 — LLM Y/M/M/S normalization: resolver.
  *
- * Pipeline (docs/LLM-YMMS-Normalization.md §4):
- *   alias fast-path (mmr_style_aliases) → full (year, make) catalog subtree →
+ * Pipeline (docs/LLM-YMMS-Normalization.md §4, §70 updates):
+ *   alias fast-path → offline confident gate → pruned catalog (Ford/Chevy) →
  *   single Claude call → deterministic exact-match gate → fallback.
- *
- * Every dependency is injected via `LlmYmmsDeps` so this module is testable
- * without a real Supabase client or Anthropic API key — see
- * buildLlmYmmsDeps() for the production wiring and
- * __tests__/resolveListingWithLLM.test.ts for the mocked version.
  */
 import type { Env } from "../types/env";
 import type { SupabaseClient } from "../persistence/supabase";
 import {
   buildListingStyleAliasKey,
-  lookupMmrStyleAlias,
+  lookupMmrStyleAliasWithFallback,
   type MmrStyleAlias,
 } from "../persistence/mmrStyleAliases";
 import { hasCoxCatalogTreeForYear, loadCoxCatalogTreeForMake } from "../persistence/coxCatalogTree";
-import type { CoxCatalogTreeRow } from "./matchListingToCoxCatalog";
+import {
+  isOfflineConfidentCatalogMatch,
+  matchListingToCoxCatalog,
+  type CoxCatalogTreeRow,
+} from "./matchListingToCoxCatalog";
+import { isCatalogAliasValid, normalizeCatalogAliasTokens } from "./catalogAliasValidation";
+import { extractTitleTrim } from "./extractTitleTrim";
 import { callAnthropicForYmms, type AnthropicCallResult } from "../llm/anthropicClient";
+import { pruneCatalogSubtreeForLlm } from "../llm/pruneCatalogSubtree";
+import type { LlmYmmsTokenUsage } from "../llm/tokenUsage";
+import { log } from "../logging/logger";
 import {
   buildYmmsAnthropicPrompt,
   classifyYmmsProposalIngestOutcome,
@@ -52,8 +56,22 @@ export type LlmYmmsFallbackReason =
   | "http_error"
   | "invalid_response";
 
+type LlmAnthropicCallMeta = {
+  latencyMs: number;
+  anthropicModel: string;
+  tokenUsage?: LlmYmmsTokenUsage;
+};
+
 export type LlmYmmsResolution =
   | { kind: "alias_hit"; make: string; model: string; style: string }
+  | {
+      kind: "offline_hit";
+      make: string;
+      model: string;
+      style: string;
+      score: number;
+      catalogRowCount: number;
+    }
   | {
       kind: "llm_hit";
       make: string;
@@ -61,18 +79,21 @@ export type LlmYmmsResolution =
       style: string;
       confidence: number;
       reasoning: string;
-      latencyMs: number;
-      anthropicModel: string;
       catalogRowCount: number;
-    }
-  | { kind: "llm_needs_review"; proposal: YmmsProposal; catalogRowCount: number }
-  | { kind: "llm_invalid_pick"; proposal: YmmsProposal; catalogRowCount: number }
+    } & LlmAnthropicCallMeta
+  | ({ kind: "llm_needs_review"; proposal: YmmsProposal; catalogRowCount: number } & LlmAnthropicCallMeta)
+  | ({ kind: "llm_invalid_pick"; proposal: YmmsProposal; catalogRowCount: number } & LlmAnthropicCallMeta)
   | { kind: "fallback"; reason: LlmYmmsFallbackReason };
 
 export type LlmYmmsDeps = {
   enabled: boolean;
   callAnthropic: (prompt: YmmsAnthropicPrompt) => Promise<AnthropicCallResult>;
-  lookupStyleAlias: (aliasKey: string) => Promise<MmrStyleAlias | null>;
+  lookupStyleAlias: (
+    make: string,
+    model: string,
+    trim?: string | null,
+    titleTrim?: string | null,
+  ) => Promise<MmrStyleAlias | null>;
   hasTreeForYear: (year: number) => Promise<boolean>;
   loadTreeRows: (year: number, make: string) => Promise<CoxCatalogTreeRow[]>;
 };
@@ -82,7 +103,8 @@ export function buildLlmYmmsDeps(db: SupabaseClient, env: Env): LlmYmmsDeps {
   return {
     enabled: env.LLM_YMMS_ENABLED === "true",
     callAnthropic: (prompt: YmmsAnthropicPrompt) => callAnthropicForYmms({ env, prompt }),
-    lookupStyleAlias: (aliasKey: string) => lookupMmrStyleAlias(db, aliasKey),
+    lookupStyleAlias: (make, model, trim, titleTrim) =>
+      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim),
     hasTreeForYear: (year: number) => hasCoxCatalogTreeForYear(db, year),
     loadTreeRows: (year: number, make: string) => loadCoxCatalogTreeForMake(db, year, make),
   };
@@ -98,6 +120,14 @@ const FALLBACK_REASON_BY_CALL_KIND: Record<
   http_error: "http_error",
   invalid_response: "invalid_response",
 };
+
+function anthropicMeta(callResult: Extract<AnthropicCallResult, { kind: "ok" }>): LlmAnthropicCallMeta {
+  return {
+    latencyMs: callResult.latencyMs,
+    anthropicModel: callResult.model,
+    tokenUsage: callResult.cacheUsage,
+  };
+}
 
 /**
  * Resolve one listing's Y/M/M/S via the LLM path. Returns `{ kind: "fallback" }`
@@ -116,22 +146,74 @@ export async function resolveListingWithLLM(
   const modelRaw = input.model?.trim() ?? "";
   if (!makeRaw) return { kind: "fallback", reason: "llm_disabled" };
 
-  const aliasKey = buildListingStyleAliasKey(makeRaw, modelRaw, input.trim);
-  const alias = await deps.lookupStyleAlias(aliasKey);
-  if (alias) {
-    return {
-      kind: "alias_hit",
-      make: alias.canonicalMake,
-      model: alias.canonicalModel,
-      style: alias.canonicalStyle,
-    };
-  }
-
   const hasTree = await deps.hasTreeForYear(input.year);
   if (!hasTree) return { kind: "fallback", reason: "catalog_not_synced" };
 
-  const rows = await deps.loadTreeRows(input.year, makeRaw);
-  if (rows.length === 0) return { kind: "fallback", reason: "catalog_not_synced" };
+  const allRows = await deps.loadTreeRows(input.year, makeRaw);
+  if (allRows.length === 0) return { kind: "fallback", reason: "catalog_not_synced" };
+
+  const titleTrim =
+    extractTitleTrim(input.title) ?? extractTitleTrim(input.description) ?? null;
+
+  const alias = await deps.lookupStyleAlias(makeRaw, modelRaw, input.trim, titleTrim);
+  if (alias) {
+    if (isCatalogAliasValid(allRows, alias)) {
+      const tokens = normalizeCatalogAliasTokens(alias);
+      return {
+        kind: "alias_hit",
+        make: tokens.make,
+        model: tokens.model,
+        style: tokens.style,
+      };
+    }
+    log("llm_ymms.alias_rejected_invalid_catalog", {
+      make: makeRaw,
+      model: modelRaw,
+      title_trim: titleTrim,
+      alias_model: alias.canonicalModel,
+      alias_style: alias.canonicalStyle,
+    });
+  }
+
+  const offlineMatch = matchListingToCoxCatalog(
+    {
+      year: input.year,
+      make: makeRaw,
+      model: modelRaw || null,
+      trim: input.trim,
+      title: input.title,
+      description: input.description,
+    },
+    allRows,
+  );
+  if (isOfflineConfidentCatalogMatch(offlineMatch)) {
+    log("llm_ymms.offline_confident_skip", {
+      make: makeRaw,
+      model: modelRaw,
+      score: offlineMatch.score,
+      catalog_row_count: allRows.length,
+    });
+    return {
+      kind: "offline_hit",
+      make: offlineMatch.make,
+      model: offlineMatch.model,
+      style: offlineMatch.style,
+      score: offlineMatch.score,
+      catalogRowCount: allRows.length,
+    };
+  }
+
+  const rows = pruneCatalogSubtreeForLlm(
+    { make: makeRaw, model: modelRaw || null, trim: input.trim, title: input.title },
+    allRows,
+  );
+  if (rows.length < allRows.length) {
+    log("llm_ymms.catalog_pruned", {
+      make: makeRaw,
+      before: allRows.length,
+      after: rows.length,
+    });
+  }
 
   const prompt = buildYmmsAnthropicPrompt(
     {
@@ -143,7 +225,6 @@ export async function resolveListingWithLLM(
       description: input.description,
       condition: input.condition,
       listingMileage: input.listingMileage,
-      location: input.location,
       price: input.price,
       priorMissReason: input.priorMissReason,
     },
@@ -157,13 +238,14 @@ export async function resolveListingWithLLM(
   }
 
   const { proposal } = callResult;
+  const meta = anthropicMeta(callResult);
 
   const ingestOutcome = classifyYmmsProposalIngestOutcome(proposal, rows);
   if (ingestOutcome === "llm_invalid_pick") {
-    return { kind: "llm_invalid_pick", proposal, catalogRowCount: rows.length };
+    return { kind: "llm_invalid_pick", proposal, catalogRowCount: rows.length, ...meta };
   }
   if (ingestOutcome === "llm_needs_review") {
-    return { kind: "llm_needs_review", proposal, catalogRowCount: rows.length };
+    return { kind: "llm_needs_review", proposal, catalogRowCount: rows.length, ...meta };
   }
 
   return {
@@ -173,9 +255,8 @@ export async function resolveListingWithLLM(
     style: proposal.style,
     confidence: proposal.confidence,
     reasoning: proposal.reasoning,
-    latencyMs: callResult.latencyMs,
-    anthropicModel: callResult.model,
     catalogRowCount: rows.length,
+    ...meta,
   };
 }
 
@@ -192,9 +273,10 @@ export function llmResolutionToAuditFields(resolution: LlmYmmsResolution): {
   proposedStyle?: string;
   confidence?: number;
   reasoning?: string;
-  anthropicModel?: string;
+  model?: string;
   latencyMs?: number;
   catalogRowCount?: number;
+  tokenUsage?: LlmYmmsTokenUsage;
 } {
   switch (resolution.kind) {
     case "alias_hit":
@@ -204,6 +286,14 @@ export function llmResolutionToAuditFields(resolution: LlmYmmsResolution): {
         proposedModel: resolution.model,
         proposedStyle: resolution.style,
       };
+    case "offline_hit":
+      return {
+        outcome: resolution.kind,
+        proposedMake: resolution.make,
+        proposedModel: resolution.model,
+        proposedStyle: resolution.style,
+        catalogRowCount: resolution.catalogRowCount,
+      };
     case "llm_hit":
       return {
         outcome: resolution.kind,
@@ -212,9 +302,10 @@ export function llmResolutionToAuditFields(resolution: LlmYmmsResolution): {
         proposedStyle: resolution.style,
         confidence: resolution.confidence,
         reasoning: resolution.reasoning,
-        anthropicModel: resolution.anthropicModel,
+        model: resolution.anthropicModel,
         latencyMs: resolution.latencyMs,
         catalogRowCount: resolution.catalogRowCount,
+        tokenUsage: resolution.tokenUsage,
       };
     case "llm_needs_review":
     case "llm_invalid_pick":
@@ -225,7 +316,10 @@ export function llmResolutionToAuditFields(resolution: LlmYmmsResolution): {
         proposedStyle: resolution.proposal.style,
         confidence: resolution.proposal.confidence,
         reasoning: resolution.proposal.reasoning,
+        model: resolution.anthropicModel,
+        latencyMs: resolution.latencyMs,
         catalogRowCount: resolution.catalogRowCount,
+        tokenUsage: resolution.tokenUsage,
       };
     case "fallback":
       return { outcome: resolution.kind, fallbackReason: resolution.reason };
@@ -244,3 +338,6 @@ export function isLlmAttemptFailure(resolution: LlmYmmsResolution): boolean {
       resolution.reason === "invalid_response")
   );
 }
+
+/** Re-export for tests and alias key construction at call sites. */
+export { buildListingStyleAliasKey };

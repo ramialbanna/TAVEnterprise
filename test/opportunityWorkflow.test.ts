@@ -128,19 +128,64 @@ type WorkflowState = Record<string, unknown> | null;
 function makeWorkflowDb(initial: WorkflowState = null) {
   let workflow = initial ? { ...initial } : null;
   const actions: Array<Record<string, unknown>> = [];
+  const blockedSellerRows: Array<Record<string, unknown>> = [];
 
-  return {
+  const db = {
     actions,
+    blockedSellerRows,
     from(table: string) {
       if (table === "normalized_listings") {
+        const listingRow = {
+          id: "listing-1",
+          source: "facebook",
+          region: "dallas_tx",
+          seller_url: "https://facebook.com/marketplace/profile/dealer-1",
+          seller_name: "Dealer One",
+        };
         return {
           select(_cols?: string) {
             return {
               eq(_col: string, _val: string) {
                 return {
-                  maybeSingle: async () => ({ data: { id: "listing-1" }, error: null }),
+                  maybeSingle: async () => ({ data: listingRow, error: null }),
                 };
               },
+            };
+          },
+        };
+      }
+
+      if (table === "blocked_sellers") {
+        return {
+          select(_cols?: string) {
+            const filters: Record<string, string> = {};
+            const builder = {
+              eq(col: string, val: string) {
+                filters[col] = val;
+                return builder;
+              },
+              maybeSingle: async () => {
+                const match = blockedSellerRows.find((row) =>
+                  Object.entries(filters).every(([key, value]) => row[key] === value),
+                );
+                return {
+                  data: match ? { id: (match.id as string) ?? "bs-1" } : null,
+                  error: null,
+                };
+              },
+            };
+            return builder;
+          },
+          insert(row: Record<string, unknown>) {
+            blockedSellerRows.push({
+              id: `bs-${blockedSellerRows.length + 1}`,
+              ...row,
+            });
+            return Promise.resolve({ error: null });
+          },
+          update(_patch: Record<string, unknown>) {
+            return {
+              eq: async () => ({ error: null }),
             };
           },
         };
@@ -268,6 +313,7 @@ function makeWorkflowDb(initial: WorkflowState = null) {
       throw new Error(`unexpected table: ${table}`);
     },
   };
+  return db;
 }
 
 beforeEach(() => {
@@ -457,6 +503,28 @@ describe("dismissOpportunity", () => {
         reason: "other",
       }),
     ).rejects.toMatchObject({ code: "validation_error" });
+  });
+
+  it("auto-adds Dallas Facebook seller to blocked_sellers when reason is dealer", async () => {
+    const db = makeWorkflowDb();
+    vi.mocked(getOpportunityDetail).mockResolvedValue({
+      ...baseOpportunity,
+      status: "bad_lead",
+    });
+
+    await dismissOpportunity(db as never, "listing-1", closer, {
+      reason: "dealer",
+    });
+
+    expect(db.blockedSellerRows).toHaveLength(1);
+    expect(db.blockedSellerRows[0]).toMatchObject({
+      source: "facebook",
+      region: "dallas_tx",
+      reason: "dealer",
+      flagged_by_user_id: "closer-1",
+      normalized_listing_id: "listing-1",
+      seller_key: "url:https://facebook.com/marketplace/profile/dealer-1",
+    });
   });
 });
 

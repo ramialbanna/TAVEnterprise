@@ -187,6 +187,13 @@ export const SCRAPER_REVIEW_WINDOW_HOURS = 120;
 
 export const SCRAPER_REVIEW_WINDOW_MS = SCRAPER_REVIEW_WINDOW_HOURS * 60 * 60 * 1000;
 
+/** Unprocessed Leads tab — hide pre-2011 inventory (weak catalog + no MMR path). */
+export const SCRAPER_REVIEW_MIN_YEAR = 2011;
+
+export function isScraperReviewYearEligible(year: number | null): boolean {
+  return year !== null && year >= SCRAPER_REVIEW_MIN_YEAR;
+}
+
 /** Badge applied to review-only rows so production views can exclude them. */
 export const SCRAPER_REVIEW_BADGE = "Scraper review";
 
@@ -267,6 +274,7 @@ export function isScraperReviewNoMmrEligible(input: {
   const freshness = input.freshnessStatus ?? "new";
   if (SUPPRESSED_FRESHNESS.has(freshness)) return false;
   if (input.year === null || !input.make?.trim() || !input.model?.trim()) return false;
+  if (!isScraperReviewYearEligible(input.year)) return false;
   return true;
 }
 
@@ -275,8 +283,10 @@ export function isScraperReviewOnly(row: Pick<OpportunityRow, "type" | "badges">
   return row.type === "scraper_review" || row.badges.includes(SCRAPER_REVIEW_BADGE);
 }
 
-export function matchesScraperReview(row: Pick<OpportunityRow, "type" | "badges">): boolean {
-  return isScraperReviewOnly(row);
+export function matchesScraperReview(
+  row: Pick<OpportunityRow, "type" | "badges" | "year">,
+): boolean {
+  return isScraperReviewOnly(row) && isScraperReviewYearEligible(row.year);
 }
 
 const VALUATION_COLUMNS =
@@ -425,6 +435,7 @@ function mapToOpportunityRow(
       if (
         review.enabled &&
         withinWindow &&
+        isScraperReviewYearEligible(year) &&
         isSoftReviewableNearMiss(nearMissInput)
       ) {
         scraperReview = true;

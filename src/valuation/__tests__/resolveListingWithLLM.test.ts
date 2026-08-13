@@ -36,6 +36,25 @@ const INPUT = {
   title: "2022 Ram 1500 Big Horn Crew Cab 4x4",
 };
 
+/** Ambiguous enough that offline matcher stays below the §70 confident gate. */
+const CLAUDE_INPUT = {
+  year: 2022,
+  make: "Ram",
+  model: "1500",
+  trim: null,
+  title: "2022 Ram 1500",
+};
+
+/** Strong offline match — parser model aligns with catalog row. */
+const OFFLINE_INPUT = {
+  year: 2022,
+  make: "Ram",
+  model: "1500",
+  trim: "big horn",
+  title: "2022 Ram 1500 Big Horn Crew Cab 4x4",
+  description: "4D Crew Cab Big Horn package with 4WD",
+};
+
 describe("resolveListingWithLLM", () => {
   it("short-circuits with fallback llm_disabled when the flag is off, without touching any dep", async () => {
     const deps = baseDeps({ enabled: false });
@@ -59,10 +78,91 @@ describe("resolveListingWithLLM", () => {
 
     expect(result).toEqual({
       kind: "alias_hit",
-      make: "Ram",
+      make: "RAM",
       model: "1500",
       style: "4D Crew Cab Big Horn",
     });
+    expect(deps.callAnthropic).not.toHaveBeenCalled();
+  });
+
+  it("rejects alias_hit when canonical tokens are not in the catalog tree", async () => {
+    const alias: MmrStyleAlias = {
+      alias: "jeep|wrangler unlimited|",
+      canonicalMake: "jeep",
+      canonicalModel: "WRANGLER UNLIMITED",
+      canonicalStyle: "4D SUV SAHARA",
+      source: "ingest_learned",
+    };
+    const jeepRows: CoxCatalogTreeRow[] = [
+      {
+        year: 2018,
+        make: "JEEP",
+        model: "WRANGLER UNLIMITED V6",
+        style: "4D SUV SPORT",
+        searchText: "",
+        variantKind: null,
+      },
+    ];
+    const deps = baseDeps({
+      lookupStyleAlias: vi.fn(async () => alias),
+      loadTreeRows: vi.fn(async () => jeepRows),
+      callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
+        kind: "ok",
+        proposal: {
+          make: "JEEP",
+          model: "WRANGLER UNLIMITED V6",
+          style: "4D SUV SPORT",
+          confidence: 0.9,
+          reasoning: "Sport in title",
+          needsReview: false,
+        },
+        latencyMs: 500,
+        model: "claude-sonnet-5",
+      })),
+    });
+
+    const result = await resolveListingWithLLM(
+      {
+        year: 2018,
+        make: "jeep",
+        model: "wrangler unlimited",
+        trim: null,
+        title: "2018 Jeep Wrangler Unlimited · All New Sport SUV 4D",
+      },
+      deps,
+    );
+
+    expect(result.kind).toBe("llm_hit");
+    expect(deps.callAnthropic).toHaveBeenCalled();
+  });
+
+  it("returns offline_hit without calling Claude when offline matcher is confident (§70)", async () => {
+    const confidentRows: CoxCatalogTreeRow[] = [
+      {
+        year: 2022,
+        make: "Ram",
+        model: "1500",
+        style: "4D Crew Cab Big Horn",
+        searchText: "",
+        variantKind: "cab_bed",
+      },
+      {
+        year: 2022,
+        make: "Ram",
+        model: "1500",
+        style: "4D Crew Cab Laramie",
+        searchText: "",
+        variantKind: "cab_bed",
+      },
+    ];
+    const deps = baseDeps({ loadTreeRows: vi.fn(async () => confidentRows) });
+    const result = await resolveListingWithLLM(OFFLINE_INPUT, deps);
+    expect(result.kind).toBe("offline_hit");
+    if (result.kind === "offline_hit") {
+      expect(result.make).toBe("Ram");
+      expect(result.model).toBe("1500");
+      expect(result.style).toContain("Big Horn");
+    }
     expect(deps.callAnthropic).not.toHaveBeenCalled();
   });
 
@@ -96,7 +196,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
 
     expect(result).toEqual({
       kind: "llm_hit",
@@ -128,7 +228,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
     expect(result.kind).toBe("llm_needs_review");
   });
 
@@ -149,7 +249,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
     expect(result.kind).toBe("llm_hit");
   });
 
@@ -170,7 +270,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
     expect(result.kind).toBe("llm_needs_review");
   });
 
@@ -191,7 +291,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
     expect(result.kind).toBe("llm_hit");
   });
 
@@ -212,7 +312,7 @@ describe("resolveListingWithLLM", () => {
       })),
     });
 
-    const result = await resolveListingWithLLM(INPUT, deps);
+    const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
     expect(result.kind).toBe("llm_invalid_pick");
   });
 
@@ -231,7 +331,7 @@ describe("resolveListingWithLLM", () => {
           callKind === "http_error" ? { kind: "http_error", status: 503 } : ({ kind: callKind } as AnthropicCallResult),
         ),
       });
-      const result = await resolveListingWithLLM(INPUT, deps);
+      const result = await resolveListingWithLLM(CLAUDE_INPUT, deps);
       expect(result).toEqual({ kind: "fallback", reason: expectedReason });
     }
   });
@@ -293,6 +393,14 @@ describe("llmResolutionToAuditFields", () => {
         needsReview: false,
       },
       catalogRowCount: 5,
+      latencyMs: 800,
+      anthropicModel: "claude-sonnet-5",
+      tokenUsage: {
+        cacheReadInputTokens: 100,
+        cacheCreationInputTokens: 0,
+        uncachedInputTokens: 400,
+        outputTokens: 120,
+      },
     });
     expect(result).toEqual({
       outcome: "llm_invalid_pick",
@@ -302,6 +410,14 @@ describe("llmResolutionToAuditFields", () => {
       confidence: 0.5,
       reasoning: "r",
       catalogRowCount: 5,
+      model: "claude-sonnet-5",
+      latencyMs: 800,
+      tokenUsage: {
+        cacheReadInputTokens: 100,
+        cacheCreationInputTokens: 0,
+        uncachedInputTokens: 400,
+        outputTokens: 120,
+      },
     });
   });
 });
