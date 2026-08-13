@@ -4,6 +4,7 @@ import {
 } from "../llm/listingTextContext";
 import { parseFacebookItem, type AdapterContext } from "../sources/facebook";
 import { parseCraigslistItem } from "../sources/craigslist";
+import { isYearBelowValuationFloor } from "../valuation/valuationEligibility";
 import type { NormalizedListingInput } from "../types/domain";
 import type { LlmYmmsResolutionInput } from "../valuation/resolveListingWithLLM";
 import {
@@ -60,6 +61,7 @@ export function buildLlmYmmsPrefetchInputs(
     }
     if (listing.vin) return;
     if (listing.year === undefined || !listing.make || !listing.model) return;
+    if (isYearBelowValuationFloor(listing.year)) return;
 
     inputs.set(i, buildLlmYmmsResolutionInput(item, listing));
   });

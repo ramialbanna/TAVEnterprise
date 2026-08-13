@@ -1,13 +1,13 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-08-13 · **Focus:** **68–70** — Facebook Dallas throughput + dealer pre-filter + LLM token efficiency (shipped). Alias quality fix + unprocessed leads year floor shipped **2026-08-13**. Craigslist **67** deprioritized (chunked ingest shipped; schedule still off).
+**Last updated:** 2026-08-13 · **Focus:** **72** — MMR quality (identity accuracy over alias speed). **~59% MMR hit is unacceptable** — target near-universal evaluation on eligible inventory. Also open: **71** dealer AI filter, **68–70** Dallas FB. Craigslist **67** deprioritized.
 
 > **Fresh chat prompt:**
-> **2026-08-13:** **Alias quality fix** — bad `mmr_style_aliases` caused `cox_no_data` (e.g. 2018 Wrangler Unlimited → wrong Sahara alias + invalid model `WRANGLER UNLIMITED`). Shipped: title-trim before empty-trim lookup, catalog validation on alias hits, no empty-trim learning, uppercase make, migration **`0070`** (865 → **324** aliases). Worker staging `b3616613` + production `e97c673e`. Commit **`414ce2f`** on `main` (Vercel auto-deploy). **Unprocessed Leads** tab hides **2010 and older** (`SCRAPER_REVIEW_MIN_YEAR=2011`). **Credits restored ~2026-08-12** — MMR ~**60%** Dallas FB; §68 post-credits validation updated below.
+> **2026-08-13:** **Alias quality fix** — bad `mmr_style_aliases` caused `cox_no_data` (e.g. 2018 Wrangler Unlimited → wrong Sahara alias + invalid model `WRANGLER UNLIMITED`). Shipped: title-trim before empty-trim lookup, catalog validation on alias hits, no empty-trim learning, uppercase make, migration **`0070`** (865 → **324** aliases). Worker staging `b3616613` + production `e97c673e`. Commit **`414ce2f`** on `main` (Vercel auto-deploy). **Unprocessed Leads** tab hides **2010 and older** (`SCRAPER_REVIEW_MIN_YEAR=2011`). **Credits restored ~2026-08-12** — MMR ~**60%** Dallas FB; §68 post-credits validation updated below. **§71 opened** — AI text-based dealer listing detection (complements §69 seller-key blacklist; not built yet). **§72 opened (priority)** — production triage: **~59% MMR hit**; **~85% of `cox_no_data` misses trace to `alias_hit`** (wrong Y/M/M/S sent to Manheim, not “no book value”). Quality over alias skip rate — see §72.
 >
 > **2026-08-11 (current):** **Priority shift** — main focus is **Facebook Dallas** (`dallas-nick-task` `ZQEsd3nHcLAs5kLwL` → `dallas_tx`), not Craigslist. Goals: **better ingest results fast**, **least validation soak time** (hours / single-run metrics — not 1–3 day soaks when shipping changes). Three tracks — see §68, §69, §70:
 > 1. **§68** — Dallas FB scraper throughput + fast validation playbook.
-> 2. **§69** — **Dealer seller blacklist**: when a buyer dismisses with reason **`dealer`**, **auto-add** seller to a blocklist; filter **before ingest** (before LLM/MMR) so tokens aren’t wasted. **Scope v1:** `source=facebook` + `region=dallas_tx` only. **Blocked on scraper:** `seller_url` / `seller_name` not in Apify payloads yet (0 rows in `blocked_sellers`); boss still seeing dealer/salvage volume — no pre-ingest text filter yet.
+> 2. **§69** — **Dealer seller blacklist**: when a buyer dismisses with reason **`dealer`**, **auto-add** seller to a blocklist; filter **before ingest** (before LLM/MMR) so tokens aren’t wasted. **Scope v1:** `source=facebook` + `region=dallas_tx` only. **Blocked on scraper:** `seller_url` / `seller_name` not in Apify payloads yet (0 rows in `blocked_sellers`); boss still seeing dealer/salvage volume — **§71** scopes AI text classification as the first-sighting complement.
 > 3. **§70** — **Token efficiency — shipped 2026-08-11** (offline-first, Ford/Chevy catalog prune, prefetch sort, evidence trim, alias learning fix, token columns). Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md). Worker staging `46ac09a2` + production `7cbd9844`; **credits restored 2026-08-12** — token columns populating; ~**81%** of listings skip Claude via alias/offline.
 >
 > **2026-08-11 (same session):** **§55 Phase D** offline matcher — `parserGarbagePenalty` regex fix, style tie-break, `2d`/`4d` body tokens, offline alias fallback. Worker staging `57cafd1c` + production `64c6ea94`. Migrations **`0068_blocked_sellers`**, **`0069_llm_ymms_token_usage`** applied Supabase.
@@ -81,7 +81,7 @@
 
 **TAV-AIP** â€” internal buyer app for Texas Auto Value. Next.js in `web/`; API is a Cloudflare Worker in `src/` (proxied via `web/app/api/app/*`).
 
-**This doc:** **Priority shift 2026-08-11** — **68** (FB Dallas throughput + partial validation), **69** (dealer blacklist — deployed, scraper-blocked), **70** (token efficiency — shipped), **55** Phase D (offline matcher fixes). Craigslist **67** chunked ingest shipped 2026-08-08; schedule still off. **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**, funnel soak items.
+**This doc:** **Priority shift 2026-08-13** — **72** (MMR quality / identity accuracy) is the main ingest goal; **~59% MMR hit is not acceptable**. Supporting: **71** (dealer AI filter), **68–70** (Dallas FB throughput + token efficiency — shipped). **`SCRAPER_REVIEW_MODE` permanent** (2026-07-16). Also open: **51**, funnel soak items.
 
 | Area | Path |
 |------|------|
@@ -139,9 +139,11 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
+| **72** | **MMR quality — identity accuracy over alias speed** — `alias_hit` → `cox_no_data` recovery; §72 | **Critical** | [ ] opened 2026-08-13 |
 | **68** | **Facebook Dallas throughput + fast validation** — main scraper focus; hours-not-days sign-off; §68 | **Critical** | [~] baseline + partial validation 2026-08-11 |
 | **69** | **Dealer seller blacklist (pre-ingest)** — auto-add on `dealer` dismiss; Dallas FB only; **blocked on scraper seller fields**; §69 | **Critical** | [~] deployed `c786c54b`; verify blocked |
 | **70** | **LLM token efficiency** — §70 shipped (offline-first, prune, tokens); staging `46ac09a2` prod `7cbd9844` | **High** | [~] credits out; partial §68 validation |
+| **71** | **AI dealer listing detection (pre-ingest)** — text LLM + heuristics; complements §69; §71 | **High** | [ ] scoped 2026-08-13 |
 | **55** | **Scraper review / ingest YMMS** — Phase D offline matcher 2026-08-11; staging `57cafd1c` prod `64c6ea94` | **High** | [~] |
 | **51** | **Expand workflow statuses (buyer email #5)** — Bad Lead shipped as `bad_lead`; Purchased exists; fuller list pending from buyer | **High** | [~] |
 | **58** | **UI/UX polish** — badges/KPI cards, detail two-column layout + claim banner + stepper, MMR Lab skeleton state | **Medium** | [ ] |
@@ -187,6 +189,8 @@ cd .. && npm run lint && npm run typecheck && npm test
 | **68** | **Facebook Dallas throughput + fast validation** — main scraper focus; §68 | **Critical** | [~] partial validation 2026-08-11 |
 | **69** | **Dealer seller blacklist (pre-ingest filter)** — auto-add on dealer dismiss; Dallas FB v1; scraper blocked; §69 | **Critical** | [~] deployed `c786c54b` |
 | **70** | **LLM token efficiency** — §70 shipped; staging `46ac09a2` prod `7cbd9844` | **High** | [~] credits out; partial validation |
+| **71** | **AI dealer listing detection (pre-ingest)** — text LLM + heuristics; §71 | **High** | [ ] scoped 2026-08-13 |
+| **72** | **MMR quality — identity accuracy over alias speed** — §72 | **Critical** | [ ] opened 2026-08-13 |
 | **64** | **Extend Cox catalog to 2013 + improve MMR hit rate** — shipped `b0eda58`; soak §64 | **Critical** | [~] |
 | **65** | **LLM → offline matcher learning** — Phase 1 deployed prod `aadd46ef`; alias soak §65 | **Medium** | [~] |
 | **66** | **LLM prompt caching (item 57 cost)** — shipped prod `aadd46ef`; §66 | **High** | [~] |
@@ -1556,7 +1560,7 @@ Closed without full Worker/Cox webhook replay. Product ask: surface missed Dalla
 - [x] Learning loop — persist accepted Claude/offline picks into `mmr_style_aliases` (`ingest_learned`) so repeats skip the LLM call — Phase 1 prod `aadd46ef`; §70 extended to `offline_hit` + alias key fix (2026-08-11)
 - [ ] Vision tier — enable Apify photo capture, persist images (R2 or equivalent), low-confidence-triggered vision follow-up call only
 - [ ] Model tiering / prompt caching once Phase 0 data shows an easy/hard listing split worth exploiting
-- [ ] Seller classification (dealer vs private/curbstoner) — RFP FR-3.5 phase 2, text + photos, needs its own labeled eval set (50–100); not started, not blocking item 57
+- [ ] Seller classification (dealer vs private/curbstoner) — **moved to item 71** (§71); RFP FR-3.5; text v0 + vision later; not blocking item 57
 - [x] Fix `parserGarbagePenalty` regex bug in `matchListingToCoxCatalog.ts` — shipped 2026-08-11 (staging `57cafd1c`, prod `64c6ea94`); tie-break + alias fallback same cut
 
 ---
@@ -2043,7 +2047,7 @@ Optional: trigger one manual Apify run (`ZQEsd3nHcLAs5kLwL`) before relying on s
 | Token columns populated | Yes | ✓ |
 | Top miss reason now | **`cox_no_data`**, **`cox_rate_limited`** | monitor |
 
-**Open ops items:** 4 stuck `running` `source_runs`; dealer/salvage still high in queue (§69 scraper-blocked; no text heuristics); list/detail flag UI cache lag (~60s) under investigation.
+**Open ops items:** 4 stuck `running` `source_runs`; dealer/salvage still high in queue (§69 scraper-blocked; **§71** scopes AI text filter); list/detail flag UI cache lag (~60s) under investigation.
 
 ### Implementation tracks (ordered)
 
@@ -2165,6 +2169,7 @@ Next Apify webhook → parseFacebookItem
 - Item **47** / **45** — dismiss + dealer reason (shipped)
 - Item **68** — Dallas FB throughput + validation
 - Item **70** — further token reductions after blacklist
+- Item **71** — AI dealer detection on first sighting (text; complements seller-key blocklist)
 
 ---
 
@@ -2203,6 +2208,8 @@ Next Apify webhook → parseFacebookItem
 **Deploy:** staging `46ac09a2` + production `7cbd9844` (2026-08-11).
 
 **Observed post-deploy (§68 window):** `offline_hit` **3**, `alias_hit` **27**, **3** new `mmr_style_aliases` rows; MMR hit **50.8%** vs **61.5%** baseline — dominated by **`llm_unavailable` (75)** with credits out, not a regression signal yet.
+
+**Follow-up (2026-08-13):** §**72** — production triage shows **~85% of `cox_no_data` traced to `alias_hit`** after credits restored. §70 alias skip rate must be rebalanced for **identity accuracy** (see §72).
 
 ### Research phase (completed)
 
@@ -2252,7 +2259,312 @@ Next Apify webhook → parseFacebookItem
 
 - Item **68** — fast validation playbook
 - Item **69** — pre-ingest dealer filter (non-LLM token win)
+- Item **71** — AI dealer detection on first sighting (planned)
+- Item **72** — MMR quality / alias over-trust (priority)
 - Items **57**, **60**, **61**, **66** — existing LLM ingest stack
+
+---
+
+## 71 — AI dealer listing detection (pre-ingest)
+
+**Opened:** 2026-08-13  
+**Status:** [ ] **Scoped — not started**
+
+**Product goal:** Detect **dealership listings from listing text** (title, description, seller name) **before** Y/M/M/S + MMR run — so first-time dealer inventory is filtered without waiting for a buyer dismiss (§69) or scraper seller fields.
+
+**Problem today:** §69 only blocks **known** sellers (`blocked_sellers` keyed on `seller_url` / `seller_name`). Apify payloads often lack seller fields → blacklist empty → dealer inventory still burns Claude + MMR tokens and fills the queue. Buyers already flag **`dealer`** dismiss reason (item **47**), but that is reactive, not pre-ingest.
+
+**Principle:** *Separate LLM task from item 57 Y/M/M/S.* Do **not** extend the Cox catalog prompt — dealer detection is a cheap classification call with its own prompt, tool schema, eval harness, and feature flag.
+
+### Locked decisions (2026-08-13)
+
+| Decision | Choice |
+|----------|--------|
+| Scope v1 | **`source=facebook`** + **`region=dallas_tx`** (same as §69) |
+| Filter point | **After adapter**, **before** offline/LLM Y/M/M/S — same hook as `isBlockedSeller` in `runIngestItemLoop.ts` |
+| Auto-reject gate | Only when `seller_type=dealer` **and** `confidence >= 0.85` (threshold tuned on eval — not locked until labeled set exists) |
+| Lower confidence | Ingest continues as today (no regression on private-party edge cases) |
+| On auto-reject | `writeFilteredOut(..., reason_code: "dealer_listing")` + log `ingest.dealer_listing_blocked`; optionally **upsert `blocked_sellers`** when seller URL/name present |
+| Feature flag | `SELLER_CLASSIFY_ENABLED="false"` default; staging first |
+| Model tier | Prefer **Haiku** (or cheapest sufficient model) — classification is simpler than Cox Y/M/M/S |
+| Not in v1 | Vision/photos (RFP FR-3.5 Tier 3); salvage/junk classification; auto-learning from dismiss without eval |
+
+### Proposed pipeline
+
+```
+adapter OK
+  → §69 blocked_sellers lookup (seller key)     — already shipped
+  → Phase 0: cheap text heuristics (optional)    — zero-token obvious dealers
+  → Phase 1: classifyListingSeller (Claude)      — only if flag on + heuristics ambiguous
+       → dealer + high conf → filter + optional blacklist upsert
+       → else → normal ingest (offline / LLM YMMS → MMR)
+```
+
+### Phase 0 — heuristics (do first, no API cost)
+
+Regex / rules on title + description + seller name before any LLM call:
+
+- Financing / CARFAX / “we finance” / “bad credit OK”
+- Business suffixes (LLC, Auto Group, Motors, Dealership)
+- Lot / inventory language (“over 100 vehicles”, “visit our lot”)
+- Multiple vehicles mentioned in one listing
+
+**Output:** `dealer_heuristic` → skip listing immediately, or pass through to Phase 1 when ambiguous.
+
+### Phase 1 — text LLM (v0)
+
+**Inputs** (reuse item **60** extractors): `title`, `description`, `sellerName`, `price`, `location` — from `extractLlmListingTextFromIngestItem` + adapter fields.
+
+**Structured output (tool schema):**
+
+```json
+{
+  "seller_type": "dealer" | "private_party" | "curbstoner_suspected" | "unknown",
+  "confidence": 0.0,
+  "reasoning": "one sentence",
+  "signals": ["financing_language", "business_name", "..."]
+}
+```
+
+**Primary files (when implementing):**
+
+| Piece | Pattern / path |
+|-------|----------------|
+| Prompt + tool | new `src/llm/sellerClassifyPrompt.ts` (mirror `ymmsPrompt.ts`) |
+| API caller | extend `src/llm/anthropicClient.ts` or thin wrapper |
+| Resolver | new `src/valuation/classifyListingSeller.ts` |
+| Ingest hook | `src/ingest/runIngestItemLoop.ts` — after §69 check, before norm/dedupe/LLM YMMS |
+| Eval harness | new `scripts/eval-seller-classification.mjs` (`npm run eval:seller-classify`) |
+| Audit (optional v1) | new table or extend `filtered_out` details — TBD in Phase 0 |
+
+### Phase 2 — vision (later backlog)
+
+- Requires persisted listing photos (FB URLs expire; RFP R2 capture)
+- Low-confidence text → optional photo follow-up
+- See [`docs/TAV API.md`](TAV%20API.md) seller classification section + item **57** vision tier backlog
+
+### Eval before production (non-negotiable)
+
+Build **50–100 buyer-labeled listings** (dealer / private / curbstoner) from dismiss reasons + manual review. Measure precision/recall at auto-reject threshold. **Do not** wire to production ingest until eval shows acceptable false-positive rate on private-party listings.
+
+### Cost control
+
+- Run **before** Y/M/M/S — saves more tokens than the classification call costs when dealer rate is meaningful
+- Skip LLM when Phase 0 heuristics are confident
+- Optional: cache classification by `(seller_url | seller_name | normalized title hash)` in KV for repeat posters
+
+### Relationship to §69
+
+| Mechanism | When it helps |
+|-----------|----------------|
+| §69 buyer dismiss → `blocked_sellers` | Repeat listings from **same seller key** (needs scraper seller fields) |
+| §71 AI text classification | **First sighting** — no prior buyer flag required |
+| §71 + seller URL on reject | Seeds blacklist so §69 handles repeats even before next buyer dismiss |
+
+### Implementation order
+
+1. **Phase 0** — heuristics module + unit tests; wire to `writeFilteredOut` behind flag
+2. **Eval set** — export labeled rows from dismiss=`dealer` + private-party controls
+3. **Phase 1** — prompt + resolver + eval script; tune confidence threshold on eval
+4. **Staging soak** — `SELLER_CLASSIFY_ENABLED=true` on staging only; §68 fast-validation metrics (`ingest.dealer_listing_blocked`, token savings, false-positive spot-check)
+5. **Production** — only after staging sign-off
+
+### Exit criteria
+
+- [ ] Labeled eval set (≥50 rows) with documented precision/recall at chosen threshold
+- [ ] Phase 0 heuristics shipped with unit tests
+- [ ] Phase 1 text classifier + eval script; `SELLER_CLASSIFY_ENABLED` flag
+- [ ] Ingest hook filters high-confidence dealers before Y/M/M/S
+- [ ] Optional blacklist upsert on reject when seller fields present
+- [ ] Staging validation: dealer volume down, no material private-party false-positive reports
+- [ ] `docs/TAV API.md` cross-link updated when shipped
+
+### Related
+
+- Item **47** / **45** — dismiss + `dealer` reason (shipped)
+- Item **69** — seller-key blacklist (shipped; scraper-blocked)
+- Item **68** — fast validation playbook
+- Item **57** — separate LLM stack; seller classification explicitly **not** part of Y/M/M/S prompt
+- Item **70** — token savings compound when junk listings never reach Claude Y/M/M/S
+- [`docs/TAV API.md`](TAV%20API.md) — RFP FR-3.5 seller classification notes
+
+---
+
+## 72 — MMR quality: identity accuracy over alias speed
+
+**Opened:** 2026-08-13  
+**Status:** [~] **Phase 0 (year-floor alignment) in code — not deployed;** Phases 1–5 not started
+
+**Product goal:** **Near-universal MMR evaluation on eligible vehicle inventory** — every real private-party listing that Manheim can price should get a wholesale number at ingest. **~59% MMR hit today is unacceptable.** Target: **85–90%+** on Dallas FB eligible inventory in weeks (not “stable at 60%”).
+
+**Buyer mental model (correct):** Parse listing → load all Cox model/style options for `(year, make)` → send catalog + listing evidence to AI → AI picks exact Y/M/M/S → Manheim returns MMR.
+
+**What actually happens today:** That AI path (**item 57**) exists, but **~80% of listings skip Claude** via **`alias_hit`** (learned memory) or **`offline_hit`** (rules). §**70** optimized for token cost and speed — not pick accuracy. When the shortcut sends the **wrong** Cox tokens, Manheim returns **`cox_no_data`** and the listing lands in Scraper review with no price.
+
+### Production evidence (Dallas FB, 2026-08-13, last 24h)
+
+| Metric | Value |
+|--------|------:|
+| MMR hit rate (listings) | **~59%** |
+| Valuation attempted, missed | **~40%** |
+| Miss reason **`cox_no_data`** | **66%** of all misses |
+| **`cox_no_data` rows traced to `alias_hit`** | **~85%** (~1,895 / 2,237) |
+| Listings skipping Claude (`alias_hit` + `offline_hit`) | **~81%** |
+| **`llm_ymms_decisions.normalized_listing_id` populated** | **0%** (audit gap) |
+| Miss snapshots storing Cox tokens sent (`lookup_*`) | **Not wired** from ingest |
+
+**Interpretation:** Failures are **wrong identity sent to Manheim**, not “Manheim has no book.” Aliases pass **`isCatalogAliasValid`** (row exists in `cox_catalog_tree`) but map the **wrong trim/variant** for this listing.
+
+### Example failures (`alias_hit` → `cox_no_data`)
+
+| Listing | Alias sent to Cox | Why wrong |
+|---------|-------------------|-----------|
+| 2023 Corolla **Sport** | `COROLLA` / **4D SEDAN SE** | SE ≠ Sport |
+| 2017 Rogue **Sport** | `ROGUE AWD 3C` / **SV** | Rogue Sport ≠ Rogue SV |
+| 2017 Altima **2.5 S** | `ALTIMA FWD` / **4D SEDAN SR** | S ≠ SR |
+| 2017 Civic **LX Hatchback** | `CIVIC` / **4D SEDAN LX** | Hatchback ≠ Sedan |
+| 2017 Cherokee **Sport** | `CHEROKEE FWD` / **LATITUDE PLUS** | Sport ≠ Latitude |
+
+Mainstream vehicles — not exotic Cox gaps.
+
+### Other miss buckets (same 24h window)
+
+| Reason | Count | Fix class |
+|--------|------:|-----------|
+| `cox_rate_limited` | 487 | Infra — retry/queue |
+| `model_variant_missing` | 323 | Identity — AWD/FWD, cab/bed |
+| `trim_missing` | 265 | Identity — style never resolved |
+| Dealer-like description (within `cox_no_data`) | ~626 | Filter — §71 |
+| FB parser pollution (`altima 2.5`, `equinox lt` in model field) | ~599 | Parser — split trim from model |
+
+### Intended identity ladder (quality-first — §72 target state)
+
+```
+parse listing (title, description, photos when available)
+  → optional: dealer/junk filter (§71)
+  → VIN path when present (high confidence)
+  → alias lookup ONLY if trim evidence matches (strict gate)
+  → offline matcher if confident
+  → Claude: full (year, make) catalog subtree + listing text (+ vision when ambiguous)
+  → validate pick exists in cox_catalog_tree BEFORE calling Manheim
+  → Manheim MMR
+  → if cox_no_data after alias_hit: BAN alias + retry full ladder (do not accept miss)
+  → if still miss: persist suggestions + Scraper review
+```
+
+**Principle:** *Quality over alias skip rate.* Token cost is secondary to getting the right Y/M/M/S. Re-run Claude when shortcuts fail — do not treat `cox_no_data` as terminal on first attempt.
+
+### Locked decisions (2026-08-13)
+
+| Decision | Choice |
+|----------|--------|
+| Priority | **Above §70 token savings** — accuracy regressions from alias skip are the top ingest defect |
+| Scope v1 | **`source=facebook`** + **`region=dallas_tx`** (same as §68) |
+| **`alias_hit` gate** | Require trim/title token overlap with alias key; reject weak single-token trims (`sport`, `lt`, `ex`) without variant match |
+| **`alias_hit` + `cox_no_data`** | **Ban/invalidate alias** + **retry** without alias (Claude + offline); log `ingest.alias_cox_no_data_retry` |
+| **Pre-Manheim validation** | Never call intel worker if pick not in `cox_catalog_tree` for `(year, make)` |
+| **Photos** | **Not in Phase 1** — Phase 3 vision follow-up (item 57 backlog); text retry first |
+| **Metric** | Track **MMR hit % on eligible inventory** (exclude `missing_ymm`, dealer-filtered) — not raw scrape % |
+| **Observability** | Populate `llm_ymms_decisions.normalized_listing_id`; pass `lookup_make/model/trim` on miss snapshots |
+
+### Implementation phases
+
+**Phase 0 — Year-floor alignment (done in code 2026-08-13; not deployed)**
+
+Denominator hygiene, done before the alias work so Phase 1–2 lift is measured against eligible inventory only. Two changes, in opposite directions:
+
+- **Skip valuation below 2011.** `VALUATION_MIN_YEAR` (new `src/valuation/valuationEligibility.ts`) mirrors `SCRAPER_REVIEW_MIN_YEAR`, so we value exactly what Unprocessed Leads shows. No-VIN listings older than that now short-circuit before the catalog cascade and the Manheim call with new miss reason **`year_below_valuation_floor`**; VIN listings are exempt. **113 listings/day** at a **20.4%** hit rate stop consuming a catalog + MMR round-trip each. A drift test asserts the two floors stay equal.
+- **Extend the catalog tree down to 2011** (`COX_CATALOG_MIN_YEAR` 2013 → 2011, plus `scripts/sync-cox-catalog.mjs`). **Correction to the original plan:** 2011–2012 listings were *not* dead weight — **534/day** were already reaching MMR at **35.2%** through the live catalog cascade, because alias/offline/Claude all bail out on `catalog_not_synced` without tree rows. Skipping them would have destroyed ~188 real valuations/day. Syncing the tree instead puts them on the same identity ladder as 2013+ (**63.0%**).
+
+Measured Dallas FB, 24h to 2026-08-13: raw hit **60.6%**; eligible-only (2011+ or VIN) **63.0%**. Tests 1,357 green; lint + typecheck clean.
+
+**Still to do for Phase 0:** run the catalog sync for **2011–2012** (cron picks up missing years once deployed; verify row counts), then deploy Worker to staging → production and re-measure per the §68 playbook. Report MMR hit on eligible inventory from here on, excluding `year_below_valuation_floor`.
+
+**Phase 1 — Alias failure recovery (P0, highest ROI) — done in code 2026-08-13; not deployed**
+
+On `cox_no_data` from the Y/M/M path, `performMmrCall` now retires the alias behind the pick (when the resolution was `alias_hit`), re-asks Claude with `skipShortcuts` and the rejected `model / style` named in the prompt, and re-prices once. Recovered picks are marked `confidence: "low"` / `normalizationConfidence: "partial"` and are deliberately **not** fed back into item 65 alias learning.
+
+| Guard | Behaviour |
+|-------|-----------|
+| Budget | One retry per listing; skipped unless `retryDeadlineMs − now ≥ 10s` (`ingest.mmr_no_data_retry_skipped`, `reason: batch_deadline`) |
+| No deadline passed | No retry — non-ingest callers unchanged |
+| Claude repeats the pick | No second Manheim call (`reason: same_pick`) |
+| Retry also has no book | Original `cox_no_data` miss preserved |
+| Prompt caching | Rejected pick goes in the per-listing evidence block, never the cached catalog prefix (item 66 still hits) |
+
+Logs: `ingest.mmr_no_data_retry` (`recovered` true/false, kpi), `ingest.mmr_alias_retired_after_no_data` (kpi), `ingest.mmr_no_data_retry_skipped`.
+
+Files: `workerClient.ts` (wire call extracted to `sendMmrRequest` so it can run twice; `retryYmmAfterNoData`), `resolveListingWithLLM.ts` (`skipShortcuts`, `rejectedPicks`), `ymmsPrompt.ts`, `mmrStyleAliases.ts` (`deleteMmrStyleAlias`), `runIngestItemLoop.ts` (passes `loopDeadline`). Tests: `test/valuation.mmrNoDataRetry.test.ts` (7), suite 1,364 green.
+
+**Root-cause correction (2026-08-13):** the failing cohort is **not** mainly wrong *trim* (Corolla Sport → SE). It is Cox models split by **engine or drivetrain** where the listing text does not state either — `CAMRY 4C` vs `CAMRY V6`, `YUKON 2WD FFV` vs `4WD`, `ACADIA AWD` vs `FWD`. Clean 24h window (the earlier 7-day read was skewed by the Aug 11 credit outage): **GMC 44.5%**, **Toyota 57.2%**, while **Ford 78.5%**, **RAM 78.2%**, **Cadillac 80.5%** are healthy. Worst offenders: `gmc sierra 1500` 17/95, `toyota camry` 18/90, `gmc yukon` 17/70, `toyota tacoma double` 6/54, `gmc acadia` 2/34 — against `toyota rav4` 69/74 and `highlander` 19/23, which the listing text disambiguates.
+
+**Rejected alternative:** blind sibling-variant retry (walk the catalog for models sharing a style). Cheaper and needs no Claude call, but siblings sharing a style include genuinely different vehicles (`YUKON` vs `YUKON XL`, `2500HD SIERRA` vs `3500 SIERRA`) and different powertrains, so "first variant Manheim books" can return a **wrong price** — worse than no price under the never-mislead-a-buyer principle. Claude re-ask keeps the pick evidence-based.
+
+**Still to do:** deploy staging → production, then measure `ingest.mmr_no_data_retry` recovery rate and MMR hit lift per the §68 playbook.
+
+**Phase 2 — Stricter alias acceptance (P0)**
+
+- In `resolveListingWithLLM.ts` `alias_hit` path: require listing trim/title tokens to overlap canonical style tokens; reject alias when body style conflicts (hatchback vs sedan, Sport vs SE/SR).
+- Stop learning aliases from picks that later produce `cox_no_data` (extend §65 guardrails).
+
+**Phase 3 — Parser + observability (P1)**
+
+- Facebook adapter: split trim from polluted model strings (`altima 2.5`, `equinox lt`, `tacoma double`, `suburban ltz`, …).
+- Wire `lookupMake/lookupModel/lookupTrim` into `writeValuationMissSnapshot` from `runIngestItemLoop.ts`.
+- Populate `normalized_listing_id` on `insertLlmYmmsDecision`.
+
+**Phase 4 — Infra + filter (P2)**
+
+- Retry queue for `cox_rate_limited` (~15% of non-`cox_no_data` misses).
+- §71 dealer text filter — remove junk from denominator.
+
+**Phase 5 — Vision (P3, item 57 Phase 2)**
+
+- Persist listing photos (R2); on ambiguous text or failed text retry, Claude vision pass for body style / trim.
+- See [`LLM-YMMS-Normalization.md`](LLM-YMMS-Normalization.md) vision tier backlog.
+
+### Expected impact (order-of-magnitude)
+
+| Stage | Approx MMR hit |
+|-------|----------------|
+| Today | **~59%** |
+| Phase 1–2 (alias recovery + strict gate) | **~75–80%** |
+| Phase 3–4 (parser + rate limits + dealer filter) | **~85–90%** |
+| Phase 5 + VIN + buyer Apply loop | Approach **100% on eligible inventory** |
+
+Literal **100% on all scraped rows** is not the target (motorcycles, parts cars, dealer lots, true Cox gaps).
+
+### Primary files
+
+| Area | Path |
+|------|------|
+| Identity ladder | `src/valuation/resolveListingWithLLM.ts`, `src/valuation/workerClient.ts` |
+| Alias lookup / learn | `src/persistence/mmrStyleAliases.ts`, `src/valuation/learnIngestStyleAlias.ts`, `src/valuation/catalogAliasValidation.ts` |
+| Ingest loop | `src/ingest/runIngestItemLoop.ts` |
+| FB parser | `src/sources/facebook.ts` |
+| Miss audit | `src/persistence/valuationSnapshots.ts`, `src/persistence/llmYmmsDecisions.ts` |
+| Claude prompt | `src/llm/ymmsPrompt.ts`, `src/llm/anthropicClient.ts` |
+
+### Exit criteria
+
+- [x] Phase 0 — valuation year floor aligned to `SCRAPER_REVIEW_MIN_YEAR`; catalog floor lowered to 2011 (code + tests, 2026-08-13)
+- [ ] Phase 0 — `cox_catalog_tree` synced for 2011–2012; Worker deployed; eligible-inventory hit rate re-measured
+- [x] `alias_hit` + `cox_no_data` triggers ban + retry; unit tests for engine/drivetrain variant cases (2026-08-13, code only)
+- [ ] Stricter alias acceptance shipped; false alias hits measurably down on staging
+- [ ] MMR hit **≥ 75%** Dallas FB eligible inventory (24h window, §68 playbook)
+- [ ] `lookup_*` persisted on all miss snapshots; `llm_ymms_decisions` links to `normalized_listing_id`
+- [ ] Documented before/after cohort (same §68 methodology as item 55 Phase C)
+- [ ] Phase 5 vision scoped separately — not blocking Phase 1–2
+
+### Related
+
+- Item **57** — Claude full-catalog Y/M/M/S path (runs when not skipped)
+- Item **65** — alias learning (must not learn from bad picks; extend with §72 ban rules)
+- Item **70** — token efficiency (**tradeoff** — alias skip rate vs accuracy; §72 rebalance)
+- Item **55** Phase D / **0070** — alias quality fix (necessary but insufficient)
+- Item **71** — dealer filter (denominator + token waste)
+- Item **68** — fast validation playbook for measuring lift
+- Item **64** — catalog floor (2013+); separate from wrong-token failures
 
 ---
 
@@ -2346,6 +2658,7 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 - [x] Accepted LLM picks (`llm_hit` + MMR hit) persist to `mmr_style_aliases` (`ingest_learned`) — deployed prod `aadd46ef`; forward soak pending
 - [x] No bad aliases from low-confidence or MMR-miss picks — **guardrails shipped 2026-08-13** (catalog validation, no empty-trim learn, migration 0070 purge)
 - [~] Repeat listing combos resolve via alias fast-path without Claude call — **9,607 `alias_hit` / 24h** post-credits; forward soak ongoing
+- [ ] **§72:** alias fast-path must not produce `cox_no_data` at scale — ban + retry when it does
 - [ ] `LLM-YMMS-Normalization.md` §Phase 3 updated when shipped
 
 ---

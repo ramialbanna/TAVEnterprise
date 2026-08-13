@@ -79,6 +79,27 @@ export async function lookupMmrStyleAliasWithFallback(
   return null;
 }
 
+/**
+ * Item 72 — drop an alias whose canonical tokens Manheim would not price.
+ * Scoped to the one (alias, make, model) row that produced the bad pick, since
+ * the primary key allows several canonical mappings per alias key.
+ */
+export async function deleteMmrStyleAlias(
+  db: SupabaseClient,
+  input: { aliasKey: string; canonicalMake: string; canonicalModel: string },
+): Promise<void> {
+  if (!input.aliasKey.replace(/\|/g, "").trim()) return;
+
+  const { error } = await db
+    .schema("tav")
+    .from("mmr_style_aliases")
+    .delete()
+    .eq("alias", input.aliasKey)
+    .eq("canonical_make", input.canonicalMake)
+    .eq("canonical_model", input.canonicalModel);
+  if (error) throw error;
+}
+
 export async function upsertMmrStyleAlias(
   db: SupabaseClient,
   input: {

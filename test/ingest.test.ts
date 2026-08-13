@@ -446,6 +446,35 @@ const WORKER_MMR_RESULT = {
   rawResponse: {},
 };
 
+/** Item 72 — 2010 is below VALUATION_MIN_YEAR (2011). */
+const BELOW_YEAR_FLOOR_PAYLOAD = JSON.stringify({
+  source: "facebook",
+  run_id: "run-002",
+  region: "dallas_tx",
+  scraped_at: new Date().toISOString(),
+  items: [{ url: "https://fb.com/item/124", title: "2010 Toyota Camry SE, 180k miles, $4,500" }],
+});
+
+const BELOW_YEAR_FLOOR_VIN_PAYLOAD = JSON.stringify({
+  source: "facebook",
+  run_id: "run-003",
+  region: "dallas_tx",
+  scraped_at: new Date().toISOString(),
+  items: [{
+    url: "https://fb.com/item/125",
+    title: "2010 Toyota Camry SE, 180k miles, $4,500",
+    vin: "4T1BF3EK5AU513879",
+  }],
+});
+
+const AT_YEAR_FLOOR_PAYLOAD = JSON.stringify({
+  source: "facebook",
+  run_id: "run-004",
+  region: "dallas_tx",
+  scraped_at: new Date().toISOString(),
+  items: [{ url: "https://fb.com/item/126", title: "2011 Toyota Camry SE, 160k miles, $6,500" }],
+});
+
 const workerEnv = {
   WEBHOOK_HMAC_SECRET: SECRET,
   SUPABASE_URL: "https://test.supabase.co",
@@ -532,6 +561,42 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     );
   });
 
+  it("item 72: skips the lookup entirely for a no-VIN listing below the year floor", async () => {
+    const sig = await sign(BELOW_YEAR_FLOOR_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(BELOW_YEAR_FLOOR_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    // No catalog cascade and no Manheim round-trip: Unprocessed Leads hides
+    // 2010-and-older, so a buyer could never act on the price anyway.
+    expect(vi.mocked(getMmrLookupOutcome)).not.toHaveBeenCalled();
+    expect(vi.mocked(writeValuationSnapshot)).not.toHaveBeenCalled();
+    expect(vi.mocked(writeValuationMissSnapshot)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ missingReason: "year_below_valuation_floor", method: null }),
+    );
+  });
+
+  it("item 72: still runs the lookup for a below-floor listing that has a VIN", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_MMR_RESULT });
+    const sig = await sign(BELOW_YEAR_FLOOR_VIN_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(BELOW_YEAR_FLOOR_VIN_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    // The VIN path never touches the catalog, so the year floor must not gate it.
+    expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
+  });
+
+  it("item 72: still runs the lookup at the floor year itself", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "hit", result: WORKER_MMR_RESULT });
+    const sig = await sign(AT_YEAR_FLOOR_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(AT_YEAR_FLOOR_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledOnce();
+    expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
+  });
+
   it("miss-snapshot persistence failure does not fail ingest", async () => {
     vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({ kind: "miss", reason: "cox_no_data", method: "vin" });
     vi.mocked(writeValuationMissSnapshot).mockRejectedValueOnce(new Error("db constraint"));
@@ -557,7 +622,11 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledWith(
       expect.anything(),
       workerEnv,
-      { llmResolution: { kind: "fallback", reason: "llm_disabled" } },
+      {
+        llmResolution: { kind: "fallback", reason: "llm_disabled" },
+        // Item 72 — batch deadline the cox_no_data retry must fit inside.
+        retryDeadlineMs: expect.any(Number),
+      },
     );
   });
 

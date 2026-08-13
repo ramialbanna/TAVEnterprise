@@ -154,4 +154,25 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx, blockedLookup);
     expect(map.size).toBe(0);
   });
+
+  it("skips listings below the valuation year floor (item 72)", () => {
+    const item = {
+      title: "2010 Toyota Camry SE",
+      price: 4500,
+      url: "https://www.facebook.com/marketplace/item/1000/",
+    };
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
+    expect(map.size).toBe(0);
+  });
+
+  it("still registers listings at the valuation year floor (item 72)", () => {
+    const item = {
+      title: "2011 Toyota Camry SE",
+      price: 6500,
+      url: "https://www.facebook.com/marketplace/item/1001/",
+    };
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
+    expect(map.size).toBe(1);
+    expect(map.get(0)?.year).toBe(2011);
+  });
 });

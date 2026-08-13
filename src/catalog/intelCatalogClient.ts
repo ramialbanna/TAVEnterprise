@@ -33,10 +33,19 @@ const IntelCatalogEnvelopeSchema = z.object({
   }),
 });
 
-/** Item 64 — buyer inventory includes 2013–2015; Cox tree must cover this floor. */
-export const COX_CATALOG_MIN_YEAR = 2013;
+/**
+ * Item 64 — buyer inventory includes 2013–2015; Cox tree must cover this floor.
+ *
+ * Item 72 — lowered 2013 → 2011 to match `SCRAPER_REVIEW_MIN_YEAR`. Manheim does
+ * book 2011–2012, and those listings were already reaching MMR through the live
+ * catalog cascade at a ~35% hit rate (vs ~63% for tree-covered years) because
+ * alias/offline/Claude all short-circuit on `catalog_not_synced` without tree
+ * rows. Syncing the tree down to the year floor we actually surface to buyers
+ * puts them on the same identity ladder as everything else.
+ */
+export const COX_CATALOG_MIN_YEAR = 2011;
 
-/** Cox years synced into `tav.cox_catalog_tree` (2013 … current + 1). */
+/** Cox years synced into `tav.cox_catalog_tree` (2011 … current + 1). */
 export function buildCoxCatalogYearRange(): number[] {
   const currentYear = new Date().getFullYear();
   const years: number[] = [];

@@ -100,7 +100,8 @@ async function main() {
   });
 
   const currentYear = new Date().getFullYear();
-  const COX_CATALOG_MIN_YEAR = 2013;
+  // Keep in sync with COX_CATALOG_MIN_YEAR in src/catalog/intelCatalogClient.ts.
+  const COX_CATALOG_MIN_YEAR = 2011;
   const years = [];
   for (let year = COX_CATALOG_MIN_YEAR; year <= currentYear + 1; year += 1) {
     years.push(year);

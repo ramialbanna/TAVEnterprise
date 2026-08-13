@@ -45,6 +45,17 @@ export type LlmYmmsResolutionInput = {
   price?: number | null;
   /** Prior rules-based miss reason, if this is a re-attempt. */
   priorMissReason?: string | null;
+  /**
+   * Item 72 — model+style pairs Manheim already refused to price for this
+   * listing. Named in the prompt so Claude picks something else.
+   */
+  rejectedPicks?: ReadonlyArray<{ model: string; style: string }>;
+  /**
+   * Item 72 — skip the alias and offline fast-paths and go straight to Claude.
+   * Set on a retry: those shortcuts are what produced the rejected pick, so
+   * re-running them would just return it again.
+   */
+  skipShortcuts?: boolean;
 };
 
 export type LlmYmmsFallbackReason =
@@ -155,7 +166,9 @@ export async function resolveListingWithLLM(
   const titleTrim =
     extractTitleTrim(input.title) ?? extractTitleTrim(input.description) ?? null;
 
-  const alias = await deps.lookupStyleAlias(makeRaw, modelRaw, input.trim, titleTrim);
+  const alias = input.skipShortcuts
+    ? null
+    : await deps.lookupStyleAlias(makeRaw, modelRaw, input.trim, titleTrim);
   if (alias) {
     if (isCatalogAliasValid(allRows, alias)) {
       const tokens = normalizeCatalogAliasTokens(alias);
@@ -175,32 +188,34 @@ export async function resolveListingWithLLM(
     });
   }
 
-  const offlineMatch = matchListingToCoxCatalog(
-    {
-      year: input.year,
-      make: makeRaw,
-      model: modelRaw || null,
-      trim: input.trim,
-      title: input.title,
-      description: input.description,
-    },
-    allRows,
-  );
-  if (isOfflineConfidentCatalogMatch(offlineMatch)) {
-    log("llm_ymms.offline_confident_skip", {
-      make: makeRaw,
-      model: modelRaw,
-      score: offlineMatch.score,
-      catalog_row_count: allRows.length,
-    });
-    return {
-      kind: "offline_hit",
-      make: offlineMatch.make,
-      model: offlineMatch.model,
-      style: offlineMatch.style,
-      score: offlineMatch.score,
-      catalogRowCount: allRows.length,
-    };
+  if (!input.skipShortcuts) {
+    const offlineMatch = matchListingToCoxCatalog(
+      {
+        year: input.year,
+        make: makeRaw,
+        model: modelRaw || null,
+        trim: input.trim,
+        title: input.title,
+        description: input.description,
+      },
+      allRows,
+    );
+    if (isOfflineConfidentCatalogMatch(offlineMatch)) {
+      log("llm_ymms.offline_confident_skip", {
+        make: makeRaw,
+        model: modelRaw,
+        score: offlineMatch.score,
+        catalog_row_count: allRows.length,
+      });
+      return {
+        kind: "offline_hit",
+        make: offlineMatch.make,
+        model: offlineMatch.model,
+        style: offlineMatch.style,
+        score: offlineMatch.score,
+        catalogRowCount: allRows.length,
+      };
+    }
   }
 
   const rows = pruneCatalogSubtreeForLlm(
@@ -227,6 +242,7 @@ export async function resolveListingWithLLM(
       listingMileage: input.listingMileage,
       price: input.price,
       priorMissReason: input.priorMissReason,
+      rejectedPicks: input.rejectedPicks,
     },
     rows,
   );

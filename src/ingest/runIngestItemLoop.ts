@@ -48,6 +48,7 @@ import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalo
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
 import { getValuationLookupMode } from "../valuation/lookupMode";
+import { VALUATION_MIN_YEAR, isYearBelowValuationFloor } from "../valuation/valuationEligibility";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../persistence/vehicleEnrichments";
@@ -334,6 +335,13 @@ export async function runIngestItemLoop(
       } catch (err) {
         logError("valuation", "ingest.mmr_failed", err, listingCtx);
       }
+    } else if (!listing.vin && isYearBelowValuationFloor(listing.year)) {
+      workerMiss = { reason: "year_below_valuation_floor", method: null };
+      log(
+        "valuation.skipped_below_year_floor",
+        { year: listing.year ?? null, min_year: VALUATION_MIN_YEAR, kpi: true },
+        listingCtx,
+      );
     } else {
       try {
         const llmResolution = await llmPrefetch!.consume(prefetchIndex);
@@ -354,7 +362,7 @@ export async function runIngestItemLoop(
             listingMileage: llmText.listingMileage ?? undefined,
           },
           env,
-          { llmResolution },
+          { llmResolution, retryDeadlineMs: loopDeadline },
         );
         if (outcome.kind === "hit") {
           mmrResult = outcome.result;

@@ -22,6 +22,10 @@ import {
 } from "./resolveListingWithLLM";
 import { insertLlmYmmsDecision } from "../persistence/llmYmmsDecisions";
 import { maybeLearnIngestStyleAlias } from "./learnIngestStyleAlias";
+import {
+  buildListingStyleAliasKey,
+  deleteMmrStyleAlias,
+} from "../persistence/mmrStyleAliases";
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -53,6 +57,11 @@ import { maybeLearnIngestStyleAlias } from "./learnIngestStyleAlias";
  *                          tell "LLM hallucinated" apart from "rules couldn't decide"
  *   llm_unavailable      — item 57: Claude API call errored/timed out/rate-limited and
  *                          the offline-matcher fallback also could not resolve a model
+ *   year_below_valuation_floor — item 72: no-VIN listing older than VALUATION_MIN_YEAR,
+ *                          which the Unprocessed Leads tab already hides. Skipped before
+ *                          any catalog or Manheim call. Ineligible inventory — exclude
+ *                          from MMR hit-rate denominators rather than counting it as a
+ *                          miss we could have converted.
  */
 export type MmrMissReason =
   | "not_configured"
@@ -60,6 +69,7 @@ export type MmrMissReason =
   | "mileage_missing"
   | "model_variant_missing"
   | "trim_missing"
+  | "year_below_valuation_floor"
   | "cox_no_data"
   | "cox_bad_request"
   | "cox_auth"
@@ -132,6 +142,8 @@ const IntelOkEnvelopeSchema = z.object({
   success: z.literal(true),
   data:    MmrResponseEnvelopeSchema,
 });
+
+type IntelMmrEnvelope = z.infer<typeof MmrResponseEnvelopeSchema>;
 
 const IntelCatalogEnvelopeSchema = z.object({
   success: z.literal(true),
@@ -274,7 +286,21 @@ export type MmrLookupOutcomeOpts = {
    * previous, still-supported behavior of resolving inline.
    */
   llmResolution?: LlmYmmsResolution;
+  /**
+   * Item 72 — epoch ms the caller's batch must finish by. The `cox_no_data`
+   * retry costs a Claude call plus a second Manheim call, so it is skipped
+   * when the remaining budget cannot absorb both. Omit to disable the retry.
+   */
+  retryDeadlineMs?: number;
 };
+
+/** Worst-case cost of one retry: Claude round-trip plus a second MMR call. */
+const RETRY_BUDGET_MS = 10_000;
+
+function hasRetryBudget(deadlineMs: number | undefined): boolean {
+  if (deadlineMs === undefined) return false;
+  return Date.now() + RETRY_BUDGET_MS <= deadlineMs;
+}
 
 async function performMmrCall(
   params: MmrParams,
@@ -537,114 +563,24 @@ async function performMmrCall(
     return { kind: "miss", reason: "insufficient_params", method: null };
   }
 
-  // Prefer Cloudflare Service Binding when configured (avoids CF 1042 between
-  // same-account Workers on public URLs).
-  log("ingest.mmr_worker_called", {
-    endpoint,
-    http_method: "POST",
-    method,
-    vin_present:                   !!vin,
-    body_keys:                     Object.keys(body).sort(),
-    service_secret_header_present: serviceSecretConfigured,
-    transport:                     useServiceBinding ? "service_binding" : "public_fetch",
-  });
+  const wire = await sendMmrRequest(endpoint, body);
+  if (wire.kind === "miss") return wire.outcome;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let envelope = wire.envelope;
 
-  const requestInit: RequestInit = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-tav-service-secret": env.INTEL_WORKER_SECRET,
-    },
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  };
-
-  let res: Response;
-  try {
-    res = useServiceBinding
-      ? await env.INTEL_WORKER!.fetch(endpoint, requestInit)
-      : await fetch(endpoint, requestInit);
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      return {
-        kind: "miss",
-        reason: "cox_timeout",
-        method,
-        ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
-        ...mileageMeta,
-      };
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+  // Item 72 — `cox_no_data` on the Y/M/M path usually means we sent the wrong
+  // Cox tokens, not that Manheim has no book for the car: 65% of these misses
+  // are for a year/make/model that prices fine on other listings. Retire the
+  // alias that produced the bad pick, then give Claude one attempt with the
+  // rejected combination named so it can choose a different drivetrain/engine.
+  if (
+    !envelope.ok ||
+    envelope.mmr_value === null
+  ) {
+    const retried = await retryYmmAfterNoData();
+    if (retried) envelope = retried;
   }
 
-  if (res.status === 429) {
-    return {
-      kind: "miss",
-      reason: "cox_rate_limited",
-      method,
-      ...mileageMeta,
-    };
-  }
-
-  if (!res.ok) {
-    // Read response body so the failure log captures intel's error envelope.
-    // Capped at 500 chars to keep log lines bounded; truncation is explicit.
-    let responseText = "";
-    try {
-      responseText = await res.text();
-      if (responseText.length > 500) responseText = responseText.slice(0, 500) + "...[truncated]";
-    } catch { /* body unreadable, log empty string */ }
-
-    log("ingest.mmr_worker_http_error", {
-      endpoint,
-      http_method:                   "POST",
-      status:                        res.status,
-      body_keys:                     Object.keys(body).sort(),
-      service_secret_header_present: serviceSecretConfigured,
-      response_text:                 responseText,
-    });
-
-    return {
-      kind: "miss",
-      reason: classifyIntelHttpError(res.status, responseText),
-      method,
-      httpStatus: res.status,
-      ...mileageMeta,
-    };
-  }
-
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch {
-    return {
-      kind: "miss",
-      reason: "envelope_invalid",
-      method,
-      ...mileageMeta,
-    };
-  }
-
-  const wrapped = IntelOkEnvelopeSchema.safeParse(data);
-  if (!wrapped.success) {
-    log("ingest.mmr_worker_envelope_invalid", {
-      endpoint,
-      issues: wrapped.error.issues.slice(0, 5),
-    });
-    return {
-      kind: "miss",
-      reason: "envelope_invalid",
-      method,
-      ...mileageMeta,
-    };
-  }
-
-  const envelope = wrapped.data.data;
   if (!envelope.ok || envelope.mmr_value === null) {
     return {
       kind: "miss",
@@ -699,6 +635,268 @@ async function performMmrCall(
     result,
     ...(catalogMatchSuggestions && { catalogMatchSuggestions }),
   };
+
+  /**
+   * One Manheim round-trip. Returns the parsed envelope on any 2xx that matches
+   * the contract (caller decides whether `ok`/`mmr_value` count as a hit), or a
+   * fully-formed miss outcome for transport, status, and contract failures.
+   */
+  async function sendMmrRequest(
+    reqEndpoint: string,
+    reqBody: Record<string, unknown>,
+  ): Promise<
+    { kind: "envelope"; envelope: IntelMmrEnvelope } | { kind: "miss"; outcome: MmrLookupOutcomeInternal }
+  > {
+  // Prefer Cloudflare Service Binding when configured (avoids CF 1042 between
+  // same-account Workers on public URLs).
+  log("ingest.mmr_worker_called", {
+    endpoint: reqEndpoint,
+    http_method: "POST",
+    method,
+    vin_present:                   !!vin,
+    body_keys:                     Object.keys(reqBody).sort(),
+    service_secret_header_present: serviceSecretConfigured,
+    transport:                     useServiceBinding ? "service_binding" : "public_fetch",
+  });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    const requestInit: RequestInit = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tav-service-secret": env.INTEL_WORKER_SECRET,
+      },
+      body: JSON.stringify(reqBody),
+      signal: controller.signal,
+    };
+
+    let res: Response;
+    try {
+      res = useServiceBinding
+        ? await env.INTEL_WORKER!.fetch(reqEndpoint, requestInit)
+        : await fetch(reqEndpoint, requestInit);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return {
+          kind: "miss",
+          outcome: {
+            kind: "miss",
+            reason: "cox_timeout",
+            method,
+            ...(normalizationMeta && { normalizationConfidence: normalizationMeta.normalizationConfidence }),
+            ...mileageMeta,
+          },
+        };
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (res.status === 429) {
+      return {
+        kind: "miss",
+        outcome: { kind: "miss", reason: "cox_rate_limited", method, ...mileageMeta },
+      };
+    }
+
+    if (!res.ok) {
+      // Read response body so the failure log captures intel's error envelope.
+      // Capped at 500 chars to keep log lines bounded; truncation is explicit.
+      let responseText = "";
+      try {
+        responseText = await res.text();
+        if (responseText.length > 500) responseText = responseText.slice(0, 500) + "...[truncated]";
+      } catch { /* body unreadable, log empty string */ }
+
+      log("ingest.mmr_worker_http_error", {
+        endpoint: reqEndpoint,
+        http_method:                   "POST",
+        status:                        res.status,
+        body_keys:                     Object.keys(reqBody).sort(),
+        service_secret_header_present: serviceSecretConfigured,
+        response_text:                 responseText,
+      });
+
+      return {
+        kind: "miss",
+        outcome: {
+          kind: "miss",
+          reason: classifyIntelHttpError(res.status, responseText),
+          method,
+          httpStatus: res.status,
+          ...mileageMeta,
+        },
+      };
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      return {
+        kind: "miss",
+        outcome: { kind: "miss", reason: "envelope_invalid", method, ...mileageMeta },
+      };
+    }
+
+    const wrapped = IntelOkEnvelopeSchema.safeParse(data);
+    if (!wrapped.success) {
+      log("ingest.mmr_worker_envelope_invalid", {
+        endpoint: reqEndpoint,
+        issues: wrapped.error.issues.slice(0, 5),
+      });
+      return {
+        kind: "miss",
+        outcome: { kind: "miss", reason: "envelope_invalid", method, ...mileageMeta },
+      };
+    }
+
+    return { kind: "envelope", envelope: wrapped.data.data };
+  }
+
+  /**
+   * Item 72 — second and final identity attempt after Manheim returned no book
+   * value on the Y/M/M path. Retires the alias behind the bad pick, re-asks
+   * Claude with that pick named as already-rejected, and re-prices on a
+   * different one. Returns the new envelope only when it carries a value, so a
+   * failed retry leaves the original `cox_no_data` untouched.
+   */
+  async function retryYmmAfterNoData(): Promise<IntelMmrEnvelope | null> {
+    if (method !== "year_make_model") return null;
+    if (year === undefined || !make || !model) return null;
+
+    const rejectedModel = normalizationMeta?.lookupModel;
+    const rejectedStyle = normalizationMeta?.lookupTrim;
+    if (!rejectedModel || !rejectedStyle) return null;
+
+    if (!hasRetryBudget(opts?.retryDeadlineMs)) {
+      log("ingest.mmr_no_data_retry_skipped", {
+        year,
+        make,
+        model: rejectedModel,
+        style: rejectedStyle,
+        reason: "batch_deadline",
+      });
+      return null;
+    }
+
+    const db = getSupabaseClient(env);
+
+    // The alias produced tokens Manheim will not price. Leaving it in place
+    // would re-fail every future listing with the same make/model/trim and pay
+    // for this retry each time (item 65 learned it; item 72 retires it).
+    if (llmResolutionForLearn?.kind === "alias_hit") {
+      try {
+        await deleteMmrStyleAlias(db, {
+          aliasKey: buildListingStyleAliasKey(make, model, params.trim),
+          canonicalMake: llmResolutionForLearn.make,
+          canonicalModel: llmResolutionForLearn.model,
+        });
+        log("ingest.mmr_alias_retired_after_no_data", {
+          year,
+          listing_make: make,
+          listing_model: model,
+          alias_model: llmResolutionForLearn.model,
+          alias_style: llmResolutionForLearn.style,
+          kpi: true,
+        });
+      } catch (err) {
+        logError("valuation", "ingest.mmr_alias_retire_failed", err);
+      }
+    }
+
+    const retryResolution = await resolveListingWithLLM(
+      {
+        year,
+        make,
+        model,
+        trim: params.trim,
+        title: params.title,
+        price: params.price,
+        description: params.description,
+        condition: params.condition,
+        location: params.location,
+        listingMileage: params.listingMileage,
+        priorMissReason: "cox_no_data",
+        skipShortcuts: true,
+        rejectedPicks: [{ model: rejectedModel, style: rejectedStyle }],
+      },
+      buildLlmYmmsDeps(db, env),
+    );
+
+    if (retryResolution.kind !== "fallback") {
+      try {
+        await insertLlmYmmsDecision(db, {
+          year,
+          inputMake: make,
+          inputModel: model,
+          inputTrim: params.trim,
+          inputTitle: params.title,
+          ...llmResolutionToAuditFields(retryResolution),
+        });
+      } catch (err) {
+        logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
+      }
+    }
+
+    if (retryResolution.kind !== "llm_hit") return null;
+
+    const samePick =
+      retryResolution.model.trim().toLowerCase() === rejectedModel.trim().toLowerCase() &&
+      retryResolution.style.trim().toLowerCase() === rejectedStyle.trim().toLowerCase();
+    if (samePick) {
+      log("ingest.mmr_no_data_retry_skipped", {
+        year,
+        make,
+        model: rejectedModel,
+        style: rejectedStyle,
+        reason: "same_pick",
+      });
+      return null;
+    }
+
+    const retryWire = await sendMmrRequest(endpoint, {
+      ...body,
+      make: retryResolution.make,
+      model: retryResolution.model,
+      trim: retryResolution.style,
+    });
+
+    const retried = retryWire.kind === "envelope" ? retryWire.envelope : null;
+    const recovered = retried !== null && retried.ok && retried.mmr_value !== null;
+
+    log("ingest.mmr_no_data_retry", {
+      year,
+      make,
+      rejected_model: rejectedModel,
+      rejected_style: rejectedStyle,
+      retry_model: retryResolution.model,
+      retry_style: retryResolution.style,
+      retry_confidence: retryResolution.confidence,
+      recovered,
+      kpi: true,
+    });
+
+    if (!recovered) return null;
+
+    // The first pick was wrong, so the second is a corrected guess rather than a
+    // clean match — surface that to closers instead of implying exact identity.
+    confidence = "low";
+    normalizationMeta = {
+      lookupMake: retryResolution.make,
+      lookupModel: retryResolution.model,
+      lookupTrim: retryResolution.style,
+      normalizationConfidence: "partial",
+    };
+    // Do not feed a recovered pick back into item 65 alias learning: it is the
+    // second answer for this listing, not a pattern we have confirmed twice.
+    llmResolutionForLearn = undefined;
+
+    return retried;
+  }
 }
 
 /**

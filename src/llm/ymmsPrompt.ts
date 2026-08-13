@@ -22,6 +22,13 @@ export type YmmsPromptListingInput = {
   price?: number | null;
   /** Prior rules-based miss reason, if this is a re-attempt (e.g. model_variant_missing). */
   priorMissReason?: string | null;
+  /**
+   * Item 72 — model+style combinations already sent to Manheim for this listing
+   * that came back with no book value. Rendered in the per-listing evidence
+   * block, never in the cached catalog prefix, so item 66 prompt caching still
+   * hits on the retry.
+   */
+  rejectedPicks?: ReadonlyArray<{ model: string; style: string }>;
 };
 
 export const YMMS_TOOL_NAME = "propose_cox_ymms";
@@ -142,6 +149,20 @@ export function buildYmmsListingEvidenceText(input: YmmsPromptListingInput): str
   if (input.trim) lines.push(`Parser-guessed trim (hypothesis): ${input.trim}`);
   if (typeof input.price === "number") lines.push(`Listing price: $${input.price}`);
   if (input.priorMissReason) lines.push(`Why rules-based matching failed before: ${input.priorMissReason}`);
+  if (input.rejectedPicks?.length) {
+    lines.push("");
+    lines.push(
+      "These Cox combinations were already priced for THIS listing and Manheim returned no book " +
+        "value, so they are wrong for this vehicle. Pick a different model and/or style:",
+    );
+    for (const pick of input.rejectedPicks) {
+      lines.push(`  - ${pick.model} / ${pick.style}`);
+    }
+    lines.push(
+      "A no-book result usually means the wrong drivetrain, engine, or body style was chosen — " +
+        "re-read the listing evidence for those details before choosing again.",
+    );
+  }
   lines.push("");
   lines.push("Listing title (evidence):");
   lines.push(input.title?.trim() || "(none)");
