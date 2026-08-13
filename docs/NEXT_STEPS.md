@@ -1,8 +1,15 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-08-13 · **Focus:** **72** — MMR quality (identity accuracy over alias speed). **~59% MMR hit is unacceptable** — target near-universal evaluation on eligible inventory. Also open: **71** dealer AI filter, **68–70** Dallas FB. Craigslist **67** deprioritized.
+**Last updated:** 2026-08-13 (evening) · **Focus:** **72** — **resolve a complete Year + Make + Model + Trim/Style for every eligible listing.** That is the whole game: Cox will not price without a style, so identity completeness *is* the MMR hit rate. ~**65%** today. Also open: **71** dealer AI filter, **68–70** Dallas FB. Craigslist **67** deprioritized.
 
 > **Fresh chat prompt:**
+> **2026-08-13 (evening) — READ §72 "Root-cause map" FIRST.** Item **72** Phases 0–1 shipped (commit `31e1724`, production `e779a844`); Workers Logs enabled (`bea3556`). **2h controlled validation: hit rate FLAT — 64.9% post-deploy vs 64.5% same clock window yesterday.** The retry works (22 listings recovered, 14 on a different Cox pick) but is cancelled out: `cox_no_data` fell 53% while `model_variant_missing` rose 2.5× and `trim_missing` 2.8×. **Alias retirement converts "wrong answer" into "no answer"** — suspected cause, not yet proven vs inventory mix. Claude calls up ~2× as accepted.
+> **Three findings that change the plan — details in §72:**
+> 1. **Cox cannot price on Y/M/M alone.** `bodyname` (style) is a required path segment (`manheimHttp.ts` short-circuits with `cox_ymm_requires_trim`). No trimless valuation exists.
+> 2. **Cox styles bundle cab × engine × trim**, so one listing has many valid combinations (a 2014 F-150 Lariat has 12+). Listings usually state trim only → we guess ~1-in-12. Some trims cannot match at all (2015 Cruze "LT" — Cox only has `1LT`/`2LT`). **A retry that names one rejected combination just guesses another.**
+> 3. **~30% of failures already state the missing evidence in the description** (611/2160 state engine, 455 drivetrain) — but ~81% of listings skip Claude via the alias fast-path, whose key is only `make|model|trim` and ignores drivetrain/engine entirely. **Free win: route description-bearing listings to Claude — costs tokens, zero extra Cox calls.**
+>
+> **Immediate open items:** (a) retire an alias only when the retry finds a working replacement — currently retired before knowing anything better exists; (b) `year_below_valuation_floor` is logging **0** rows when ~9/2h expected — verify the gate fires; (c) **BMW is 4.9% hit / 80 `cox_no_data`/day because Cox stores the make as `B M W`** (2,427 tree rows exist — it was never a sync gap); (d) §69 is dead until the vendor fixes `extraListingData.seller`, which is present but `{}` on 13,652/13,678 payloads.
 > **2026-08-13:** **Alias quality fix** — bad `mmr_style_aliases` caused `cox_no_data` (e.g. 2018 Wrangler Unlimited → wrong Sahara alias + invalid model `WRANGLER UNLIMITED`). Shipped: title-trim before empty-trim lookup, catalog validation on alias hits, no empty-trim learning, uppercase make, migration **`0070`** (865 → **324** aliases). Worker staging `b3616613` + production `e97c673e`. Commit **`414ce2f`** on `main` (Vercel auto-deploy). **Unprocessed Leads** tab hides **2010 and older** (`SCRAPER_REVIEW_MIN_YEAR=2011`). **Credits restored ~2026-08-12** — MMR ~**60%** Dallas FB; §68 post-credits validation updated below. **§71 opened** — AI text-based dealer listing detection (complements §69 seller-key blacklist; not built yet). **§72 opened (priority)** — production triage: **~59% MMR hit**; **~85% of `cox_no_data` misses trace to `alias_hit`** (wrong Y/M/M/S sent to Manheim, not “no book value”). Quality over alias skip rate — see §72.
 >
 > **2026-08-11 (current):** **Priority shift** — main focus is **Facebook Dallas** (`dallas-nick-task` `ZQEsd3nHcLAs5kLwL` → `dallas_tx`), not Craigslist. Goals: **better ingest results fast**, **least validation soak time** (hours / single-run metrics — not 1–3 day soaks when shipping changes). Three tracks — see §68, §69, §70:
@@ -139,7 +146,7 @@ cd .. && npm run lint && npm run typecheck && npm test
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **72** | **MMR quality — identity accuracy over alias speed** — `alias_hit` → `cox_no_data` recovery; §72 | **Critical** | [ ] opened 2026-08-13 |
+| **72** | **Y/M/M/S completeness = MMR hit rate** — Phases 0–1 shipped prod `e779a844`; **2h validation flat (64.9% vs 64.5%)**; root-cause map + ordered actions in §72 | **Critical** | [~] |
 | **68** | **Facebook Dallas throughput + fast validation** — main scraper focus; hours-not-days sign-off; §68 | **Critical** | [~] baseline + partial validation 2026-08-11 |
 | **69** | **Dealer seller blacklist (pre-ingest)** — auto-add on `dealer` dismiss; Dallas FB only; **blocked on scraper seller fields**; §69 | **Critical** | [~] deployed `c786c54b`; verify blocked |
 | **70** | **LLM token efficiency** — §70 shipped (offline-first, prune, tokens); staging `46ac09a2` prod `7cbd9844` | **High** | [~] credits out; partial §68 validation |
@@ -2146,6 +2153,8 @@ Next Apify webhook → parseFacebookItem
 
 **Phase 2 — metrics (fast validation per §68):** **blocked** — cannot seed blacklist or verify `ingest.dealer_blocked` until scraper sends seller fields
 
+**Blocker characterised precisely (2026-08-13):** the field is not missing from the payload — it is **present and empty**. `extraListingData.seller` exists on **13,652 of 13,678** raw payloads in 24h and is `{}` in **every single one**: zero sub-keys, no `seller_type`, no dealer flag anywhere in the JSON. Detailed Fetch *is* enabled (we do get `description`, `condition`, `images`, `location`, `creation_time` from the same object) — the seller slot just comes back hollow. Vendor re-contacted 2026-08-13 with this specific detail, which is far more actionable than "no seller data". **Nothing on our side unblocks this**; §71 text classification is the only route to dealer filtering that does not depend on the vendor.
+
 ### Primary files (when implementing)
 
 - `src/persistence/opportunityWorkflow.ts` — dismiss handler
@@ -2475,6 +2484,59 @@ parse listing (title, description, photos when available)
 | **Metric** | Track **MMR hit % on eligible inventory** (exclude `missing_ymm`, dealer-filtered) — not raw scrape % |
 | **Observability** | Populate `llm_ymms_decisions.normalized_listing_id`; pass `lookup_make/model/trim` on miss snapshots |
 
+### Root-cause map (2026-08-13 evening — read before planning further work)
+
+**The objective restated:** Cox refuses to price without a style. `manheimHttp.ts` `lookupByYmm` short-circuits any trimless call (`reason: cox_ymm_requires_trim`) because MMR 1.4 requires `bodyname` as a path segment: `/search/{year}/{make}/{model}/{bodyname}`. So **"raise the MMR hit rate" and "resolve a complete Y/M/M/S" are the same task.** There is no partial-credit valuation to fall back on.
+
+**Why this is harder than "pick the right trim":** a Cox style bundles **cab × engine displacement × trim** into one string. A 2014 Ford F-150 Lariat has 12+ valid combinations:
+
+```
+F150 2WD V6      / CREW CAB 3.5L LARIAT      F150 4WD V6      / EXT CAB 3.5L LARIAT
+F150 2WD V8 FFV  / CREW CAB 5.0L LARIAT      F150 4WD V8 FFV  / CREW CAB 5.0L LARIAT
+F150 2WD V8      / EXT CAB 6.2L LARIAT       F150 4WD V8 FFV  / CREW CAB 6.2L LARIAT   … +6
+```
+
+The listing (*"2014 Ford F-150 · Lariat Pickup 4D 6 1/2 ft"*) gives trim and bed length only — not drivetrain, engine, or cab. So we guess roughly 1-in-12 and any wrong axis returns `cox_no_data`. **This is why the §72 Phase 1 retry cannot move this bucket much: naming one rejected combination leaves 11 others.** Some listings can never match — 2015 Cruze "LT" has no counterpart, Cox only lists `4D SEDAN 1LT` and `4D SEDAN 2LT`.
+
+**`cox_no_data` misses by cause (24h, Dallas FB, 2,167 rows):**
+
+| Bucket | Misses | Certain fix? |
+|--------|-------:|--------------|
+| No trim stated → combination explosion | 1,044 | No — needs evidence, not retries |
+| Other (trim stated but unmappable) | 658 | Partly |
+| Dealer listings | 230 | Yes — §71 |
+| Parser garbage (`ct ct`, `cruze lt`, `f150_5.0_v8_clean.title`) | 102 | Yes |
+| **BMW make mismatch** | **80** | **Yes — one-line map** |
+| Commercial chassis trucks (F-550, Ram 5500) | 34 | Yes — filter, Manheim won't book |
+| Motorcycles / scooters (SCL500, PCX, K1600, F750) | 19 | Yes — filter, not cars |
+
+≈ **385/day are ineligible inventory or outright bugs** — fixable with certainty. The remaining ~1,700 need evidence.
+
+**Where that evidence already is (same 2,160 misses):**
+
+| Description already states | Count | Share |
+|----------------------------|------:|------:|
+| Engine (V8, 6.7L, Cummins, EcoBoost…) | 611 | 28% |
+| Drivetrain (4x4, AWD, 2WD…) | 455 | 21% |
+| Both engine and drivetrain | 308 | 14% |
+| Cab config (crew/ext/supercrew) | 88 | 4% |
+
+Real failing examples: *"RAM 5500 V6 6.7L DIESEL 4WD AUTO CREW CAB"*, *"FORD F150 XLT 2017 4x4 V6"*, *"Model : F150 SuperCrew Cab"*. **The answer is in text we already store, and the alias fast-path throws it away** — its key is `make|model|trim` with no drivetrain or engine dimension, so it returns a cached 2WD-V6 pick for a listing whose description says 4x4 V8. This is the strongest available lever and costs **zero extra Cox calls**.
+
+**BMW — root cause found, not yet fixed.** Cox stores the make as **`B M W`** (spaces), 2,427 tree rows across 2013–2026. Our parser emits `bmw` from `CANONICAL_MAKES` and catalog lookups match make exactly, so every BMW listing returns `catalog_not_synced` and falls to the weak live cascade → **4.9% hit on 1,104 listings/week**. An earlier "the sync skipped BMW" hypothesis was **wrong**. Second layer: Cox has no individual BMW nameplates — 2018 has exactly `2/3/4/5/6/7 SERIES`, `I SERIES`, `M SERIES`, `X SERIES`. So `x5`, `x3 xdrive28i`, `m3 competition` must fold into `X SERIES` / `M SERIES` (41 styles under `X SERIES` — the X3-vs-X5 choice becomes a *style* choice, which suits Claude). `LAND ROVER`, `ALFA ROMEO`, `ASTON MARTIN` also contain spaces but match fine because `CANONICAL_MAKES` spells them the same way — **BMW is the only make where the two vocabularies disagree.**
+
+**Ineligible-make caution:** motorcycle models arrive under car makes (Honda SCL500/PCX, BMW K1600/F750), so a make-level filter will not catch them; needs model-level patterns.
+
+### Ordered next actions (Y/M/M/S completeness first)
+
+1. **Alias retirement ordering (P0, small).** Retire only when the retry finds a working replacement. Today it is retired before knowing anything better exists, which converts a sometimes-right answer into no answer — the suspected cause of the flat 2h result.
+2. **Verify the year floor fires** — `year_below_valuation_floor` logged 0 rows in 2h against ~9 expected.
+3. **BMW vocabulary map (P0, small)** — `bmw` → `B M W` at the listing→Cox boundary, plus X/M/I series folding. ~80 misses/day, self-contained.
+4. **Feed drivetrain/engine/cab evidence into identity (P0, biggest lever).** Either extend the alias key so a description stating 4x4/V8 cannot hit a 2WD/V6 alias, or bypass the alias when the description carries axis evidence the alias key does not encode. ~700 misses/day in scope, no extra Cox calls.
+5. **Parser hygiene (P1)** — split trim from model (`cruze lt`), fix duplication (`ct ct`), reject garbage (`f150_5.0_v8_clean.title`, emoji models). ~102/day.
+6. **Filter ineligible inventory (P1)** — motorcycles/scooters and commercial chassis trucks out of the denominator; §71 for dealer text. ~283/day.
+7. **Combination ambiguity (P2, product decision — undecided).** For listings that genuinely lack the evidence: pricing all candidates is **not viable at ingest** (~1,700 listings × 6–12 combos vs a path already rate-limited ~470/day) but **is viable on demand** when a closer opens one listing. `catalog_match_suggestions` + the detail-page Apply button (item 55 Phase C-b) already exist, so "we know it's a Lariat, pick the drivetrain" is closer to wiring than building. **Note human picks only compound for *pattern* mappings (Cruze LT → 1LT, BMW X5 → X SERIES); per-vehicle facts (this truck is 4x4 with the 5.0) never generalize.** Before choosing, measure the MMR spread between sibling variants — if it is small, prevalence-guessing is acceptable; if it is thousands, only a range or a human pick is honest.
+
 ### Implementation phases
 
 **Phase 0 — Year-floor alignment (shipped 2026-08-13; commit `1b75ab3` — see deploy table above)**
@@ -2529,17 +2591,29 @@ Files: `coxNoDataRetryPass.ts` (new), `workerClient.ts` (`retryMmrAfterCoxNoData
 
 **Observability:** `[observability]` was **not** enabled on this Worker — every structured `log()` event was being written to nowhere. Added to top level + both envs in `wrangler.toml` (commit `bea3556`). Note environments do not inherit it, same as `[vars]`. Without this none of the KPI events above are queryable.
 
-**First post-deploy reading (2026-08-13 ~14:50Z, Dallas FB):**
+**2h controlled validation (2026-08-13 16:40Z, Dallas FB) — clock-matched to remove time-of-day bias:**
 
-| Window | Attempts | Hit % | `cox_no_data` share of misses |
-|--------|---------:|------:|------------------------------:|
-| Prior 24h baseline | 8,332 | **60.7%** | 67% |
-| Last 30 min | 223 | **75.3%** | 38% |
-| Since `e779a844` | 38 | 71.1% | — |
+| Cohort | Attempts | Hit % |
+|--------|---------:|------:|
+| Post-deploy (2h after `e779a844`) | 1,549 | **64.9%** |
+| Same clock window yesterday | 957 | **64.5%** |
 
-**Do not treat 75.3% as the lift yet.** The same clock window yesterday already ran ~69.5%, so time-of-day explains part of it, and 30 minutes is a small sample. The more interesting signal is the **miss composition**: `cox_no_data` fell from 67% to 38% of all misses. Some of that is the year floor trimming pre-2011 inventory out of the denominator rather than the retry recovering anything — **0 same-slice recoveries observed so far** on only 4–21 candidates.
+**Verdict: flat.** (An earlier "75.3%" reading was a time-of-day artifact — this window runs ~64% regardless. Do not compare short windows to 24h averages.)
 
-**Still to do:** 24h cohort per the §68 playbook — `ingest.cox_no_data_retry_pass` (candidates / attempted / recovered), Anthropic spend vs the accepted ~2× Claude calls, `cox_rate_limited` vs ~470/day baseline, and confirm the 06:00 UTC cron synced `cox_catalog_tree` for 2011–2012.
+**The retry itself works:** 22 listings recovered that would otherwise have had no price, 14 of them on a genuinely different Cox pick; `lookup_model` now populated on 199/199 `cox_no_data` misses so all are retry-eligible. Worth ~+1.4 pts alone.
+
+**But it is cancelled out — misses moved rather than disappeared** (rates per attempt):
+
+| Reason | Post-deploy | Yesterday | Change |
+|--------|------------:|----------:|--------|
+| `cox_no_data` | 10.1% | 21.2% | **−53%** |
+| `model_variant_missing` | 16.5% | 6.5% | **+2.5×** |
+| `trim_missing` | 6.6% | 2.4% | **+2.8×** |
+| `cox_rate_limited` | 1.5% | 4.9% | −69% |
+
+Resolution mix shifted off aliases (alias share of decisions 64% → 36%), Claude calls up ~2× as accepted. **Suspected mechanism: alias retirement converts "wrong answer" into "no answer"** — the retired alias was confident-but-sometimes-right; without it Claude may not be confident and the live cascade cannot pick a model variant. **Not yet proven** against an inventory-mix shift. Fix in "Ordered next actions" item 1.
+
+**Still to do:** 24h cohort per §68 — `ingest.cox_no_data_retry_pass` (candidates/attempted/recovered), Anthropic spend, `cox_rate_limited` vs ~470/day baseline, and confirm the 06:00 UTC cron synced `cox_catalog_tree` for 2011–2012.
 
 **Phase 2 — Stricter alias acceptance (P0)**
 
