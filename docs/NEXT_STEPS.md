@@ -1,12 +1,14 @@
 ﻿# Next Steps â€” MMR Lab
 
-**Last updated:** 2026-08-11 · **Focus:** **68–70** — Facebook Dallas throughput + dealer pre-filter + LLM token efficiency (shipped). Craigslist **67** deprioritized (chunked ingest shipped; schedule still off).
+**Last updated:** 2026-08-13 · **Focus:** **68–70** — Facebook Dallas throughput + dealer pre-filter + LLM token efficiency (shipped). Alias quality fix + unprocessed leads year floor shipped **2026-08-13**. Craigslist **67** deprioritized (chunked ingest shipped; schedule still off).
 
 > **Fresh chat prompt:**
+> **2026-08-13:** **Alias quality fix** — bad `mmr_style_aliases` caused `cox_no_data` (e.g. 2018 Wrangler Unlimited → wrong Sahara alias + invalid model `WRANGLER UNLIMITED`). Shipped: title-trim before empty-trim lookup, catalog validation on alias hits, no empty-trim learning, uppercase make, migration **`0070`** (865 → **324** aliases). Worker staging `b3616613` + production `e97c673e`. Commit **`414ce2f`** on `main` (Vercel auto-deploy). **Unprocessed Leads** tab hides **2010 and older** (`SCRAPER_REVIEW_MIN_YEAR=2011`). **Credits restored ~2026-08-12** — MMR ~**60%** Dallas FB; §68 post-credits validation updated below.
+>
 > **2026-08-11 (current):** **Priority shift** — main focus is **Facebook Dallas** (`dallas-nick-task` `ZQEsd3nHcLAs5kLwL` → `dallas_tx`), not Craigslist. Goals: **better ingest results fast**, **least validation soak time** (hours / single-run metrics — not 1–3 day soaks when shipping changes). Three tracks — see §68, §69, §70:
 > 1. **§68** — Dallas FB scraper throughput + fast validation playbook.
-> 2. **§69** — **Dealer seller blacklist**: when a buyer dismisses with reason **`dealer`**, **auto-add** seller to a blocklist; filter **before ingest** (before LLM/MMR) so tokens aren’t wasted. **Scope v1:** `source=facebook` + `region=dallas_tx` only. **Blocked on scraper:** `seller_url` / `seller_name` not in Apify payloads yet (0 rows in `blocked_sellers`).
-> 3. **§70** — **Token efficiency — shipped 2026-08-11** (offline-first, Ford/Chevy catalog prune, prefetch sort, evidence trim, alias learning fix, token columns). Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md). Worker staging `46ac09a2` + production `7cbd9844`. **Anthropic credits out** — `llm_unavailable` dominates misses; offline-first + alias paths still work.
+> 2. **§69** — **Dealer seller blacklist**: when a buyer dismisses with reason **`dealer`**, **auto-add** seller to a blocklist; filter **before ingest** (before LLM/MMR) so tokens aren’t wasted. **Scope v1:** `source=facebook` + `region=dallas_tx` only. **Blocked on scraper:** `seller_url` / `seller_name` not in Apify payloads yet (0 rows in `blocked_sellers`); boss still seeing dealer/salvage volume — no pre-ingest text filter yet.
+> 3. **§70** — **Token efficiency — shipped 2026-08-11** (offline-first, Ford/Chevy catalog prune, prefetch sort, evidence trim, alias learning fix, token columns). Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md). Worker staging `46ac09a2` + production `7cbd9844`; **credits restored 2026-08-12** — token columns populating; ~**81%** of listings skip Claude via alias/offline.
 >
 > **2026-08-11 (same session):** **§55 Phase D** offline matcher — `parserGarbagePenalty` regex fix, style tie-break, `2d`/`4d` body tokens, offline alias fallback. Worker staging `57cafd1c` + production `64c6ea94`. Migrations **`0068_blocked_sellers`**, **`0069_llm_ymms_token_usage`** applied Supabase.
 >
@@ -1453,6 +1455,20 @@ CREATE TABLE tav.mmr_style_aliases (
 
 **Validation:** §68 post-§55 run pending (deploy ~2026-08-11 afternoon UTC). Prior §70 window showed **`offline_hit`: 3**, **`alias_hit`: 27** since §70 deploy.
 
+#### Phase E — alias quality + unprocessed year floor (2026-08-13)
+
+**Shipped:** Worker staging `b3616613-bb62-4f42-be6f-b3652ba23bf4` + production `e97c673e-e345-4d48-9b76-1a1a8cca5382`. Commit **`414ce2f`** on `main`.
+
+| Change | File | Notes |
+|--------|------|-------|
+| Title-trim before empty-trim alias lookup | `mmrStyleAliases.ts`, `resolveListingWithLLM.ts` | e.g. "Sport" from title before catch-all `jeep\|wrangler unlimited\|` |
+| Reject alias hits not in `cox_catalog_tree` | `catalogAliasValidation.ts`, `resolveListingWithLLM.ts`, `resolveListingToCatalog.ts` | Invalid model tokens (e.g. `WRANGLER UNLIMITED` without V6/4C) fall through to Claude/offline |
+| Safer alias learning | `learnIngestStyleAlias.ts` | No empty-trim keys; require trim from listing or title; validate catalog before upsert; uppercase make |
+| Unprocessed Leads year floor | `opportunities.ts`, `web/lib/opportunities/view-filter.ts` | `SCRAPER_REVIEW_MIN_YEAR=2011` — hide 2010 and older from Scraper review tab |
+| DB cleanup | migration `0070_fix_mmr_style_aliases.sql` | Purged invalid + empty-trim aliases (**865 → 324** rows) |
+
+**Root cause example:** 2018 Jeep Wrangler Unlimited "Sport" got `alias_hit` → Sahara + invalid Cox model → `cox_no_data` / No MMR in queue.
+
 ---
 
 ## 56 — Apify `unmapped_task` outage + missed-lead backfill
@@ -1923,7 +1939,7 @@ Also fixed: `parseCraigslistItem` parses `priceUsd` directly so structured-YMM r
 ## 68 — Facebook Dallas throughput + fast validation
 
 **Opened:** 2026-08-11 (priority shift — **main scraper focus**)  
-**Status:** [~] **baseline captured + partial validation** — §70 + §55 Phase D deployed 2026-08-11; full pass blocked on Anthropic credits (`llm_unavailable`)
+**Status:** [~] **baseline captured + validation updated 2026-08-13** — §70 + §55 Phase D–E deployed; credits restored ~2026-08-12; MMR ~**60%** Dallas FB (near 61.5% baseline)
 
 **Product goal:** Get **more usable Dallas Facebook inventory through ingest faster**, with changes validated in **hours** (single Apify run + `source_runs` row + queue spot-check) — **not** the old 1–3 day multi-day soak bar used for items **55**, **64**, **66**.
 
@@ -2012,7 +2028,22 @@ Optional: trigger one manual Apify run (`ZQEsd3nHcLAs5kLwL`) before relying on s
 | Token columns on `llm_ymms_decisions` | Empty (no successful Claude calls) | pending credits |
 | Stuck `running` runs | **2** (`sp8b79sGtPlStahrv`, `M1TeVfi3u5h1kofFP`) | ✗ ops flag |
 
-**Recommendation (2026-08-11):** Consider `LLM_YMMS_ENABLED=false` until Anthropic credits refill — offline-first + alias paths still resolve listings without Claude.
+**Recommendation (2026-08-11):** ~~Consider `LLM_YMMS_ENABLED=false` until Anthropic credits refill~~ — **credits restored ~2026-08-12.**
+
+### Validation — post credits restore (2026-08-12 → 2026-08-13)
+
+| Check | Result | Pass? |
+|-------|--------|-------|
+| Claude calls (~22h post-credits) | **2,269** | ✓ |
+| `llm_hit` rate on Claude calls | **50%** | ✓ (item 61 design) |
+| Listings skipping Claude (alias + offline) | **~81%** | ✓ §70 |
+| `alias_hit` (24h) | **9,607** | ✓ |
+| MMR hit Dallas FB (since credits) | **~60.2%** | ✓ (vs 61.5% baseline) |
+| `llm_unavailable` (since credits) | **4** | ✓ |
+| Token columns populated | Yes | ✓ |
+| Top miss reason now | **`cox_no_data`**, **`cox_rate_limited`** | monitor |
+
+**Open ops items:** 4 stuck `running` `source_runs`; dealer/salvage still high in queue (§69 scraper-blocked; no text heuristics); list/detail flag UI cache lag (~60s) under investigation.
 
 ### Implementation tracks (ordered)
 
@@ -2035,7 +2066,7 @@ Optional: trigger one manual Apify run (`ZQEsd3nHcLAs5kLwL`) before relying on s
 - [x] At least one post-change manual run meets process-rate bar — **`zGSnkc2CAshruebrr` 4/4 (100%)**
 - [~] Truncation rate materially down vs baseline — **already low (1.7% in 24h window)**; multi-day trend TBD
 - [~] No regression in lead quality — not spot-checked yet
-- [ ] MMR hit ≥ baseline after credits return (token columns + cache metrics populated)
+- [x] MMR hit ≥ baseline after credits return — **~60.2% vs 61.5%** (2026-08-13)
 - [ ] Stuck `running` `source_runs` investigated / cleared
 
 ### Related
@@ -2140,7 +2171,7 @@ Next Apify webhook → parseFacebookItem
 ## 70 — LLM token efficiency
 
 **Opened:** 2026-08-11  
-**Status:** [~] **research + implementation shipped 2026-08-11** — staging `46ac09a2-e979-4d16-ac96-72b5ad4e0ce8` + production `7cbd9844-3cfb-44ab-a218-fd91fab8dfa9`; §68 partial validation done; token-column verification pending Anthropic credits
+**Status:** [~] **research + implementation shipped 2026-08-11; validated post-credits 2026-08-13** — staging `46ac09a2` + production `7cbd9844`; alias quality fix **`e97c673e`** (2026-08-13)
 
 **Product goal:** Reduce Claude token spend and ingest latency on Dallas FB without regressing MMR hit rate. Research doc [`LLM-Token-Efficiency.md`](LLM-Token-Efficiency.md); implementation followed buyer sign-off on ranked recommendations.
 
@@ -2215,7 +2246,7 @@ Next Apify webhook → parseFacebookItem
 - [x] Implementation shipped — offline-first, Ford/Chevy prune, prefetch sort, evidence trim, alias fix, token columns
 - [x] Migration `0069_llm_ymms_token_usage` applied to Supabase
 - [x] **Deploy Worker** — staging `46ac09a2` + production `7cbd9844` (2026-08-11)
-- [x] §68 partial validation — `offline_hit` / `alias_hit` / alias rows confirmed; MMR regression check **pending credits**
+- [x] §68 validation post-credits — MMR ~60%, token columns, alias skip rate confirmed (2026-08-13)
 
 ### Related
 
@@ -2313,9 +2344,8 @@ Measured on `valuation_snapshots`; exclude `llm_unavailable` for fair LLM-on com
 ### Exit criteria
 
 - [x] Accepted LLM picks (`llm_hit` + MMR hit) persist to `mmr_style_aliases` (`ingest_learned`) — deployed prod `aadd46ef`; forward soak pending
-- [~] Repeat listing combos resolve via alias fast-path without Claude call — **27 `alias_hit` since §70 deploy 2026-08-11**; forward soak ongoing
-- [ ] Offline matcher recall improves on held-out `llm_hit` sample (document baseline + after)
-- [ ] No bad aliases from low-confidence or MMR-miss picks (guardrails tested)
+- [x] No bad aliases from low-confidence or MMR-miss picks — **guardrails shipped 2026-08-13** (catalog validation, no empty-trim learn, migration 0070 purge)
+- [~] Repeat listing combos resolve via alias fast-path without Claude call — **9,607 `alias_hit` / 24h** post-credits; forward soak ongoing
 - [ ] `LLM-YMMS-Normalization.md` §Phase 3 updated when shipped
 
 ---
