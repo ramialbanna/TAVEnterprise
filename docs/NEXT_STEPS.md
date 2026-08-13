@@ -2393,7 +2393,13 @@ Build **50–100 buyer-labeled listings** (dealer / private / curbstoner) from d
 ## 72 — MMR quality: identity accuracy over alias speed
 
 **Opened:** 2026-08-13  
-**Status:** [~] **Phases 0–1 shipped to production 2026-08-13** (`1b75ab3`; staging `7ade46ca` + production `c7a3341a`) — post-deploy validation pending; Phases 2–5 not started
+**Status:** [~] **Phases 0–1 shipped to production 2026-08-13** — post-deploy validation pending; Phases 2–5 not started
+
+| Commit | What | Staging | Production |
+|--------|------|---------|------------|
+| `1b75ab3` | Year floor + first (inline) retry | `7ade46ca` | `c7a3341a` |
+| `bea3556` | Workers Logs enabled | `2f7f133e` | `e1242be2` |
+| **`31e1724`** | **Retry moved out of the batch (current)** | **`eff0caa3`** | **`e779a844`** |
 
 **Watch after this deploy (§68 playbook):** `ingest.mmr_no_data_retry` recovery rate, Anthropic spend (the retry roughly doubles Claude calls — ~2.2k `cox_no_data`/day each now costing one extra Claude + one extra Manheim call), `cox_rate_limited` trend, and MMR hit on eligible inventory. Roll back by redeploying the prior version if rate limiting climbs materially.
 
@@ -2471,7 +2477,7 @@ parse listing (title, description, photos when available)
 
 ### Implementation phases
 
-**Phase 0 — Year-floor alignment (shipped 2026-08-13; commit `1b75ab3`, staging `7ade46ca` + production `c7a3341a`)**
+**Phase 0 — Year-floor alignment (shipped 2026-08-13; commit `1b75ab3` — see deploy table above)**
 
 Denominator hygiene, done before the alias work so Phase 1–2 lift is measured against eligible inventory only. Two changes, in opposite directions:
 
@@ -2482,7 +2488,7 @@ Measured Dallas FB, 24h to 2026-08-13: raw hit **60.6%**; eligible-only (2011+ o
 
 **Still to do for Phase 0:** run the catalog sync for **2011–2012** (cron picks up missing years once deployed; verify row counts), then deploy Worker to staging → production and re-measure per the §68 playbook. Report MMR hit on eligible inventory from here on, excluding `year_below_valuation_floor`.
 
-**Phase 1 — Alias failure recovery (P0, highest ROI) — shipped 2026-08-13; commit `1b75ab3`, staging `7ade46ca` + production `c7a3341a`**
+**Phase 1 — Alias failure recovery (P0, highest ROI) — shipped 2026-08-13; final form in commit `31e1724`, production `e779a844`**
 
 On `cox_no_data` from the Y/M/M path, ingest retires the alias behind the pick (when the resolution was `alias_hit`), re-asks Claude with `skipShortcuts` and the rejected `model / style` named in the prompt, and re-prices once. Recovered picks are marked `confidence: "low"` / `normalizationConfidence: "partial"` and are deliberately **not** fed back into item 65 alias learning.
 
@@ -2523,7 +2529,17 @@ Files: `coxNoDataRetryPass.ts` (new), `workerClient.ts` (`retryMmrAfterCoxNoData
 
 **Observability:** `[observability]` was **not** enabled on this Worker — every structured `log()` event was being written to nowhere. Added to top level + both envs in `wrangler.toml` (commit `bea3556`). Note environments do not inherit it, same as `[vars]`. Without this none of the KPI events above are queryable.
 
-**Still to do:** measure `ingest.cox_no_data_retry_pass` recovery rate and MMR hit lift on eligible inventory per the §68 playbook.
+**First post-deploy reading (2026-08-13 ~14:50Z, Dallas FB):**
+
+| Window | Attempts | Hit % | `cox_no_data` share of misses |
+|--------|---------:|------:|------------------------------:|
+| Prior 24h baseline | 8,332 | **60.7%** | 67% |
+| Last 30 min | 223 | **75.3%** | 38% |
+| Since `e779a844` | 38 | 71.1% | — |
+
+**Do not treat 75.3% as the lift yet.** The same clock window yesterday already ran ~69.5%, so time-of-day explains part of it, and 30 minutes is a small sample. The more interesting signal is the **miss composition**: `cox_no_data` fell from 67% to 38% of all misses. Some of that is the year floor trimming pre-2011 inventory out of the denominator rather than the retry recovering anything — **0 same-slice recoveries observed so far** on only 4–21 candidates.
+
+**Still to do:** 24h cohort per the §68 playbook — `ingest.cox_no_data_retry_pass` (candidates / attempted / recovered), Anthropic spend vs the accepted ~2× Claude calls, `cox_rate_limited` vs ~470/day baseline, and confirm the 06:00 UTC cron synced `cox_catalog_tree` for 2011–2012.
 
 **Phase 2 — Stricter alias acceptance (P0)**
 
