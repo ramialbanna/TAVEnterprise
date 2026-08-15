@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 
 import {
+  DEFAULT_PAGE_SIZE,
   defaultColumnVisibility,
   readColumnVisibility,
   writeColumnVisibility,
@@ -11,6 +12,10 @@ beforeEach(() => {
 });
 
 describe("table-preferences", () => {
+  it("loads the full queue instead of a 25-row page", () => {
+    expect(DEFAULT_PAGE_SIZE).toBe(500);
+  });
+
   it("defaults hide region and last seen", () => {
     const visibility = defaultColumnVisibility();
     expect(visibility.region).toBe(false);

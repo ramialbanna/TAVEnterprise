@@ -2,6 +2,7 @@ import { Suspense } from "react";
 
 import type { OpportunityView } from "@/lib/app-api/client";
 import { listOpportunitiesPage } from "@/lib/app-api/server";
+import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { DEFAULT_QUEUE_VIEW } from "@/lib/opportunities/queue-views";
 
 import { OpportunitiesInterfaceClient } from "./_components/opportunities-interface-client";
@@ -33,7 +34,7 @@ export default async function OpportunitiesPage({
   const initialView = parseQueueView(viewParam);
 
   const initialNew = await listOpportunitiesPage({
-    limit: 25,
+    limit: DEFAULT_PAGE_SIZE,
     offset: 0,
     sort: "received_desc",
     view: initialView,

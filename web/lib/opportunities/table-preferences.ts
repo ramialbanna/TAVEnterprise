@@ -17,9 +17,7 @@ export type TableColumnId =
 
 export type TableDensity = "comfortable" | "compact";
 
-export const DEFAULT_PAGE_SIZE = 25;
-
-export const PAGE_SIZE_OPTIONS = [25, 50] as const;
+export const DEFAULT_PAGE_SIZE = 500;
 
 export const SORT_OPTIONS: readonly { value: OpportunitySort; label: string }[] = [
   { value: "posted_desc", label: "Listed (newest first)" },

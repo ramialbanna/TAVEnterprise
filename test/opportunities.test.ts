@@ -13,6 +13,7 @@ import {
   matchesWorthALook,
   sortOpportunityRows,
   paginateOpportunityRows,
+  mergeQueueListingIds,
   SCRAPER_REVIEW_BADGE,
   SCRAPER_REVIEW_WINDOW_MS,
   type OpportunityRow,
@@ -400,5 +401,13 @@ describe("opportunity list views and pagination", () => {
     const rows = [sampleRow({ id: "a" }), sampleRow({ id: "b" }), sampleRow({ id: "c" })];
     const page = paginateOpportunityRows(rows, 1, 1);
     expect(page).toEqual({ items: [rows[1]], total: 3, offset: 1 });
+  });
+
+  it("mergeQueueListingIds keeps lead ids ahead of last-seen listings", () => {
+    expect(mergeQueueListingIds(["lead-old"], ["fresh-1", "lead-old", "fresh-2"], 2)).toEqual([
+      "lead-old",
+      "fresh-1",
+    ]);
+    expect(mergeQueueListingIds(["a", "b", "c"], ["d"], 2)).toEqual(["a", "b"]);
   });
 });

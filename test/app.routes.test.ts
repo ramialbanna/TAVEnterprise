@@ -1482,6 +1482,24 @@ describe("GET /app/opportunities", () => {
     });
   });
 
+  it("allows queue limit up to 500 and clamps above that", async () => {
+    vi.mocked(listOpportunities).mockResolvedValue({ items: [], total: 0, offset: 0 });
+    await worker.fetch(
+      authedReq("/app/opportunities?offset=0&limit=500&view=needs_action"),
+      makeEnv(),
+      ctx,
+    );
+    expect(vi.mocked(listOpportunities).mock.calls[0]![1].limit).toBe(500);
+
+    vi.mocked(listOpportunities).mockClear();
+    await worker.fetch(
+      authedReq("/app/opportunities?offset=0&limit=5000&view=needs_action"),
+      makeEnv(),
+      ctx,
+    );
+    expect(vi.mocked(listOpportunities).mock.calls[0]![1].limit).toBe(500);
+  });
+
   it("passes valid filters through", async () => {
     vi.mocked(listOpportunities).mockResolvedValue({ items: [], total: 0, offset: 0 });
     await worker.fetch(

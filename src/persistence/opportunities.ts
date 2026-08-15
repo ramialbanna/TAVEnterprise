@@ -16,6 +16,7 @@ import {
   listOpportunityActions,
   writeOpportunityAction,
   OpportunityWorkflowError,
+  SUPPRESSED_QUEUE_STATUSES,
   type OpportunityActionRecord,
   type WorkflowDisplayContext,
 } from "./opportunityWorkflow";
@@ -740,6 +741,45 @@ export function paginateOpportunityRows(
   };
 }
 
+/** PostgREST `.in()` URL length — keep UUID batches small. */
+const POSTGREST_IN_CHUNK = 120;
+/** Active/flagged leads to seed the queue (not a last-seen recency window). */
+const QUEUE_LEAD_FETCH = 2000;
+/** Recent scrapes for near-miss / scraper-review rows that have no lead yet. */
+const RECENT_LISTING_FETCH = 500;
+/** Hard cap on listings hydrated per list request. Leads are merged first. */
+const MAX_HYDRATE = 1500;
+
+function chunkIds(ids: string[], size = POSTGREST_IN_CHUNK): string[][] {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Queue identity: keep every lead/workflow/manual id, then fill remaining slots
+ * with recently seen listings. A lead you were looking at must not fall off
+ * because Facebook stopped refreshing `last_seen_at`.
+ */
+export function mergeQueueListingIds(
+  priorityIds: string[],
+  restIds: string[],
+  max: number,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [...priorityIds, ...restIds]) {
+    if (typeof id !== "string" || id.length === 0 || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 async function fetchCandidateCounts(
   db: SupabaseClient,
   candidateIds: string[],
@@ -747,13 +787,20 @@ async function fetchCandidateCounts(
   const out = new Map<string, number>();
   if (candidateIds.length === 0) return out;
 
-  const { data, error } = await db
-    .from("vehicle_candidates")
-    .select("id, listing_count")
-    .in("id", candidateIds);
-  if (error) throw error;
+  const rows = (
+    await Promise.all(
+      chunkIds(candidateIds).map(async (chunk) => {
+        const { data, error } = await db
+          .from("vehicle_candidates")
+          .select("id, listing_count")
+          .in("id", chunk);
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      }),
+    )
+  ).flat();
 
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of rows) {
     const id = row.id as string;
     out.set(id, asNumber(row.listing_count) ?? 1);
   }
@@ -771,18 +818,26 @@ async function loadOpportunityContext(
     return { valuations: [], leads: [] };
   }
 
-  const [{ data: valData, error: valErr }, { data: leadData, error: leadErr }] =
-    await Promise.all([
-      db.from("valuation_snapshots").select(VALUATION_COLUMNS).in("normalized_listing_id", listingIds),
-      db.from("leads").select(LEAD_COLUMNS).in("normalized_listing_id", listingIds),
-    ]);
-
-  if (valErr) throw valErr;
-  if (leadErr) throw leadErr;
+  const chunks = chunkIds(listingIds);
+  const parts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const [{ data: valData, error: valErr }, { data: leadData, error: leadErr }] =
+        await Promise.all([
+          db.from("valuation_snapshots").select(VALUATION_COLUMNS).in("normalized_listing_id", chunk),
+          db.from("leads").select(LEAD_COLUMNS).in("normalized_listing_id", chunk),
+        ]);
+      if (valErr) throw valErr;
+      if (leadErr) throw leadErr;
+      return {
+        valuations: (valData ?? []) as ValuationRow[],
+        leads: (leadData ?? []) as LeadRow[],
+      };
+    }),
+  );
 
   return {
-    valuations: (valData ?? []) as ValuationRow[],
-    leads: (leadData ?? []) as LeadRow[],
+    valuations: parts.flatMap((part) => part.valuations),
+    leads: parts.flatMap((part) => part.leads),
   };
 }
 
@@ -793,13 +848,19 @@ async function fetchManualSubmissionContext(
   const out = new Map<string, ManualSubmissionContext>();
   if (listingIds.length === 0) return out;
 
-  const { data: submissionRows, error: submissionErr } = await db
-    .from("manual_opportunity_submissions")
-    .select("normalized_listing_id, submitted_by_user_id, assigned_to_user_id, created_at")
-    .in("normalized_listing_id", listingIds)
-    .order("created_at", { ascending: false });
-
-  if (submissionErr) throw submissionErr;
+  const submissionRows = (
+    await Promise.all(
+      chunkIds(listingIds).map(async (chunk) => {
+        const { data, error } = await db
+          .from("manual_opportunity_submissions")
+          .select("normalized_listing_id, submitted_by_user_id, assigned_to_user_id, created_at")
+          .in("normalized_listing_id", chunk)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      }),
+    )
+  ).flat();
 
   const latestByListing = new Map<string, Record<string, unknown>>();
   for (const row of (submissionRows ?? []) as Array<Record<string, unknown>>) {
@@ -844,7 +905,7 @@ async function fetchManualSubmissionContext(
 
 async function fetchRecentManualListingIds(
   db: SupabaseClient,
-  filter: OpportunityListFilter,
+  _filter: OpportunityListFilter,
   limit: number,
 ): Promise<string[]> {
   const { data, error } = await db
@@ -857,6 +918,82 @@ async function fetchRecentManualListingIds(
   return (data ?? []).map((row) => (row as Record<string, unknown>).normalized_listing_id as string);
 }
 
+function listingIdFromRow(row: Record<string, unknown>): string | null {
+  const id = row.normalized_listing_id;
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+async function fetchLeadQueueListingIds(
+  db: SupabaseClient,
+  filter: OpportunityListFilter,
+  limit: number,
+): Promise<string[]> {
+  const suppressed = [...SUPPRESSED_QUEUE_STATUSES].join(",");
+  let q = db
+    .from("leads")
+    .select("normalized_listing_id")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (filter.view === "flagged_leads") {
+    q = q.eq("status", "bad_lead");
+  } else {
+    q = q.or(`status.is.null,status.not.in.(${suppressed})`);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? [])
+    .map((row) => listingIdFromRow(row as Record<string, unknown>))
+    .filter((id): id is string => id !== null);
+}
+
+async function fetchMineWorkflowListingIds(
+  db: SupabaseClient,
+  viewerUserId: string,
+  limit: number,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("opportunity_workflow")
+    .select("normalized_listing_id")
+    .or(`assigned_to_user_id.eq.${viewerUserId},claimed_by_user_id.eq.${viewerUserId}`)
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? [])
+    .map((row) => listingIdFromRow(row as Record<string, unknown>))
+    .filter((id): id is string => id !== null);
+}
+
+async function fetchRecentListings(
+  db: SupabaseClient,
+  filter: OpportunityListFilter,
+  limit: number,
+): Promise<ListingRow[]> {
+  let q = db
+    .from("normalized_listings")
+    .select(LISTING_COLUMNS)
+    .order("last_seen_at", { ascending: false })
+    .limit(limit);
+  if (filter.source) q = q.eq("source", filter.source);
+  if (filter.region) q = q.eq("region", filter.region);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []) as ListingRow[];
+}
+
+async function fetchWorkflowMapChunked(
+  db: SupabaseClient,
+  listingIds: string[],
+): Promise<Map<string, WorkflowDisplayContext>> {
+  const out = new Map<string, WorkflowDisplayContext>();
+  if (listingIds.length === 0) return out;
+  const parts = await Promise.all(chunkIds(listingIds).map((chunk) => fetchWorkflowMap(db, chunk)));
+  for (const part of parts) {
+    for (const [id, workflow] of part) out.set(id, workflow);
+  }
+  return out;
+}
+
 async function fetchListingsByIds(
   db: SupabaseClient,
   listingIds: string[],
@@ -864,13 +1001,17 @@ async function fetchListingsByIds(
 ): Promise<ListingRow[]> {
   if (listingIds.length === 0) return [];
 
-  let q = db.from("normalized_listings").select(LISTING_COLUMNS).in("id", listingIds);
-  if (filter.source) q = q.eq("source", filter.source);
-  if (filter.region) q = q.eq("region", filter.region);
-
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as ListingRow[];
+  const parts = await Promise.all(
+    chunkIds(listingIds).map(async (chunk) => {
+      let q = db.from("normalized_listings").select(LISTING_COLUMNS).in("id", chunk);
+      if (filter.source) q = q.eq("source", filter.source);
+      if (filter.region) q = q.eq("region", filter.region);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as ListingRow[];
+    }),
+  );
+  return parts.flat();
 }
 
 async function fetchMaxbuySummaries(
@@ -880,15 +1021,21 @@ async function fetchMaxbuySummaries(
   const out = new Map<string, MaxbuySummary>();
   if (listingIds.length === 0) return out;
 
-  const { data, error } = await db
-    .from("maxbuy_recommendations")
-    .select("id, normalized_listing_id, verdict, recommended_max_buy, data_strength, created_at")
-    .in("normalized_listing_id", listingIds)
-    .order("created_at", { ascending: false });
+  const rows = (
+    await Promise.all(
+      chunkIds(listingIds).map(async (chunk) => {
+        const { data, error } = await db
+          .from("maxbuy_recommendations")
+          .select("id, normalized_listing_id, verdict, recommended_max_buy, data_strength, created_at")
+          .in("normalized_listing_id", chunk)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? []) as Array<Record<string, unknown>>;
+      }),
+    )
+  ).flat();
 
-  if (error) throw error;
-
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+  for (const row of rows) {
     const listingId = row.normalized_listing_id as string;
     if (!out.has(listingId)) {
       out.set(listingId, {
@@ -953,33 +1100,43 @@ export async function listOpportunities(
   filter: OpportunityListFilter,
 ): Promise<OpportunityListPage> {
   const offset = filter.offset ?? 0;
-  const usesView = filter.view !== undefined && filter.view !== "all";
-  const fetchLimit = usesView ? MAX_FETCH : Math.min(filter.limit * 5, MAX_FETCH);
-  let q = db
-    .from("normalized_listings")
-    .select(LISTING_COLUMNS)
-    .order("last_seen_at", { ascending: false })
-    .limit(fetchLimit);
+  const includeRecent = filter.view !== "mine" && filter.view !== "flagged_leads";
 
-  if (filter.source) q = q.eq("source", filter.source);
-  if (filter.region) q = q.eq("region", filter.region);
+  const [recentListings, leadIds, manualIds, mineIds] = await Promise.all([
+    includeRecent
+      ? fetchRecentListings(db, filter, RECENT_LISTING_FETCH)
+      : Promise.resolve([] as ListingRow[]),
+    fetchLeadQueueListingIds(db, filter, QUEUE_LEAD_FETCH),
+    fetchRecentManualListingIds(db, filter, QUEUE_LEAD_FETCH),
+    filter.view === "mine" && filter.viewerUserId
+      ? fetchMineWorkflowListingIds(db, filter.viewerUserId, QUEUE_LEAD_FETCH)
+      : Promise.resolve([] as string[]),
+  ]);
 
-  const { data: listingData, error: listingErr } = await q;
-  if (listingErr) throw listingErr;
+  const listingIds = mergeQueueListingIds(
+    [...leadIds, ...mineIds, ...manualIds],
+    recentListings.map((listing) => listing.id as string),
+    MAX_HYDRATE,
+  );
 
-  const listings = (listingData ?? []) as ListingRow[];
-  const listingIds = listings.map((l) => l.id as string);
-
-  const manualListingIds = await fetchRecentManualListingIds(db, filter, fetchLimit);
-  const extraListingIds = manualListingIds.filter((id) => !listingIds.includes(id));
-  const extraListings = await fetchListingsByIds(db, extraListingIds, filter);
-  const allListings = [...listings, ...extraListings];
-  const allListingIds = allListings.map((l) => l.id as string);
+  const recentById = new Map(
+    recentListings.map((listing) => [listing.id as string, listing] as const),
+  );
+  const missingIds = listingIds.filter((id) => !recentById.has(id));
+  const extraListings = await fetchListingsByIds(db, missingIds, filter);
+  const listingById = new Map<string, ListingRow>(recentById);
+  for (const listing of extraListings) {
+    listingById.set(listing.id as string, listing);
+  }
+  const allListings = listingIds
+    .map((id) => listingById.get(id))
+    .filter((listing): listing is ListingRow => listing !== undefined);
+  const allListingIds = allListings.map((listing) => listing.id as string);
 
   const { valuations, leads } = await loadOpportunityContext(db, allListingIds);
   const [manualByListing, workflowByListing, maxbuySummaryByListing] = await Promise.all([
     fetchManualSubmissionContext(db, allListingIds),
-    fetchWorkflowMap(db, allListingIds),
+    fetchWorkflowMapChunked(db, allListingIds),
     fetchMaxbuySummaries(db, allListingIds),
   ]);
 
@@ -1067,8 +1224,6 @@ export async function getOpportunityDetail(
     storedSuggestions?.suggestions ?? [],
   );
 }
-
-const MAX_FETCH = 500;
 
 /**
  * Patch input for vehicle-identity + contact / salesperson / title edits.

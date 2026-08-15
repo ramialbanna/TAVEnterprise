@@ -141,6 +141,30 @@ describe("OpportunitiesTableNew", () => {
     expect(link).toHaveAttribute("href", "/opportunities/listing-1");
   });
 
+  it("shows the full list count without a 25-row pager", () => {
+    render(
+      <OpportunitiesTableNew
+        rows={[baseRow]}
+        total={73}
+        offset={0}
+        limit={500}
+        sort="spread_desc"
+        claimActor={null}
+        onSelect={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onPaginationChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onClaim={vi.fn()}
+        onDismiss={vi.fn()}
+        queueView="needs_action"
+      />,
+    );
+
+    expect(screen.getByText("73 leads")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Rows per page")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Next page")).not.toBeInTheDocument();
+  });
+
   it("middle-click on listing icon opens posting, not detail", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 

@@ -95,6 +95,8 @@ import { VERSION } from "../version";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+/** Buyer queue can return the full Needs action set, not a 25/100 page. */
+const MAX_OPPORTUNITY_LIST_LIMIT = 500;
 const INTEL_SERVICE_BINDING_BASE = "https://tav-intelligence-worker.internal";
 
 /**
@@ -216,6 +218,13 @@ function parseLimitParam(raw: string | null): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) return DEFAULT_LIST_LIMIT;
   return Math.min(n, MAX_LIST_LIMIT);
+}
+
+function parseOpportunityLimitParam(raw: string | null): number {
+  if (raw === null) return DEFAULT_LIST_LIMIT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return DEFAULT_LIST_LIMIT;
+  return Math.min(n, MAX_OPPORTUNITY_LIST_LIMIT);
 }
 
 function verifyAppAuth(request: Request, env: Env): boolean {
@@ -1162,7 +1171,7 @@ async function handleOpportunitiesList(
   const paginatedResponse = hasOffset || sortParam !== null || viewParam !== null;
 
   const filter: OpportunityListFilter = {
-    limit: parseLimitParam(url.searchParams.get("limit")),
+    limit: parseOpportunityLimitParam(url.searchParams.get("limit")),
   };
 
   if (hasOffset) {

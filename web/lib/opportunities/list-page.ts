@@ -1,6 +1,7 @@
 import type { OpportunitySort } from "@/lib/app-api/client";
 import type { OpportunitiesPageKeyFilter } from "@/lib/query";
 import type { OpportunityListPage, OpportunityRow } from "@/lib/app-api/schemas";
+import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 
 /** Client-side sort/pagination when the Worker only supports the classic array response. */
 export function paginateOpportunityRowsClient(
@@ -34,7 +35,7 @@ export function paginateOpportunityRowsClient(
   });
 
   const offset = Math.max(filter.offset ?? 0, 0);
-  const limit = filter.limit ?? 25;
+  const limit = filter.limit ?? DEFAULT_PAGE_SIZE;
 
   return {
     items: sorted.slice(offset, offset + limit),

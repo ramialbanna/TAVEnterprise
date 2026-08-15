@@ -14,7 +14,6 @@ import { canShowClaimAction } from "@/lib/opportunities/claim-eligibility";
 import { isSuppressedFromActiveQueue } from "@/lib/opportunities/dismiss-reasons";
 import {
   DEFAULT_PAGE_SIZE,
-  PAGE_SIZE_OPTIONS,
   SORT_OPTIONS,
   TABLE_COLUMNS,
   type TableColumnId,
@@ -92,47 +91,41 @@ function ServerPagination({
   const last = Math.min(total, offset + limit);
   const canPrev = offset > 0;
   const canNext = offset + limit < total;
+  const needsPager = canPrev || canNext;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-1 text-xs text-muted-foreground">
-      <span>{total === 0 ? "No rows" : `Showing ${first}–${last} of ${total}`}</span>
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-1.5">
-          Rows per page
-          <select
-            className="h-7 rounded-md border border-input bg-background px-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={limit}
-            onChange={(event) => onChange(0, Number(event.target.value))}
-            aria-label="Rows per page"
+      <span>
+        {total === 0
+          ? "No rows"
+          : needsPager
+            ? `Showing ${first}–${last} of ${total}`
+            : `${total} ${total === 1 ? "lead" : "leads"}`}
+      </span>
+      {needsPager ? (
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onChange(Math.max(0, offset - limit), limit)}
+            disabled={!canPrev}
+            aria-label="Previous page"
           >
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => onChange(Math.max(0, offset - limit), limit)}
-          disabled={!canPrev}
-          aria-label="Previous page"
-        >
-          <ChevronLeft />
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => onChange(offset + limit, limit)}
-          disabled={!canNext}
-          aria-label="Next page"
-        >
-          <ChevronRight />
-        </Button>
-      </div>
+            <ChevronLeft />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onChange(offset + limit, limit)}
+            disabled={!canNext}
+            aria-label="Next page"
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
