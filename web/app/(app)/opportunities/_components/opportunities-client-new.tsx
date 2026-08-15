@@ -27,7 +27,7 @@ import {
   formatQueueSummaryLine,
 } from "@/lib/opportunities/queue-views";
 import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
-import { queryKeys } from "@/lib/query";
+import { OPPORTUNITIES_REFETCH_MS, queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,6 +44,13 @@ import type { OpportunityRow } from "@/lib/app-api/schemas";
 const SUMMARY_FETCH_LIMIT = 100;
 /** List + tab revisit cache — NEXT_STEPS #43. */
 const LIST_STALE_TIME_MS = 60_000;
+/** Keep the open queue current without a full page refresh. */
+const LIST_POLL = {
+  staleTime: LIST_STALE_TIME_MS,
+  refetchInterval: OPPORTUNITIES_REFETCH_MS,
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: true,
+} as const;
 
 const QUEUE_VIEWS = new Set<OpportunityView>([
   "needs_action",
@@ -221,7 +228,7 @@ export function OpportunitiesClientNew({
     queryFn: () => listOpportunitiesPage(listFilter, viewerOpts),
     initialData: matchesInitialFetch ? initial : undefined,
     enabled: view !== "mine" || meQuery.isSuccess,
-    staleTime: LIST_STALE_TIME_MS,
+    ...LIST_POLL,
     // Keep prior tab rows visible while the next view loads (#43) — avoids
     // unmounting the queue shell (which felt like a "dead" double-click, #52).
     // Do not reuse an error page or show another view's rows under Mine before /me.
@@ -254,28 +261,28 @@ export function OpportunitiesClientNew({
       {
         queryKey: queryKeys.opportunitiesPage(countFilter({ view: "needs_action" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" }), viewerOpts),
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
       {
         queryKey: queryKeys.opportunitiesPage(countFilter({ view: "mine" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" }), viewerOpts),
         enabled: meQuery.isSuccess,
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
       {
         queryKey: queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" }), viewerOpts),
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
       {
         queryKey: queryKeys.opportunitiesPage(countFilter({ view: "scraper_review" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "scraper_review" }), viewerOpts),
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
       {
         queryKey: queryKeys.opportunitiesPage(countFilter({ view: "flagged_leads" }), viewerUserId),
         queryFn: () => listOpportunitiesPage(countFilter({ view: "flagged_leads" }), viewerOpts),
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
       {
         queryKey: ["opportunities-summary", "new-today", viewerUserId] as const,
@@ -289,7 +296,7 @@ export function OpportunitiesClientNew({
             },
             viewerOpts,
           ),
-        staleTime: LIST_STALE_TIME_MS,
+        ...LIST_POLL,
       },
     ],
   });
@@ -453,7 +460,7 @@ export function OpportunitiesClientNew({
             offset={offset}
             limit={limit}
             sort={sort}
-            loading={query.isFetching && !showingPlaceholder}
+            loading={query.isLoading && !showingPlaceholder}
             selectedId={selected?.id ?? null}
             claimActor={claimActor}
             claimPendingId={claimMutation.isPending ? (claimMutation.variables?.id ?? null) : null}

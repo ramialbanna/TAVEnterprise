@@ -16,6 +16,9 @@ import { QueryClient } from "@tanstack/react-query";
 /** Poll interval for `GET /app/system-status` (the header health pill). */
 export const SYSTEM_STATUS_REFETCH_MS = 30_000;
 
+/** Poll interval for the opportunities queue while the page is open. */
+export const OPPORTUNITIES_REFETCH_MS = 15_000;
+
 const DEFAULT_STALE_TIME_MS = 30_000;
 const MAX_QUERY_RETRIES = 2;
 

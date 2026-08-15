@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  OPPORTUNITIES_REFETCH_MS,
   SYSTEM_STATUS_REFETCH_MS,
   isRetryableError,
   makeQueryClient,
@@ -87,5 +88,8 @@ describe("makeQueryClient", () => {
 describe("constants", () => {
   it("system-status refetch interval", () => {
     expect(SYSTEM_STATUS_REFETCH_MS).toBe(30_000);
+  });
+  it("opportunities queue refetch interval", () => {
+    expect(OPPORTUNITIES_REFETCH_MS).toBe(15_000);
   });
 });
