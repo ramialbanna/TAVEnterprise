@@ -7,6 +7,7 @@ import { isSuppressedFromActiveQueue } from "./dismiss-reasons";
 export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
 export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
+export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const SCRAPER_REVIEW_BADGE = "Scraper review";
 
@@ -30,16 +31,28 @@ function isClaimActive(claimExpiresAt: string | null, now: Date): boolean {
   return new Date(claimExpiresAt).getTime() > now.getTime();
 }
 
+function isWithinNeedsActionAge(
+  row: Pick<OpportunityRow, "receivedAt" | "firstSeenAt" | "lastSeenAt">,
+  now: Date,
+): boolean {
+  const raw = row.receivedAt ?? row.firstSeenAt ?? row.lastSeenAt;
+  if (!raw) return true;
+  const received = new Date(raw).getTime();
+  if (Number.isNaN(received)) return true;
+  return now.getTime() - received <= NEEDS_ACTION_MAX_AGE_MS;
+}
+
 export function matchesNeedsAction(row: OpportunityRow, now: Date = new Date()): boolean {
   if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
-  if (!row.assignedTo) return true;
-  if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
-    return true;
-  }
   if (isClaimActive(row.claimExpiresAt, now)) {
     const msLeft = new Date(row.claimExpiresAt!).getTime() - now.getTime();
     if (msLeft > 0 && msLeft <= CLAIM_EXPIRING_SOON_MS) return true;
+  }
+  if (!isWithinNeedsActionAge(row, now)) return false;
+  if (!row.assignedTo) return true;
+  if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
+    return true;
   }
   return false;
 }

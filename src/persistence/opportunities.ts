@@ -179,6 +179,9 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 /** Claim window ending within this many ms counts as needs-action. */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
+/** Unworked Needs action rows drop off after this age. */
+export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 /**
  * Max age of `first_seen_at` for scraper-review inclusion (item 55).
  * Temporarily 120h (was 48) so item-56 Apify outage backfill (2026-07-11→13)
@@ -612,6 +615,24 @@ function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter):
   return out;
 }
 
+function needsActionReceivedAt(
+  row: Pick<OpportunityRow, "receivedAt" | "firstSeenAt" | "lastSeenAt">,
+): string | null {
+  return row.receivedAt ?? row.firstSeenAt ?? row.lastSeenAt;
+}
+
+/** True when the opportunity is still within the 24h Needs action window. */
+export function isWithinNeedsActionAge(
+  row: Pick<OpportunityRow, "receivedAt" | "firstSeenAt" | "lastSeenAt">,
+  now: Date = new Date(),
+): boolean {
+  const raw = needsActionReceivedAt(row);
+  if (!raw) return true;
+  const received = new Date(raw).getTime();
+  if (Number.isNaN(received)) return true;
+  return now.getTime() - received <= NEEDS_ACTION_MAX_AGE_MS;
+}
+
 export function matchesNeedsAction(
   row: OpportunityRow,
   workflow: WorkflowDisplayContext | null,
@@ -619,13 +640,14 @@ export function matchesNeedsAction(
 ): boolean {
   if (isScraperReviewOnly(row)) return false;
   if (isSuppressedFromActiveQueue(row.status)) return false;
-  if (!row.assignedTo) return true;
-  if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
-    return true;
-  }
   if (workflow && isActiveClaim(workflow) && workflow.claimExpiresAt) {
     const msLeft = new Date(workflow.claimExpiresAt).getTime() - now.getTime();
     if (msLeft > 0 && msLeft <= CLAIM_EXPIRING_SOON_MS) return true;
+  }
+  if (!isWithinNeedsActionAge(row, now)) return false;
+  if (!row.assignedTo) return true;
+  if (row.type === "manual_submission" && (row.status === "new" || row.status === null)) {
+    return true;
   }
   return false;
 }

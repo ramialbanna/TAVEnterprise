@@ -340,12 +340,30 @@ describe("opportunity list views and pagination", () => {
   const now = new Date("2026-05-21T12:00:00.000Z");
 
   it("matchesNeedsAction for unassigned and expiring claims", () => {
-    expect(matchesNeedsAction(sampleRow({ assignedTo: null }), null)).toBe(true);
+    expect(matchesNeedsAction(sampleRow({ assignedTo: null }), null, now)).toBe(true);
+    const wall = new Date();
     const workflow = {
       claimedByUserId: "user-1",
-      claimExpiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+      claimExpiresAt: new Date(wall.getTime() + 2 * 60 * 60 * 1000).toISOString(),
     } as WorkflowDisplayContext;
-    expect(matchesNeedsAction(sampleRow({ assignedTo: "user-2" }), workflow)).toBe(true);
+    expect(matchesNeedsAction(sampleRow({ assignedTo: "user-2" }), workflow, wall)).toBe(true);
+  });
+
+  it("drops Needs action rows older than 24 hours", () => {
+    expect(
+      matchesNeedsAction(
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-19T12:00:00.000Z" }),
+        null,
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      matchesNeedsAction(
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-20T13:00:00.000Z" }),
+        null,
+        now,
+      ),
+    ).toBe(true);
   });
 
   it("matchesMine for assignee and active claim owner", () => {
