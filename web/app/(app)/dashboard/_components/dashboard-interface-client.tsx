@@ -2,10 +2,6 @@
 
 import { DashboardHomeNew } from "./dashboard-home-new";
 
-export function DashboardInterfaceClient({
-  homeCounts,
-}: {
-  homeCounts: { needsYou?: number; mine?: number };
-}) {
-  return <DashboardHomeNew initialCounts={homeCounts} />;
+export function DashboardInterfaceClient() {
+  return <DashboardHomeNew />;
 }

@@ -6,11 +6,13 @@ import { DashboardHomeNew } from "./dashboard-home-new";
 
 vi.mock("@/lib/app-api/client", () => ({
   listOpportunitiesPage: vi.fn(),
+  getAppMe: vi.fn(),
 }));
 
-import { listOpportunitiesPage } from "@/lib/app-api/client";
+import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
 
 const mockedList = vi.mocked(listOpportunitiesPage);
+const mockedMe = vi.mocked(getAppMe);
 
 function renderHome() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -22,6 +24,19 @@ function renderHome() {
 }
 
 beforeEach(() => {
+  mockedMe.mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      id: "u1",
+      email: "alex@texasautovalue.com",
+      displayName: "Alex",
+      role: "closer",
+      isActive: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+  });
   mockedList.mockResolvedValue({ ok: true, status: 200, data: { items: [], total: 0, offset: 0 } });
 });
 

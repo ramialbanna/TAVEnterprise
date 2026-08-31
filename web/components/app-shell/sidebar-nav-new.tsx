@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Wrench } from "lucide-react";
 
 import { getAppMe } from "@/lib/app-api/client";
@@ -15,6 +15,7 @@ import {
   opsNavItems,
   type NavLinkItem,
 } from "@/lib/app-shell/nav-new";
+import { prefetchNavHref } from "@/lib/opportunities/queue-prefetch";
 import { queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
 
@@ -24,12 +25,14 @@ function NavLink({
   search,
   showLabel,
   onNavigate,
+  onPrefetch,
 }: {
   item: NavLinkItem;
   pathname: string;
   search: string;
   showLabel: boolean;
   onNavigate?: () => void;
+  onPrefetch?: (href: string) => void;
 }) {
   const active = navLinkActive(item, pathname, search);
   const Icon = item.icon;
@@ -37,6 +40,8 @@ function NavLink({
     <Link
       href={item.href}
       onClick={onNavigate}
+      onPointerEnter={() => onPrefetch?.(item.href)}
+      onFocus={() => onPrefetch?.(item.href)}
       aria-current={active ? "page" : undefined}
       title={item.label}
       className={cn(
@@ -67,6 +72,7 @@ export function SidebarNavNew({
   const searchParams = useSearchParams();
   const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
   const showLabel = labels === "always" || labels === "responsive";
+  const queryClient = useQueryClient();
 
   const meQuery = useQuery({
     queryKey: queryKeys.appMe,
@@ -82,6 +88,10 @@ export function SidebarNavNew({
   const buyer = buyerNavItems();
   const analytics = analyticsNavItem();
   const ops = opsNavItems();
+
+  function prefetchHref(href: string) {
+    prefetchNavHref(queryClient, href, meQuery.data);
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -102,6 +112,7 @@ export function SidebarNavNew({
             search={search}
             showLabel={showLabel}
             onNavigate={onNavigate}
+            onPrefetch={prefetchHref}
           />
         ))}
         <NavLink
@@ -110,6 +121,7 @@ export function SidebarNavNew({
           search={search}
           showLabel={showLabel}
           onNavigate={onNavigate}
+          onPrefetch={prefetchHref}
         />
 
         {showOps ? (

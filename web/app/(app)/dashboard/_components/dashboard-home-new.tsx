@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Briefcase, PlusCircle, Search, Target } from "lucide-react";
 
-import { listOpportunitiesPage } from "@/lib/app-api/client";
+import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
 import { NEW_ANALYTICS_HREF } from "@/lib/app-shell/nav-new";
+import {
+  prefetchNavHref,
+  prefetchOpportunitiesQueue,
+  queueCountFilter,
+  QUEUE_LIST_STALE_TIME_MS,
+  viewerFetchOptions,
+} from "@/lib/opportunities/queue-prefetch";
 import { queryKeys } from "@/lib/query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -14,21 +22,36 @@ type HomeCounts = {
   mine?: number;
 };
 
-function countFilter(view: "needs_action" | "mine") {
-  return { limit: 1, offset: 0, sort: "spread_desc" as const, view };
-}
+export function DashboardHomeNew({ initialCounts = {} }: { initialCounts?: HomeCounts }) {
+  const queryClient = useQueryClient();
+  const meQuery = useQuery({
+    queryKey: queryKeys.appMe,
+    queryFn: getAppMe,
+    staleTime: QUEUE_LIST_STALE_TIME_MS,
+  });
+  const viewerOpts = viewerFetchOptions(meQuery.data);
+  const viewerUserId = viewerOpts?.viewerUserId ?? null;
+  const meReady = !meQuery.isPending;
 
-export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts }) {
+  const needsFilter = queueCountFilter("needs_action");
+  const mineFilter = queueCountFilter("mine");
+
   const needsQuery = useQuery({
-    queryKey: queryKeys.opportunitiesPage(countFilter("needs_action")),
-    queryFn: () => listOpportunitiesPage(countFilter("needs_action")),
-    staleTime: 60_000,
+    queryKey: queryKeys.opportunitiesPage(needsFilter, viewerUserId),
+    queryFn: () => listOpportunitiesPage(needsFilter, viewerOpts),
+    staleTime: QUEUE_LIST_STALE_TIME_MS,
+    enabled: meReady,
   });
   const mineQuery = useQuery({
-    queryKey: queryKeys.opportunitiesPage(countFilter("mine")),
-    queryFn: () => listOpportunitiesPage(countFilter("mine")),
-    staleTime: 60_000,
+    queryKey: queryKeys.opportunitiesPage(mineFilter, viewerUserId),
+    queryFn: () => listOpportunitiesPage(mineFilter, viewerOpts),
+    staleTime: QUEUE_LIST_STALE_TIME_MS,
+    enabled: meReady && meQuery.isSuccess,
   });
+
+  useEffect(() => {
+    prefetchOpportunitiesQueue(queryClient, { me: meQuery.data });
+  }, [meQuery.data, queryClient]);
 
   const needsYou =
     needsQuery.data?.ok === true
@@ -61,7 +84,13 @@ export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts 
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link href="/opportunities?view=needs_action" className="block h-full">
+        <Link
+          href="/opportunities?view=needs_action"
+          className="block h-full"
+          onPointerEnter={() =>
+            prefetchNavHref(queryClient, "/opportunities?view=needs_action", meQuery.data)
+          }
+        >
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
               <Target className="mb-1 size-5 text-primary" aria-hidden />
@@ -81,7 +110,11 @@ export function DashboardHomeNew({ initialCounts }: { initialCounts: HomeCounts 
           </Card>
         </Link>
 
-        <Link href="/my-work" className="block h-full">
+        <Link
+          href="/my-work"
+          className="block h-full"
+          onPointerEnter={() => prefetchNavHref(queryClient, "/my-work", meQuery.data)}
+        >
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
               <Briefcase className="mb-1 size-5 text-primary" aria-hidden />

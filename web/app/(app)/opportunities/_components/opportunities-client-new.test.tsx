@@ -149,6 +149,16 @@ describe("OpportunitiesClientNew", () => {
     expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
   });
 
+  it("loads the queue on the client when there is no SSR payload (#58)", async () => {
+    render(<OpportunitiesClientNew initialView="needs_action" />, { wrapper: TestWrapper });
+
+    expect(screen.getByText("Loading opportunities…")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByText("2019 Honda Accord")).toBeInTheDocument();
+    });
+  });
+
   it("selects the clicked tab immediately and keeps the queue shell mounted (#43/#52)", async () => {
     const user = userEvent.setup();
     let resolveWorth: ((value: ApiResult<OpportunityListPage>) => void) | undefined;

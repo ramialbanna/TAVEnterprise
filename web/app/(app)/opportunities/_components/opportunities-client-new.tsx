@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useState } from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Sparkles, type LucideIcon } from "lucide-react";
@@ -11,7 +11,6 @@ import {
   dismissOpportunity,
   getAppMe,
   listOpportunitiesPage,
-  type ListOpportunitiesPageOptions,
   type OpportunitiesPageFilter,
   type OpportunitySort,
   type OpportunityView,
@@ -22,6 +21,13 @@ import type { OpportunityListPage } from "@/lib/app-api/schemas";
 import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import type { DismissReasonCode } from "@/lib/opportunities/dismiss-reasons";
 import {
+  prefetchHomeCounts,
+  queueCountFilter,
+  queueListFilter,
+  QUEUE_LIST_STALE_TIME_MS,
+  viewerFetchOptions,
+} from "@/lib/opportunities/queue-prefetch";
+import {
   countFirstSeenToday,
   DEFAULT_QUEUE_VIEW,
   formatQueueSummaryLine,
@@ -31,6 +37,7 @@ import { OPPORTUNITIES_REFETCH_MS, queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { ClaimFeedbackInline } from "./claim-feedback-inline";
 import { DismissOpportunityDialog } from "./dismiss-opportunity-dialog";
@@ -42,11 +49,9 @@ import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
 const SUMMARY_FETCH_LIMIT = 100;
-/** List + tab revisit cache — NEXT_STEPS #43. */
-const LIST_STALE_TIME_MS = 60_000;
 /** Keep the open queue current without a full page refresh. */
 const LIST_POLL = {
-  staleTime: LIST_STALE_TIME_MS,
+  staleTime: QUEUE_LIST_STALE_TIME_MS,
   refetchInterval: OPPORTUNITIES_REFETCH_MS,
   refetchIntervalInBackground: false,
   refetchOnWindowFocus: true,
@@ -66,24 +71,6 @@ function parseViewParam(raw: string | null): OpportunityView {
   return DEFAULT_QUEUE_VIEW;
 }
 
-function viewerFetchOptions(
-  me: Awaited<ReturnType<typeof getAppMe>> | undefined,
-): ListOpportunitiesPageOptions | undefined {
-  if (!me?.ok) return undefined;
-  return { viewerUserId: me.data.id, viewerDisplayName: me.data.displayName };
-}
-
-function countFilter(
-  filter: OpportunitiesPageFilter,
-): Pick<OpportunitiesPageFilter, "limit" | "offset" | "sort" | "view"> {
-  return {
-    limit: 1,
-    offset: 0,
-    sort: filter.sort ?? "received_desc",
-    view: filter.view,
-  };
-}
-
 function extractTotal(result: ApiResult<OpportunityListPage> | undefined): number | undefined {
   if (!result?.ok) return undefined;
   return result.data.total;
@@ -93,12 +80,7 @@ function listPageFilter(
   view: OpportunityView,
   opts: { limit: number; offset: number; sort: OpportunitySort },
 ): OpportunitiesPageFilter {
-  return {
-    limit: opts.limit,
-    offset: opts.offset,
-    sort: opts.sort,
-    view,
-  };
+  return queueListFilter(view, opts);
 }
 
 /**
@@ -166,7 +148,7 @@ export function OpportunitiesClientNew({
   initial,
   initialView = DEFAULT_QUEUE_VIEW,
 }: {
-  initial: ApiResult<OpportunityListPage>;
+  initial?: ApiResult<OpportunityListPage>;
   initialView?: OpportunityView;
 }) {
   const router = useRouter();
@@ -210,6 +192,7 @@ export function OpportunitiesClientNew({
   const listFilter = listPageFilter(view, { limit, offset, sort });
 
   const matchesInitialFetch =
+    initial !== undefined &&
     view === initialView &&
     offset === 0 &&
     limit === DEFAULT_PAGE_SIZE &&
@@ -250,7 +233,7 @@ export function OpportunitiesClientNew({
       void queryClient.prefetchQuery({
         queryKey: queryKeys.opportunitiesPage(filter, viewerUserId),
         queryFn: () => listOpportunitiesPage(filter, viewerOpts),
-        staleTime: LIST_STALE_TIME_MS,
+        staleTime: QUEUE_LIST_STALE_TIME_MS,
       });
     },
     [meQuery.isSuccess, queryClient, sort, view, viewerOpts, viewerUserId],
@@ -259,29 +242,29 @@ export function OpportunitiesClientNew({
   const summaryQueries = useQueries({
     queries: [
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "needs_action" }), viewerUserId),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "needs_action" }), viewerOpts),
+        queryKey: queryKeys.opportunitiesPage(queueCountFilter("needs_action"), viewerUserId),
+        queryFn: () => listOpportunitiesPage(queueCountFilter("needs_action"), viewerOpts),
         ...LIST_POLL,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "mine" }), viewerUserId),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "mine" }), viewerOpts),
+        queryKey: queryKeys.opportunitiesPage(queueCountFilter("mine"), viewerUserId),
+        queryFn: () => listOpportunitiesPage(queueCountFilter("mine"), viewerOpts),
         enabled: meQuery.isSuccess,
         ...LIST_POLL,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "worth_a_look" }), viewerUserId),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "worth_a_look" }), viewerOpts),
+        queryKey: queryKeys.opportunitiesPage(queueCountFilter("worth_a_look"), viewerUserId),
+        queryFn: () => listOpportunitiesPage(queueCountFilter("worth_a_look"), viewerOpts),
         ...LIST_POLL,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "scraper_review" }), viewerUserId),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "scraper_review" }), viewerOpts),
+        queryKey: queryKeys.opportunitiesPage(queueCountFilter("scraper_review"), viewerUserId),
+        queryFn: () => listOpportunitiesPage(queueCountFilter("scraper_review"), viewerOpts),
         ...LIST_POLL,
       },
       {
-        queryKey: queryKeys.opportunitiesPage(countFilter({ view: "flagged_leads" }), viewerUserId),
-        queryFn: () => listOpportunitiesPage(countFilter({ view: "flagged_leads" }), viewerOpts),
+        queryKey: queryKeys.opportunitiesPage(queueCountFilter("flagged_leads"), viewerUserId),
+        queryFn: () => listOpportunitiesPage(queueCountFilter("flagged_leads"), viewerOpts),
         ...LIST_POLL,
       },
       {
@@ -300,6 +283,10 @@ export function OpportunitiesClientNew({
       },
     ],
   });
+
+  useEffect(() => {
+    prefetchHomeCounts(queryClient, { me: meQuery.data });
+  }, [meQuery.data, queryClient]);
 
   const claimMutation = useMutation({
     mutationFn: (row: OpportunityRow) => claimOpportunity(row.id),
@@ -400,7 +387,13 @@ export function OpportunitiesClientNew({
             />
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Loading opportunities…</p>
+            <p className="sr-only">Loading opportunities…</p>
+            <div className="space-y-2" aria-hidden>
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-3/4" />
+            </div>
           </CardContent>
         </Card>
       </div>

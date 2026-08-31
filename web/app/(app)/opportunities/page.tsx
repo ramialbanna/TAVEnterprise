@@ -1,8 +1,6 @@
 import { Suspense } from "react";
 
 import type { OpportunityView } from "@/lib/app-api/client";
-import { listOpportunitiesPage } from "@/lib/app-api/server";
-import { DEFAULT_PAGE_SIZE } from "@/lib/opportunities/table-preferences";
 import { DEFAULT_QUEUE_VIEW } from "@/lib/opportunities/queue-views";
 
 import { OpportunitiesInterfaceClient } from "./_components/opportunities-interface-client";
@@ -24,6 +22,10 @@ function parseQueueView(raw: string | undefined): OpportunityView {
 
 /**
  * `/opportunities` — v2 buyer queue.
+ *
+ * Item 58: do not await Worker SQL here. A blocking RSC fetch of the 500-row
+ * queue is what made Home ↔ Opportunities feel like ~10s. The client loads
+ * (and shows cached) rows via React Query after paint.
  */
 export default async function OpportunitiesPage({
   searchParams,
@@ -33,19 +35,12 @@ export default async function OpportunitiesPage({
   const { view: viewParam } = await searchParams;
   const initialView = parseQueueView(viewParam);
 
-  const initialNew = await listOpportunitiesPage({
-    limit: DEFAULT_PAGE_SIZE,
-    offset: 0,
-    sort: "received_desc",
-    view: initialView,
-  });
-
   return (
     <div className="space-y-6">
       <OpportunitiesPageIntro />
 
       <Suspense fallback={<p className="text-sm text-muted-foreground">Loading queue…</p>}>
-        <OpportunitiesInterfaceClient initialNew={initialNew} initialView={initialView} />
+        <OpportunitiesInterfaceClient initialView={initialView} />
       </Suspense>
     </div>
   );
