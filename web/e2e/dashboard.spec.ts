@@ -17,19 +17,18 @@ import { mockAppApi } from "./helpers/app-api-mocks";
  * only — chart titles, KPI labels/values, the system-health pill, the future-metrics
  * grid, and the no-`sellThroughRate` invariant — never component internals.
  */
-test.describe("/dashboard (authenticated + mocked /api/app/*)", () => {
+test.describe("/dashboard/analytics (authenticated + mocked /api/app/*)", () => {
   test.beforeEach(async ({ context, page }) => {
     await setAuthCookie(context);
     await mockAppApi(page);
   });
 
-  test("renders the full dashboard surface from mocked fixtures", async ({ page }) => {
-    await page.goto("/dashboard");
+  test("renders the analytics surface from mocked fixtures", async ({ page }) => {
+    await page.goto("/dashboard/analytics");
 
     const main = page.getByRole("main");
 
-    // Page identity (scoped to <main> — the topbar also renders a "Dashboard" h1).
-    await expect(main.getByRole("heading", { name: /^Dashboard$/i })).toBeVisible();
+    await expect(main.getByRole("heading", { name: /^Analytics$/i })).toBeVisible();
 
     // KPI cards (numeric values from the kpis fixture). Scope to the "Top metrics"
     // region — "Avg hold days" also appears as a sr-only column header inside the
@@ -83,17 +82,17 @@ test.describe("/dashboard (authenticated + mocked /api/app/*)", () => {
     expect(await page.locator("body").textContent()).not.toMatch(/sell[-_\s]?through/i);
   });
 
-  test("theme toggle does not break the dashboard surface", async ({ page }) => {
-    await page.goto("/dashboard");
+  test("theme toggle does not break the analytics surface", async ({ page }) => {
+    await page.goto("/dashboard/analytics");
     const main = page.getByRole("main");
-    await expect(main.getByRole("heading", { name: /^Dashboard$/i })).toBeVisible();
+    await expect(main.getByRole("heading", { name: /^Analytics$/i })).toBeVisible();
 
     const toggle = page.getByRole("button", { name: /toggle theme|theme/i }).first();
     await toggle.click();
 
     // After the toggle, the dashboard must still be rendered (no error boundary,
     // no missing chart titles).
-    await expect(main.getByRole("heading", { name: /^Dashboard$/i })).toBeVisible();
+    await expect(main.getByRole("heading", { name: /^Analytics$/i })).toBeVisible();
     await expect(main.getByText("Gross by region", { exact: true })).toBeVisible();
     await expect(main.getByText("Hold days by region", { exact: true })).toBeVisible();
   });

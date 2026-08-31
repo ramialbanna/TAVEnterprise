@@ -39,14 +39,14 @@ import { SalesTable } from "./sales-table";
  * Honest states: `kind:"unavailable"` → muted `UnavailableState`; other failure
  * kinds → `ErrorState` + Retry (when `isRetryableError`). No `sellThroughRate`.
  */
-export function HistoricalClient({ initial }: { initial: ApiResult<HistoricalSale[]> }) {
+export function HistoricalClient({ initial }: { initial?: ApiResult<HistoricalSale[]> }) {
   const [filter, setFilter] = useState<FilterState>(INITIAL_FILTER);
   const isInitialFilter = isEqualFilter(filter, INITIAL_FILTER);
 
   const query = useQuery({
     queryKey: queryKeys.historicalSales(serverFilter(filter)),
     queryFn: () => listHistoricalSales(serverFilter(filter)),
-    initialData: isInitialFilter ? initial : undefined,
+    ...(isInitialFilter && initial !== undefined ? { initialData: initial } : {}),
   });
 
   // The make/model dropdowns are derived from the most recent ok fetch's rows.

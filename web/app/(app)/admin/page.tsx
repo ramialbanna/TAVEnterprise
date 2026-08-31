@@ -1,7 +1,6 @@
 import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
 import { auth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
-import { getSystemStatus } from "@/lib/app-api/server";
 
 import { EnvSection } from "./_components/env-section";
 import { AdminClient } from "./_components/admin-client";
@@ -9,15 +8,12 @@ import { AdminClient } from "./_components/admin-client";
 /**
  * `/admin` — Phase 5 RSC shell.
  *
- * Fetches the authenticated session (the route is already gated by the auth proxy) plus
- * the first-paint `/app/system-status` `ApiResult`. Passes the signed-in email/name, the
- * `ENV_LABEL` from `serverEnv()`, the `APP_API_BASE_URL` host only (never the secret),
- * and the system-status result down to the client wrapper. Live polling + refresh live
- * in `<AdminClient />`; the env / signed-in panels are static RSC output.
+ * Session + env label are local (no Worker). System status loads on the client
+ * so sidebar switches are not blocked on `/app/system-status`.
  */
 export default async function AdminPage() {
   const env = serverEnv();
-  const [session, systemStatus] = await Promise.all([auth(), getSystemStatus()]);
+  const session = await auth();
 
   const apiHost = (() => {
     try {
@@ -50,7 +46,7 @@ export default async function AdminPage() {
 
       <EnvSection envLabel={env.ENV_LABEL} apiHost={apiHost} />
 
-      <AdminClient initial={systemStatus} />
+      <AdminClient />
     </div>
     </NewModeOpsGuard>
   );

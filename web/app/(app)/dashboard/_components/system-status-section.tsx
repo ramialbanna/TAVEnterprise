@@ -31,12 +31,12 @@ import { SystemStatusDetail } from "./system-status-detail";
  * Popover would be the ideal trigger surface but no `ui/popover.tsx` is vendored;
  * Dialog is the next-closest already-vendored primitive (Sheet would also work).
  */
-export function SystemStatusSection({ initial }: { initial: ApiResult<SystemStatus> }) {
+export function SystemStatusSection({ initial }: { initial?: ApiResult<SystemStatus> }) {
   const [open, setOpen] = useState(false);
   const query = useQuery({
     queryKey: queryKeys.systemStatus,
     queryFn: () => getSystemStatus(),
-    initialData: initial,
+    ...(initial !== undefined ? { initialData: initial } : {}),
     refetchInterval: SYSTEM_STATUS_REFETCH_MS,
   });
 

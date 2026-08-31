@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listIngestRuns } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type { IngestRunSummary } from "@/lib/app-api/schemas";
-import { queryKeys } from "@/lib/query";
+import { INGEST_RUNS_DEFAULT_LIMIT, queryKeys } from "@/lib/query";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,21 +15,19 @@ import { formatNumber, formatDateTime } from "@/lib/format";
 import { IngestTable } from "./ingest-table";
 import { RunDetailSheet } from "./run-detail-sheet";
 
-const LIST_LIMIT = 50;
-
 /**
- * Client wrapper for `/ingest`. Owns the recent-runs query (seeded from the RSC
- * first paint) and the selected-run drawer. Honest states only: `unavailable` →
+ * Client wrapper for `/ingest`. Owns the recent-runs query (hydrated from React Query,
+ * optionally seeded) and the selected-run drawer. Honest states only: `unavailable` →
  * muted `UnavailableState`; other failures → `ErrorState` (+ Retry when
  * retryable); `unauthorized` → `ErrorState` sign-in. No demo/fallback data.
  */
-export function IngestClient({ initial }: { initial: ApiResult<IngestRunSummary[]> }) {
+export function IngestClient({ initial }: { initial?: ApiResult<IngestRunSummary[]> }) {
   const [selected, setSelected] = useState<IngestRunSummary | null>(null);
 
   const query = useQuery({
-    queryKey: queryKeys.ingestRuns({ limit: LIST_LIMIT }),
-    queryFn: () => listIngestRuns({ limit: LIST_LIMIT }),
-    initialData: initial,
+    queryKey: queryKeys.ingestRuns({ limit: INGEST_RUNS_DEFAULT_LIMIT }),
+    queryFn: () => listIngestRuns({ limit: INGEST_RUNS_DEFAULT_LIMIT }),
+    ...(initial !== undefined ? { initialData: initial } : {}),
   });
 
   const result = query.data;
@@ -107,7 +105,7 @@ export function IngestClient({ initial }: { initial: ApiResult<IngestRunSummary[
             emptyHint="No source runs have been recorded yet. Once the Apify schedule fires, runs appear here newest-first."
           />
           <p className="pt-3 text-xs text-muted-foreground">
-            Showing the {LIST_LIMIT} most recent runs. Select a row to inspect
+            Showing the {INGEST_RUNS_DEFAULT_LIMIT} most recent runs. Select a row to inspect
             rejection, valuation-miss, schema-drift, and created-lead diagnostics.
           </p>
         </CardContent>

@@ -23,6 +23,7 @@ import { SecretsChecklist } from "./secrets-checklist";
 import { FeatureFlags } from "./feature-flags";
 import { StaffDirectoryAdmin } from "./staff-directory-admin";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Client wrapper around the live `/app/system-status` poll. Seeds TanStack Query with the
@@ -36,12 +37,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
  * `/app/system-status` still does not expose a machine-readable vendor-environment flag —
  * the label below reflects the operator-managed configuration state, not a runtime signal.
  */
-export function AdminClient({ initial }: { initial: ApiResult<SystemStatus> }) {
+export function AdminClient({ initial }: { initial?: ApiResult<SystemStatus> }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: queryKeys.systemStatus,
     queryFn: () => getSystemStatus(),
-    initialData: initial,
+    ...(initial !== undefined ? { initialData: initial } : {}),
     refetchInterval: SYSTEM_STATUS_REFETCH_MS,
   });
 
@@ -126,10 +127,21 @@ export function AdminClient({ initial }: { initial: ApiResult<SystemStatus> }) {
 }
 
 function renderStatus(
-  result: ApiResult<SystemStatus>,
+  result: ApiResult<SystemStatus> | undefined,
   onRetry: () => void,
   renderOk: (data: SystemStatus) => React.ReactNode,
 ): React.ReactNode {
+  if (result === undefined) {
+    return (
+      <div>
+        <p className="sr-only">Loading system status…</p>
+        <div className="space-y-3" aria-hidden>
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
   if (result.ok) return renderOk(result.data);
   if (result.kind === "unavailable") {
     return <UnavailableState code={result.error} title="System status unavailable" />;

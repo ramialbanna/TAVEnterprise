@@ -5,14 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { listHistoricalSales } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type { HistoricalSale } from "@/lib/app-api/schemas";
-import { queryKeys } from "@/lib/query";
+import { HISTORICAL_SALES_DEFAULT_LIMIT, queryKeys } from "@/lib/query";
 import { LineChartCard } from "@/components/charts";
 
 import { bucketGrossByMonth } from "@/lib/historical-aggregate";
 
 import { renderApiResult } from "./render-api-result";
-
-const HISTORICAL_SALES_LIMIT = 100;
 
 /**
  * Monthly gross-profit area chart from `/app/historical-sales`. Shares the
@@ -27,11 +25,11 @@ const HISTORICAL_SALES_LIMIT = 100;
  * `ErrorState` with `query.refetch()` as the retry. Rows missing `saleDate`
  * or `grossProfit` are dropped by `bucketGrossByMonth` — never coerced to `0`.
  */
-export function GrossTrendSection({ initial }: { initial: ApiResult<HistoricalSale[]> }) {
+export function GrossTrendSection({ initial }: { initial?: ApiResult<HistoricalSale[]> }) {
   const query = useQuery({
-    queryKey: queryKeys.historicalSales({ limit: HISTORICAL_SALES_LIMIT }),
-    queryFn: () => listHistoricalSales({ limit: HISTORICAL_SALES_LIMIT }),
-    initialData: initial,
+    queryKey: queryKeys.historicalSales({ limit: HISTORICAL_SALES_DEFAULT_LIMIT }),
+    queryFn: () => listHistoricalSales({ limit: HISTORICAL_SALES_DEFAULT_LIMIT }),
+    ...(initial !== undefined ? { initialData: initial } : {}),
   });
 
   return renderApiResult(

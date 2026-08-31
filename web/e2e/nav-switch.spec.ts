@@ -4,10 +4,9 @@ import { setAuthCookie } from "./helpers/auth";
 import { mockAppApi } from "./helpers/app-api-mocks";
 
 /**
- * Item 58 — Home ↔ Opportunities must paint the destination chrome without
- * waiting on Worker SQL. Queue rows may still arrive after paint.
+ * Item 58 — menu destinations must paint chrome without waiting on Worker SQL.
  */
-test.describe("Home ↔ Opportunities nav (#58)", () => {
+test.describe("sidebar nav chrome (#58)", () => {
   test.beforeEach(async ({ context, page }) => {
     await setAuthCookie(context);
     await page.addInitScript(() => {
@@ -31,5 +30,23 @@ test.describe("Home ↔ Opportunities nav (#58)", () => {
 
     await page.getByRole("link", { name: "Home" }).click();
     await expect(main.getByRole("heading", { name: "Home" })).toBeVisible({ timeout: 3_000 });
+  });
+
+  test("buyer menu destinations paint their chrome without waiting on SQL", async ({ page }) => {
+    await page.goto("/dashboard");
+    const main = page.getByRole("main");
+
+    await page.getByRole("link", { name: "Submit listing" }).click();
+    await expect(main.getByRole("heading", { name: /Submit a listing/i })).toBeVisible({
+      timeout: 3_000,
+    });
+
+    await page.getByRole("link", { name: "TAV MMR" }).click();
+    await expect(main.getByText("MMR", { exact: true })).toBeVisible({ timeout: 3_000 });
+
+    await page.getByRole("link", { name: "Analytics" }).click();
+    await expect(main.getByRole("heading", { name: /^Analytics$/i })).toBeVisible({
+      timeout: 3_000,
+    });
   });
 });

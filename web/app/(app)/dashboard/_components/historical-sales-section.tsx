@@ -5,26 +5,22 @@ import { useQuery } from "@tanstack/react-query";
 import { listHistoricalSales } from "@/lib/app-api/client";
 import type { ApiResult } from "@/lib/app-api";
 import type { HistoricalSale } from "@/lib/app-api/schemas";
-import { queryKeys } from "@/lib/query";
+import { HISTORICAL_SALES_DEFAULT_LIMIT, queryKeys } from "@/lib/query";
 import { EmptyState } from "@/components/data-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/format";
 
 import { renderApiResult } from "./render-api-result";
 
-const HISTORICAL_SALES_LIMIT = 100;
-
 /**
- * `/app/historical-sales?limit=100` first paint, seeded from RSC. Task 2.1 renders only
- * the count of returned rows inside a card — the full sortable/filterable DataTable
- * surface arrives in a later Phase 2 task. Empty result renders `EmptyState`; failures
+ * `/app/historical-sales` first paint. Empty result renders `EmptyState`; failures
  * route through `renderApiResult` (unavailable → muted panel; other kinds → ErrorState).
  */
-export function HistoricalSalesSection({ initial }: { initial: ApiResult<HistoricalSale[]> }) {
+export function HistoricalSalesSection({ initial }: { initial?: ApiResult<HistoricalSale[]> }) {
   const query = useQuery({
-    queryKey: queryKeys.historicalSales({ limit: HISTORICAL_SALES_LIMIT }),
-    queryFn: () => listHistoricalSales({ limit: HISTORICAL_SALES_LIMIT }),
-    initialData: initial,
+    queryKey: queryKeys.historicalSales({ limit: HISTORICAL_SALES_DEFAULT_LIMIT }),
+    queryFn: () => listHistoricalSales({ limit: HISTORICAL_SALES_DEFAULT_LIMIT }),
+    ...(initial !== undefined ? { initialData: initial } : {}),
   });
 
   return (

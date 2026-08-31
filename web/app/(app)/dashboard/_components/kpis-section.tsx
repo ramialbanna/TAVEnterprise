@@ -23,11 +23,11 @@ import { renderApiResult } from "./render-api-result";
  * Leads total, Normalized listings. By-region tiles, gross-trend charts, and other
  * detail surfaces come in Tasks 2.4–2.5.
  */
-export function KpisSection({ initial }: { initial: ApiResult<Kpis> }) {
+export function KpisSection({ initial }: { initial?: ApiResult<Kpis> }) {
   const query = useQuery({
     queryKey: queryKeys.kpis,
     queryFn: () => getKpis(),
-    initialData: initial,
+    ...(initial !== undefined ? { initialData: initial } : {}),
   });
 
   return renderApiResult(
@@ -92,6 +92,6 @@ export function KpisSection({ initial }: { initial: ApiResult<Kpis> }) {
         </KpiGrid>
       );
     },
-    { onRetry: () => void query.refetch() },
+    { onRetry: () => void query.refetch(), pendingLabel: "Loading KPIs…" },
   );
 }

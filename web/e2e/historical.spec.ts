@@ -6,9 +6,9 @@ import { setAuthCookie } from "./helpers/auth";
  * Historical sales e2e — verifies the authenticated `/historical` surface end-to-end.
  *
  * Two mock layers cooperate:
- *   1. SSR first paint (`appApiServer.listHistoricalSales({ limit: 100 })`) is served by
- *      the gated `/api/e2e-mocks/app/historical-sales` handler — the same 6-row
- *      fixture every browser-side mock starts from (`E2E_HISTORICAL_SALES`).
+ *   1. First paint loads `/api/app/historical-sales?limit=100` on the client (thin RSC).
+ *      The gated `/api/e2e-mocks/app/historical-sales` handler still serves the 6-row
+ *      fixture when the Next proxy is pointed at e2e-mocks (`E2E_HISTORICAL_SALES`).
  *   2. Browser-side TanStack refreshes (filter changes) go through `/api/app/historical-sales*`.
  *      Per-test `page.route` handlers intercept those so a filter scenario can shape the
  *      response without touching SSR.
@@ -186,9 +186,8 @@ test.describe("/historical (authenticated)", () => {
     });
 
     await page.goto("/historical");
-
-    // SSR first paint: 6 rows.
     await expect(page.getByText(/6 of 6 rows? after filters/i)).toBeVisible();
+    const callsAfterLoad = calls;
 
     // VIN missing → 2 rows (ids 3, 6 have null vin per the fixture).
     await page.getByLabel(/^VIN/i).selectOption("missing");
@@ -201,8 +200,8 @@ test.describe("/historical (authenticated)", () => {
     await expect(page.getByText(/4 of 6 rows? after filters/i)).toBeVisible();
     await expect(page.getByText(/gross ≥ \$1500/i)).toBeVisible();
 
-    // No browser-side API call fired — only SSR's call which page.route does NOT see.
-    expect(calls).toBe(0);
+    // Client-only filters must not fire extra API calls after the first-paint fetch.
+    expect(calls).toBe(callsAfterLoad);
   });
 
   test("clicking a row opens the detail sheet with the selected row's data", async ({ page }) => {

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { MmrLabClient } from "./_components/mmr-lab-client";
+import { MmrLabFallback } from "./_components/mmr-lab-fallback";
 
 /**
  * `/mmr-lab` — Combined MMR + MaxBuy valuation workspace (buyer-accessible).
@@ -10,7 +11,7 @@ import { MmrLabClient } from "./_components/mmr-lab-client";
  */
 export default function MmrLabPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<MmrLabFallback />}>
       <MmrLabClient />
     </Suspense>
   );

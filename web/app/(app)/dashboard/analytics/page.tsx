@@ -1,9 +1,3 @@
-import {
-  getKpis,
-  getSystemStatus,
-  listHistoricalSales,
-} from "@/lib/app-api/server";
-
 import { FutureMetricsSection } from "../_components/future-metrics-section";
 import { GrossTrendSection } from "../_components/gross-trend-section";
 import { HistoricalSalesSection } from "../_components/historical-sales-section";
@@ -13,15 +7,13 @@ import { SystemStatusSection } from "../_components/system-status-section";
 import { DashboardAnalyticsGate } from "../_components/dashboard-analytics-gate";
 
 /**
- * `/dashboard/analytics` — KPIs and charts (New-mode nav). Classic users keep `/dashboard`.
+ * `/dashboard/analytics` — KPIs and charts (New-mode nav).
+ *
+ * Item 58: do not await Worker SQL here. Next.js holds the previous page until
+ * this RSC finishes; KPIs / status / sales load on the client from the shared
+ * QueryClient (hover-prefetch warms the cache).
  */
-export default async function DashboardAnalyticsPage() {
-  const [systemStatus, kpis, historicalSales] = await Promise.all([
-    getSystemStatus(),
-    getKpis(),
-    listHistoricalSales({ limit: 100 }),
-  ]);
-
+export default function DashboardAnalyticsPage() {
   return (
     <DashboardAnalyticsGate>
       <div className="space-y-6">
@@ -32,27 +24,27 @@ export default async function DashboardAnalyticsPage() {
               Live acquisition health, outcomes, and recent sales.
             </p>
           </div>
-          <SystemStatusSection initial={systemStatus} />
+          <SystemStatusSection />
         </header>
 
         <section aria-label="Top metrics">
-          <KpisSection initial={kpis} />
+          <KpisSection />
         </section>
 
         <section aria-label="Regional outcomes">
-          <RegionChartsSection initial={kpis} />
+          <RegionChartsSection />
         </section>
 
         <section aria-label="Gross trend">
-          <GrossTrendSection initial={historicalSales} />
+          <GrossTrendSection />
         </section>
 
         <section aria-label="Recent sales">
-          <HistoricalSalesSection initial={historicalSales} />
+          <HistoricalSalesSection />
         </section>
 
         <section aria-label="Future metrics">
-          <FutureMetricsSection initial={systemStatus} />
+          <FutureMetricsSection />
         </section>
       </div>
     </DashboardAnalyticsGate>

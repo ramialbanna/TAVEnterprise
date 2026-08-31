@@ -19,6 +19,12 @@ export const SYSTEM_STATUS_REFETCH_MS = 30_000;
 /** Poll interval for the opportunities queue while the page is open. */
 export const OPPORTUNITIES_REFETCH_MS = 15_000;
 
+/** Default row cap shared by Analytics + Historical (must match query keys). */
+export const HISTORICAL_SALES_DEFAULT_LIMIT = 100;
+
+/** Default run list cap for Ingest Monitor (must match query keys). */
+export const INGEST_RUNS_DEFAULT_LIMIT = 50;
+
 const DEFAULT_STALE_TIME_MS = 30_000;
 const MAX_QUERY_RETRIES = 2;
 

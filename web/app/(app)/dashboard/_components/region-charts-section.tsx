@@ -25,11 +25,11 @@ import { renderApiResult } from "./render-api-result";
  * "No data to display." empty state. Rows missing the metric column are dropped by
  * `normalizeByRegion` — never coerced to `0`. `sellThroughRate` is never rendered.
  */
-export function RegionChartsSection({ initial }: { initial: ApiResult<Kpis> }) {
+export function RegionChartsSection({ initial }: { initial?: ApiResult<Kpis> }) {
   const query = useQuery({
     queryKey: queryKeys.kpis,
     queryFn: () => getKpis(),
-    initialData: initial,
+    ...(initial !== undefined ? { initialData: initial } : {}),
   });
 
   return renderApiResult(

@@ -7,8 +7,8 @@ import { BarChart3, Briefcase, PlusCircle, Search, Target } from "lucide-react";
 
 import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
 import { NEW_ANALYTICS_HREF } from "@/lib/app-shell/nav-new";
+import { prefetchNavHref } from "@/lib/app-shell/nav-prefetch";
 import {
-  prefetchNavHref,
   prefetchOpportunitiesQueue,
   queueCountFilter,
   QUEUE_LIST_STALE_TIME_MS,
@@ -100,7 +100,11 @@ export function DashboardHomeNew({ initialCounts = {} }: { initialCounts?: HomeC
           </Card>
         </Link>
 
-        <Link href="/opportunities/submit" className="block h-full">
+        <Link
+          href="/opportunities/submit"
+          className="block h-full"
+          onPointerEnter={() => prefetchNavHref(queryClient, "/opportunities/submit", meQuery.data)}
+        >
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
               <PlusCircle className="mb-1 size-5 text-primary" aria-hidden />
@@ -124,7 +128,11 @@ export function DashboardHomeNew({ initialCounts = {} }: { initialCounts?: HomeC
           </Card>
         </Link>
 
-        <Link href="/mmr-lab" className="block h-full">
+        <Link
+          href="/mmr-lab"
+          className="block h-full"
+          onPointerEnter={() => prefetchNavHref(queryClient, "/mmr-lab", meQuery.data)}
+        >
           <Card className="h-full transition-colors hover:bg-accent/40">
             <CardHeader>
               <Search className="mb-1 size-5 text-primary" aria-hidden />
@@ -149,6 +157,7 @@ export function DashboardHomeNew({ initialCounts = {} }: { initialCounts?: HomeC
           <Link
             href={NEW_ANALYTICS_HREF}
             className="text-sm font-medium text-primary hover:underline"
+            onPointerEnter={() => prefetchNavHref(queryClient, NEW_ANALYTICS_HREF, meQuery.data)}
           >
             View analytics →
           </Link>

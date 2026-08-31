@@ -15,7 +15,7 @@ import {
   opsNavItems,
   type NavLinkItem,
 } from "@/lib/app-shell/nav-new";
-import { prefetchNavHref } from "@/lib/opportunities/queue-prefetch";
+import { prefetchNavHref } from "@/lib/app-shell/nav-prefetch";
 import { queryKeys } from "@/lib/query";
 import { cn } from "@/lib/utils";
 
@@ -154,6 +154,7 @@ export function SidebarNavNew({
                     search={search}
                     showLabel={showLabel}
                     onNavigate={onNavigate}
+                    onPrefetch={prefetchHref}
                   />
                 ))}
               </div>

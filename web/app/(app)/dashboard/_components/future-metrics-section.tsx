@@ -12,6 +12,7 @@ import { formatNumber, formatRelativeTime } from "@/lib/format";
 import type { OperationalStatus } from "@/components/status";
 
 import { MetricTile } from "./metric-tile";
+import { QueryPending } from "./query-pending";
 
 /**
  * "Coming soon — pending backend" grid. The handful of tiles that ARE safely
@@ -22,11 +23,11 @@ import { MetricTile } from "./metric-tile";
  * Shares the system-status TanStack query key with `SystemStatusSection`, so the
  * 30s poll is deduped across both surfaces.
  */
-export function FutureMetricsSection({ initial }: { initial: ApiResult<SystemStatus> }) {
+export function FutureMetricsSection({ initial }: { initial?: ApiResult<SystemStatus> }) {
   const query = useQuery({
     queryKey: queryKeys.systemStatus,
     queryFn: () => getSystemStatus(),
-    initialData: initial,
+    ...(initial !== undefined ? { initialData: initial } : {}),
     refetchInterval: SYSTEM_STATUS_REFETCH_MS,
   });
 
@@ -42,7 +43,9 @@ export function FutureMetricsSection({ initial }: { initial: ApiResult<SystemSta
         </p>
       </header>
 
-      {query.data.ok ? (
+      {query.data === undefined ? (
+        <QueryPending label="Loading system metrics…" />
+      ) : query.data.ok ? (
         <LiveAndPendingGrid data={query.data.data} />
       ) : query.data.kind === "unavailable" ? (
         <UnavailableState code={query.data.error} title="System status unavailable" />
