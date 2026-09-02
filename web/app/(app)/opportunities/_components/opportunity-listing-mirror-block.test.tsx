@@ -72,7 +72,51 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
     expect(screen.getByText(/One owner/)).toBeInTheDocument();
     expect(screen.getByText("Jane Seller")).toBeInTheDocument();
     expect(screen.getByText("Dallas, TX")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View on Facebook/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View listing on Facebook/i })).toBeInTheDocument();
+  });
+
+  it("links the seller name to the marketplace profile URL", () => {
+    render(
+      <OpportunityListingMirrorBlock
+        opportunity={baseDetail({
+          listingSellerName: "Dakota Herrel",
+          listingSellerUrl: "https://www.facebook.com/marketplace/profile/100008618685090",
+        })}
+      />,
+    );
+    const seller = screen.getByRole("link", { name: /Dakota Herrel/i });
+    expect(seller).toHaveAttribute(
+      "href",
+      "https://www.facebook.com/marketplace/profile/100008618685090",
+    );
+  });
+
+  it("shows a profile link when Fly attached a URL without a name", () => {
+    render(
+      <OpportunityListingMirrorBlock
+        opportunity={baseDetail({
+          listingSellerName: null,
+          listingSellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+        })}
+      />,
+    );
+    expect(screen.getByRole("link", { name: /Marketplace profile/i })).toHaveAttribute(
+      "href",
+      "https://www.facebook.com/marketplace/profile/1000526149",
+    );
+  });
+
+  it("serves the 1536px Facebook photo by stripping ctp from stored thumbnails", () => {
+    const thumb =
+      "https://scontent.xx.fbcdn.net/v/t.jpg?stp=keep_me&ctp=s261x260&oe=SIG";
+    const { container } = render(
+      <OpportunityListingMirrorBlock
+        opportunity={baseDetail({ listingImages: [thumb] })}
+      />,
+    );
+    const img = container.querySelector("img");
+    expect(img).toHaveAttribute("src", "https://scontent.xx.fbcdn.net/v/t.jpg?stp=keep_me&oe=SIG");
+    expect(img?.getAttribute("src")).not.toMatch(/ctp=/);
   });
 
   it("shows empty hint when no mirror content", () => {

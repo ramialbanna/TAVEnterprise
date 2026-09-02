@@ -269,7 +269,7 @@ export function OpportunityDetailClientNew({
 
       <CollapsibleBlock
         title="Listing from marketplace"
-        description="Photos and seller description from the scrape"
+        description="Photos and seller from the scrape"
         defaultOpen
       >
         <OpportunityListingMirrorBlock opportunity={opportunity} />

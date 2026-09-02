@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { OpportunityDetail } from "@/lib/app-api/schemas";
 import { formatMoney } from "@/lib/format";
 import { formatRegion } from "@/lib/copy/opportunities-labels";
+import { listingMirrorPhotoUrls } from "@/lib/listing-photo";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +24,18 @@ function formatListingLocation(opportunity: OpportunityDetail): string | null {
   return null;
 }
 
+function sellerProfileHref(raw: string | null | undefined): string | null {
+  const href = raw?.trim();
+  if (!href) return null;
+  try {
+    const url = new URL(href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Item 62 — Facebook-style listing mirror (photos + seller text) on detail.
  */
@@ -31,14 +44,22 @@ export function OpportunityListingMirrorBlock({
 }: {
   opportunity: OpportunityDetail;
 }) {
-  const images = opportunity.listingImages ?? [];
+  const images = listingMirrorPhotoUrls(opportunity.listingImages ?? []);
   const description = opportunity.listingDescription?.trim();
   const location = formatListingLocation(opportunity);
-  const seller = opportunity.listingSellerName?.trim();
+  const sellerName = opportunity.listingSellerName?.trim() || null;
+  const sellerHref = sellerProfileHref(opportunity.listingSellerUrl);
+  const photoAlt = opportunity.title?.trim()
+    ? `Listing photo of ${opportunity.title.trim()}`
+    : "Marketplace listing photo";
   const hasCityState =
     Boolean(opportunity.listingCity?.trim()) || Boolean(opportunity.listingState?.trim());
   const hasMirrorContent =
-    images.length > 0 || Boolean(description) || Boolean(seller) || hasCityState;
+    images.length > 0 ||
+    Boolean(description) ||
+    Boolean(sellerName) ||
+    Boolean(sellerHref) ||
+    hasCityState;
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -61,7 +82,18 @@ export function OpportunityListingMirrorBlock({
 
   return (
     <div className="space-y-4">
-      {images.length > 0 ? (
+      {images.length === 1 && images[0] ? (
+        <button
+          type="button"
+          className="relative aspect-[4/3] w-full max-w-xl overflow-hidden rounded-md border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setLightboxIndex(0)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- FB CDN URLs are external/expiring */}
+          <img src={images[0]} alt={photoAlt} className="h-full w-full object-cover" />
+        </button>
+      ) : null}
+
+      {images.length > 1 ? (
         <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
           {images.map((src, index) => (
             <button
@@ -71,17 +103,32 @@ export function OpportunityListingMirrorBlock({
               onClick={() => setLightboxIndex(index)}
             >
               {/* eslint-disable-next-line @next/next/no-img-element -- FB CDN URLs are external/expiring */}
-              <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
+              <img src={src} alt={photoAlt} className="h-full w-full object-cover" loading="lazy" />
             </button>
           ))}
         </div>
       ) : null}
 
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        {seller ? (
+        {sellerName || sellerHref ? (
           <div>
             <dt className="text-xs text-muted-foreground">Seller</dt>
-            <dd className="text-sm font-medium">{seller}</dd>
+            <dd className="text-sm font-medium">
+              {sellerHref ? (
+                <a
+                  href={sellerHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-foreground underline-offset-4 hover:underline"
+                >
+                  {sellerName || "Marketplace profile"}
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="sr-only">(opens in a new tab)</span>
+                </a>
+              ) : (
+                sellerName
+              )}
+            </dd>
           </div>
         ) : null}
         {location ? (
@@ -110,7 +157,7 @@ export function OpportunityListingMirrorBlock({
       {opportunity.listingUrl ? (
         <Button variant="outline" size="sm" asChild>
           <a href={opportunity.listingUrl} target="_blank" rel="noopener noreferrer">
-            View on Facebook
+            View listing on Facebook
             <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
           </a>
         </Button>
@@ -152,7 +199,7 @@ export function OpportunityListingMirrorBlock({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={images[lightboxIndex]}
-                alt=""
+                alt={photoAlt}
                 className="max-h-[70vh] max-w-full object-contain"
               />
             </div>
