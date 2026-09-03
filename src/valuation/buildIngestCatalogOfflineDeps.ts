@@ -10,8 +10,8 @@ import type { IngestCatalogOfflineDeps } from "./resolveListingToCatalog";
 
 export function buildIngestCatalogOfflineDeps(db: SupabaseClient): IngestCatalogOfflineDeps {
   return {
-    lookupStyleAlias: (make, model, trim, titleTrim) =>
-      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim),
+    lookupStyleAlias: (make, model, trim, titleTrim, axisTokens) =>
+      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim, axisTokens),
     loadTreeRows: (year: number, make: string) => loadCoxCatalogTreeForMake(db, year, make),
     hasTreeForYear: (year: number) => hasCoxCatalogTreeForYear(db, year),
   };

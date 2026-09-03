@@ -516,15 +516,27 @@ describe("dismissOpportunity", () => {
       reason: "dealer",
     });
 
-    expect(db.blockedSellerRows).toHaveLength(1);
-    expect(db.blockedSellerRows[0]).toMatchObject({
-      source: "facebook",
-      region: "dallas_tx",
-      reason: "dealer",
-      flagged_by_user_id: "closer-1",
-      normalized_listing_id: "listing-1",
-      seller_key: "url:https://facebook.com/marketplace/profile/dealer-1",
-    });
+    expect(db.blockedSellerRows).toHaveLength(2);
+    expect(db.blockedSellerRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "facebook",
+          region: "dallas_tx",
+          reason: "dealer",
+          flagged_by_user_id: "closer-1",
+          normalized_listing_id: "listing-1",
+          seller_key: "url:https://facebook.com/marketplace/profile/dealer-1",
+        }),
+        expect.objectContaining({
+          source: "facebook",
+          region: "dallas_tx",
+          reason: "dealer",
+          flagged_by_user_id: "closer-1",
+          normalized_listing_id: "listing-1",
+          seller_key: "name:dealer one",
+        }),
+      ]),
+    );
   });
 });
 

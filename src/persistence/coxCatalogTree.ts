@@ -4,6 +4,7 @@ import {
   inferVariantKind,
   type CoxCatalogTreeRow,
 } from "../valuation/matchListingToCoxCatalog";
+import { squashCatalogToken } from "../valuation/matchCatalogOption";
 
 export type CoxCatalogSyncRunStatus = "running" | "completed" | "failed" | "partial";
 
@@ -65,6 +66,28 @@ export async function upsertCoxCatalogTreeRows(
   return payload.length;
 }
 
+const TREE_COLUMNS = "year, make, model, style, search_text, variant_kind";
+
+type CatalogTreeRecord = {
+  year: number;
+  make: string;
+  model: string;
+  style: string;
+  search_text: string;
+  variant_kind: string | null;
+};
+
+function toTreeRow(row: CatalogTreeRecord): CoxCatalogTreeRow {
+  return {
+    year: row.year,
+    make: row.make,
+    model: row.model,
+    style: row.style,
+    searchText: row.search_text,
+    variantKind: row.variant_kind ?? null,
+  };
+}
+
 export async function loadCoxCatalogTreeForMake(
   db: SupabaseClient,
   year: number,
@@ -73,19 +96,47 @@ export async function loadCoxCatalogTreeForMake(
   const { data, error } = await db
     .schema("tav")
     .from("cox_catalog_tree")
-    .select("year, make, model, style, search_text, variant_kind")
+    .select(TREE_COLUMNS)
     .eq("year", year)
     .ilike("make", make);
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    year: row.year as number,
-    make: row.make as string,
-    model: row.model as string,
-    style: row.style as string,
-    searchText: row.search_text as string,
-    variantKind: (row.variant_kind as string | null) ?? null,
-  }));
+  const rows = (data ?? []) as CatalogTreeRecord[];
+  if (rows.length > 0) return rows.map(toTreeRow);
+
+  return loadByPunctuationInsensitiveMake(db, year, make);
+}
+
+/**
+ * Item 72 — second attempt for makes Cox spells with spaces or hyphens.
+ *
+ * `ilike` is case-insensitive but not punctuation-insensitive, so our `bmw`
+ * never matched Cox's `B M W` and every BMW listing fell through with
+ * `catalog_not_synced` despite 2,427 tree rows existing.
+ *
+ * The `%`-interleaved pattern only narrows the scan; the squashed equality
+ * check below is what decides, so a loose pattern cannot produce a wrong make.
+ * Runs only when the exact lookup found nothing, which is the rare path.
+ */
+async function loadByPunctuationInsensitiveMake(
+  db: SupabaseClient,
+  year: number,
+  make: string,
+): Promise<CoxCatalogTreeRow[]> {
+  const squashed = squashCatalogToken(make);
+  if (!squashed) return [];
+
+  const { data, error } = await db
+    .schema("tav")
+    .from("cox_catalog_tree")
+    .select(TREE_COLUMNS)
+    .eq("year", year)
+    .ilike("make", squashed.split("").join("%"));
+  if (error) throw error;
+
+  return ((data ?? []) as CatalogTreeRecord[])
+    .filter((row) => squashCatalogToken(row.make) === squashed)
+    .map(toTreeRow);
 }
 
 export async function hasCoxCatalogTreeForYear(

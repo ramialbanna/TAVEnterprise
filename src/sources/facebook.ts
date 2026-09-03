@@ -1,4 +1,12 @@
 import type { AdapterResult, NormalizedListingInput, RegionKey } from "../types/domain";
+import { resolveListingVin } from "./extractVinFromText";
+import {
+  isCabOrBedOnly,
+  isCabOrBedStopToken,
+  isDisplacementToken,
+  isYearToken,
+  stripLeadingCabBed,
+} from "./listingParseHygiene";
 
 export type AdapterContext = {
   region: RegionKey;
@@ -68,6 +76,7 @@ const KNOWN_TRIMS: readonly string[] = [
   "badlands", "everglades",
   "se premium",
   "sport", "se", "sel", "le", "xle", "xse",
+  "lt", "ls", "ltz", "rst",
   "ex", "lx", "dx", "sx", "limited", "premium",
   "xlt", "lariat", "laramie", "rebel", "platinum",
   "slt", "denali", "at4",
@@ -111,10 +120,12 @@ const MODEL_STOP_RE =
 // ── Parsing helpers ───────────────────────────────────────────────────────────
 
 function normaliseWs(s: string): string {
-  // Replace Unicode dashes, glued tokens (+), and non-breaking spaces with ASCII space.
+  // Replace Unicode dashes, glued tokens (+/_), emoji, and non-breaking spaces with ASCII space.
   return s
     .replace(/[\u00a0\u2013\u2014]/g, " ")
     .replace(/\+/g, " ")
+    .replace(/_/g, " ")
+    .replace(/\p{Extended_Pictographic}/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -253,6 +264,9 @@ function extractModel(
 
   for (const tok of tokens) {
     if (!tok) continue;
+    if (isYearToken(tok)) continue;
+    if (tok === make || MAKE_ALIASES[tok] === make) continue;
+    if (modelTokens.length > 0 && tok === modelTokens[modelTokens.length - 1]) continue;
     if (MODEL_STOP_RE.test(tok)) break;
     if (/^[,|/()[\]{}:;]+$/.test(tok)) break;
     if (/^[,|/()[\]{}:;]/.test(tok)) break;
@@ -262,6 +276,8 @@ function extractModel(
     if (DRIVETRAIN_STOP_SET.has(tok)) break;
     if (ENGINE_CONFIG_STOP_SET.has(tok)) break;
     if (BODY_STYLE_STOP_SET.has(tok)) break;
+    if (isCabOrBedStopToken(tok)) break;
+    if (isDisplacementToken(tok)) break;
     modelTokens.push(tok);
     if (modelTokens.length === 2) break;
   }
@@ -269,7 +285,10 @@ function extractModel(
   if (modelTokens.length === 0) return undefined;
 
   const model = modelTokens.join(" ");
-  const remaining = lower.slice(model.length).trim();
+  let remaining = lower.slice(model.length).trim();
+  while (remaining === model || remaining.startsWith(`${model} `)) {
+    remaining = remaining.slice(model.length).trim();
+  }
   return { model, remaining };
 }
 
@@ -284,7 +303,7 @@ function normalizeKnownModel(model: string): string {
 }
 
 function extractTrim(remaining: string): string | undefined {
-  const lower = remaining.toLowerCase().trim();
+  const lower = stripLeadingCabBed(remaining);
 
   // Multi-word trims first.
   for (const t of KNOWN_TRIMS) {
@@ -382,20 +401,22 @@ function extractSourceListingId(item: Record<string, unknown>): string | undefin
   return undefined;
 }
 
-// VIN is rare on Facebook listings but occasionally present in the description
-// or a side field. When provided, validate to a 17-char standard VIN (alphanumeric,
-// excluding I/O/Q per ISO 3779) and uppercase. Anything else returns undefined so
-// the YMM fallback path runs cleanly without polluting MMR with malformed input.
-const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
-
-function extractVin(item: Record<string, unknown>): string | undefined {
+// Facebook has never sent a structured VIN field — `normalized_listings.vin`
+// was 0% populated — but sellers type them into the description. Item 72 falls
+// back to the listing text; `resolveListingVin` owns the safety gates.
+function extractVin(
+  item: Record<string, unknown>,
+  text: { description?: string | undefined; title?: string | undefined; year?: number },
+): string | undefined {
+  let structured: string | undefined;
   for (const key of ["vin", "VIN", "Vin"]) {
     const raw = item[key];
-    if (typeof raw !== "string") continue;
-    const candidate = raw.trim().toUpperCase();
-    if (VIN_REGEX.test(candidate)) return candidate;
+    if (typeof raw === "string") {
+      structured = raw;
+      break;
+    }
   }
-  return undefined;
+  return resolveListingVin({ ...text, ...(structured !== undefined && { structured }) });
 }
 
 /** Seller listing post time — ISO string from payloadAdapter (`listing_date_ms`) or aliases. */
@@ -570,15 +591,17 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     // bodyname. Empty/whitespace/non-string `rec.trim` falls back to the title
     // parse. Make/model parsing is intentionally unchanged in this PR.
     const explicitTrimRaw = typeof rec["trim"] === "string" ? (rec["trim"] as string).trim() : "";
-    const trim = explicitTrimRaw.length > 0 ? explicitTrimRaw.toLowerCase() : titleTrim;
+    const explicitTrim = explicitTrimRaw.length > 0 ? explicitTrimRaw.toLowerCase() : "";
+    const trimCandidate = explicitTrim && !isCabOrBedOnly(explicitTrim) ? explicitTrim : titleTrim;
+    const trim = isCabOrBedOnly(trimCandidate) ? undefined : trimCandidate;
     const sourceListingId = extractSourceListingId(rec);
-    const vin = extractVin(rec);
     // payloadAdapter maps listing_date_ms → postedAt before we run; persist so
     // queue "Listed" can show seller post time (item 44).
     const postedAt = extractPostedAt(rec);
     const sellerName = extractOptionalString(rec, ["sellerName", "seller_name", "seller"]);
     const sellerUrl = extractOptionalString(rec, ["sellerUrl", "seller_url"]);
     const description = extractOptionalString(rec, ["description"]);
+    const vin = extractVin(rec, { description, title, year });
     const city = extractOptionalString(rec, ["city"]);
     const stateRaw = extractOptionalString(rec, ["state"]);
     const state = stateRaw !== undefined ? extractStateCode(stateRaw) : undefined;

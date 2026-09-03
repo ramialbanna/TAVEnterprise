@@ -8,6 +8,7 @@
  * subtree — not a pre-scored top-3 — see docs/LLM-YMMS-Normalization.md §5.
  */
 import type { CoxCatalogTreeRow } from "../valuation/matchListingToCoxCatalog";
+import { squashCatalogToken } from "../valuation/matchCatalogOption";
 
 export type YmmsPromptListingInput = {
   year: number;
@@ -207,19 +208,51 @@ export type YmmsProposal = {
 
 /**
  * Deterministic gate (docs/LLM-YMMS-Normalization.md §5): the proposal must
- * exist verbatim (case-insensitive) in the exact subtree Claude was given.
- * Never trust the model's self-report of validity.
+ * exist in the exact subtree Claude was given. Never trust the model's
+ * self-report of validity.
+ *
+ * Returns the matched row rather than a boolean so callers send Cox's own
+ * spelling to Manheim instead of Claude's. Item 72: Claude echoes the make it
+ * was asked about (`bmw`), not the catalog's (`B M W`), which discarded 12 of
+ * 12 BMW picks as `llm_invalid_pick` — including a 0.97-confidence X5 whose
+ * model and style were both correct.
+ *
+ * Punctuation-insensitive matching is a fallback tier only, and only when it
+ * identifies exactly one row: an ambiguous squashed match must not be allowed
+ * to choose between sibling styles.
  */
-export function isValidCoxPick(proposal: YmmsProposal, rows: readonly CoxCatalogTreeRow[]): boolean {
+export function findCoxPickRow(
+  proposal: YmmsProposal,
+  rows: readonly CoxCatalogTreeRow[],
+): CoxCatalogTreeRow | null {
   const make = proposal.make.trim().toLowerCase();
   const model = proposal.model.trim().toLowerCase();
   const style = proposal.style.trim().toLowerCase();
-  return rows.some(
+
+  const exact = rows.find(
     (row) =>
       row.make.toLowerCase() === make &&
       row.model.toLowerCase() === model &&
       row.style.toLowerCase() === style,
   );
+  if (exact) return exact;
+
+  const squashedMake = squashCatalogToken(proposal.make);
+  const squashedModel = squashCatalogToken(proposal.model);
+  const squashedStyle = squashCatalogToken(proposal.style);
+  if (!squashedMake || !squashedModel || !squashedStyle) return null;
+
+  const loose = rows.filter(
+    (row) =>
+      squashCatalogToken(row.make) === squashedMake &&
+      squashCatalogToken(row.model) === squashedModel &&
+      squashCatalogToken(row.style) === squashedStyle,
+  );
+  return loose.length === 1 ? loose[0]! : null;
+}
+
+export function isValidCoxPick(proposal: YmmsProposal, rows: readonly CoxCatalogTreeRow[]): boolean {
+  return findCoxPickRow(proposal, rows) !== null;
 }
 
 /** Item 61 — ingest auto-accepts valid Cox picks strictly above this (0–1). */

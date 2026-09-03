@@ -1,8 +1,57 @@
 # Completed Tasks — MMR Lab
 
-**Last updated:** 2026-06-16
+**Last updated:** 2026-09-03
 
-Archived completed work items from `NEXT_STEPS.md`. Each entry preserves the original exit criteria and implementation notes.
+Archived completed work items from `NEXT_STEPS.md`. Each entry preserves the original exit criteria and implementation notes. §74 is still open on NEXT_STEPS (48h soak); the slices below are shipped.
+
+---
+
+## 2026-09-03 — §72 soak closed + §74 needs-action-only live
+
+### §72 — proven-aware last-resort soak closed
+
+- ~10d production window (`78f79974`, 2026-08-24 19:00Z → 2026-09-03): deduped hit **79.0%**, `not_proven_bookable` flat **4.8%**, `llm_unavailable` **7.3%** (#1 miss driver).
+- Verdict: deploy gates listing-word trims correctly; does not recover F-series npb. Ceiling without Claude credits ~79–80%; credits + §73 vision path to ≥85%.
+
+### §74 — needs-action-only enrich + view filter (shipped + deployed)
+
+**Code**
+
+- `scripts/lib/enrich-queues.mjs` — default queue `needs_action`; `matchesWouldBeNeedsAction` mirrors `opportunities.ts`.
+- `scripts/enrich-facebook-sellers.mjs` — `loadNeedsActionQueue`; legacy `--queue unprocessed|dealer_*` for debug.
+- `test/enrich-queues.test.ts` — 9 tests.
+
+**Deploy**
+
+- Fly **`tav-seller-enrich`** v6 (2026-09-03 ~13:56Z): `queue=needs_action`, first batch 40, `ok wrote needs_action` ~8/min, no 503/checkpoint in first hour.
+- Worker production **`2b262630`**: hide Facebook on default Opportunities views until `seller_url`; then `blocked_sellers` check.
+
+**Still open:** 48h Fly soak (clock from 2026-09-03 redeploy), action 6 (more FB logins), vendor `extraListingData.seller` still `{}`.
+
+---
+
+## 2026-08-31 / 2026-09-01 — §74 seller gate + Fly always-on (partial)
+
+**Not closed.** Full item stays in `NEXT_STEPS.md` §74. This records what landed so the next session does not re-do it.
+
+**Buyer lock:** no blacklisted seller on Opportunities. Facebook stays off the default sheet until a **seller URL** exists, then hide if that key is in `blocked_sellers`. Name-only is not enough. Worker still cannot open Facebook; GoLogin attaches the URL after ingest upserts `listing_url`.
+
+### Shipped
+
+- Opportunities default views hide Facebook with no seller URL **and** hide blocked sellers (`src/persistence/blockedSellers.ts`, `src/persistence/opportunities.ts`). `flagged_leads` still shows everything. Craigslist unchanged.
+- Excellent-lead emails suppressed until Facebook has a seller URL (`src/ingest/runIngestItemLoop.ts`).
+- Tests: `test/opportunities.test.ts`, `test/blockedSellers.test.ts`, `test/ingest.test.ts`.
+- Enrich **uncapped** by default (`scripts/lib/gologin-antiban.mjs`). `--hours` / `--max-per-day` restore 25/h 40/d Chicago.
+- Daemon: Unprocessed first, 3s poll, batch 40, crash-resilient loop, PostgREST `.in()` chunk 40 (`scripts/enrich-facebook-sellers.mjs`, `scripts/lib/enrich-queues.mjs`).
+- Always-on: Fly app **`tav-seller-enrich`** (`Dockerfile.enrich`, `fly.seller-enrich.toml`), machine `2870647c500408` region `ord`, volume `enrich_state`. Health https://tav-seller-enrich.fly.dev/ . Secrets on Fly, not git.
+- Local `gologin:enrich:daemon` **stopped** — do not share `fb_buyer_10` with Fly.
+- Fly trial 5-minute stop: card added 2026-08-31; machine restarted ~17:13Z and attaching sellers.
+
+### Still open (on NEXT_STEPS §74)
+
+- 48h soak on Fly (clock from 2026-09-03 needs-action redeploy)
+- More Facebook accounts (action 6)
+- Vendor `extraListingData.seller` still `{}` (§69)
 
 ---
 

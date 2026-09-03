@@ -27,9 +27,29 @@ vi.mock("../src/persistence/filteredOut", () => ({
   writeFilteredOut: vi.fn(),
 }));
 
+vi.mock("../src/persistence/blockedSellers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/blockedSellers")>();
+  return {
+    ...actual,
+    loadBlockedSellerLookup: vi.fn().mockResolvedValue(null),
+    upsertBlockedSeller: vi.fn().mockResolvedValue(null),
+  };
+});
+
 vi.mock("../src/persistence/normalizedListings", () => ({
   upsertNormalizedListing: vi.fn(),
+  setNormalizedListingEntryMethod: vi.fn().mockResolvedValue(undefined),
+  loadStoredSellersByListingUrls: vi.fn().mockResolvedValue(new Map()),
+  stampNormalizedListingSeller: vi.fn().mockResolvedValue(undefined),
 }));
+
+vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/opportunityWorkflow")>();
+  return {
+    ...actual,
+    suppressOpportunityForBlockedSeller: vi.fn().mockResolvedValue(false),
+  };
+});
 
 vi.mock("../src/persistence/vehicleCandidates", () => ({
   upsertVehicleCandidate: vi.fn(),
@@ -82,6 +102,11 @@ vi.mock("../src/ingest/coxNoDataRetryPass", () => ({
   MAX_RETRIES_PER_SLICE: 10,
 }));
 
+vi.mock("../src/ingest/mmrRateLimitRetryPass", () => ({
+  runMmrRateLimitRetryPass: vi.fn().mockResolvedValue({ attempted: 0, recovered: 0 }),
+  MAX_RATE_LIMIT_RETRIES_PER_SLICE: 10,
+}));
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof LeadScoringModule>("../src/scoring/lead");
@@ -90,7 +115,7 @@ vi.mock("../src/scoring/lead", async () => {
 
 import { upsertSourceRun, completeSourceRun, completeSourceRunSafe } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
-import { upsertNormalizedListing } from "../src/persistence/normalizedListings";
+import { upsertNormalizedListing, loadStoredSellersByListingUrls, stampNormalizedListingSeller } from "../src/persistence/normalizedListings";
 import { upsertVehicleCandidate } from "../src/persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../src/persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../src/persistence/buyBoxRules";
@@ -103,6 +128,10 @@ import { getMmrValueFromWorker, getMmrLookupOutcome } from "../src/valuation/wor
 import { writeValuationSnapshot, writeValuationMissSnapshot } from "../src/persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
 import { runCoxNoDataRetryPass } from "../src/ingest/coxNoDataRetryPass";
+import { runMmrRateLimitRetryPass } from "../src/ingest/mmrRateLimitRetryPass";
+import { writeFilteredOut } from "../src/persistence/filteredOut";
+import { loadBlockedSellerLookup, upsertBlockedSeller } from "../src/persistence/blockedSellers";
+import { suppressOpportunityForBlockedSeller } from "../src/persistence/opportunityWorkflow";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -137,6 +166,9 @@ beforeEach(() => {
   vi.mocked(writeValuationSnapshot).mockResolvedValue(undefined);
   vi.mocked(writeValuationMissSnapshot).mockResolvedValue(undefined);
   vi.mocked(writeVehicleEnrichment).mockResolvedValue(undefined);
+  vi.mocked(upsertBlockedSeller).mockResolvedValue(null);
+  vi.mocked(loadBlockedSellerLookup).mockResolvedValue(null);
+  vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(new Map());
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -413,13 +445,25 @@ describe("POST /ingest", () => {
     expect(body.processed).toBe(1);
   });
 
-  it("dispatches excellent lead alert via ctx.waitUntil when grade is excellent", async () => {
+  it("dispatches excellent lead alert via ctx.waitUntil when grade is excellent and Facebook has a seller URL", async () => {
     vi.mocked(computeFinalScore).mockReturnValueOnce({ finalScore: 92, grade: "excellent" });
     vi.mocked(upsertLead).mockResolvedValueOnce({ id: "lead-excellent", created: true });
     const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/123",
+        title: "2020 Toyota Camry SE, 62k miles, $18,500",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/100008618685090",
+        sellerName: "Dakota Herrel",
+      }],
+    });
 
-    const sig = await sign(VALID_PAYLOAD, SECRET);
-    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+    const sig = await sign(payload, SECRET);
+    await worker.fetch(makeRequest(payload, sig), env, ctx);
 
     expect(waitUntilSpy).toHaveBeenCalled();
     expect(vi.mocked(sendExcellentLeadSummary)).toHaveBeenCalledWith(
@@ -427,6 +471,16 @@ describe("POST /ingest", () => {
       expect.arrayContaining([expect.objectContaining({ leadId: "lead-excellent", finalScore: 92 })]),
       expect.objectContaining({ runId: "run-001", source: "facebook" }),
     );
+  });
+
+  it("does not dispatch excellent lead alert for Facebook with no seller URL", async () => {
+    vi.mocked(computeFinalScore).mockReturnValueOnce({ finalScore: 92, grade: "excellent" });
+    vi.mocked(upsertLead).mockResolvedValueOnce({ id: "lead-excellent", created: true });
+
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(vi.mocked(sendExcellentLeadSummary)).not.toHaveBeenCalled();
   });
 
   it("does not dispatch alert when grade is good (not excellent)", async () => {
@@ -645,6 +699,7 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
       expect.objectContaining({
         candidates: [
           expect.objectContaining({
+            normalizedListingId: "norm-uuid",
             rejectedModel: "CAMRY V6",
             rejectedStyle: "4D SEDAN LE",
           }),
@@ -664,6 +719,33 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
 
     expect(vi.mocked(runCoxNoDataRetryPass)).not.toHaveBeenCalled();
+    expect(vi.mocked(runMmrRateLimitRetryPass)).not.toHaveBeenCalled();
+  });
+
+  it("item 72 action 8: schedules the rate-limit retry pass outside the batch on cox_rate_limited", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+      kind: "miss",
+      reason: "cox_rate_limited",
+      method: "year_make_model",
+      lookupMake: "FORD",
+      lookupModel: "F150 4WD V6",
+      lookupTrim: "CREW CAB 3.5L XLT",
+    });
+    const waitUntilSpy = vi.spyOn(ctx, "waitUntil");
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(runMmrRateLimitRetryPass)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: [
+          expect.objectContaining({
+            normalizedListingId: "norm-uuid",
+            llmResolution: expect.objectContaining({ kind: expect.any(String) }),
+          }),
+        ],
+      }),
+    );
+    expect(waitUntilSpy).toHaveBeenCalled();
   });
 
   it("miss-snapshot persistence failure does not fail ingest", async () => {
@@ -691,7 +773,10 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
     expect(vi.mocked(getMmrLookupOutcome)).toHaveBeenCalledWith(
       expect.anything(),
       workerEnv,
-      { llmResolution: { kind: "fallback", reason: "llm_disabled" } },
+      {
+        llmResolution: { kind: "fallback", reason: "llm_disabled" },
+        normalizedListingId: "norm-uuid",
+      },
     );
   });
 
@@ -876,6 +961,251 @@ describe("POST /ingest — deadline-aware truncation", () => {
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
     expect(waitUntilSpy).toHaveBeenCalled();
     expect(vi.mocked(completeSourceRunSafe)).toHaveBeenCalledOnce();
+  });
+
+  it("item 71: filters a heuristic dealer listing when SELLER_CLASSIFY_ENABLED is true", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-dealer-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/dealer-1",
+        title: "2018 Ford F-150 XLT",
+        description: "We finance! Bad credit OK. Visit our lot. Stock #A99",
+        sellerName: "Metro Auto Group",
+      }],
+    });
+    const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      dealerEnv,
+      expect.objectContaining({ reason_code: "dealer_listing" }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(upsertBlockedSeller).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        source: "facebook",
+        region: "dallas_tx",
+        sellerName: "Metro Auto Group",
+        reason: "dealer",
+      }),
+    );
+  });
+
+  it("item 71: does not filter dealers when SELLER_CLASSIFY_ENABLED is off", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-dealer-002",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/dealer-2",
+        title: "2018 Ford F-150 XLT",
+        description: "We finance! Stock #A99",
+        sellerName: "Metro Auto Group",
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(0);
+    expect(body.processed).toBe(1);
+    expect(upsertNormalizedListing).toHaveBeenCalled();
+  });
+
+  it("filters salvage and rebuilt titles even when seller classify is off", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-salvage-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/salvage-1",
+        title: "2018 Ford F-150 XLT",
+        description: "Salvage title, priced to sell.",
+        price: 6500,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({ reason_code: "salvage_or_rebuilt_title" }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
+  it("filters motorcycles and commercial chassis before valuation", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-ineligible-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [
+        {
+          url: "https://fb.com/item/moto-1",
+          title: "2018 BMW K1600 GTL",
+          price: 12000,
+        },
+        {
+          url: "https://fb.com/item/f550-1",
+          title: "2016 Ford F-550 XL",
+          price: 22000,
+        },
+      ],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(2);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({ reason_code: "ineligible_vehicle" }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
+  it("item 74: re-scrape of a URL with stored seller matching blocked_sellers skips MMR", async () => {
+    const listingUrl = "https://www.facebook.com/marketplace/item/1555379669961807/";
+    const sellerUrl = "https://www.facebook.com/marketplace/profile/1000526149";
+    vi.mocked(loadBlockedSellerLookup).mockResolvedValue({
+      keys: new Set(["url:https://www.facebook.com/marketplace/profile/1000526149"]),
+    });
+    vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(
+      new Map([
+        [
+          listingUrl,
+          { listingId: "nl-existing", sellerUrl, sellerName: "Lot Seller" },
+        ],
+      ]),
+    );
+
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-enrich-rescrape-001",
+      region: "houston_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: listingUrl,
+        title: "2024 Chevrolet 2500",
+        price: 42000,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "blocked_dealer",
+        listing_url: listingUrl,
+        details: expect.objectContaining({ seller_url: sellerUrl }),
+      }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(getMmrLookupOutcome).not.toHaveBeenCalled();
+    expect(stampNormalizedListingSeller).toHaveBeenCalledWith(
+      expect.anything(),
+      "nl-existing",
+      expect.objectContaining({ sellerUrl }),
+    );
+    expect(suppressOpportunityForBlockedSeller).toHaveBeenCalledWith(expect.anything(), "nl-existing");
+  });
+
+  it("item 74 lock: new listing with blocked seller name never upserts", async () => {
+    vi.mocked(loadBlockedSellerLookup).mockResolvedValue({
+      keys: new Set(["name:claudia gonzalez"]),
+    });
+
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-blocked-name-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://www.facebook.com/marketplace/item/999/",
+        title: "2018 Volkswagen Passat",
+        price: 8500,
+        sellerName: "Claudia Gonzalez",
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({ reason_code: "blocked_dealer" }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(getMmrLookupOutcome).not.toHaveBeenCalled();
+    expect(suppressOpportunityForBlockedSeller).not.toHaveBeenCalled();
+  });
+
+  it("item 74 lock: payload name keeps stored profile URL for the blocked check", async () => {
+    const listingUrl = "https://www.facebook.com/marketplace/item/passat-1/";
+    const sellerUrl = "https://www.facebook.com/marketplace/profile/61560214693807";
+    vi.mocked(loadBlockedSellerLookup).mockResolvedValue({
+      keys: new Set(["url:https://www.facebook.com/marketplace/profile/61560214693807"]),
+    });
+    vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(
+      new Map([
+        [listingUrl, { listingId: "nl-passat", sellerUrl, sellerName: "Claudia Gonzalez" }],
+      ]),
+    );
+
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-blocked-merge-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: listingUrl,
+        title: "2018 Volkswagen Passat",
+        price: 8500,
+        sellerName: "Claudia Gonzalez",
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "blocked_dealer",
+        details: expect.objectContaining({ seller_url: sellerUrl }),
+      }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(suppressOpportunityForBlockedSeller).toHaveBeenCalledWith(expect.anything(), "nl-passat");
   });
 
   it("response shape: no truncated/items_skipped fields when deadline is not hit", async () => {

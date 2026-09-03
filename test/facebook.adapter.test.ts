@@ -1004,3 +1004,85 @@ describe("detectFacebookDrift", () => {
     expect(detectFacebookDrift({})).toHaveLength(0);
   });
 });
+
+// ── Item 72 action 6: parser hygiene ──────────────────────────────────────────
+
+describe("parseFacebookItem — parser hygiene", () => {
+  it("does not put a repeated year+make into model", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-year", title: "2018 Mazda 2018 mazda Touring", price: "$12,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("missing_ymm");
+  });
+
+  it("splits a glued trim off the model (cruze lt)", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-lt", title: "2016 Chevrolet Cruze LT 98k miles", price: "$8,500" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.model).toBe("cruze");
+    expect(r.listing.trim).toBe("lt");
+  });
+
+  it("stops model at engine displacement (altima 2.5)", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-disp", title: "2017 Nissan Altima 2.5 SL 80k miles", price: "$9,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.model).toBe("altima");
+  });
+
+  it("collapses duplicated model tokens", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-dupe", title: "2015 Ford Tauro Tauro SEL", price: "$6,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.model).toBe("tauro");
+    expect(r.listing.trim).toBe("sel");
+  });
+
+  it("keeps XLT and does not store SuperCrew as trim", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-cab", title: "2016 Ford F-150 SuperCrew XLT 89k miles", price: "$18,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.model).toBe("f-150");
+    expect(r.listing.trim).toBe("xlt");
+  });
+
+  it("ignores cab-only rec.trim and uses the title trim", () => {
+    const r = parseFacebookItem(
+      {
+        url: "https://fb.com/hygiene-rec-cab",
+        title: "2019 Ford F-150 Lariat",
+        trim: "SuperCrew",
+        price: "$24,000",
+      },
+      CTX,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.listing.trim).toBe("lariat");
+  });
+
+  it("strips emoji duplication so a lone repeated make does not become the model", () => {
+    const r = parseFacebookItem(
+      { url: "https://fb.com/hygiene-emoji", title: "2018 Chevrolet 🩷 chevrolet", price: "$7,000" },
+      CTX,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("missing_ymm");
+  });
+});

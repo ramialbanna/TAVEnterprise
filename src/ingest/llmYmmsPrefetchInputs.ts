@@ -11,6 +11,17 @@ import {
   isBlockedSeller,
   type BlockedSellerLookup,
 } from "../persistence/blockedSellers";
+import {
+  applyResolvedSeller,
+  storedSellerForListing,
+  type StoredSeller,
+} from "./listingSellerIdentity";
+import {
+  classifyListingSellerHeuristic,
+  shouldAutoRejectDealer,
+} from "./dealerHeuristics";
+import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
+import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
 
 /** Item 60 — build Claude Y/M/M/S input from raw ingest item + parsed listing. */
 export function buildLlmYmmsResolutionInput(
@@ -42,6 +53,10 @@ export function buildLlmYmmsPrefetchInputs(
   source: string,
   adapterCtx: AdapterContext,
   blockedSellerLookup?: BlockedSellerLookup | null,
+  opts?: {
+    skipHeuristicDealers?: boolean;
+    storedSellersByUrl?: ReadonlyMap<string, StoredSeller> | null;
+  },
 ): Map<number, LlmYmmsResolutionInput> {
   const inputs = new Map<number, LlmYmmsResolutionInput>();
   if (source !== "facebook" && source !== "craigslist") return inputs;
@@ -53,9 +68,35 @@ export function buildLlmYmmsPrefetchInputs(
         : parseFacebookItem(item, adapterCtx);
     if (!parsed.ok) return;
     const { listing } = parsed;
+    applyResolvedSeller(listing, storedSellerForListing(listing, opts?.storedSellersByUrl));
+    if (listingHasSalvageOrRebuiltTitle({ title: listing.title, description: listing.description })) {
+      return;
+    }
+    if (
+      listingIsIneligibleVehicle({
+        make: listing.make,
+        model: listing.model,
+        title: listing.title,
+        description: listing.description,
+      })
+    ) {
+      return;
+    }
     if (
       blockedSellerLookup &&
       isBlockedSeller(blockedSellerLookup, listing.sellerUrl, listing.sellerName)
+    ) {
+      return;
+    }
+    if (
+      opts?.skipHeuristicDealers &&
+      shouldAutoRejectDealer(
+        classifyListingSellerHeuristic({
+          title: listing.title,
+          description: listing.description,
+          sellerName: listing.sellerName,
+        }),
+      )
     ) {
       return;
     }

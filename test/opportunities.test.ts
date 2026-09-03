@@ -6,6 +6,7 @@ import {
   isWithinScraperReviewWindow,
   isScraperReviewNoMmrEligible,
   isScraperReviewOnly,
+  isHiddenBlockedSellerOpportunity,
   matchesNeedsAction,
   matchesMine,
   matchesFlaggedLeads,
@@ -427,5 +428,90 @@ describe("opportunity list views and pagination", () => {
       "fresh-1",
     ]);
     expect(mergeQueueListingIds(["a", "b", "c"], ["d"], 2)).toEqual(["a", "b"]);
+  });
+});
+
+describe("isHiddenBlockedSellerOpportunity (item 74 lock)", () => {
+  const lookup = {
+    keys: new Set(["name:claudia gonzalez", "url:https://www.facebook.com/marketplace/profile/61560214693807"]),
+  };
+
+  it("hides a Facebook card with no seller URL — cannot prove the seller is not blocked", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({
+          source: "facebook",
+          listingSellerName: null,
+          listingSellerUrl: null,
+        }),
+        lookup,
+        "needs_action",
+      ),
+    ).toBe(true);
+  });
+
+  it("hides a Facebook card that only has a display name until GoLogin attaches a profile URL", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({
+          source: "facebook",
+          listingSellerName: "Private Party",
+          listingSellerUrl: null,
+        }),
+        lookup,
+        "needs_action",
+      ),
+    ).toBe(true);
+  });
+
+  it("hides a Facebook card whose seller URL is already blocked", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({
+          source: "facebook",
+          listingSellerName: "Claudia Gonzalez",
+          listingSellerUrl: "https://www.facebook.com/marketplace/profile/61560214693807",
+        }),
+        lookup,
+        "needs_action",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows a Facebook card whose profile URL is not in the blacklist", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({
+          source: "facebook",
+          listingSellerName: "Dakota Herrel",
+          listingSellerUrl: "https://www.facebook.com/marketplace/profile/100008618685090",
+        }),
+        lookup,
+        "needs_action",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not hide flagged_leads (dismissed dealers stay auditable)", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({
+          source: "facebook",
+          listingSellerName: "Claudia Gonzalez",
+        }),
+        lookup,
+        "flagged_leads",
+      ),
+    ).toBe(false);
+  });
+
+  it("does not hide Craigslist rows against the Facebook blacklist", () => {
+    expect(
+      isHiddenBlockedSellerOpportunity(
+        sampleRow({ source: "craigslist", listingSellerName: "Claudia Gonzalez" }),
+        lookup,
+        "needs_action",
+      ),
+    ).toBe(false);
   });
 });

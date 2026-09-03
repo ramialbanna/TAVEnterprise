@@ -141,17 +141,54 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     expect(map.size).toBe(0);
   });
 
-  it("skips blocked Dallas Facebook sellers for LLM prefetch (item 69)", () => {
+  it("skips blocked Facebook sellers for LLM prefetch, including stored seller on empty payload (item 74)", () => {
     const item = {
       title: "2020 Toyota Camry",
       price: 15000,
       url: "https://www.facebook.com/marketplace/item/999/",
-      sellerUrl: "https://www.facebook.com/marketplace/profile/dealer-abc/",
     };
     const blockedLookup = {
       keys: new Set(["url:https://www.facebook.com/marketplace/profile/dealer-abc"]),
     };
-    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx, blockedLookup);
+    const stored = new Map([
+      [
+        "https://www.facebook.com/marketplace/item/999/",
+        {
+          sellerUrl: "https://www.facebook.com/marketplace/profile/dealer-abc/",
+          sellerName: "Dealer",
+        },
+      ],
+    ]);
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx, blockedLookup, {
+      storedSellersByUrl: stored,
+    });
+    expect(map.size).toBe(0);
+  });
+
+  it("skips heuristic dealer listings for LLM prefetch when skipHeuristicDealers is set (item 71)", () => {
+    const item = {
+      title: "2018 Ford F-150 XLT",
+      price: 22000,
+      url: "https://www.facebook.com/marketplace/item/dealer-skip/",
+      description: "We finance! Visit our lot. Stock #A99",
+      sellerName: "Metro Auto Group",
+    };
+    const kept = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
+    expect(kept.size).toBe(1);
+    const skipped = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx, null, {
+      skipHeuristicDealers: true,
+    });
+    expect(skipped.size).toBe(0);
+  });
+
+  it("skips salvage and rebuilt title listings for LLM prefetch", () => {
+    const item = {
+      title: "2018 Ford F-150 XLT",
+      price: 9000,
+      url: "https://www.facebook.com/marketplace/item/salvage-1/",
+      description: "Salvage title, runs and drives.",
+    };
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
     expect(map.size).toBe(0);
   });
 

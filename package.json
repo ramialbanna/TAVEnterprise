@@ -23,12 +23,23 @@
     "test:int": "vitest run --config vitest.int.config.ts",
     "sync:cox-catalog": "node scripts/sync-cox-catalog.mjs",
     "eval:llm-ymms": "node scripts/eval-llm-ymms.mjs",
+    "eval:ymms-vision": "node scripts/eval-ymms-vision.mjs",
     "eval:cl-automotive-scraper": "npx vite-node scripts/eval-cl-automotive-scraper.ts",
     "try:llm-ymms-one": "node scripts/eval-llm-ymms.mjs --one",
-    "try:apify-llm-one": "node scripts/try-apify-llm-one.mjs"
+    "try:apify-llm-one": "node scripts/try-apify-llm-one.mjs",
+    "gologin:ping": "node scripts/gologin-ping.mjs",
+    "gologin:probe": "node scripts/gologin-seller-probe.mjs",
+    "gologin:enrich": "node scripts/enrich-facebook-sellers.mjs",
+    "gologin:enrich:daemon": "node scripts/enrich-facebook-sellers.mjs --write --loop --cloud",
+    "gologin:enrich:deploy": "fly deploy -c fly.seller-enrich.toml",
+    "gologin:assign-residential": "node scripts/gologin-assign-residential.mjs",
+    "gologin:open-facebook": "node scripts/gologin-open-facebook.mjs",
+    "monitor:fly-soak": "node scripts/monitor-fly-soak.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
+    "gologin": "^3.0.3",
+    "puppeteer-core": "^25.8.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

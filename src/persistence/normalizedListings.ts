@@ -16,6 +16,54 @@ export async function setNormalizedListingEntryMethod(
   if (error) throw error;
 }
 
+/** Item 74 — seller identity already persisted on this listing URL (empty Apify payload). */
+export async function loadStoredSellersByListingUrls(
+  db: SupabaseClient,
+  source: string,
+  listingUrls: readonly string[],
+): Promise<Map<string, { listingId: string; sellerUrl: string | null; sellerName: string | null }>> {
+  const out = new Map<string, { listingId: string; sellerUrl: string | null; sellerName: string | null }>();
+  if (source !== "facebook" || listingUrls.length === 0) return out;
+
+  const unique = [...new Set(listingUrls.filter(Boolean))];
+  const { data, error } = await db
+    .from("normalized_listings")
+    .select("id, listing_url, seller_url, seller_name")
+    .eq("source", source)
+    .in("listing_url", unique);
+  if (error) throw error;
+
+  for (const row of (data ?? []) as Array<{
+    id: string;
+    listing_url: string;
+    seller_url: string | null;
+    seller_name: string | null;
+  }>) {
+    if (!row.listing_url || !row.id) continue;
+    out.set(row.listing_url, {
+      listingId: row.id,
+      sellerUrl: row.seller_url,
+      sellerName: row.seller_name,
+    });
+  }
+  return out;
+}
+
+export async function stampNormalizedListingSeller(
+  db: SupabaseClient,
+  listingId: string,
+  seller: { sellerUrl?: string | null; sellerName?: string | null },
+): Promise<void> {
+  const { error } = await db
+    .from("normalized_listings")
+    .update({
+      seller_url: seller.sellerUrl?.trim() || null,
+      seller_name: seller.sellerName?.trim() || null,
+    })
+    .eq("id", listingId);
+  if (error) throw error;
+}
+
 export async function upsertNormalizedListing(
   db: SupabaseClient,
   listing: NormalizedListingInput,

@@ -1,0 +1,14 @@
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.git
+.wrangler
+node_modules
+web
+scripts/.enrich-run-state.json
+scripts/.enrich-daemon.log
+scripts/_eval-results
+docs
+test
+*.md

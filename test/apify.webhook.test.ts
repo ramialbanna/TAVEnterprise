@@ -87,6 +87,8 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     ANTHROPIC_API_KEY: "",
     LLM_YMMS_ENABLED: "false",
     LLM_YMMS_MODEL: "claude-sonnet-5",
+    SELLER_CLASSIFY_ENABLED: "false",
+    SELLER_CLASSIFY_MODEL: "claude-haiku-4-5",
     ...overrides,
   };
 }

@@ -13,6 +13,7 @@ import {
   type MmrStyleAlias,
 } from "../persistence/mmrStyleAliases";
 import { hasCoxCatalogTreeForYear, loadCoxCatalogTreeForMake } from "../persistence/coxCatalogTree";
+import { loadProvenBookableForMake } from "../persistence/coxProvenBookable";
 import {
   isOfflineConfidentCatalogMatch,
   matchListingToCoxCatalog,
@@ -20,6 +21,9 @@ import {
 } from "./matchListingToCoxCatalog";
 import { isCatalogAliasValid, normalizeCatalogAliasTokens } from "./catalogAliasValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
+import { extractListingAxisTokens } from "./listingAxisEvidence";
+import { resolveFSeriesTrimAxisAlias } from "./fSeriesTrimAxisAliases";
+import type { ProvenBookableCombo } from "./provenBookable";
 import { callAnthropicForYmms, type AnthropicCallResult } from "../llm/anthropicClient";
 import { pruneCatalogSubtreeForLlm } from "../llm/pruneCatalogSubtree";
 import type { LlmYmmsTokenUsage } from "../llm/tokenUsage";
@@ -27,6 +31,7 @@ import { log } from "../logging/logger";
 import {
   buildYmmsAnthropicPrompt,
   classifyYmmsProposalIngestOutcome,
+  findCoxPickRow,
   type YmmsAnthropicPrompt,
   type YmmsProposal,
 } from "../llm/ymmsPrompt";
@@ -92,7 +97,18 @@ export type LlmYmmsResolution =
       reasoning: string;
       catalogRowCount: number;
     } & LlmAnthropicCallMeta
-  | ({ kind: "llm_needs_review"; proposal: YmmsProposal; catalogRowCount: number } & LlmAnthropicCallMeta)
+  | ({
+      kind: "llm_needs_review";
+      proposal: YmmsProposal;
+      catalogRowCount: number;
+      /**
+       * Item 72 — a needs-review pick already passed the deterministic catalog
+       * gate; only Claude's confidence was low. Carrying the matched row lets
+       * the caller use it as a last resort instead of abstaining, in Cox's
+       * spelling rather than Claude's.
+       */
+      canonical?: { make: string; model: string; style: string };
+    } & LlmAnthropicCallMeta)
   | ({ kind: "llm_invalid_pick"; proposal: YmmsProposal; catalogRowCount: number } & LlmAnthropicCallMeta)
   | { kind: "fallback"; reason: LlmYmmsFallbackReason };
 
@@ -104,9 +120,11 @@ export type LlmYmmsDeps = {
     model: string,
     trim?: string | null,
     titleTrim?: string | null,
+    axisTokens?: readonly string[] | null,
   ) => Promise<MmrStyleAlias | null>;
   hasTreeForYear: (year: number) => Promise<boolean>;
   loadTreeRows: (year: number, make: string) => Promise<CoxCatalogTreeRow[]>;
+  loadProvenCombos: (year: number, make: string) => Promise<ProvenBookableCombo[]>;
 };
 
 /** Production wiring — real Supabase + real Anthropic call. */
@@ -114,10 +132,11 @@ export function buildLlmYmmsDeps(db: SupabaseClient, env: Env): LlmYmmsDeps {
   return {
     enabled: env.LLM_YMMS_ENABLED === "true",
     callAnthropic: (prompt: YmmsAnthropicPrompt) => callAnthropicForYmms({ env, prompt }),
-    lookupStyleAlias: (make, model, trim, titleTrim) =>
-      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim),
+    lookupStyleAlias: (make, model, trim, titleTrim, axisTokens) =>
+      lookupMmrStyleAliasWithFallback(db, make, model, trim, titleTrim, axisTokens),
     hasTreeForYear: (year: number) => hasCoxCatalogTreeForYear(db, year),
     loadTreeRows: (year: number, make: string) => loadCoxCatalogTreeForMake(db, year, make),
+    loadProvenCombos: (year: number, make: string) => loadProvenBookableForMake(db, year, make),
   };
 }
 
@@ -165,10 +184,15 @@ export async function resolveListingWithLLM(
 
   const titleTrim =
     extractTitleTrim(input.title) ?? extractTitleTrim(input.description) ?? null;
+  const axisTokens = extractListingAxisTokens({
+    title: input.title,
+    trim: input.trim,
+    description: input.description,
+  });
 
   const alias = input.skipShortcuts
     ? null
-    : await deps.lookupStyleAlias(makeRaw, modelRaw, input.trim, titleTrim);
+    : await deps.lookupStyleAlias(makeRaw, modelRaw, input.trim, titleTrim, axisTokens);
   if (alias) {
     if (isCatalogAliasValid(allRows, alias)) {
       const tokens = normalizeCatalogAliasTokens(alias);
@@ -186,6 +210,42 @@ export async function resolveListingWithLLM(
       alias_model: alias.canonicalModel,
       alias_style: alias.canonicalStyle,
     });
+  }
+
+  if (!input.skipShortcuts && !alias && axisTokens.length > 0) {
+    const provenCombos = await deps.loadProvenCombos(input.year, makeRaw);
+    const fSeriesPick = resolveFSeriesTrimAxisAlias({
+      model: modelRaw,
+      trim: input.trim,
+      titleTrim,
+      axisTokens,
+      catalogRows: allRows,
+      provenCombos,
+    });
+    if (
+      fSeriesPick &&
+      isCatalogAliasValid(allRows, {
+        canonicalMake: fSeriesPick.make,
+        canonicalModel: fSeriesPick.model,
+        canonicalStyle: fSeriesPick.style,
+      })
+    ) {
+      log("llm_ymms.f_series_trim_axis_alias", {
+        make: makeRaw,
+        model: modelRaw,
+        trim: input.trim ?? titleTrim,
+        axis_tokens: axisTokens,
+        canonical_model: fSeriesPick.model,
+        canonical_style: fSeriesPick.style,
+        kpi: true,
+      });
+      return {
+        kind: "alias_hit",
+        make: fSeriesPick.make,
+        model: fSeriesPick.model,
+        style: fSeriesPick.style,
+      };
+    }
   }
 
   if (!input.skipShortcuts) {
@@ -260,15 +320,28 @@ export async function resolveListingWithLLM(
   if (ingestOutcome === "llm_invalid_pick") {
     return { kind: "llm_invalid_pick", proposal, catalogRowCount: rows.length, ...meta };
   }
+  // Send Cox's own spelling to Manheim, not Claude's echo of the listing make.
+  // Claude answers `bmw` for a catalog that says `B M W`; forwarding that would
+  // fail the lookup even though the pick itself is right (item 72).
+  const matched = findCoxPickRow(proposal, rows);
+
   if (ingestOutcome === "llm_needs_review") {
-    return { kind: "llm_needs_review", proposal, catalogRowCount: rows.length, ...meta };
+    return {
+      kind: "llm_needs_review",
+      proposal,
+      catalogRowCount: rows.length,
+      ...(matched && {
+        canonical: { make: matched.make, model: matched.model, style: matched.style },
+      }),
+      ...meta,
+    };
   }
 
   return {
     kind: "llm_hit",
-    make: proposal.make,
-    model: proposal.model,
-    style: proposal.style,
+    make: matched?.make ?? proposal.make,
+    model: matched?.model ?? proposal.model,
+    style: matched?.style ?? proposal.style,
     confidence: proposal.confidence,
     reasoning: proposal.reasoning,
     catalogRowCount: rows.length,

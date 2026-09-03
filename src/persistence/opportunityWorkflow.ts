@@ -339,6 +339,21 @@ async function upsertWorkflowRow(
   return mapWorkflowRow(data as Record<string, unknown>);
 }
 
+/**
+ * Item 74 lock 2026-08-31 — hide a listing that is already on the queue once
+ * we know the seller is blocked. Does not invent a listing row.
+ */
+export async function suppressOpportunityForBlockedSeller(
+  db: SupabaseClient,
+  normalizedListingId: string,
+): Promise<boolean> {
+  const existing = await getWorkflowRow(db, normalizedListingId);
+  if (existing && isSuppressedFromActiveQueue(existing.status)) return false;
+  const workflow = await upsertWorkflowRow(db, normalizedListingId, { status: "bad_lead" });
+  await syncLeadFromWorkflow(db, normalizedListingId, workflow);
+  return true;
+}
+
 export async function fetchWorkflowMap(
   db: SupabaseClient,
   listingIds: string[],
@@ -758,6 +773,11 @@ export async function dismissOpportunity(
           normalizedListingId,
           sellerKey: blocked.sellerKey,
           inserted: blocked.inserted,
+          kpi: true,
+        });
+      } else {
+        log("ingest.dealer_blacklist.awaiting_seller_enrich", {
+          normalizedListingId,
           kpi: true,
         });
       }

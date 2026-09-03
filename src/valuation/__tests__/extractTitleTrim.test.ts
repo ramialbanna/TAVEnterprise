@@ -2,21 +2,17 @@ import { describe, it, expect } from "vitest";
 import { extractTitleTrim } from "../extractTitleTrim";
 
 describe("extractTitleTrim", () => {
-  it("pulls a multi-word body token from the title", () => {
-    expect(extractTitleTrim("2019 Ram 2500 Long Bed")).toBe("Long Bed");
-  });
-
-  it("pulls an EV range trim", () => {
-    expect(extractTitleTrim("2023 Tesla Model 3 Standard Range")).toBe("Standard Range");
-  });
-
   it("pulls a common pickup trim", () => {
     expect(extractTitleTrim("2020 Ram 1500 Big Horn Crew Cab")).toBe("Big Horn");
   });
 
-  it("prefers the longest match when several tokens are present", () => {
-    // "Crew Cab" (8) beats "LT" — longest, most specific wins.
-    expect(extractTitleTrim("2018 Chevrolet Silverado 1500 LT Crew Cab")).toBe("Crew Cab");
+  it("does not send cab/bed as if they were a Cox bodyname", () => {
+    expect(extractTitleTrim("2019 Ram 2500 Long Bed")).toBeNull();
+    expect(extractTitleTrim("2016 Ford F-150 SuperCrew")).toBeNull();
+  });
+
+  it("prefers a real trim over a cab token", () => {
+    expect(extractTitleTrim("2018 Chevrolet Silverado 1500 LT Crew Cab")).toBe("LT");
   });
 
   it("is case-insensitive", () => {

@@ -1,3 +1,4 @@
+import { listingMirrorPhotoUrls } from "../apify/listingMedia";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import type { SupabaseClient } from "./supabase";
 import { getCatalogMatchSuggestions } from "./catalogMatchSuggestions";
@@ -9,6 +10,12 @@ import { buildListingDiagnostics } from "./ingestRuns";
 import { resolveOpportunityStyle } from "./opportunityStyle";
 import { computeDealScore } from "../scoring/deal";
 import type { AppUser } from "./users";
+import {
+  isBlockedSellerOpportunity,
+  isPendingFacebookSellerIdentity,
+  loadBlockedSellerLookup,
+  type BlockedSellerLookup,
+} from "./blockedSellers";
 import {
   fetchWorkflowMap,
   isActiveClaim,
@@ -83,6 +90,9 @@ export interface OpportunityRow {
   seenCount: number | null;
   listingUrl: string | null;
   entryMethod: string | null;
+  /** Item 74 — used to hold Facebook cards until seller URL is known, then hide blocked keys. */
+  listingSellerName?: string | null;
+  listingSellerUrl?: string | null;
   estimateFlags: OpportunityEstimateFlags;
   maxbuySummary: MaxbuySummary | null;
   bodyType: string | null;
@@ -549,6 +559,8 @@ function mapToOpportunityRow(
     seenCount: scrapeCount,
     listingUrl: asString(listing.listing_url),
     entryMethod: asString(listing.entry_method),
+    listingSellerName: asString(listing.seller_name),
+    listingSellerUrl: asString(listing.seller_url),
     estimateFlags,
     maxbuySummary: maxbuySummary ?? null,
     bodyType: asString(listing.body_type),
@@ -586,9 +598,11 @@ function mapToOpportunityDetail(
   catalogMatchSuggestions: CatalogMatchSuggestion[] = [],
 ): OpportunityDetail {
   const reasonCodes = lead?.reason_codes;
-  const listingImages = Array.isArray(listing.images)
-    ? (listing.images as unknown[]).filter((u): u is string => typeof u === "string" && u.length > 0)
-    : [];
+  const listingImages = listingMirrorPhotoUrls(
+    Array.isArray(listing.images)
+      ? (listing.images as unknown[]).filter((u): u is string => typeof u === "string" && u.length > 0)
+      : [],
+  );
   return {
     ...row,
     reasonCodes: Array.isArray(reasonCodes) ? (reasonCodes as string[]) : [],
@@ -613,6 +627,27 @@ function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter):
   if (filter.grade) out = out.filter((r) => r.grade === filter.grade);
   if (filter.status) out = out.filter((r) => r.status === filter.status);
   return out;
+}
+
+/**
+ * Default queue views must not show a Facebook card until we have a seller URL
+ * and that seller is not in `blocked_sellers`. Flagged leads keep them.
+ */
+export function isHiddenBlockedSellerOpportunity(
+  row: Pick<OpportunityRow, "source"> & {
+    listingSellerUrl?: string | null;
+    listingSellerName?: string | null;
+  },
+  lookup: BlockedSellerLookup | null | undefined,
+  view?: OpportunityListFilter["view"],
+): boolean {
+  if (view === "flagged_leads") return false;
+  if (isPendingFacebookSellerIdentity(row.source, row.listingSellerUrl)) return true;
+  return isBlockedSellerOpportunity(lookup, {
+    source: row.source,
+    sellerUrl: row.listingSellerUrl,
+    sellerName: row.listingSellerName,
+  });
 }
 
 function needsActionReceivedAt(
@@ -713,6 +748,7 @@ function applyViewFilter(
   rows: OpportunityRow[],
   filter: OpportunityListFilter,
   workflowByListing: Map<string, WorkflowDisplayContext>,
+  blockedSellerLookup?: BlockedSellerLookup | null,
 ): OpportunityRow[] {
   const view = filter.view ?? "all";
   const now = new Date();
@@ -721,8 +757,13 @@ function applyViewFilter(
     return rows.filter((row) => matchesFlaggedLeads(row));
   }
 
-  // Default queue views exclude dismissed / terminal statuses (items 45/47).
-  const active = rows.filter((row) => !isSuppressedFromActiveQueue(row.status));
+  // Default queue views exclude dismissed / terminal statuses (items 45/47)
+  // and Facebook cards with no seller URL or a blocked seller (item 74).
+  const active = rows.filter(
+    (row) =>
+      !isSuppressedFromActiveQueue(row.status) &&
+      !isHiddenBlockedSellerOpportunity(row, blockedSellerLookup, view),
+  );
 
   if (view === "scraper_review") {
     if (!filter.scraperReviewMode) return [];
@@ -1124,7 +1165,7 @@ export async function listOpportunities(
   const offset = filter.offset ?? 0;
   const includeRecent = filter.view !== "mine" && filter.view !== "flagged_leads";
 
-  const [recentListings, leadIds, manualIds, mineIds] = await Promise.all([
+  const [recentListings, leadIds, manualIds, mineIds, blockedSellerLookup] = await Promise.all([
     includeRecent
       ? fetchRecentListings(db, filter, RECENT_LISTING_FETCH)
       : Promise.resolve([] as ListingRow[]),
@@ -1133,6 +1174,7 @@ export async function listOpportunities(
     filter.view === "mine" && filter.viewerUserId
       ? fetchMineWorkflowListingIds(db, filter.viewerUserId, QUEUE_LEAD_FETCH)
       : Promise.resolve([] as string[]),
+    loadBlockedSellerLookup(db, "facebook").catch(() => null),
   ]);
 
   const listingIds = mergeQueueListingIds(
@@ -1186,7 +1228,7 @@ export async function listOpportunities(
     review,
   );
   const filtered = applyListFilter(rows, filter);
-  const viewed = applyViewFilter(filtered, filter, workflowByListing);
+  const viewed = applyViewFilter(filtered, filter, workflowByListing, blockedSellerLookup);
   sortOpportunityRows(viewed, filter.sort ?? "last_seen_desc");
   return paginateOpportunityRows(viewed, offset, filter.limit);
 }

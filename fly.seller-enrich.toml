@@ -1,0 +1,33 @@
+# Always-on seller enrich. Deploy: fly deploy -c fly.seller-enrich.toml
+# Secrets (never commit): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+# GOLOGIN_API_TOKEN, GOLOGIN_PROFILE_ID
+app = "tav-seller-enrich"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile.enrich"
+
+[env]
+  SELLER_ENRICH_ENABLED = "true"
+  ENRICH_STATE_PATH = "/data/.enrich-run-state.json"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 10
+    soft_limit = 5
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[mounts]
+  source = "enrich_state"
+  destination = "/data"

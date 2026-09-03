@@ -92,6 +92,7 @@ export async function runCoxNoDataRetryPass(params: {
           model: candidate.rejectedModel,
           style: candidate.rejectedStyle,
         },
+        { normalizedListingId: candidate.normalizedListingId },
       );
 
       if (outcome.kind !== "hit") continue;

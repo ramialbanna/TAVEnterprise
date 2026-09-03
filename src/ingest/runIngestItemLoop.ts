@@ -7,9 +7,18 @@ import { insertRawListing } from "../persistence/rawListings";
 import { writeDeadLetter } from "../persistence/deadLetter";
 import { writeFilteredOut } from "../persistence/filteredOut";
 import {
+  loadStoredSellersByListingUrls,
   setNormalizedListingEntryMethod,
+  stampNormalizedListingSeller,
   upsertNormalizedListing,
 } from "../persistence/normalizedListings";
+import { suppressOpportunityForBlockedSeller } from "../persistence/opportunityWorkflow";
+import {
+  applyResolvedSeller,
+  collectFacebookListingUrls,
+  storedSellerForListing,
+  type StoredSeller,
+} from "./listingSellerIdentity";
 import { upsertVehicleCandidate } from "../persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../persistence/buyBoxRules";
@@ -40,10 +49,19 @@ import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerC
 import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
 import { buildLlmYmmsPrefetchInputs, buildLlmYmmsResolutionInput } from "./llmYmmsPrefetchInputs";
 import {
+  hasFacebookSellerUrlForQueue,
   isBlockedSeller,
   loadBlockedSellerLookup,
+  upsertBlockedSeller,
   type BlockedSellerLookup,
 } from "../persistence/blockedSellers";
+import {
+  classifyListingSeller,
+  shouldAutoRejectDealer,
+} from "../valuation/classifyListingSeller";
+import { SELLER_CLASSIFY_TIMEOUT_MS } from "../llm/sellerClassifyClient";
+import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
+import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
@@ -63,6 +81,11 @@ import {
   runCoxNoDataRetryPass,
   type CoxNoDataRetryCandidate,
 } from "./coxNoDataRetryPass";
+import {
+  runMmrRateLimitRetryPass,
+  type MmrRateLimitRetryCandidate,
+} from "./mmrRateLimitRetryPass";
+import type { LlmYmmsResolution } from "../valuation/resolveListingWithLLM";
 import type { IngestRequest } from "../validate";
 
 /** Wall-clock budget per ingest slice (single /ingest call or one Apify chunk). */
@@ -135,10 +158,26 @@ export async function runIngestItemLoop(
     logError("persistence", "ingest.blocked_sellers_load_failed", err, ctx);
   }
 
+  let storedSellersByUrl = new Map<string, StoredSeller>();
+  if (source === "facebook") {
+    try {
+      storedSellersByUrl = await loadStoredSellersByListingUrls(
+        db,
+        source,
+        collectFacebookListingUrls(items, adapterCtx),
+      );
+    } catch (err) {
+      logError("persistence", "ingest.stored_sellers_load_failed", err, ctx);
+    }
+  }
+
   const llmPrefetch: LlmYmmsPrefetch | null =
     getValuationLookupMode(env) === "worker"
       ? createLlmYmmsPrefetch(
-          buildLlmYmmsPrefetchInputs(items, source, adapterCtx, blockedSellerLookup),
+          buildLlmYmmsPrefetchInputs(items, source, adapterCtx, blockedSellerLookup, {
+            skipHeuristicDealers: env.SELLER_CLASSIFY_ENABLED === "true",
+            storedSellersByUrl,
+          }),
           env,
         )
       : null;
@@ -153,6 +192,7 @@ export async function runIngestItemLoop(
   let itemsSkipped = 0;
   const excellentLeads: ExcellentLeadSummary[] = [];
   const retryCandidates: CoxNoDataRetryCandidate[] = [];
+  const rateLimitRetryCandidates: MmrRateLimitRetryCandidate[] = [];
 
   for (const item of items) {
     const i = itemIndexOffset + localIndex++;
@@ -244,7 +284,54 @@ export async function runIngestItemLoop(
     }
 
     const { listing } = adapterResult;
+    applyResolvedSeller(listing, storedSellerForListing(listing, storedSellersByUrl));
     const listingCtx: LogContext = { ...itemCtx, listingUrl: listing.url };
+
+    const badTitle = listingHasSalvageOrRebuiltTitle({
+      title: listing.title,
+      description: listing.description,
+    });
+    if (badTitle) {
+      log(
+        "ingest.salvage_or_rebuilt_title_blocked",
+        { kind: badTitle.kind, matched: badTitle.matched, kpi: true },
+        listingCtx,
+      );
+      await writeFilteredOut(db, env, {
+        source,
+        source_run_id: run_id,
+        listing_url: listing.url,
+        reason_code: "salvage_or_rebuilt_title",
+        details: { kind: badTitle.kind, matched: badTitle.matched },
+        raw_listing_id: rawId,
+      });
+      rejected++;
+      continue;
+    }
+
+    const ineligible = listingIsIneligibleVehicle({
+      make: listing.make,
+      model: listing.model,
+      title: listing.title,
+      description: listing.description,
+    });
+    if (ineligible) {
+      log(
+        "ingest.ineligible_vehicle_blocked",
+        { kind: ineligible.kind, matched: ineligible.matched, kpi: true },
+        listingCtx,
+      );
+      await writeFilteredOut(db, env, {
+        source,
+        source_run_id: run_id,
+        listing_url: listing.url,
+        reason_code: "ineligible_vehicle",
+        details: { kind: ineligible.kind, matched: ineligible.matched },
+        raw_listing_id: rawId,
+      });
+      rejected++;
+      continue;
+    }
 
     if (
       blockedSellerLookup &&
@@ -270,8 +357,78 @@ export async function runIngestItemLoop(
         },
         raw_listing_id: rawId,
       });
+      const existingListingId = storedSellerForListing(listing, storedSellersByUrl)?.listingId;
+      if (existingListingId) {
+        try {
+          await stampNormalizedListingSeller(db, existingListingId, {
+            sellerUrl: listing.sellerUrl,
+            sellerName: listing.sellerName,
+          });
+          await suppressOpportunityForBlockedSeller(db, existingListingId);
+        } catch (err) {
+          logError("persistence", "ingest.blocked_dealer_suppress_failed", err, listingCtx);
+        }
+      }
       rejected++;
       continue;
+    }
+
+    if (env.SELLER_CLASSIFY_ENABLED === "true") {
+      const allowLlm = Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
+      const classification = await classifyListingSeller(
+        {
+          title: listing.title,
+          description: listing.description,
+          sellerName: listing.sellerName,
+          images: listing.images,
+        },
+        env,
+        { allowLlm },
+      );
+      if (shouldAutoRejectDealer(classification)) {
+        log(
+          "ingest.dealer_listing_blocked",
+          {
+            seller_type: classification.sellerType,
+            confidence: classification.confidence,
+            source: classification.source,
+            signals: classification.signals,
+            seller_url: listing.sellerUrl ?? null,
+            seller_name: listing.sellerName ?? null,
+            kpi: true,
+          },
+          listingCtx,
+        );
+        await writeFilteredOut(db, env, {
+          source,
+          source_run_id: run_id,
+          listing_url: listing.url,
+          reason_code: "dealer_listing",
+          details: {
+            seller_type: classification.sellerType,
+            confidence: classification.confidence,
+            source: classification.source,
+            signals: classification.signals,
+            reasoning: classification.reasoning,
+            seller_url: listing.sellerUrl ?? null,
+            seller_name: listing.sellerName ?? null,
+          },
+          raw_listing_id: rawId,
+        });
+        try {
+          await upsertBlockedSeller(db, {
+            source,
+            region,
+            sellerUrl: listing.sellerUrl,
+            sellerName: listing.sellerName,
+            reason: "dealer",
+          });
+        } catch (err) {
+          logError("persistence", "ingest.dealer_listing_blocklist_failed", err, listingCtx);
+        }
+        rejected++;
+        continue;
+      }
     }
 
     let normResult: { id: string; isNew: boolean; priceChanged: boolean; mileageChanged: boolean };
@@ -326,6 +483,7 @@ export async function runIngestItemLoop(
     } | null = null;
     let llmTextForRetry: ReturnType<typeof buildLlmYmmsResolutionInput> | null = null;
     let resolvedAliasMake: string | null = null;
+    let llmResolutionForRetry: LlmYmmsResolution | null = null;
 
     const prefetchIndex = localIndex - 1;
 
@@ -357,6 +515,7 @@ export async function runIngestItemLoop(
         const llmResolution = await llmPrefetch!.consume(prefetchIndex);
         const llmText = buildLlmYmmsResolutionInput(item, listing);
         llmTextForRetry = llmText;
+        llmResolutionForRetry = llmResolution ?? null;
         resolvedAliasMake = llmResolution?.kind === "alias_hit" ? llmResolution.make : null;
         const outcome = await getMmrLookupOutcome(
           {
@@ -374,7 +533,7 @@ export async function runIngestItemLoop(
             listingMileage: llmText.listingMileage ?? undefined,
           },
           env,
-          { llmResolution },
+          { llmResolution, normalizedListingId: normResult.id },
         );
         if (outcome.kind === "hit") {
           mmrResult = outcome.result;
@@ -456,6 +615,26 @@ export async function runIngestItemLoop(
             rejectedModel: workerMiss.lookupModel,
             rejectedStyle: workerMiss.lookupTrim,
             rejectedAliasMake: resolvedAliasMake,
+          });
+        }
+
+        // Item 72 action 8 — re-price after Manheim 429; identity already resolved.
+        if (
+          workerMiss.reason === "cox_rate_limited" &&
+          !listing.vin &&
+          llmResolutionForRetry
+        ) {
+          rateLimitRetryCandidates.push({
+            normalizedListingId: normResult.id,
+            ...(vcId && { vehicleCandidateId: vcId }),
+            listing,
+            llmResolution: llmResolutionForRetry,
+            llmText: {
+              description: llmTextForRetry?.description ?? undefined,
+              condition: llmTextForRetry?.condition ?? undefined,
+              location: llmTextForRetry?.location ?? undefined,
+              listingMileage: llmTextForRetry?.listingMileage ?? undefined,
+            },
           });
         }
       } catch (err) {
@@ -640,7 +819,10 @@ export async function runIngestItemLoop(
             },
             listingCtx,
           );
-          if (grade === "excellent") {
+          if (
+            grade === "excellent" &&
+            (source !== "facebook" || hasFacebookSellerUrlForQueue(listing.sellerUrl))
+          ) {
             excellentLeads.push({
               leadId: lead.id,
               finalScore,
@@ -683,6 +865,20 @@ export async function runIngestItemLoop(
     execCtx.waitUntil(
       runCoxNoDataRetryPass({ db, env, execCtx, candidates: retryCandidates, ctx }).catch((err) => {
         logError("valuation", "ingest.cox_no_data_retry_pass_failed", err, ctx);
+      }),
+    );
+  }
+
+  if (rateLimitRetryCandidates.length > 0) {
+    execCtx.waitUntil(
+      runMmrRateLimitRetryPass({
+        db,
+        env,
+        execCtx,
+        candidates: rateLimitRetryCandidates,
+        ctx,
+      }).catch((err) => {
+        logError("valuation", "ingest.mmr_rate_limit_retry_pass_failed", err, ctx);
       }),
     );
   }

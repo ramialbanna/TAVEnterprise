@@ -4,6 +4,7 @@
  */
 
 import { extractTitleTrim } from "./extractTitleTrim";
+import { extractListingAxisTokens } from "./listingAxisEvidence";
 import { buildListingCatalogEvidenceText } from "./listingCatalogEvidence";
 import { matchCatalogOption, pickCatalogOptionFuzzy } from "./matchCatalogOption";
 import {
@@ -70,6 +71,7 @@ export type IngestCatalogOfflineDeps = {
     model: string,
     trim?: string | null,
     titleTrim?: string | null,
+    axisTokens?: readonly string[] | null,
   ) => Promise<MmrStyleAlias | null>;
   loadTreeRows?: (year: number, make: string) => Promise<CoxCatalogTreeRow[]>;
   hasTreeForYear?: (year: number) => Promise<boolean>;
@@ -95,8 +97,19 @@ async function tryOfflineIngestCatalogResolution(
   if (treeRows.length === 0) return null;
 
   const titleTrim = extractTitleTrim(input.title) ?? extractTitleTrim(input.description);
+  const axisTokens = extractListingAxisTokens({
+    title: input.title,
+    trim: styleRaw,
+    description: input.description,
+  });
   if (deps.lookupStyleAlias) {
-    const alias = await deps.lookupStyleAlias(makeRaw, modelRaw, styleRaw || null, titleTrim);
+    const alias = await deps.lookupStyleAlias(
+      makeRaw,
+      modelRaw,
+      styleRaw || null,
+      titleTrim,
+      axisTokens,
+    );
     if (alias && isCatalogAliasValid(treeRows, alias)) {
       const tokens = normalizeCatalogAliasTokens(alias);
       return {

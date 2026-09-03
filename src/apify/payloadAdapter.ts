@@ -36,6 +36,30 @@ interface RaidrApiListingPrice {
 
 interface RaidrApiSeller {
   name?: unknown;
+  id?: unknown;
+  url?: unknown;
+  profile_url?: unknown;
+}
+
+const FB_MARKETPLACE_PROFILE_URL_PREFIX = "https://www.facebook.com/marketplace/profile/";
+
+function marketplaceProfileUrlFromSellerId(id: unknown): string | undefined {
+  const raw = readString(id) ?? (typeof id === "number" && Number.isFinite(id) ? String(id) : undefined);
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  return `${FB_MARKETPLACE_PROFILE_URL_PREFIX}${raw}`;
+}
+
+function marketplaceProfileUrlFromUnknown(value: unknown): string | undefined {
+  const raw = readString(value);
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (!/facebook\.com$/i.test(url.hostname) && url.hostname !== "fb.com") return undefined;
+    if (!/\/marketplace\/profile\/\d+\/?$/i.test(url.pathname)) return undefined;
+    return `${FB_MARKETPLACE_PROFILE_URL_PREFIX}${url.pathname.match(/\/marketplace\/profile\/(\d+)/i)?.[1]}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function readString(value: unknown): string | undefined {
@@ -123,17 +147,47 @@ export function mapRaidrApiItem(item: unknown): unknown {
     if (extracted !== undefined) out.price = extracted;
   }
 
-  // sellerName — adapter recognises sellerName / seller_name / seller; raidr-api
-  // emits nested marketplace_listing_seller.name.
+  // sellerName / sellerUrl — raidr-api emits nested marketplace_listing_seller
+  // { id, name }. Detail-mode sometimes puts the same object on
+  // extraListingData.seller (often {} today — still map it). Numeric `id` is
+  // the Marketplace profile we persist as sellerUrl.
+  const sellerCandidates: unknown[] = [rec.marketplace_listing_seller];
+  const eldForSeller = rec.extraListingData;
+  if (eldForSeller && typeof eldForSeller === "object" && !Array.isArray(eldForSeller)) {
+    sellerCandidates.push((eldForSeller as Record<string, unknown>).seller);
+  }
+  sellerCandidates.push(rec.seller);
+
   if (
     readString(rec.sellerName) === undefined &&
     readString(rec.seller_name) === undefined &&
     readString(rec.seller) === undefined
   ) {
-    const seller = rec.marketplace_listing_seller;
-    if (seller && typeof seller === "object" && !Array.isArray(seller)) {
+    for (const seller of sellerCandidates) {
+      if (!seller || typeof seller !== "object" || Array.isArray(seller)) continue;
       const name = readString((seller as RaidrApiSeller).name);
-      if (name) out.sellerName = name;
+      if (name) {
+        out.sellerName = name;
+        break;
+      }
+    }
+  }
+
+  if (readString(rec.sellerUrl) === undefined && readString(rec.seller_url) === undefined) {
+    for (const seller of sellerCandidates) {
+      if (!seller || typeof seller !== "object" || Array.isArray(seller)) continue;
+      const s = seller as RaidrApiSeller;
+      const fromUrl =
+        marketplaceProfileUrlFromUnknown(s.url) ?? marketplaceProfileUrlFromUnknown(s.profile_url);
+      if (fromUrl) {
+        out.sellerUrl = fromUrl;
+        break;
+      }
+      const fromId = marketplaceProfileUrlFromSellerId(s.id);
+      if (fromId) {
+        out.sellerUrl = fromId;
+        break;
+      }
     }
   }
 

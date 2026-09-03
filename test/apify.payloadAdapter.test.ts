@@ -208,10 +208,34 @@ describe("mapRaidrApiItem — sellerName", () => {
     expect(out.sellerName).toBe("Dealer Joe");
   });
 
+  it("maps a numeric marketplace_listing_seller.id to sellerUrl", () => {
+    const out = mapRaidrApiItem(
+      raidrItem({
+        marketplace_listing_seller: { __typename: "User", id: "61560214693807", name: "Claudia Gonzalez" },
+      }),
+    ) as Record<string, unknown>;
+    expect(out.sellerName).toBe("Claudia Gonzalez");
+    expect(out.sellerUrl).toBe("https://www.facebook.com/marketplace/profile/61560214693807");
+  });
+
+  it("does not invent a sellerUrl from a non-numeric seller id", () => {
+    const out = mapRaidrApiItem(raidrItem()) as Record<string, unknown>;
+    expect(out.sellerUrl).toBeUndefined();
+  });
+
   it("leaves sellerName undefined when marketplace_listing_seller is null", () => {
     const item = raidrItem({ marketplace_listing_seller: null });
     const out = mapRaidrApiItem(item) as Record<string, unknown>;
     expect(out.sellerName).toBeUndefined();
+  });
+
+  it("extracts extraListingData.seller.name when the top-level seller object is empty", () => {
+    const item = raidrItem({
+      marketplace_listing_seller: null,
+      extraListingData: { seller: { name: "Crystal Auto Group" } },
+    });
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.sellerName).toBe("Crystal Auto Group");
   });
 
   it("preserves an existing flat sellerName", () => {

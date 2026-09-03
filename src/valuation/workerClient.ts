@@ -23,9 +23,20 @@ import {
 import { insertLlmYmmsDecision } from "../persistence/llmYmmsDecisions";
 import { maybeLearnIngestStyleAlias } from "./learnIngestStyleAlias";
 import {
-  buildListingStyleAliasKey,
   deleteMmrStyleAlias,
+  listListingStyleAliasLookupKeys,
 } from "../persistence/mmrStyleAliases";
+import { extractListingAxisTokens } from "./listingAxisEvidence";
+import { loadProvenBookableForMake } from "../persistence/coxProvenBookable";
+import {
+  catalogStyleContainsListingTrim,
+  findProvenBookableCombo,
+  type ProvenBookableCombo,
+} from "./provenBookable";
+import type { SupabaseClient } from "../persistence/supabase";
+
+/** Item 72 — only swap to a booked #2 when it is this close to #1. Wider gaps are different vehicles. */
+export const LAST_RESORT_CLOSE_SCORE_DELTA = 10;
 
 /**
  * Diagnostic reason an MMR lookup did not produce a value. Caller-visible
@@ -62,6 +73,10 @@ import {
  *                          any catalog or Manheim call. Ineligible inventory — exclude
  *                          from MMR hit-rate denominators rather than counting it as a
  *                          miss we could have converted.
+ *   not_proven_bookable  — item 72 action 2: the tokens we would send have never
+ *                          returned money from Cox, and they did not come from a
+ *                          catalog-valid ladder hit. Listing garbage and unbookable
+ *                          last-resort guesses stop here instead of becoming cox_no_data.
  */
 export type MmrMissReason =
   | "not_configured"
@@ -80,7 +95,8 @@ export type MmrMissReason =
   | "cox_timeout"
   | "envelope_invalid"
   | "llm_invalid_pick"
-  | "llm_unavailable";
+  | "llm_unavailable"
+  | "not_proven_bookable";
 
 /**
  * Map an intel non-2xx response to a specific, actionable miss reason.
@@ -295,7 +311,126 @@ export type MmrLookupOutcomeOpts = {
    * one listing's answer, not a pattern worth caching for every future listing.
    */
   skipAliasLearning?: boolean;
+  /**
+   * Item 72 audit gap — `tav.llm_ymms_decisions.normalized_listing_id`.
+   * Ingest has already upserted the listing when performMmrCall runs.
+   * Omit on MMR Lab / VIN-only callers (column stays null).
+   */
+  normalizedListingId?: string | null;
 };
+
+export type LastResortCatalogPick = {
+  make: string;
+  model: string;
+  style: string;
+  source: "llm_needs_review" | "catalog_suggestion";
+};
+
+/**
+ * Item 72 — the best real Cox row we can offer when the ladder failed to
+ * commit to one, so ingest stops returning nothing while holding the answer
+ * sheet.
+ *
+ * Both sources are catalog rows, never listing text:
+ *   - a `llm_needs_review` pick already passed the deterministic catalog gate;
+ *     only Claude's self-reported confidence was low. That is a stronger
+ *     candidate than any offline score, so it wins.
+ *   - otherwise matcher suggestions. When the allowlist is loaded, only a
+ *     booked row in the close-score window of the top suggestion is kept —
+ *     walking a far-behind sibling is the blind retry we rejected. If the
+ *     listing still names a trim, a booked style that contains those tokens
+ *     wins inside that window; a leftover listing word is never the pick.
+ *
+ * The result is always flagged estimated by the caller, so a closer sees the
+ * style was inferred and can correct it (§72 action 9).
+ */
+export function resolveLastResortCatalogPick(
+  llmResolution: LlmYmmsResolution,
+  suggestions: CatalogMatchSuggestion[] | undefined,
+  provenCombos?: readonly ProvenBookableCombo[] | null,
+  listingTrim?: string | null,
+): LastResortCatalogPick | null {
+  const constrain = (provenCombos?.length ?? 0) > 0;
+  const leftoverTrim = listingTrim?.trim() || "";
+  const take = (
+    pick: { make: string; model: string; style: string },
+    source: LastResortCatalogPick["source"],
+  ): LastResortCatalogPick | null => {
+    if (!constrain) return { ...pick, source };
+    const booked = findProvenBookableCombo(provenCombos ?? [], pick);
+    return booked ? { ...booked, source } : null;
+  };
+
+  if (llmResolution.kind === "llm_needs_review" && llmResolution.canonical) {
+    const pick = take(llmResolution.canonical, "llm_needs_review");
+    if (pick) return pick;
+  }
+
+  const complete = (suggestions ?? []).filter(
+    (row): row is CatalogMatchSuggestion & { make: string; model: string; style: string } =>
+      Boolean(row.make && row.model && row.style),
+  );
+  if (complete.length === 0) return null;
+
+  if (!constrain) {
+    const top = complete[0]!;
+    return take({ make: top.make, model: top.model, style: top.style }, "catalog_suggestion");
+  }
+
+  const topScore = complete[0]!.score;
+  const closeWindow = complete.filter(
+    (row) => row.score >= topScore - LAST_RESORT_CLOSE_SCORE_DELTA,
+  );
+
+  const takeSuggestion = (
+    row: CatalogMatchSuggestion & { make: string; model: string; style: string },
+  ): LastResortCatalogPick | null =>
+    take({ make: row.make, model: row.model, style: row.style }, "catalog_suggestion");
+
+  if (leftoverTrim) {
+    const trimMatches = closeWindow.filter((row) =>
+      catalogStyleContainsListingTrim(row.style, leftoverTrim),
+    );
+    if (trimMatches.length > 0) {
+      for (const row of trimMatches) {
+        const pick = takeSuggestion(row);
+        if (pick) return pick;
+      }
+      return null;
+    }
+    return null;
+  }
+
+  for (const row of closeWindow) {
+    const pick = takeSuggestion(row);
+    if (pick) return pick;
+  }
+
+  return null;
+}
+
+async function writeLlmYmmsAudit(
+  db: ReturnType<typeof getSupabaseClient>,
+  params: Pick<MmrParams, "year" | "make" | "model" | "trim" | "title">,
+  llmResolution: LlmYmmsResolution,
+  normalizedListingId?: string | null,
+): Promise<void> {
+  if (llmResolution.kind === "fallback") return;
+  if (params.year === undefined || !params.make) return;
+  try {
+    await insertLlmYmmsDecision(db, {
+      normalizedListingId: normalizedListingId ?? null,
+      year: params.year,
+      inputMake: params.make,
+      inputModel: params.model,
+      inputTrim: params.trim,
+      inputTitle: params.title,
+      ...llmResolutionToAuditFields(llmResolution),
+    });
+  } catch (err) {
+    logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
+  }
+}
 
 async function performMmrCall(
   params: MmrParams,
@@ -396,20 +531,7 @@ async function performMmrCall(
       ));
     llmResolutionForLearn = llmResolution;
 
-    if (llmResolution.kind !== "fallback") {
-      try {
-        await insertLlmYmmsDecision(db, {
-          year,
-          inputMake: make,
-          inputModel: model,
-          inputTrim: params.trim,
-          inputTitle: params.title,
-          ...llmResolutionToAuditFields(llmResolution),
-        });
-      } catch (err) {
-        logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
-      }
-    }
+    await writeLlmYmmsAudit(db, params, llmResolution, opts?.normalizedListingId);
 
     const catalogResolved =
       llmResolution.kind === "alias_hit" ||
@@ -451,7 +573,30 @@ async function performMmrCall(
       ref,
     );
 
-    if (catalogResolved.modelVariantAmbiguous && !catalogResolved.model) {
+    // Item 72 action 2 — Cox tokens that have already returned money. Stronger
+    // than the catalog tree. Last-resort walks this set; listing-text fallback
+    // is refused when the set is loaded and the tokens have never booked.
+    const provenCombos = await loadProvenBookableForMake(db, year, make);
+
+    // Item 72 — the ladder used to abstain here even though the catalog for
+    // this (year, make) was loaded and every legal style was in hand: 82% of
+    // model_variant_missing / trim_missing misses had a tree. Abstaining and
+    // failing cost the same, but abstaining cannot win, so fall back to the
+    // best real catalog row rather than returning nothing.
+    const leftoverListingTrim =
+      params.trim?.trim() ||
+      extractTitleTrim(params.title) ||
+      extractTitleTrim(params.description) ||
+      "";
+
+    const lastResort = resolveLastResortCatalogPick(
+      llmResolution,
+      catalogMatchSuggestions,
+      provenCombos,
+      leftoverListingTrim || null,
+    );
+
+    if (catalogResolved.modelVariantAmbiguous && !catalogResolved.model && !lastResort) {
       log("ingest.mmr_catalog_model_variant_unmatched", {
         year,
         make: catalogResolved.make,
@@ -475,30 +620,99 @@ async function performMmrCall(
       };
     }
 
-    const sendMake = catalogResolved.make ?? normalized.canonicalMake ?? make;
-    const sendModel = catalogResolved.model ?? normalized.canonicalModel ?? model;
+    if (!catalogResolved.model && lastResort) {
+      log("ingest.mmr_last_resort_catalog_pick", {
+        year,
+        make: lastResort.make,
+        model: lastResort.model,
+        style: lastResort.style,
+        source: lastResort.source,
+        listing_model: model,
+        kpi: true,
+      });
+    }
+
+    const catalogCommitted = Boolean(catalogResolved.model && catalogResolved.style);
+    const refuseListingWords = !catalogCommitted && provenCombos.length > 0;
+    let sendMake = catalogResolved.make ?? lastResort?.make ?? normalized.canonicalMake ?? make;
+    let sendModel = catalogResolved.model ?? lastResort?.model ?? normalized.canonicalModel ?? model;
+    // Raw listing trim is never a Cox bodyname. When the allowlist is loaded
+    // and the ladder did not commit, only a catalog row (including last-resort)
+    // may go to Manheim — leftover words like `XLT` / `Lariat` / `Platinum`
+    // miss not_proven_bookable instead of being sent.
     let sendTrim =
       catalogResolved.style ??
-      params.trim?.trim() ??
-      normalized.trim?.trim() ??
-      "";
-    const lookupTrimEstimated = catalogResolved.style ? catalogResolved.styleEstimated : false;
+      lastResort?.style ??
+      (refuseListingWords ? "" : leftoverListingTrim);
+    const lookupTrimEstimated = catalogResolved.style
+      ? catalogResolved.styleEstimated
+      : lastResort != null;
 
-    if (!sendTrim) {
-      const derived =
-        extractTitleTrim(params.title) ?? extractTitleTrim(params.description);
-      if (derived) {
-        sendTrim = derived;
-        log("ingest.mmr_trim_from_title", { derived_trim: derived });
+    if (!sendTrim && !refuseListingWords && leftoverListingTrim) {
+      sendTrim = leftoverListingTrim;
+      if (!params.trim?.trim()) {
+        log("ingest.mmr_trim_from_title", { derived_trim: leftoverListingTrim });
       }
     }
 
     if (!sendTrim) {
+      if (refuseListingWords && leftoverListingTrim) {
+        log("ingest.mmr_not_proven_bookable", {
+          year,
+          make: sendMake,
+          model: sendModel,
+          style: leftoverListingTrim,
+          listing_model: model,
+          kpi: true,
+        });
+        return {
+          kind: "miss",
+          reason: "not_proven_bookable",
+          method: "year_make_model",
+          normalizationConfidence: "partial",
+          lookupMake: sendMake,
+          lookupModel: sendModel,
+          lookupTrim: leftoverListingTrim,
+          catalogMatchSuggestions,
+          ...mileageMeta,
+        };
+      }
       return {
         kind: "miss",
         reason: "trim_missing",
         method: "year_make_model",
         normalizationConfidence: normalized.normalizationConfidence,
+        catalogMatchSuggestions,
+        ...mileageMeta,
+      };
+    }
+
+    const provenMatch = findProvenBookableCombo(provenCombos, {
+      make: sendMake,
+      model: sendModel,
+      style: sendTrim,
+    });
+    if (provenMatch) {
+      sendMake = provenMatch.make;
+      sendModel = provenMatch.model;
+      sendTrim = provenMatch.style;
+    } else if (!catalogCommitted && provenCombos.length > 0) {
+      log("ingest.mmr_not_proven_bookable", {
+        year,
+        make: sendMake,
+        model: sendModel,
+        style: sendTrim,
+        listing_model: model,
+        kpi: true,
+      });
+      return {
+        kind: "miss",
+        reason: "not_proven_bookable",
+        method: "year_make_model",
+        normalizationConfidence: "partial",
+        lookupMake: sendMake,
+        lookupModel: sendModel,
+        lookupTrim: sendTrim,
         catalogMatchSuggestions,
         ...mileageMeta,
       };
@@ -751,6 +965,50 @@ async function performMmrCall(
 
 }
 
+/** Item 72 action 7 — retire only after a booked replacement, not before the re-ask. */
+async function retireAliasAfterSuccessfulNoDataRetry(
+  db: SupabaseClient,
+  params: MmrParams,
+  rejected: { make: string; model: string; style: string },
+): Promise<void> {
+  const { year, make, model } = params;
+  if (year === undefined || !make || !model) return;
+
+  const titleTrim =
+    extractTitleTrim(params.title) ?? extractTitleTrim(params.description) ?? null;
+  const axisTokens = extractListingAxisTokens({
+    title: params.title,
+    trim: params.trim,
+    description: params.description,
+  });
+  const aliasKeys = listListingStyleAliasLookupKeys(
+    make,
+    model,
+    params.trim,
+    titleTrim,
+    axisTokens,
+  );
+
+  for (const aliasKey of aliasKeys) {
+    await deleteMmrStyleAlias(db, {
+      aliasKey,
+      canonicalMake: rejected.make,
+      canonicalModel: rejected.model,
+    });
+  }
+
+  log("ingest.mmr_alias_retired_after_no_data", {
+    year,
+    listing_make: make,
+    listing_model: model,
+    alias_model: rejected.model,
+    alias_style: rejected.style,
+    alias_keys: aliasKeys,
+    axis_tokens: axisTokens,
+    kpi: true,
+  });
+}
+
 /**
  * Item 72 — second and final identity attempt after Manheim returned no book
  * value on the Y/M/M path.
@@ -760,8 +1018,9 @@ async function performMmrCall(
  * full 23.5s budget and truncates, so the headroom check rejected nearly every
  * candidate (`ingest.mmr_no_data_retry_skipped`, `reason: batch_deadline`).
  *
- * Retires the alias behind the rejected pick, re-asks Claude with that pick
- * named as already-wrong, then re-prices by handing the new resolution back to
+ * Retires the alias behind the rejected pick only after Claude finds a different
+ * pick that Manheim books, then re-asks Claude with that pick named as
+ * already-wrong, then re-prices by handing the new resolution back to
  * performMmrCall as a precomputed `llmResolution` — so the send, envelope
  * parsing, and miss classification all stay on one code path. Alias learning is
  * suppressed: a corrected second pick is one listing's answer, not a confirmed
@@ -771,6 +1030,7 @@ export async function retryMmrAfterCoxNoData(
   params: MmrParams,
   env: Env,
   rejected: { make?: string | null; model: string; style: string },
+  opts?: { normalizedListingId?: string | null },
 ): Promise<MmrLookupOutcome & { retried: boolean }> {
   const { year, make, model } = params;
   const notRetried = { kind: "miss", reason: "cox_no_data", method: "year_make_model", retried: false } as const;
@@ -778,29 +1038,6 @@ export async function retryMmrAfterCoxNoData(
   if (year === undefined || !make || !model) return notRetried;
 
   const db = getSupabaseClient(env);
-
-  // The alias produced tokens Manheim will not price. Leaving it in place
-  // re-fails every future listing with the same make/model/trim and pays for
-  // this retry each time (item 65 learned it; item 72 retires it).
-  if (rejected.make) {
-    try {
-      await deleteMmrStyleAlias(db, {
-        aliasKey: buildListingStyleAliasKey(make, model, params.trim),
-        canonicalMake: rejected.make,
-        canonicalModel: rejected.model,
-      });
-      log("ingest.mmr_alias_retired_after_no_data", {
-        year,
-        listing_make: make,
-        listing_model: model,
-        alias_model: rejected.model,
-        alias_style: rejected.style,
-        kpi: true,
-      });
-    } catch (err) {
-      logError("valuation", "ingest.mmr_alias_retire_failed", err);
-    }
-  }
 
   const retryResolution = await resolveListingWithLLM(
     {
@@ -821,22 +1058,8 @@ export async function retryMmrAfterCoxNoData(
     buildLlmYmmsDeps(db, env),
   );
 
-  if (retryResolution.kind !== "fallback") {
-    try {
-      await insertLlmYmmsDecision(db, {
-        year,
-        inputMake: make,
-        inputModel: model,
-        inputTrim: params.trim,
-        inputTitle: params.title,
-        ...llmResolutionToAuditFields(retryResolution),
-      });
-    } catch (err) {
-      logError("valuation", "ingest.llm_ymms_decision_write_failed", err);
-    }
-  }
-
   if (retryResolution.kind !== "llm_hit") {
+    await writeLlmYmmsAudit(db, params, retryResolution, opts?.normalizedListingId);
     log("ingest.mmr_no_data_retry_skipped", {
       year,
       make,
@@ -851,6 +1074,7 @@ export async function retryMmrAfterCoxNoData(
     retryResolution.model.trim().toLowerCase() === rejected.model.trim().toLowerCase() &&
     retryResolution.style.trim().toLowerCase() === rejected.style.trim().toLowerCase();
   if (samePick) {
+    await writeLlmYmmsAudit(db, params, retryResolution, opts?.normalizedListingId);
     log("ingest.mmr_no_data_retry_skipped", {
       year,
       make,
@@ -864,7 +1088,20 @@ export async function retryMmrAfterCoxNoData(
   const outcome = await getMmrLookupOutcome(params, env, {
     llmResolution: retryResolution,
     skipAliasLearning: true,
+    normalizedListingId: opts?.normalizedListingId,
   });
+
+  if (outcome.kind === "hit" && rejected.make) {
+    try {
+      await retireAliasAfterSuccessfulNoDataRetry(db, params, {
+        make: rejected.make,
+        model: rejected.model,
+        style: rejected.style,
+      });
+    } catch (err) {
+      logError("valuation", "ingest.mmr_alias_retire_failed", err);
+    }
+  }
 
   log("ingest.mmr_no_data_retry", {
     year,

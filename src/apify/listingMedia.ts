@@ -13,10 +13,57 @@ function isHttpUrl(value: string): boolean {
   return value.startsWith("http://") || value.startsWith("https://");
 }
 
+/**
+ * Facebook `primaryImage` URLs carry `&ctp=s261x260` (thumbnail crop).
+ * Strip only `ctp` — `stp` is part of the signed URL and must stay.
+ * Verified: the same signed link then returns 1536×1536. See docs/NEXT_STEPS.md §73.
+ */
+export function upgradeFacebookListingPhotoUrl(url: string): string {
+  if (!/[?&]ctp=/i.test(url)) return url;
+  return url.replace(/([?&])ctp=[^&]*&/i, "$1").replace(/[?&]ctp=[^&]*$/i, "");
+}
+
+/** Full-res URLs for the detail mirror. Strips `ctp` and dedupes. */
+export function listingMirrorPhotoUrls(urls: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of urls) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const url = upgradeFacebookListingPhotoUrl(trimmed);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
+}
+
 function pushUrl(urls: string[], seen: Set<string>, raw: string | undefined): void {
-  if (!raw || !isHttpUrl(raw) || seen.has(raw)) return;
-  seen.add(raw);
-  urls.push(raw);
+  if (!raw || !isHttpUrl(raw)) return;
+  const url = upgradeFacebookListingPhotoUrl(raw);
+  if (seen.has(url)) return;
+  seen.add(url);
+  urls.push(url);
+}
+
+/** One full-res HTTPS photo for the seller-type vision call. */
+export const SELLER_CLASSIFY_MAX_IMAGES = 1;
+
+export function selectSellerClassifyImageUrls(images: unknown): string[] {
+  if (!Array.isArray(images)) return [];
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of images) {
+    if (typeof raw !== "string") continue;
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith("https://")) continue;
+    const url = upgradeFacebookListingPhotoUrl(trimmed);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+    if (urls.length >= SELLER_CLASSIFY_MAX_IMAGES) break;
+  }
+  return urls;
 }
 
 function collectFromUnknownMediaEntry(

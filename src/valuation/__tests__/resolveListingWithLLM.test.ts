@@ -24,6 +24,7 @@ function baseDeps(overrides: Partial<LlmYmmsDeps> = {}): LlmYmmsDeps {
     lookupStyleAlias: vi.fn(async (): Promise<MmrStyleAlias | null> => null),
     hasTreeForYear: vi.fn(async () => true),
     loadTreeRows: vi.fn(async () => ROWS),
+    loadProvenCombos: vi.fn(async () => []),
     ...overrides,
   };
 }
@@ -81,6 +82,95 @@ describe("resolveListingWithLLM", () => {
       make: "RAM",
       model: "1500",
       style: "4D Crew Cab Big Horn",
+    });
+    expect(deps.callAnthropic).not.toHaveBeenCalled();
+    expect(deps.lookupStyleAlias).toHaveBeenCalledWith(
+      "Ram",
+      "1500 Bighorn",
+      "big horn",
+      expect.any(String),
+      ["4wd", "crew"],
+    );
+  });
+
+  it("passes drivetrain and engine into alias lookup and does not use a short key", async () => {
+    const lookupStyleAlias = vi.fn(async (): Promise<MmrStyleAlias | null> => null);
+    const deps = baseDeps({
+      lookupStyleAlias,
+      callAnthropic: vi.fn(async (): Promise<AnthropicCallResult> => ({
+        kind: "ok",
+        proposal: {
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.9,
+          reasoning: "ok",
+          needsReview: false,
+        },
+        latencyMs: 10,
+        model: "claude-sonnet-5",
+      })),
+    });
+
+    await resolveListingWithLLM(
+      {
+        year: 2017,
+        make: "Ford",
+        model: "F-150",
+        trim: "xlt",
+        title: "FORD F150 XLT 2017 4x4 V6",
+      },
+      deps,
+    );
+
+    expect(lookupStyleAlias).toHaveBeenCalledWith("Ford", "F-150", "xlt", expect.anything(), [
+      "4wd",
+      "v6",
+    ]);
+  });
+
+  it("returns alias_hit from the F-series trim+axis resolver when the alias table misses", async () => {
+    const fordRows: CoxCatalogTreeRow[] = [
+      {
+        year: 2018,
+        make: "FORD",
+        model: "F150 4WD V6",
+        style: "CREW CAB 3.5L XLT",
+        searchText: "",
+        variantKind: null,
+      },
+      {
+        year: 2018,
+        make: "FORD",
+        model: "F150 4WD V6",
+        style: "CREW CAB 3.5L LARIAT",
+        searchText: "",
+        variantKind: null,
+      },
+    ];
+    const deps = baseDeps({
+      loadTreeRows: vi.fn(async () => fordRows),
+      loadProvenCombos: vi.fn(async () => [
+        { make: "FORD", model: "F150 4WD V6", style: "CREW CAB 3.5L XLT" },
+      ]),
+    });
+
+    const result = await resolveListingWithLLM(
+      {
+        year: 2018,
+        make: "Ford",
+        model: "f-150",
+        trim: "xlt",
+        title: "2018 Ford F-150 SuperCrew XLT 4x4 3.5L V6",
+      },
+      deps,
+    );
+
+    expect(result).toEqual({
+      kind: "alias_hit",
+      make: "FORD",
+      model: "F150 4WD V6",
+      style: "CREW CAB 3.5L XLT",
     });
     expect(deps.callAnthropic).not.toHaveBeenCalled();
   });

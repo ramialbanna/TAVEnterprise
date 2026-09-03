@@ -6,6 +6,7 @@ import type {
   NormalizationConfidence,
 } from "../types/domain";
 import type { MmrMissReason } from "../valuation/workerClient";
+import { recordProvenBookableHit } from "./coxProvenBookable";
 
 interface ValuationSnapshotInput {
   normalizedListingId: string;
@@ -122,4 +123,11 @@ export async function writeValuationSnapshot(
   });
 
   if (error) throw error;
+
+  await recordProvenBookableHit(db, {
+    year: listing.year,
+    make: valuation.lookupMake,
+    model: valuation.lookupModel,
+    style: valuation.lookupTrim,
+  });
 }

@@ -1,7 +1,12 @@
 /**
- * Promote a real trim / body token already present in a listing title so the
+ * Promote a real trim token already present in a listing title so the
  * YMM valuation path has something to send instead of short-circuiting to
  * `trim_missing`.
+ *
+ * Cab/bed tokens (`SuperCrew`, `Crew Cab`, `Short Bed`) are axis evidence,
+ * not Cox bodynames — sending them as `trim` is how listings miss
+ * `not_proven_bookable`. They stay in the title for the matcher; they are
+ * not returned here.
  *
  * IMPORTANT: this only ever returns a token that literally appears in the
  * title. It never fabricates or guesses a Cox bodyname — fabricating a
@@ -14,18 +19,6 @@
 // Curated, conservative set of common Facebook-title trim / body tokens.
 // Canonical casing here is what gets returned.
 const KNOWN_TOKENS: readonly string[] = [
-  // ── body styles (Cox `bodyname`-adjacent) ──
-  "Extended Cab",
-  "Regular Cab",
-  "Double Cab",
-  "Crew Cab",
-  "Quad Cab",
-  "Mega Cab",
-  "King Cab",
-  "SuperCrew",
-  "SuperCab",
-  "Long Bed",
-  "Short Bed",
   // ── EV ranges ──
   "Standard Range",
   "Extended Range",

@@ -1,5 +1,7 @@
 import type { AdapterResult, NormalizedListingInput } from "../types/domain";
 import { parseFacebookItem, type AdapterContext } from "./facebook";
+import { resolveListingVin } from "./extractVinFromText";
+import { isCabOrBedOnly } from "./listingParseHygiene";
 
 export type { AdapterContext };
 
@@ -15,8 +17,6 @@ type AdapterReasonCode =
 function fail(reason: AdapterReasonCode, details?: unknown): AdapterResult {
   return { ok: false, reason, details };
 }
-
-const VIN_REGEX = /^[A-HJ-NPR-Z0-9]{17}$/;
 
 function normaliseWs(s: string): string {
   return s
@@ -87,14 +87,21 @@ function extractSourceListingId(rec: Record<string, unknown>, url: string): stri
   return fromUrl?.[1];
 }
 
-function extractVin(rec: Record<string, unknown>): string | undefined {
+// Craigslist sellers frequently paste the VIN into the body text; item 72
+// falls back to it when no structured field is present.
+function extractVin(
+  rec: Record<string, unknown>,
+  text: { description?: string | undefined; title?: string | undefined; year?: number },
+): string | undefined {
+  let structured: string | undefined;
   for (const key of ["vin", "VIN", "Vin"]) {
     const raw = rec[key];
-    if (typeof raw !== "string") continue;
-    const candidate = raw.trim().toUpperCase();
-    if (VIN_REGEX.test(candidate)) return candidate;
+    if (typeof raw === "string") {
+      structured = raw;
+      break;
+    }
   }
-  return undefined;
+  return resolveListingVin({ ...text, ...(structured !== undefined && { structured }) });
 }
 
 function extractImages(rec: Record<string, unknown>): string[] | undefined {
@@ -340,13 +347,14 @@ export function parseCraigslistItem(item: unknown, ctx: AdapterContext): Adapter
 
     if (year === undefined || !make || !model) return fail("missing_ymm");
     if (year < 2000 || year > 2035) return fail("invalid_year");
+    if (isCabOrBedOnly(trim)) trim = undefined;
 
     const mileage = extractMileage(rec, attrs, title);
     const sourceListingId = extractSourceListingId(rec, url);
-    const vin = extractVin(rec);
     const postedAt = extractPostedAt(rec);
     const sellerName = readString(rec.seller_name) ?? readString(rec.sellerName) ?? readString(rec.seller);
     const description = extractDescription(rec);
+    const vin = extractVin(rec, { description, title, year });
     const { city, state } = extractCityState(rec);
     const images = extractImages(rec);
 

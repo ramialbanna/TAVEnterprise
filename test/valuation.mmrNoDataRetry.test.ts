@@ -15,6 +15,7 @@ import { retryMmrAfterCoxNoData } from "../src/valuation/workerClient";
 import { loadMmrReferenceData } from "../src/valuation/loadMmrReferenceData";
 import { deleteMmrStyleAlias, upsertMmrStyleAlias } from "../src/persistence/mmrStyleAliases";
 import { callAnthropicForYmms } from "../src/llm/anthropicClient";
+import { insertLlmYmmsDecision } from "../src/persistence/llmYmmsDecisions";
 import type { Env } from "../src/types/env";
 import type * as MmrStyleAliasesModule from "../src/persistence/mmrStyleAliases";
 
@@ -151,7 +152,7 @@ beforeEach(() => {
 });
 
 describe("item 72 — retryMmrAfterCoxNoData", () => {
-  it("retires the bad alias, re-asks Claude, and recovers a value on the second pick", async () => {
+  it("retires the bad alias only after Manheim books the corrected pick", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(response(VALUE_ENVELOPE));
     vi.stubGlobal("fetch", fetchMock);
     claudePicks("CAMRY 4C", "4D SEDAN LE");
@@ -169,9 +170,54 @@ describe("item 72 — retryMmrAfterCoxNoData", () => {
     expect(outcome.result.normalizationConfidence).toBe("partial");
 
     expect(sentBodies(fetchMock)[0]?.model).toBe("CAMRY 4C");
+    expect(fetchMock.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(deleteMmrStyleAlias).mock.invocationCallOrder[0]!,
+    );
     expect(deleteMmrStyleAlias).toHaveBeenCalledWith(
       expect.anything(),
       { aliasKey: "toyota|camry|le", canonicalMake: "TOYOTA", canonicalModel: "CAMRY V6" },
+    );
+  });
+
+  it("item 72: recovered retry audit row includes normalized_listing_id", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response(VALUE_ENVELOPE)));
+    claudePicks("CAMRY 4C", "4D SEDAN LE");
+
+    await retryMmrAfterCoxNoData(LISTING, ENV, REJECTED_FROM_ALIAS, {
+      normalizedListingId: "nl-retry",
+    });
+
+    expect(insertLlmYmmsDecision).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        normalizedListingId: "nl-retry",
+        outcome: "llm_hit",
+        proposedModel: "CAMRY 4C",
+      }),
+    );
+  });
+
+  it("retires the axis-qualified alias when the listing named drivetrain and engine", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response(VALUE_ENVELOPE)));
+    claudePicks("CAMRY 4C", "4D SEDAN LE");
+
+    await retryMmrAfterCoxNoData(
+      { ...LISTING, title: "2019 Toyota Camry LE AWD V6" },
+      ENV,
+      REJECTED_FROM_ALIAS,
+    );
+
+    expect(deleteMmrStyleAlias).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        aliasKey: "toyota|camry|le|awd|v6",
+        canonicalMake: "TOYOTA",
+        canonicalModel: "CAMRY V6",
+      },
+    );
+    expect(deleteMmrStyleAlias).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ aliasKey: "toyota|camry|le" }),
     );
   });
 
@@ -206,9 +252,10 @@ describe("item 72 — retryMmrAfterCoxNoData", () => {
     expect(outcome.kind).toBe("miss");
     expect(outcome.retried).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(deleteMmrStyleAlias).not.toHaveBeenCalled();
   });
 
-  it("reports a miss when the corrected pick also has no book value", async () => {
+  it("does not retire the alias when the corrected pick also has no book value", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(response(NEGATIVE_ENVELOPE));
     vi.stubGlobal("fetch", fetchMock);
     claudePicks("CAMRY 4C", "4D SEDAN LE");
@@ -219,6 +266,7 @@ describe("item 72 — retryMmrAfterCoxNoData", () => {
     if (outcome.kind !== "miss") return;
     expect(outcome.reason).toBe("cox_no_data");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(deleteMmrStyleAlias).not.toHaveBeenCalled();
   });
 
   it("does not call Manheim when Claude is unavailable", async () => {
@@ -233,6 +281,7 @@ describe("item 72 — retryMmrAfterCoxNoData", () => {
     expect(outcome.kind).toBe("miss");
     expect(outcome.retried).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(deleteMmrStyleAlias).not.toHaveBeenCalled();
   });
 
   it("skips alias retirement when the bad pick did not come from the alias table", async () => {

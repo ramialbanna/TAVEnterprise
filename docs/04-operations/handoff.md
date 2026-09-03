@@ -18,7 +18,14 @@ Apify / authorized caller
   -> Supabase + KV
   -> intelligence Worker for Cox/Manheim MMR
   -> Next.js web app
+
+Facebook seller enrich (always-on, not the Worker):
+  Fly app tav-seller-enrich (ord)
+  -> GoLogin Cloud (fb_buyer_10)
+  -> writes seller_url / seller_name on Supabase
 ```
+
+Do **not** also run `npm run gologin:enrich:daemon` locally while Fly is up (same Facebook profile). Living checklist: [NEXT_STEPS.md](../NEXT_STEPS.md) §74.
 
 Important routes:
 
@@ -199,7 +206,21 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 ## 8. Repo and Branch State
 
-GitHub `main` (as of **2026-05-23**): **`73dbe6d`** — *chore: pin Cloudflare account_id in wrangler.toml*
+**Living checklist:** [NEXT_STEPS.md](../NEXT_STEPS.md) — start at **Fresh chat handoff (2026-09-03 session)**.
+
+| Fact | Value |
+|------|--------|
+| **Git HEAD (local)** | `75d69f3` — listing mirror on detail |
+| **Uncommitted** | ~94 files — §72 Worker bundle, §74 enrich queue, docs (**production already deployed** Worker `2b262630`, Fly v6) |
+| **Worker production** | `2b262630` (2026-09-03) — `npx wrangler deploy --env production` |
+| **Fly enrich** | `tav-seller-enrich` v6, `ord`, queue=`needs_action` |
+| **Main goal** | §72 MMR hit **79%** offline; §74 soak in progress |
+
+Historical GitHub `main` snapshot (2026-05-23) and Phase 4–8 notes below are **stale** — use NEXT_STEPS for current work.
+
+### Historical (2026-05-23)
+
+GitHub `main`: **`73dbe6d`** — *chore: pin Cloudflare account_id in wrangler.toml*
 
 Recent commits on `main`:
 

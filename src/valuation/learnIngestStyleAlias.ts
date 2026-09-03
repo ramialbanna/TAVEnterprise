@@ -11,6 +11,7 @@ import {
 import type { LlmYmmsResolution } from "./resolveListingWithLLM";
 import { isCatalogAliasValid } from "./catalogAliasValidation";
 import { extractTitleTrim } from "./extractTitleTrim";
+import { extractListingAxisTokens } from "./listingAxisEvidence";
 import { log } from "../logging/logger";
 
 export type LearnIngestStyleAliasInput = {
@@ -47,10 +48,16 @@ export async function maybeLearnIngestStyleAlias(
   // Never learn catch-all empty-trim aliases — they override title trim on later lookups.
   if (!trimForKey) return false;
 
+  const axisTokens = extractListingAxisTokens({
+    title: input.listingTitle,
+    trim: trimForKey,
+    description: input.listingDescription,
+  });
   const aliasKey = buildListingStyleAliasKey(
     input.listingMake,
     input.listingModel,
     trimForKey,
+    axisTokens,
   );
   if (!aliasKey.replace(/\|/g, "").trim()) return false;
 
@@ -78,6 +85,10 @@ export async function maybeLearnIngestStyleAlias(
     canonicalStyle: canonical.style,
     source: "ingest_learned",
   });
-  log("ingest.llm_alias_learned", { alias_key: aliasKey, source: "ingest_learned" });
+  log("ingest.llm_alias_learned", {
+    alias_key: aliasKey,
+    source: "ingest_learned",
+    axis_tokens: axisTokens,
+  });
   return true;
 }

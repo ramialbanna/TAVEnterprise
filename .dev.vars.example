@@ -60,6 +60,13 @@ APIFY_WEBHOOK_SECRET=replace_me
 # Apify Personal Access Token for dataset/run fetches.
 APIFY_TOKEN=replace_me
 
+# ── GoLogin (item 74 — local scripts only, not a Worker binding) ──────────────
+# https://app.gologin.com/personalArea/TokenApi
+GOLOGIN_API_TOKEN=replace_me
+# GOLOGIN_PROFILE_ID=
+# GOLOGIN_NAME=
+# GOLOGIN_WORKSPACE_ID=
+
 # ── LLM Y/M/M/S normalization (item 57) ────────────────────────────────────────
 # Anthropic API key used by src/llm/anthropicClient.ts to propose Y/M/M/S
 # identity at ingest. Absent/placeholder = LLM path is treated as not

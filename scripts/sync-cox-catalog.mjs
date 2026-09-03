@@ -3,6 +3,7 @@
  *
  * Usage:
  *   node scripts/sync-cox-catalog.mjs [intelBaseUrl]
+ *   node scripts/sync-cox-catalog.mjs --year 2012
  *
  * Requires `.dev.vars` with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, INTEL_WORKER_SECRET.
  */
@@ -87,8 +88,14 @@ async function main() {
   const supabaseUrl = vars.SUPABASE_URL ?? process.env.SUPABASE_URL;
   const supabaseKey = vars.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   const intelSecret = vars.INTEL_WORKER_SECRET ?? process.env.INTEL_WORKER_SECRET;
+  const yearFlagIdx = process.argv.indexOf("--year");
+  const positional = process.argv.slice(2).filter((_, i) => {
+    const abs = i + 2;
+    if (abs === yearFlagIdx || abs === yearFlagIdx + 1) return false;
+    return true;
+  });
   const baseUrl =
-    process.argv[2] ??
+    positional[0] ??
     "https://tav-intelligence-worker-production.rami-1a9.workers.dev";
 
   if (!supabaseUrl || !supabaseKey || !intelSecret) {
@@ -107,14 +114,23 @@ async function main() {
     years.push(year);
   }
 
-  const { data: existingYears, error: yearsErr } = await db
-    .schema("tav")
-    .from("cox_catalog_tree")
-    .select("year")
-    .gte("year", COX_CATALOG_MIN_YEAR);
-  if (yearsErr) throw yearsErr;
-  const populated = new Set((existingYears ?? []).map((row) => row.year));
-  const yearsToSync = years.filter((year) => !populated.has(year));
+  let yearsToSync;
+  if (yearFlagIdx !== -1) {
+    const explicit = Number(process.argv[yearFlagIdx + 1]);
+    if (!Number.isInteger(explicit) || explicit < COX_CATALOG_MIN_YEAR) {
+      throw new Error(`--year must be an integer >= ${COX_CATALOG_MIN_YEAR}`);
+    }
+    yearsToSync = [explicit];
+  } else {
+    const { data: existingYears, error: yearsErr } = await db
+      .schema("tav")
+      .from("cox_catalog_tree")
+      .select("year")
+      .gte("year", COX_CATALOG_MIN_YEAR);
+    if (yearsErr) throw yearsErr;
+    const populated = new Set((existingYears ?? []).map((row) => row.year));
+    yearsToSync = years.filter((year) => !populated.has(year));
+  }
 
   if (yearsToSync.length === 0) {
     console.log("All catalog years already populated — nothing to sync.");

@@ -61,7 +61,12 @@ logs/
 *.tmp
 tmp/
 scratch/
+scripts/_tmp-*
 supabase/.temp/
+
+# --- Item 74 enrich run state (local caps / halt latch; not secrets) --------
+scripts/.enrich-run-state.json
+scripts/.enrich-daemon.log
 
 # --- Item 57 eval output (may contain listing text; local-only) -------------
 scripts/_eval-results/

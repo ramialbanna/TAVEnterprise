@@ -6,6 +6,7 @@ import {
   buildYmmsListingEvidenceText,
   buildYmmsUserPrompt,
   classifyYmmsProposalIngestOutcome,
+  findCoxPickRow,
   isValidCoxPick,
   YMMS_TOOL,
   type YmmsProposal,
@@ -173,6 +174,63 @@ describe("isValidCoxPick", () => {
 
   it("rejects a fully hallucinated pick", () => {
     expect(isValidCoxPick(proposal({ model: "Rebel TRX", style: "Made Up Trim" }), rows)).toBe(false);
+  });
+});
+
+describe("findCoxPickRow — item 72 catalog vocabulary", () => {
+  const bmwRows: CoxCatalogTreeRow[] = [
+    { year: 2022, make: "B M W", model: "X SERIES", style: "X5 4D SUV M50I", searchText: "", variantKind: null },
+    { year: 2022, make: "B M W", model: "X SERIES", style: "X5 4D SUV 40I", searchText: "", variantKind: null },
+  ];
+
+  /** Exactly what production returned on 2026-08-13: right pick, wrong make spelling. */
+  const bmwProposal: YmmsProposal = {
+    make: "bmw",
+    model: "X SERIES",
+    style: "X5 4D SUV M50I",
+    confidence: 0.97,
+    reasoning: "listing says X5 M50i",
+    needsReview: false,
+  };
+
+  it("accepts a pick whose make differs from Cox only by spacing", () => {
+    expect(findCoxPickRow(bmwProposal, bmwRows)?.style).toBe("X5 4D SUV M50I");
+  });
+
+  it("returns Cox's spelling so Manheim receives catalog tokens", () => {
+    expect(findCoxPickRow(bmwProposal, bmwRows)?.make).toBe("B M W");
+  });
+
+  it("classifies that pick as a hit rather than an invalid pick", () => {
+    expect(classifyYmmsProposalIngestOutcome(bmwProposal, bmwRows)).toBe("llm_hit");
+  });
+
+  it("still rejects a style that does not exist under the make", () => {
+    expect(findCoxPickRow({ ...bmwProposal, style: "X5 4D SUV 55I" }, bmwRows)).toBeNull();
+  });
+
+  it("refuses a loose match when it cannot pick between siblings", () => {
+    // Neither row matches exactly, and both collapse to the same squashed
+    // tokens — choosing either would be a coin flip between two styles.
+    const ambiguous: CoxCatalogTreeRow[] = [
+      { year: 2022, make: "B M W", model: "X SERIES", style: "X5 40I", searchText: "", variantKind: null },
+      { year: 2022, make: "BMW", model: "XSERIES", style: "X-5 40I", searchText: "", variantKind: null },
+    ];
+    expect(
+      findCoxPickRow({ ...bmwProposal, make: "bmw", model: "XSERIES", style: "X540I" }, ambiguous),
+    ).toBeNull();
+  });
+
+  it("prefers an exact match over a squashed one", () => {
+    const rows: CoxCatalogTreeRow[] = [
+      { year: 2022, make: "B M W", model: "X SERIES", style: "X5 40I", searchText: "", variantKind: null },
+      { year: 2022, make: "B M W", model: "XSERIES", style: "X540I", searchText: "", variantKind: null },
+    ];
+    const picked = findCoxPickRow(
+      { ...bmwProposal, make: "B M W", model: "X SERIES", style: "X5 40I" },
+      rows,
+    );
+    expect(picked?.model).toBe("X SERIES");
   });
 });
 

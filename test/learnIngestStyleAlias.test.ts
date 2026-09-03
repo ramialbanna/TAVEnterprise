@@ -5,8 +5,16 @@ import { upsertMmrStyleAlias } from "../src/persistence/mmrStyleAliases";
 
 vi.mock("../src/persistence/mmrStyleAliases", () => ({
   buildListingStyleAliasKey: vi.fn(
-    (make: string | null | undefined, model: string | null | undefined, trim: string | null | undefined) =>
-      [make, model, trim].map((part) => (part ?? "").trim().toLowerCase()).join("|"),
+    (
+      make: string | null | undefined,
+      model: string | null | undefined,
+      trim: string | null | undefined,
+      axisTokens?: readonly string[] | null,
+    ) => {
+      const base = [make, model, trim].map((part) => (part ?? "").trim().toLowerCase()).join("|");
+      const axes = (axisTokens ?? []).map((token) => token.trim().toLowerCase()).filter(Boolean);
+      return axes.length > 0 ? `${base}|${axes.join("|")}` : base;
+    },
   ),
   upsertMmrStyleAlias: vi.fn().mockResolvedValue(undefined),
 }));
@@ -95,6 +103,34 @@ describe("maybeLearnIngestStyleAlias (item 65)", () => {
     expect(upsertMmrStyleAlias).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ aliasKey: "jeep|wrangler unlimited|sport" }),
+    );
+  });
+
+  it("appends drivetrain and cab to the learned key when the listing names them", async () => {
+    vi.mocked(upsertMmrStyleAlias).mockClear();
+    const learned = await maybeLearnIngestStyleAlias(db, {
+      year: 2022,
+      listingMake: "Ram",
+      listingModel: "1500 Bighorn",
+      listingTrim: "big horn",
+      listingTitle: "2022 Ram 1500 Big Horn Crew Cab 4x4",
+      llmResolution: {
+        kind: "llm_hit",
+        make: "RAM",
+        model: "1500",
+        style: "4D Crew Cab Big Horn",
+        confidence: 0.9,
+        reasoning: "title match",
+        latencyMs: 900,
+        anthropicModel: "claude-sonnet-5",
+        catalogRowCount: 10,
+      },
+    });
+
+    expect(learned).toBe(true);
+    expect(upsertMmrStyleAlias).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ aliasKey: "ram|1500 bighorn|big horn|4wd|crew" }),
     );
   });
 

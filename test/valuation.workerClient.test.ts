@@ -10,6 +10,8 @@ import { EMPTY_REFERENCE, type ReferenceData } from "../src/valuation/normalizeM
 import { loadMmrReferenceData } from "../src/valuation/loadMmrReferenceData";
 import type { Env } from "../src/types/env";
 import { upsertMmrStyleAlias } from "../src/persistence/mmrStyleAliases";
+import { loadProvenBookableForMake } from "../src/persistence/coxProvenBookable";
+import { insertLlmYmmsDecision } from "../src/persistence/llmYmmsDecisions";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ function makeSupabaseMock() {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     ilike: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     insert: vi.fn().mockReturnThis(),
     upsert: vi.fn().mockResolvedValue({ error: null }),
@@ -58,6 +61,11 @@ vi.mock("../src/persistence/mmrStyleAliases", async (importOriginal) => {
 
 vi.mock("../src/persistence/llmYmmsDecisions", () => ({
   insertLlmYmmsDecision: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../src/persistence/coxProvenBookable", () => ({
+  loadProvenBookableForMake: vi.fn().mockResolvedValue([]),
+  recordProvenBookableHit: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/persistence/coxCatalogTree", () => ({
@@ -210,6 +218,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: YMM tests get a reference that exact-matches Toyota/Camry and Honda/Civic
   vi.mocked(loadMmrReferenceData).mockResolvedValue(DEFAULT_REF);
+  vi.mocked(loadProvenBookableForMake).mockResolvedValue([]);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -981,12 +990,20 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
     expect(sentBody.trim).toBe("4D SEDAN GT-LINE");
   });
 
-  it("returns model_variant_missing when Cox splits the model but listing evidence cannot choose AWD/FWD", async () => {
+  /**
+   * Item 72 — this used to return `model_variant_missing`. Abstaining while
+   * holding every legal Cox style is the single largest miss bucket (~20% of
+   * attempts, 82% of them with a loaded catalog), and abstaining costs exactly
+   * as much as guessing wrong. The pick is flagged estimated so a closer sees
+   * the drivetrain was inferred and can correct it.
+   */
+  it("falls back to a real catalog variant instead of abstaining on AWD/FWD ambiguity", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(catalogOk(["Honda"]))
       .mockResolvedValueOnce(catalogOk(["CR-V AWD", "CR-V FWD", "CR-Z HYBRID"]))
       .mockResolvedValueOnce(catalogOk(["4D Sport Utility LX"]))
-      .mockResolvedValueOnce(catalogOk(["4D Sport Utility LX"]));
+      .mockResolvedValueOnce(catalogOk(["4D Sport Utility LX"]))
+      .mockResolvedValueOnce(ymmOk());
     vi.stubGlobal("fetch", fetchMock);
     vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
       makes: new Set(["Honda"]),
@@ -1007,8 +1024,37 @@ describe("#53 Cox catalog model variant selection before style lookup", () => {
       BASE_ENV,
     );
 
-    expect(outcome.kind === "miss" && outcome.reason).toBe("model_variant_missing");
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(outcome.kind).toBe("hit");
+    if (outcome.kind !== "hit") return;
+
+    const [, ymmInit] = findFetchCallContaining("/mmr/year-make-model");
+    const sentBody = JSON.parse(ymmInit.body as string) as Record<string, unknown>;
+    // A Cox catalog variant, never the raw listing model `CR-V`.
+    expect(["CR-V AWD", "CR-V FWD"]).toContain(sentBody.model);
+    expect(sentBody.trim).toBe("4D Sport Utility LX");
+    // Flagged so the queue badges it rather than presenting a guess as fact.
+    expect(outcome.result.normalizationConfidence).toBe("partial");
+    expect(outcome.result.confidence).toBe("low");
+  });
+
+  it("still abstains when the catalog offers no candidate at all", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogOk(["Honda"]))
+      .mockResolvedValueOnce(catalogOk([]));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce({
+      makes: new Set(["Honda"]),
+      models: new Map([["Honda", new Set(["CR-V"])]]),
+      makeAliases: new Map(),
+      modelAliases: new Map(),
+    });
+
+    const outcome = await getMmrLookupOutcome(
+      { year: 2016, make: "Honda", model: "CR-V", mileage: 79_200, title: "2016 Honda CR-V" },
+      BASE_ENV,
+    );
+
+    expect(outcome.kind).toBe("miss");
   });
 });
 
@@ -1075,6 +1121,42 @@ describe("item 57 §6 — precomputed llmResolution opt (batched ingest path)", 
     );
   });
 
+  it("item 72: writes llm_ymms_decisions with normalized_listing_id when ingest supplies it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(ymmOk()));
+    vi.mocked(loadMmrReferenceData).mockResolvedValueOnce(DEFAULT_REF);
+
+    await getMmrLookupOutcome(
+      { year: 2022, make: "Ram", model: "1500 Bighorn", trim: "big horn", mileage: 30_000, title: "2022 Ram 1500 Big Horn" },
+      BASE_ENV,
+      {
+        normalizedListingId: "nl-from-ingest",
+        llmResolution: {
+          kind: "llm_hit",
+          make: "Ram",
+          model: "1500",
+          style: "4D Crew Cab Big Horn",
+          confidence: 0.9,
+          reasoning: "Big Horn + Crew Cab in title",
+          latencyMs: 1200,
+          anthropicModel: "claude-sonnet-5",
+          catalogRowCount: 12,
+        },
+      },
+    );
+
+    expect(insertLlmYmmsDecision).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        normalizedListingId: "nl-from-ingest",
+        year: 2022,
+        inputMake: "Ram",
+        outcome: "llm_hit",
+        proposedModel: "1500",
+        proposedStyle: "4D Crew Cab Big Horn",
+      }),
+    );
+  });
+
   it("does not learn an alias when llmResolution is alias_hit", async () => {
     vi.mocked(upsertMmrStyleAlias).mockClear();
     const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
@@ -1129,5 +1211,93 @@ describe("item 57 §6 — precomputed llmResolution opt (batched ingest path)", 
 
     expect(outcome.kind).toBe("hit");
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("item 72 action 2 — proven-bookable gate", () => {
+  it("does not send listing-text tokens that have never booked", async () => {
+    vi.mocked(loadProvenBookableForMake).mockResolvedValueOnce([
+      { make: "B M W", model: "X SERIES", style: "4D SUV X3 XDRIVE30I" },
+    ]);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(catalogOk(["B M W"]))
+      .mockResolvedValueOnce(catalogOk([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2018,
+        make: "bmw",
+        model: "x5",
+        trim: "Performance",
+        mileage: 40_000,
+        title: "2018 BMW X5 Performance",
+      },
+      BASE_ENV,
+      { llmResolution: { kind: "fallback", reason: "catalog_not_synced" } },
+    );
+
+    expect(outcome.kind).toBe("miss");
+    if (outcome.kind !== "miss") return;
+    expect(outcome.reason).toBe("not_proven_bookable");
+    expect(outcome.lookupModel).toBe("x5");
+    expect(outcome.lookupTrim).toBe("Performance");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/mmr/year-make-model"))).toBe(false);
+  });
+
+  it("rewrites a ladder hit to the booked Cox spelling", async () => {
+    vi.mocked(loadProvenBookableForMake).mockResolvedValueOnce([
+      { make: "B M W", model: "X SERIES", style: "4D SUV X3 XDRIVE30I" },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const outcome = await getMmrLookupOutcome(
+      {
+        year: 2018,
+        make: "bmw",
+        model: "x series",
+        trim: "4d suv x3 xdrive30i",
+        mileage: 40_000,
+        title: "2018 BMW X3 xDrive30i",
+      },
+      BASE_ENV,
+      {
+        llmResolution: {
+          kind: "alias_hit",
+          make: "bmw",
+          model: "x series",
+          style: "4d suv x3 xdrive30i",
+        },
+      },
+    );
+
+    expect(outcome.kind).toBe("hit");
+    const sentBody = JSON.parse(
+      (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(sentBody.make).toBe("B M W");
+    expect(sentBody.model).toBe("X SERIES");
+    expect(sentBody.trim).toBe("4D SUV X3 XDRIVE30I");
+  });
+
+  it("still sends a catalog-valid ladder hit that has never booked, so the set can grow", async () => {
+    vi.mocked(loadProvenBookableForMake).mockResolvedValueOnce([
+      { make: "Ram", model: "2500", style: "4D Crew Cab Laramie" },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValueOnce(ymmOk());
+    vi.stubGlobal("fetch", fetchMock);
+
+    const outcome = await getMmrLookupOutcome(
+      { year: 2022, make: "Ram", model: "1500 Bighorn", trim: "big horn", mileage: 30_000, title: "2022 Ram 1500 Big Horn" },
+      BASE_ENV,
+      { llmResolution: { kind: "alias_hit", make: "Ram", model: "1500", style: "4D Crew Cab Big Horn" } },
+    );
+
+    expect(outcome.kind).toBe("hit");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const sentBody = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(sentBody.model).toBe("1500");
+    expect(sentBody.trim).toBe("4D Crew Cab Big Horn");
   });
 });

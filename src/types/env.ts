@@ -165,4 +165,20 @@ export interface Env {
    * secrets rotation.
    */
   LLM_YMMS_MODEL: string;
+
+  /**
+   * Item 71 — AI / heuristic dealer listing filter at ingest. When not exactly
+   * "true", ingest is unchanged (no classification, no extra Anthropic calls).
+   * Default "false" until the eval (scripts/eval-seller-classification.mjs)
+   * shows an acceptable private-party false-positive rate. Staging first.
+   */
+  SELLER_CLASSIFY_ENABLED: string;
+
+  /**
+   * Anthropic model for seller classification (Haiku-class). Non-secret.
+   * Only used when SELLER_CLASSIFY_ENABLED is "true". Haiku is skipped for
+   * slam-dunk heuristic dealers and when there is neither dealer language nor
+   * a listing photo. Set in wrangler.toml [vars].
+   */
+  SELLER_CLASSIFY_MODEL: string;
 }

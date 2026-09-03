@@ -49,6 +49,9 @@ MAXBUY_WORKER_URL = ""
 # unchanged — no Anthropic calls are made.
 LLM_YMMS_ENABLED = "false"
 LLM_YMMS_MODEL = "claude-sonnet-5"
+# Item 71 — dealer listing filter. Off until eval says private-party FP is acceptable.
+SELLER_CLASSIFY_ENABLED = "true"
+SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
 # MAXBUY_WORKER_SECRET must be set as a Cloudflare secret:
 #   wrangler secret put MAXBUY_WORKER_SECRET
 # ADMIN_API_SECRET, APP_API_SECRET, INTEL_WORKER_SECRET, APIFY_WEBHOOK_SECRET,
@@ -79,6 +82,8 @@ MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
 LLM_YMMS_MODEL = "claude-sonnet-5"
+SELLER_CLASSIFY_ENABLED = "true"
+SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
 [[env.staging.kv_namespaces]]
 binding = "TAV_KV"
 # Staging-only namespace — must not share with production.
@@ -117,6 +122,8 @@ MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
 LLM_YMMS_MODEL = "claude-sonnet-5"
+SELLER_CLASSIFY_ENABLED = "true"
+SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
