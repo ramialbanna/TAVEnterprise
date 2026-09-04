@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   CLAIM_EXPIRING_SOON_MS,
   DEFAULT_ENRICH_QUEUE,
-  NEEDS_ACTION_MAX_AGE_MS,
   assertQueueName,
   buildNeedsActionEnrichContext,
   defaultQueue,
