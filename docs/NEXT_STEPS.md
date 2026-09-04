@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-09-03 (session 3 — §72 actions 8–9 deployed) · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-09-04 (session 4 — git synced, §74 proxy top-up, §73 sample-only) · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -8,49 +8,50 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ---
 
-## Fresh chat handoff (2026-09-03 session 3)
+## Fresh chat handoff (2026-09-04 session 4)
 
-**Read this first.** Full detail lives in §72 / §74 / §68 below; this block is the minimum to continue without prior chat context.
+**Read this first.** Full detail lives in §72 / §73 / §74 below; this block is the minimum to continue without prior chat context.
 
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git HEAD:** `75d69f3` — *Show full listing photo and seller profile on opportunity detail.*
-- **~94+ files changed locally, not committed** — includes §72 actions 7–9, §74 enrich queue, `monitor-fly-soak.mjs`, docs. **Production Worker is ahead of git.**
+- **Git HEAD:** `31d861b` — *Catch up git with production Worker and Fly enrich deploys.* **Pushed** to `origin/main` (automation-TAV).
+- **Git matches production** for the §72/§74 bundle shipped 2026-09-03. `.gitignore` excludes `scripts/_tmp-*`.
 
-### Production deploy IDs (2026-09-03)
+### Production deploy IDs (unchanged 2026-09-03)
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `6bcd175b` (`tav-aip-production`) | **Current.** §72 action 8 — `cox_rate_limited` retry pass (`mmrRateLimitRetryPass.ts`, post-loop `waitUntil`, 2s stagger, cap 10). §72 action 9 — F-series trim+axis alias resolver (`fSeriesTrimAxisAliases.ts` → `resolveListingWithLLM`). Prior `1f04dd9a` had action 7. |
+| **Worker** | `6bcd175b` (`tav-aip-production`) | §72 actions 7–9 (alias retirement, rate-limit retry, F-series trim+axis aliases). |
 | **Fly enrich** | v6, machine `2870647c500408`, `ord` | Default queue **`needs_action`** only. CMD: `--write --loop --cloud`. Health: https://tav-seller-enrich.fly.dev/ |
-| **Prior Worker** | `1f04dd9a` | §72 action 7 — alias retirement after successful `cox_no_data` retry (superseded by `6bcd175b`) |
 
-### What session 3 did
+### What session 4 did
 
-1. **§72 action 8 — SHIPPED + deployed** — `src/ingest/mmrRateLimitRetryPass.ts`. Queues `cox_rate_limited` misses from the ingest loop; re-prices in `waitUntil` with the precomputed `llmResolution` (no re-ask). Logs: `ingest.mmr_rate_limit_retry_pass`, `valuation.recovered_after_rate_limit`. Tests: `test/mmrRateLimitRetryPass.test.ts`.
-2. **§72 action 9 — SHIPPED + deployed** — `src/valuation/fSeriesTrimAxisAliases.ts`. When axis-qualified alias keys miss (e.g. `ford|f-150|xlt|4wd|v6|crew`), resolves a booked Cox model+style from catalog + proven-bookable. Wired in `resolveListingWithLLM.ts`. Log: `llm_ymms.f_series_trim_axis_alias`. Tests: `test/fSeriesTrimAxisAliases.test.ts`, `resolveListingWithLLM.test.ts`.
-3. **Production deploy** — **`6bcd175b`** ~14:30Z; secrets unchanged (13/13 before and after). No secret commands run.
-
-### What session 2 did (still true)
-
-1. **§74 — Fly soak monitoring** — `scripts/monitor-fly-soak.mjs`, `npm run monitor:fly-soak`. Soak clock **2026-09-03 ~13:56Z** → ends **~2026-09-05 13:56Z**. T+~20min reading: healthy (~8/min `ok wrote needs_action`, health 200, 1 new `blocked_sellers` row with `reason: dealer` only).
-2. **§72 action 7 — SHIPPED** (in `1f04dd9a`, now bundled in `6bcd175b`) — alias delete only after Manheim books the corrected pick.
-3. **§68 — stuck `source_runs` cleared** — **131** reconciled; **0** `running` now.
+1. **Git synced** — commit `31d861b` (102 files): Worker §72/§71, §74 enrich/Fly, migrations 0071/0072, tests, docs. Pushed to GitHub.
+2. **§74 soak T+23h reading** — **~2,037** Facebook listings got `seller_url` since soak start; **2,623** total with URL; **3** new `blocked_sellers` (all `dealer`). Then **residential GB exhausted** (12.039 / 12 GB) → GoLogin Cloud **503 loop**, last write **~10:39Z**. **Not checkpoint.**
+3. **§74 proxy top-up + recovery** — pool raised to **22 GB** (~10.04 used, **~12 GB left**). Fly self-healed **~12:56Z** (`warmup facebook.com`, `ok wrote needs_action` resumed). No machine restart needed.
+4. **§73 sample-only** — `npm run eval:ymms-vision -- --sample-only`: **575** photo URLs in pool (last 3d) → **200-row sample** (91 hard / 109 random). **`--limit 1` still 401** — Anthropic credits out.
+5. **Vendor (Apify)** — confirmed **cannot provide multi pictures**. Gallery / `extraListingMedia` path **closed**. §73 and §71 stay on **one 1536px primary photo**.
 
 ### Do next (priority)
 
-1. **§74 — 48h Fly soak** (~45h left at session end). `npm run monitor:fly-soak` · red flags: 503/checkpoint, private sellers in `blocked_sellers`, writes stop.
-2. **§73** — blocked on Anthropic credits (not an option for now). When available: `npm run eval:ymms-vision -- --limit 200`.
-3. **Git commit** — stage Worker (incl. actions 7–9), enrich queue, monitor script, docs.
-4. **§74 action 6** — more Facebook logins via GoLogin (only after soak / if checkpoint).
-5. **Watch §72 on prod** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs when those paths fire.
+1. **§74 — finish 48h soak** (~25h left at session end; clock **2026-09-03 ~13:56Z** → **~2026-09-05 13:56Z**). `npm run monitor:fly-soak` · watch residential GB (`node scripts/gologin-assign-residential.mjs --traffic-only`).
+2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
+3. **§74 action 6** — more Facebook logins via GoLogin (after soak / if checkpoint).
+4. **Watch §72 on prod** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs.
 
 ### Key commands
 
 ```bash
 # §74 soak monitor
 npm run monitor:fly-soak
+
+# GoLogin residential GB (503 = check this first)
+node scripts/gologin-assign-residential.mjs --traffic-only
+
+# §73 vision eval
+npm run eval:ymms-vision -- --sample-only
+npm run eval:ymms-vision -- --limit 200 --concurrency 2   # after Anthropic credits reload
 
 # Inspect enrich queue (no browser)
 npm run gologin:enrich -- --queue-only --limit 10
@@ -80,15 +81,14 @@ cd web && npm run lint && npm run typecheck && npm test
 
 Read **§72** (identity completeness). Claude credits are **out** — ingest is on **Claude offline mode** (alias → matcher ≥80 → last-resort). Proven-aware last-resort soak is **done** (~10d): deduped hit **79.0%**, stable ~79–80%, **not** ≥85% exit. **`llm_unavailable` is the #1 miss driver** (7.3% of listings). **§72 actions 7–9 shipped** production `6bcd175b`. **Next §72 without credits:** §73 vision when credits return.
 
-**§74:** Needs-action-only enrich + view filter **live** (Fly v6, Worker `2b262630` bundle). **48h soak in progress** (clock **2026-09-03 ~13:56Z**). Monitor: `npm run monitor:fly-soak`. Do **not** run local Orbita on `fb_buyer_10`.
+**§74:** Needs-action-only enrich + view filter **live** (Fly v6, Worker `2b262630` bundle). **48h soak in progress** (clock **2026-09-03 ~13:56Z**). **T+23h:** ~2k `seller_url` writes; one **proxy exhaustion** pause (12 GB → top-up 22 GB, recovered ~12:56Z). Monitor: `npm run monitor:fly-soak`. Do **not** run local Orbita on `fb_buyer_10`.
 
 **Next (priority order):**
 
-1. **§74 soak** — ~45h left; Fly alive, `seller_url` climbing, dealer-only `blocked_sellers`.
-2. **§73** — blocked on Anthropic credits (not an option for now).
-3. **Git commit** — ~94+ uncommitted files; production Worker `6bcd175b`.
-4. **§74 action 6** — repeatable Facebook signup in GoLogin (after soak / checkpoint).
-5. **Watch §72 on prod** — rate-limit retry + F-series alias logs.
+1. **§74 soak** — ~25h left; watch residential GB; red flags: 503/checkpoint, private sellers in `blocked_sellers`.
+2. **§73** — sample-only **done** 2026-09-04; **200-row Claude eval blocked** on Anthropic 401. R2 capture next after eval.
+3. **§74 action 6** — repeatable Facebook signup in GoLogin (after soak / checkpoint).
+4. **Watch §72 on prod** — rate-limit retry + F-series alias logs.
 
 **Where we are — last-resort `d79ce76b` 2026-08-13 20:20Z; proven-bookable `a15e2588` 2026-08-14 16:18Z. Post-gate window measured 2026-08-15 ~13:00Z (~21h):**
 
@@ -144,7 +144,7 @@ Recorded so nobody re-derives them. Rows below 2011/BMW updated 2026-08-14.
 | ~~**VINs sitting in description text**~~ | ~80/day | **Now read** — §72 action 4. Was 0% populated. |
 | **GoLogin FB session** | 1 profile | `fb_buyer_10_Marcus Vance_MA`. Logged-in Marketplace sees seller profile URLs Apify does not. §74. |
 | **Fly seller enrich** | 1 machine, `ord` | `tav-seller-enrich` — always-on GoLogin Cloud daemon. `fly.seller-enrich.toml`. Do not run local `--loop` on the same profile. |
-| **GoLogin residential traffic** | **12 GB** pool (rami) | Floppydata geo on `fb_buyer_10` bills this credit. 2 GB exhausted → Cloud `missing ws_url` / Puppeteer **503** (2026-09-01). +10 GB 2026-09-02. Daemon aborts image/media/font. |
+| **GoLogin residential traffic** | **22 GB** pool (rami) as of 2026-09-04 top-up | Floppydata geo on `fb_buyer_10`. **12 GB exhausted ~T+23h into soak** → 503 until top-up. Check: `node scripts/gologin-assign-residential.mjs --traffic-only`. |
 
 ---
 
@@ -235,13 +235,13 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.0%** deduped (~10d soak closed). Actions 7–9 **shipped** `6bcd175b`. **Next:** credits → §73 vision |
-| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] eval harness **built**; 200-row Claude run **blocked on Anthropic credits** (not an option for now) |
+| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04** (575 pool / 200 sample); 200-row Claude run **blocked on Anthropic 401** |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos, `SELLER_CLASSIFY_ENABLED=true` |
-| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] Needs-action queue + view filter **live**. **48h Fly soak in progress** (~13:56Z start). Monitor: `npm run monitor:fly-soak`. Action 6 later. |
+| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] Soak **T+23h**; ~2k URLs enriched; **1× proxy exhaustion recovered** (22 GB pool). ~25h left. Action 6 after soak. |
 | **69** | **Dealer seller blacklist** | **High** | [~] ingest + views hide blocked keys **and** empty-seller Facebook (**live** `2b262630`). Fly attaches URLs. Vendor `extraListingData.seller` still `{}`. |
 | **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stuck `running` rows **cleared 2026-09-03** (131 → 0); watch for recurrence |
 | **59** | **Max buy / YMMS linkage at ingest** — shipped, soak ongoing | **High** | [~] |
-| **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; multi-photo waits on vendor |
+| **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
 
@@ -271,8 +271,9 @@ Shipped and closed items are archived at the bottom.
 | _(uncommitted → prod 2026-09-03)_ | §72 action 7 — alias retirement after successful retry hit (`retireAliasAfterSuccessfulNoDataRetry`) | `1f04dd9a` |
 | _(uncommitted → prod 2026-09-03)_ | §72 action 8 — rate-limit retry pass (`mmrRateLimitRetryPass.ts`) | `6bcd175b` |
 | _(uncommitted → prod 2026-09-03)_ | §72 action 9 — F-series trim+axis alias resolver (`fSeriesTrimAxisAliases.ts`) | `6bcd175b` |
+| `31d861b` | Git catch-up — full §72/§71/§74 local diff + docs | `origin/main` 2026-09-04 |
 
-**Note:** Rows marked _(uncommitted)_ through `78f79974` were deployed incrementally through Aug 2026; **`2b262630`** rolled the full local diff 2026-09-03; **`1f04dd9a`** added action 7; **`6bcd175b`** added actions 8–9 same day. Git still at `75d69f3` — commit pending.
+**Note:** Rows marked _(uncommitted)_ through `78f79974` were deployed incrementally through Aug 2026; **`2b262630`** rolled the full local diff 2026-09-03; **`1f04dd9a`** added action 7; **`6bcd175b`** added actions 8–9 same day. **Git synced** commit `31d861b` pushed 2026-09-04.
 
 **Pre-deploy baseline for `cada5ef3`** (2026-08-13 18:05Z): BMW **1.7%** hit / 463 attempts (24h) and **4.5%** / 110 (3h); overall **73.7%** (3h, 2,897 attempts); `normalized_listings.vin` populated on **0** listings.
 
@@ -460,7 +461,7 @@ Logs: `ingest.mmr_no_data_retry`, `valuation.recovered_after_no_data`, `ingest.c
 
 ## 73 — Vision identity from listing photos
 
-**Opened:** 2026-08-13 · **Status:** [~] photo URL upgrade shipped with §71; **eval harness shipped** 2026-08-28; 200-row result **not run** — Anthropic **credits out**
+**Opened:** 2026-08-13 · **Status:** [~] photo URL upgrade shipped with §71; **eval harness shipped** 2026-08-28; **sample-only green 2026-09-04**; 200-row Claude run **still blocked — Anthropic 401**
 
 **Why:** some listings genuinely do not state drivetrain, engine or cab configuration. No amount of text engineering extracts information that isn't there. A person looking at the photo can tell. The model should too.
 
@@ -470,21 +471,21 @@ Logs: `ingest.mmr_no_data_retry`, `valuation.recovered_after_no_data`, `ingest.c
 
 `ctp=s1536x1536` also works. Removing `stp=` as well **breaks** the signature (HTTP 400). Links expire roughly 5 days out (`oe=` parameter), so photos must be captured, not referenced.
 
-### The remaining vendor blocker — gallery is null
+### The remaining vendor blocker — gallery is null (**closed 2026-09-04**)
 
 The actor has a dedicated option, `fetchListingMedia` ("Fetch Listing Photos & Videos"), documented to populate `extraListingMedia` with `listing_photos` — every image URI with dimensions and alt text.
 
 **It is enabled on the task, and the field is `null` on every item.** Verified in Apify's own dataset (run `qH8uOovx7wNvJXBGh`), not our stored copy, so this is not our ingest dropping it. We pay for the extra proxy request per listing and get nothing.
 
+**Vendor response 2026-09-04:** they **cannot provide multi pictures**. Do not wait on gallery / `extraListingMedia`. §73 and §71 use the **single upgraded `primaryImage`** (1536×1536). §62 multi-photo gallery is **out of scope** for this actor.
+
 That is now the **third** instance of the same pattern from this vendor:
 
 | Field | State | Impact |
 |-------|-------|--------|
-| `extraListingData.seller` | `{}` on 13,652 / 13,678 payloads | §69 dead |
+| `extraListingData.seller` | `{}` on 13,652 / 13,678 payloads | §69 dead — still worth asking separately |
 | `extraListingData.images` | `[]` on all payloads | — |
-| `extraListingMedia` | `null` on all payloads, **flag enabled** | Only 1 photo per listing |
-
-The container is emitted, the contents never are. Send all three to the vendor together — an enabled paid flag returning null is a much stronger case than the seller-only complaint.
+| `extraListingMedia` | `null` on all payloads, **flag enabled** | **Closed** — vendor won't fill; 1 photo only |
 
 ### Design principle
 
@@ -527,7 +528,9 @@ Prompt is elimination-only: year + Cox make + legal styles for that model (namep
 
 **Sample-only 2026-08-28:** 635 recent hits with photo URLs (last 3d, pool 2,500 snapshots) → **100 hard / 100 random**. Photos download (smoke: 258 KB).
 
-**200-row Claude run:** not started. Anthropic **credits are out** — same wall as ingest Claude-offline (`llm_hit` 0, `llm_unavailable` in snapshots). The Messages API currently 401s; do not treat that as a bad key. Reload credits on the same account, then:
+**Sample-only 2026-09-04:** **575** hits with photo URLs (last 3d, pool 2,500 snapshots) → **200-row sample** (91 hard / 109 random). Written to `scripts/_eval-results/ymms-vision-sample-2026-09-04T13-03-07-026Z.json`.
+
+**200-row Claude run:** not started. Anthropic **credits still out** — `--limit 1` returns **401** (2026-09-04). Same wall as ingest Claude-offline (`llm_hit` 0, `llm_unavailable` in snapshots). Reload credits on the same account, then:
 
 ```bash
 npm run eval:ymms-vision -- --limit 200 --concurrency 2
@@ -543,12 +546,12 @@ Do not wire a production vision tier until this file has a real summary (text-on
 
 ### Exit criteria
 
-- [x] Eval script (`scripts/eval-ymms-vision.mjs`, `npm run eval:ymms-vision`) — sample-only green 2026-08-28
-- [ ] 200-row result documented (text-only vs photo, overall + hard slice) — **blocked on Anthropic credits**
+- [x] Eval script (`scripts/eval-ymms-vision.mjs`, `npm run eval:ymms-vision`) — sample-only green 2026-08-28 and **2026-09-04**
+- [ ] 200-row result documented (text-only vs photo, overall + hard slice) — **blocked on Anthropic 401**
 - [x] Photo URL upgrade shipped in the adapter (`upgradeFacebookListingPhotoUrl`, ingest stores 1536px)
 - [ ] Image capture to R2 before expiry
 - [ ] Vision tier wired behind a flag, outside the batch, on the ambiguous subset only
-- [ ] Vendor contacted with all three hollow fields
+- [~] Vendor — **gallery closed** (no multi-photo, 2026-09-04); `extraListingData.seller` still `{}`
 
 ---
 
@@ -594,7 +597,7 @@ Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer
 
 ## 74 — Seller identity via GoLogin / logged-in Facebook
 
-**Status:** [~] Needs-action-only enrich **live** Fly v6 2026-09-03. View filter **live** Worker `2b262630`. Fly **`tav-seller-enrich`** writing `needs_action` rows ~8/min. **48h soak in progress** (clock ~13:56Z → ~2026-09-05 13:56Z). Monitor: `npm run monitor:fly-soak`. **Open:** action 6 (more FB logins). **Unblocks:** §69 · **Does not replace:** §71
+**Status:** [~] Needs-action-only enrich **live** Fly v6 2026-09-03. View filter **live** Worker `2b262630`. **48h soak in progress** (clock **2026-09-03 ~13:56Z** → **~2026-09-05 13:56Z**). **T+23h:** ~2k `seller_url` writes; **1× residential exhaustion + recovery** (see 2026-09-04 table). Monitor: `npm run monitor:fly-soak`. **Open:** action 6 (more FB logins). **Unblocks:** §69 · **Does not replace:** §71
 
 **Goal:** get a stable seller key (`seller_url`, else `seller_name`) onto Facebook listings we already ingest, using the GoLogin profile + Facebook account we already have, so the shipped blacklist can start matching.
 
@@ -625,6 +628,17 @@ Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer
 | Fix 2 (bytes) | Abort **image / media / font** on the Cloud page (`stripHeavyProxyAssets` in `facebook-seller-extract.mjs`). Seller extract only needs document/script/XHR. Deployed Fly **2026-09-02** (`proxy savings: aborting image/media/font`; writes still `ok`). Expect ~3–5× fewer bytes so 12 GB can cover the 5-day backlog. |
 | Soak clock | **Reset 2026-09-02 ~12:59Z.** The 2026-08-31 17:13Z start is void (zombie, then 503). |
 | Do not | Local Orbita on `fb_buyer_10` while Fly is up. Swap Floppydata. Treat Cloud 503 as proxy traffic exhaustion until `/users-proxies/geolocation/traffic` checked. |
+
+### 2026-09-04 — second residential exhaustion during soak — do not re-derive
+
+| Fact | Detail |
+|------|--------|
+| Soak clock | **Unchanged** — still **2026-09-03 ~13:56Z** start (needs-action redeploy). Do **not** reset on proxy top-up alone. |
+| T+23h metrics | **~2,037** listings got `seller_url` since soak start; **2,623** Facebook rows with URL total; **3** new `blocked_sellers` (all `dealer`). |
+| Symptom | **`npm run monitor:fly-soak` unhealthy** — 503 in logs, no recent `ok wrote`. Last DB write **~10:39Z**. Fly machine still `started`, health 200. |
+| Cause | Residential **12.039 / 12 GB** (`node scripts/gologin-assign-residential.mjs --traffic-only`). Same failure mode as 2026-09-02 — GoLogin Cloud **503** retry loop, **not** checkpoint. |
+| Fix | **+10 GB top-up** → pool **22 GB** (**~10.04 used, ~12 GB left** after reset accounting). Fly **self-healed ~12:56Z** — `warmup facebook.com`, `ok wrote needs_action` resumed. No `fly machine restart` needed. |
+| Watch | Check residential GB daily during uncapped soak. 12 GB lasted ~23h with `stripHeavyProxyAssets`; budget **~22 GB** for remaining soak + backlog. |
 
 ### Product lock 2026-08-31 — seller identity before the card lands — **LIVE**
 
