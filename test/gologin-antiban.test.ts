@@ -10,7 +10,7 @@ import {
   isWithinHours,
   recordVisit,
   remainingCapacity,
-} from "../scripts/lib/gologin-antiban.mjs";
+} from "@scripts/gologin-antiban";
 
 describe("gologin antiban caps", () => {
   it("halts until a human clears the latch", () => {

@@ -8,7 +8,7 @@ import {
   isExpiringClaim,
   isWithinNeedsActionAge,
   matchesWouldBeNeedsAction,
-} from "../scripts/lib/enrich-queues.mjs";
+} from "@scripts/enrich-queues";
 
 describe("enrich queues", () => {
   it("defaults to needs_action (not Unprocessed ocean)", () => {
