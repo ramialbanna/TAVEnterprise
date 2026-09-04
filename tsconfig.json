@@ -10,8 +10,10 @@
     "noImplicitReturns": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "allowJs": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "workers/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "test/**/*.d.ts", "workers/**/*.ts", "scripts/**/*.d.ts"],
+  "exclude": ["scripts/**/*.mjs"]
 }

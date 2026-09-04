@@ -89,10 +89,11 @@ describe("callAnthropicForSellerClassify", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as {
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
       messages: Array<{ content: unknown[] }>;
     };
-    expect(body.messages[0].content).toEqual([
+    expect(body.messages[0]?.content).toEqual([
       { type: "image", source: { type: "url", url: "https://cdn.example/lot.jpg" } },
       expect.objectContaining({ type: "text" }),
     ]);
