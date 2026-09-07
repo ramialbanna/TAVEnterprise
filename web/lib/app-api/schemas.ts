@@ -555,3 +555,32 @@ export const StaffDirectoryEntrySchema = z.object({
 });
 export const StaffDirectoryListSchema = z.array(StaffDirectoryEntrySchema);
 export type StaffDirectoryEntry = z.infer<typeof StaffDirectoryEntrySchema>;
+
+export const BlockedSellerReviewListingSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  listingUrl: z.string().nullable(),
+  price: z.number().nullable(),
+  year: z.number().nullable(),
+  make: z.string().nullable(),
+  model: z.string().nullable(),
+  firstSeenAt: z.string().nullable(),
+  opportunityHref: z.string().nullable(),
+});
+export const BlockedSellerReviewSchema = z.object({
+  id: z.string(),
+  relatedIds: z.array(z.string()),
+  sellerName: z.string().nullable(),
+  sellerUrl: z.string().nullable(),
+  reason: z.string(),
+  origin: z.enum(["buyer", "auto"]),
+  listingCount: z.number().int(),
+  createdAt: z.string(),
+  listings: z.array(BlockedSellerReviewListingSchema),
+});
+export const BlockedSellerReviewListSchema = z.array(BlockedSellerReviewSchema);
+export type BlockedSellerReview = z.infer<typeof BlockedSellerReviewSchema>;
+export type BlockedSellerUnblock = { deleted: number };
+export const BlockedSellerUnblockSchema = z.object({
+  deleted: z.number().int(),
+});

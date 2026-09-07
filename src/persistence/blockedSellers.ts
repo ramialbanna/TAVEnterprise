@@ -265,3 +265,282 @@ export async function blockSellerFromDealerDismiss(
   if (!result) return null;
   return { sellerKey: result.sellerKey, inserted: result.inserted };
 }
+
+export type BlockedSellerDbRow = {
+  id: string;
+  source: string;
+  region: string | null;
+  seller_key: string;
+  seller_url: string | null;
+  seller_name: string | null;
+  reason: string;
+  flagged_by_user_id: string | null;
+  normalized_listing_id: string | null;
+  created_at: string;
+};
+
+export type BlockedSellerListingRow = {
+  id: string;
+  title: string | null;
+  listing_url: string | null;
+  price: number | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  seller_url: string | null;
+  seller_name: string | null;
+  first_seen_at: string | null;
+};
+
+export type BlockedSellerReviewListing = {
+  id: string;
+  title: string;
+  listingUrl: string | null;
+  price: number | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  firstSeenAt: string | null;
+  opportunityHref: string | null;
+};
+
+export type BlockedSellerReview = {
+  id: string;
+  relatedIds: string[];
+  sellerName: string | null;
+  sellerUrl: string | null;
+  reason: string;
+  origin: "buyer" | "auto";
+  listingCount: number;
+  createdAt: string;
+  listings: BlockedSellerReviewListing[];
+};
+
+type ReviewGroup = {
+  ids: string[];
+  sellerUrl: string | null;
+  sellerName: string | null;
+  reason: string;
+  buyerFlagged: boolean;
+  createdAt: string;
+};
+
+function listingTitle(row: BlockedSellerListingRow): string {
+  const ymm = [row.year, row.make, row.model].filter(Boolean).join(" ");
+  return row.title?.trim() || ymm || "Untitled listing";
+}
+
+/**
+ * Collapse url+name key pairs into one review row and attach matching listings.
+ */
+export function groupBlockedSellerReviews(
+  rows: readonly BlockedSellerDbRow[],
+  listings: readonly BlockedSellerListingRow[],
+  queueListingIds: ReadonlySet<string>,
+): BlockedSellerReview[] {
+  const urlGroups = new Map<string, ReviewGroup>();
+  const nameGroups = new Map<string, ReviewGroup>();
+
+  const ordered = [...rows].sort((a, b) => {
+    const aUrl = a.seller_key.startsWith("url:") ? 0 : 1;
+    const bUrl = b.seller_key.startsWith("url:") ? 0 : 1;
+    return aUrl - bUrl;
+  });
+
+  for (const row of ordered) {
+    const url = row.seller_url ? normalizeSellerUrl(row.seller_url) : "";
+    const name = row.seller_name ? normalizeSellerName(row.seller_name) : "";
+    const existing = (url && urlGroups.get(url)) || (name && nameGroups.get(name)) || null;
+    const group: ReviewGroup = existing ?? {
+      ids: [],
+      sellerUrl: url || null,
+      sellerName: name || null,
+      reason: row.reason || "dealer",
+      buyerFlagged: false,
+      createdAt: row.created_at,
+    };
+    if (!group.ids.includes(row.id)) group.ids.push(row.id);
+    if (url) group.sellerUrl = url;
+    if (name) group.sellerName = name;
+    if (row.flagged_by_user_id) group.buyerFlagged = true;
+    if (row.created_at < group.createdAt) group.createdAt = row.created_at;
+    if (url) urlGroups.set(url, group);
+    if (name) nameGroups.set(name, group);
+  }
+
+  const unique = new Set<ReviewGroup>([...urlGroups.values(), ...nameGroups.values()]);
+
+  const reviews: BlockedSellerReview[] = [];
+  for (const group of unique) {
+    const matched = listings.filter((listing) => {
+      const listingUrl = listing.seller_url ? normalizeSellerUrl(listing.seller_url) : "";
+      const listingName = listing.seller_name ? normalizeSellerName(listing.seller_name) : "";
+      if (group.sellerUrl) return Boolean(listingUrl) && listingUrl === group.sellerUrl;
+      if (!group.sellerName || listingName !== group.sellerName) return false;
+      return !listingUrl || !urlGroups.has(listingUrl);
+    });
+
+    const [primaryId, ...rest] = group.ids;
+    if (!primaryId) continue;
+
+    reviews.push({
+      id: primaryId,
+      relatedIds: rest,
+      sellerName: group.sellerName,
+      sellerUrl: group.sellerUrl,
+      reason: group.reason,
+      origin: group.buyerFlagged ? "buyer" : "auto",
+      listingCount: matched.length,
+      createdAt: group.createdAt,
+      listings: matched
+        .slice()
+        .sort((a, b) => (b.first_seen_at ?? "").localeCompare(a.first_seen_at ?? ""))
+        .map((listing) => ({
+          id: listing.id,
+          title: listingTitle(listing),
+          listingUrl: listing.listing_url,
+          price: listing.price,
+          year: listing.year,
+          make: listing.make,
+          model: listing.model,
+          firstSeenAt: listing.first_seen_at,
+          opportunityHref: queueListingIds.has(listing.id) ? `/opportunities/${listing.id}` : null,
+        })),
+    });
+  }
+
+  return reviews.sort((a, b) => {
+    if (a.listingCount !== b.listingCount) return a.listingCount - b.listingCount;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
+const LISTING_REVIEW_COLUMNS =
+  "id, title, listing_url, price, year, make, model, seller_url, seller_name, first_seen_at";
+
+function quoteOrValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+async function loadListingsForBlockedSellers(
+  db: SupabaseClient,
+  urls: string[],
+  names: string[],
+): Promise<BlockedSellerListingRow[]> {
+  const byId = new Map<string, BlockedSellerListingRow>();
+
+  if (urls.length > 0) {
+    const urlVariants = urls.flatMap((url) => [url, `${url}/`]);
+    const { data, error } = await db
+      .from("normalized_listings")
+      .select(LISTING_REVIEW_COLUMNS)
+      .eq("source", "facebook")
+      .in("seller_url", urlVariants);
+    if (error) throw error;
+    for (const row of (data ?? []) as BlockedSellerListingRow[]) {
+      byId.set(row.id, row);
+    }
+  }
+
+  for (let i = 0; i < names.length; i += 25) {
+    const chunk = names.slice(i, i + 25);
+    const orFilter = chunk.map((name) => `seller_name.ilike.${quoteOrValue(name)}`).join(",");
+    const { data, error } = await db
+      .from("normalized_listings")
+      .select(LISTING_REVIEW_COLUMNS)
+      .eq("source", "facebook")
+      .or(orFilter);
+    if (error) throw error;
+    for (const row of (data ?? []) as BlockedSellerListingRow[]) {
+      byId.set(row.id, row);
+    }
+  }
+
+  return [...byId.values()];
+}
+
+export async function listBlockedSellerReviews(
+  db: SupabaseClient,
+): Promise<BlockedSellerReview[]> {
+  const { data, error } = await db
+    .from("blocked_sellers")
+    .select(
+      "id, source, region, seller_key, seller_url, seller_name, reason, flagged_by_user_id, normalized_listing_id, created_at",
+    )
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []) as BlockedSellerDbRow[];
+  const urls = [
+    ...new Set(
+      rows
+        .map((row) => (row.seller_url ? normalizeSellerUrl(row.seller_url) : ""))
+        .filter(Boolean),
+    ),
+  ];
+  const names = [
+    ...new Set(
+      rows
+        .map((row) => (row.seller_name ? normalizeSellerName(row.seller_name) : ""))
+        .filter(Boolean),
+    ),
+  ];
+
+  const listings = await loadListingsForBlockedSellers(db, urls, names);
+  const listingIds = listings.map((row) => row.id);
+  const queueListingIds = new Set<string>();
+  if (listingIds.length > 0) {
+    const { data: leads, error: leadsError } = await db
+      .from("leads")
+      .select("normalized_listing_id")
+      .in("normalized_listing_id", listingIds);
+    if (leadsError) throw leadsError;
+    for (const lead of leads ?? []) {
+      const id = (lead as { normalized_listing_id?: string }).normalized_listing_id;
+      if (id) queueListingIds.add(id);
+    }
+  }
+
+  return groupBlockedSellerReviews(rows, listings, queueListingIds);
+}
+
+export async function unblockBlockedSellerGroup(
+  db: SupabaseClient,
+  sellerId: string,
+): Promise<{ deleted: number } | null> {
+  const { data: seed, error: seedError } = await db
+    .from("blocked_sellers")
+    .select("id, seller_url, seller_name")
+    .eq("id", sellerId)
+    .maybeSingle();
+  if (seedError) throw seedError;
+  if (!seed) return null;
+
+  const url = seed.seller_url ? normalizeSellerUrl(String(seed.seller_url)) : "";
+  const name = seed.seller_name ? normalizeSellerName(String(seed.seller_name)) : "";
+
+  const { data: siblings, error: siblingError } = await db
+    .from("blocked_sellers")
+    .select("id, seller_url, seller_name");
+  if (siblingError) throw siblingError;
+
+  const ids = [...new Set(
+    ((siblings ?? []) as Array<{ id: string; seller_url: string | null; seller_name: string | null }>)
+      .filter((row) => {
+        const rowUrl = row.seller_url ? normalizeSellerUrl(row.seller_url) : "";
+        const rowName = row.seller_name ? normalizeSellerName(row.seller_name) : "";
+        if (url && rowUrl === url) return true;
+        if (name && rowName === name && !rowUrl) return true;
+        if (name && rowName === name && url && rowUrl === url) return true;
+        if (!url && name && rowName === name) return true;
+        return row.id === sellerId;
+      })
+      .map((row) => row.id),
+  )];
+
+  if (ids.length === 0) return null;
+
+  const { error: deleteError } = await db.from("blocked_sellers").delete().in("id", ids);
+  if (deleteError) throw deleteError;
+  return { deleted: ids.length };
+}

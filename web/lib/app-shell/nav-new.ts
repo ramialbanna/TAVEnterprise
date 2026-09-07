@@ -8,6 +8,7 @@ import {
   PlusCircle,
   Search,
   Settings,
+  ShieldAlert,
   Target,
   type LucideIcon,
 } from "lucide-react";
@@ -77,7 +78,15 @@ export function opsNavItems(): NavLinkItem[] {
   return [
     { href: "/ingest", label: "Ingest Monitor", icon: Activity },
     { href: "/historical", label: "Historical data", icon: Database },
-    { href: "/admin", label: "Admin", icon: Settings },
+    { href: "/admin/blocked-sellers" as Route, label: "Blocked sellers", icon: ShieldAlert },
+    {
+      href: "/admin",
+      label: "Admin",
+      icon: Settings,
+      isActive: (pathname) =>
+        pathname === "/admin" ||
+        (pathname.startsWith("/admin/") && !pathname.startsWith("/admin/blocked-sellers")),
+    },
   ];
 }
 
@@ -106,6 +115,7 @@ const TITLE_ENTRIES: { match: (pathname: string) => boolean; label: string }[] =
   { match: (p) => p.startsWith("/opportunities"), label: "Opportunities" },
   { match: (p) => p.startsWith("/ingest"), label: "Ingest Monitor" },
   { match: (p) => p.startsWith("/historical"), label: "Historical data" },
+  { match: (p) => p.startsWith("/admin/blocked-sellers"), label: "Blocked sellers" },
   { match: (p) => p.startsWith("/admin"), label: "Admin" },
 ];
 

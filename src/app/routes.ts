@@ -15,6 +15,7 @@
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
  * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
  * GET /app/me, GET /app/users, GET /app/directory,
+ * GET /app/blocked-sellers, POST /app/blocked-sellers/:id/unblock,
  * POST /app/directory, POST /app/directory/:id/deactivate,
  * POST /app/directory/:id/reactivate,
  * POST /app/opportunities/parse,
@@ -67,6 +68,10 @@ import {
   StaffDirectoryError,
   type StaffDirectoryRole,
 } from "../persistence/staffDirectory";
+import {
+  listBlockedSellerReviews,
+  unblockBlockedSellerGroup,
+} from "../persistence/blockedSellers";
 import { SOURCE_NAMES } from "../validate";
 import { REGION_KEYS } from "../types/domain";
 import { classifyIntelHttpError } from "../valuation/workerClient";
@@ -303,6 +308,15 @@ export async function handleApp(request: Request, env: Env, ctx: ExecutionContex
     }
     if (request.method === "GET" && pathname === "/app/users") {
       return await handleUsersList(env);
+    }
+    if (request.method === "GET" && pathname === "/app/blocked-sellers") {
+      return await handleBlockedSellersList(request, env);
+    }
+    const blockedSellerUnblock = pathname.match(/^\/app\/blocked-sellers\/([^/]+)\/unblock$/);
+    if (request.method === "POST" && blockedSellerUnblock) {
+      const id = blockedSellerUnblock[1];
+      if (!id) return json({ ok: false, error: "not_found" }, 404);
+      return await handleBlockedSellerUnblock(request, env, decodeURIComponent(id));
     }
     if (request.method === "GET" && pathname === "/app/directory") {
       return await handleDirectoryList(request, env, url);
@@ -1338,6 +1352,67 @@ function mapStaffDirectoryError(err: StaffDirectoryError): Response {
 /**
  * GET /app/directory?type=salesperson|appraiser&includeInactive=1 — roster for pickers / admin.
  */
+async function handleBlockedSellersList(request: Request, env: Env): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+  if (userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.blocked_sellers.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const data = await listBlockedSellerReviews(db);
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.blocked_sellers.query_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * POST /app/blocked-sellers/:id/unblock — admin removes the seller and sibling keys.
+ */
+async function handleBlockedSellerUnblock(
+  request: Request,
+  env: Env,
+  id: string,
+): Promise<Response> {
+  const userOrResponse = await requireAppUser(request, env);
+  if (userOrResponse instanceof Response) return userOrResponse;
+  if (userOrResponse.role !== "admin") {
+    return json({ ok: false, error: "forbidden" }, 403);
+  }
+
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.blocked_sellers.unblock.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  try {
+    const result = await unblockBlockedSellerGroup(db, id);
+    if (!result) return json({ ok: false, error: "not_found" }, 404);
+    log("app.blocked_sellers.unblocked", {
+      actorId: userOrResponse.id,
+      sellerId: id,
+      deleted: result.deleted,
+    });
+    return json({ ok: true, data: result });
+  } catch (err) {
+    log("app.blocked_sellers.unblock.failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
 async function handleDirectoryList(
   request: Request,
   env: Env,

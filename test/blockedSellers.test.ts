@@ -12,6 +12,7 @@ import {
   normalizeSellerName,
   normalizeSellerUrl,
   upsertBlockedSeller,
+  groupBlockedSellerReviews,
 } from "../src/persistence/blockedSellers";
 
 describe("blockedSellers normalization", () => {
@@ -173,6 +174,136 @@ describe("item 74 blocked seller scope", () => {
     };
     const lookup = await loadBlockedSellerLookup(db as never, "facebook", "houston_tx");
     expect(lookup?.keys.has("url:https://www.facebook.com/marketplace/profile/abc")).toBe(true);
+  });
+});
+
+describe("groupBlockedSellerReviews", () => {
+  it("merges url and name keys and attaches listings", () => {
+    const reviews = groupBlockedSellerReviews(
+      [
+        {
+          id: "url-1",
+          source: "facebook",
+          region: "dallas_tx",
+          seller_key: "url:https://www.facebook.com/marketplace/profile/1",
+          seller_url: "https://www.facebook.com/marketplace/profile/1",
+          seller_name: "imd motors dallas",
+          reason: "dealer",
+          flagged_by_user_id: null,
+          normalized_listing_id: null,
+          created_at: "2026-09-03T17:46:32Z",
+        },
+        {
+          id: "name-1",
+          source: "facebook",
+          region: "dallas_tx",
+          seller_key: "name:imd motors dallas",
+          seller_url: null,
+          seller_name: "imd motors dallas",
+          reason: "dealer",
+          flagged_by_user_id: null,
+          normalized_listing_id: null,
+          created_at: "2026-09-03T17:46:32Z",
+        },
+      ],
+      [
+        {
+          id: "listing-1",
+          title: "2018 F-150",
+          listing_url: "https://www.facebook.com/marketplace/item/1/",
+          price: 12000,
+          year: 2018,
+          make: "Ford",
+          model: "F-150",
+          seller_url: "https://www.facebook.com/marketplace/profile/1/",
+          seller_name: "IMD Motors Dallas",
+          first_seen_at: "2026-09-03T18:00:00Z",
+        },
+      ],
+      new Set(["listing-1"]),
+    );
+
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]?.sellerName).toBe("imd motors dallas");
+    expect(reviews[0]?.listingCount).toBe(1);
+    expect(reviews[0]?.origin).toBe("auto");
+    expect(reviews[0]?.listings[0]?.opportunityHref).toBe("/opportunities/listing-1");
+    expect(reviews[0]?.relatedIds).toContain("name-1");
+  });
+
+  it("sorts one-listing auto blocks first", () => {
+    const reviews = groupBlockedSellerReviews(
+      [
+        {
+          id: "a",
+          source: "facebook",
+          region: null,
+          seller_key: "name:randy white",
+          seller_url: null,
+          seller_name: "randy white",
+          reason: "dealer",
+          flagged_by_user_id: null,
+          normalized_listing_id: null,
+          created_at: "2026-09-04T15:48:52Z",
+        },
+        {
+          id: "b",
+          source: "facebook",
+          region: null,
+          seller_key: "url:https://www.facebook.com/marketplace/profile/2",
+          seller_url: "https://www.facebook.com/marketplace/profile/2",
+          seller_name: "mauricio cortes",
+          reason: "dealer",
+          flagged_by_user_id: "user-1",
+          normalized_listing_id: null,
+          created_at: "2026-09-03T14:00:30Z",
+        },
+      ],
+      [
+        {
+          id: "l1",
+          title: "Car A",
+          listing_url: "https://www.facebook.com/marketplace/item/a/",
+          price: 1,
+          year: 2016,
+          make: "Honda",
+          model: "Civic",
+          seller_url: null,
+          seller_name: "Randy White",
+          first_seen_at: "2026-09-04T00:00:00Z",
+        },
+        {
+          id: "l2",
+          title: "Car B",
+          listing_url: "https://www.facebook.com/marketplace/item/b/",
+          price: 2,
+          year: 2019,
+          make: "Ford",
+          model: "F-150",
+          seller_url: "https://www.facebook.com/marketplace/profile/2",
+          seller_name: "Mauricio Cortes",
+          first_seen_at: "2026-09-03T00:00:00Z",
+        },
+        {
+          id: "l3",
+          title: "Car C",
+          listing_url: "https://www.facebook.com/marketplace/item/c/",
+          price: 3,
+          year: 2020,
+          make: "Ford",
+          model: "F-150",
+          seller_url: "https://www.facebook.com/marketplace/profile/2",
+          seller_name: "Mauricio Cortes",
+          first_seen_at: "2026-09-03T01:00:00Z",
+        },
+      ],
+      new Set(),
+    );
+
+    expect(reviews[0]?.sellerName).toBe("randy white");
+    expect(reviews[0]?.listingCount).toBe(1);
+    expect(reviews[1]?.origin).toBe("buyer");
+    expect(reviews[1]?.listingCount).toBe(2);
   });
 });
 

@@ -11,6 +11,10 @@ import { listOpportunities, getOpportunityDetail, patchOpportunityFields } from 
 import { listActiveUsers } from "../src/persistence/users";
 import { resolveAppUser } from "../src/auth/resolveAppUser";
 import {
+  listBlockedSellerReviews,
+  unblockBlockedSellerGroup,
+} from "../src/persistence/blockedSellers";
+import {
   submitManualOpportunity,
   ManualSubmissionValidationError,
 } from "../src/persistence/manualOpportunities";
@@ -91,6 +95,15 @@ vi.mock("../src/persistence/manualOpportunities", async (importOriginal) => {
 vi.mock("../src/intake/parseListingUrl", () => ({
   parseListingUrl: vi.fn(),
 }));
+
+vi.mock("../src/persistence/blockedSellers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/blockedSellers")>();
+  return {
+    ...actual,
+    listBlockedSellerReviews: vi.fn(),
+    unblockBlockedSellerGroup: vi.fn(),
+  };
+});
 
 vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/persistence/opportunityWorkflow")>();
@@ -1632,6 +1645,83 @@ describe("GET /app/users", () => {
     expect(body.ok).toBe(true);
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.id).toBe("user-1");
+  });
+});
+
+describe("GET /app/blocked-sellers", () => {
+  const admin = {
+    id: "admin-1",
+    email: "rami@texasautovalue.com",
+    displayName: "Rami",
+    role: "admin" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("returns grouped sellers for an admin", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(admin);
+    vi.mocked(listBlockedSellerReviews).mockResolvedValue([
+      {
+        id: "bs-1",
+        relatedIds: [],
+        sellerName: "randy white",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1",
+        reason: "dealer",
+        origin: "auto",
+        listingCount: 1,
+        createdAt: "2026-09-04T15:48:52Z",
+        listings: [],
+      },
+    ]);
+
+    const res = await worker.fetch(authedReq("/app/blocked-sellers"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: Array<{ sellerName: string }> };
+    expect(body.ok).toBe(true);
+    expect(body.data[0]?.sellerName).toBe("randy white");
+  });
+
+  it("returns 403 for a closer", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue({ ...admin, role: "closer" });
+    const res = await worker.fetch(authedReq("/app/blocked-sellers"), makeEnv(), ctx);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /app/blocked-sellers/:id/unblock", () => {
+  const admin = {
+    id: "admin-1",
+    email: "rami@texasautovalue.com",
+    displayName: "Rami",
+    role: "admin" as const,
+    isActive: true,
+    createdAt: "2026-05-22T00:00:00.000Z",
+    updatedAt: "2026-05-22T00:00:00.000Z",
+  };
+
+  it("unblocks a seller group", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(admin);
+    vi.mocked(unblockBlockedSellerGroup).mockResolvedValue({ deleted: 2 });
+    const res = await worker.fetch(
+      authedPost("/app/blocked-sellers/bs-1/unblock", {}),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: { deleted: number } };
+    expect(body.data.deleted).toBe(2);
+  });
+
+  it("returns 404 when the seller is gone", async () => {
+    vi.mocked(resolveAppUser).mockResolvedValue(admin);
+    vi.mocked(unblockBlockedSellerGroup).mockResolvedValue(null);
+    const res = await worker.fetch(
+      authedPost("/app/blocked-sellers/missing/unblock", {}),
+      makeEnv(),
+      ctx,
+    );
+    expect(res.status).toBe(404);
   });
 });
 

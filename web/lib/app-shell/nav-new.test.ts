@@ -21,13 +21,14 @@ describe("nav-new", () => {
   it("ops nav only for admins in shell builder", () => {
     expect(isAdminRole("admin")).toBe(true);
     expect(isAdminRole("closer")).toBe(false);
-    expect(opsNavItems()).toHaveLength(3);
+    expect(opsNavItems()).toHaveLength(4);
   });
 
   it("navTitleNew uses buyer-friendly labels", () => {
     expect(navTitleNew("/dashboard")).toBe("Home");
     expect(navTitleNew("/dashboard/analytics")).toBe("Analytics");
     expect(navTitleNew("/opportunities/submit")).toBe("Submit listing");
+    expect(navTitleNew("/admin/blocked-sellers")).toBe("Blocked sellers");
     expect(navTitleNew("/mmr-lab")).toBe("TAV MMR");
     expect(navTitleNew("/maxbuy")).toBe("TAV MMR");
     expect(analyticsNavItem().label).toBe("Analytics");

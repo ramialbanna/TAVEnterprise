@@ -23,6 +23,8 @@ import {
   parseAppMe,
   parseStaffDirectory,
   parseStaffDirectoryEntry,
+  parseBlockedSellers,
+  parseBlockedSellerUnblock,
   parseKpis,
   parseMmrCatalog,
   parseMmrYmm,
@@ -52,6 +54,8 @@ import type {
   DismissReasonCode,
   StaffDirectoryEntry,
   StaffDirectoryRole,
+  BlockedSellerReview,
+  BlockedSellerUnblock,
   Kpis,
   MmrCatalog,
   MmrVinOk,
@@ -506,6 +510,20 @@ export async function reactivateStaffDirectoryEntry(
   const r = await postJson(`directory/${encodeURIComponent(id)}/reactivate`, {});
   if (r === FETCH_FAILED) return clientTransportError();
   return parseStaffDirectoryEntry(r.status, r.json);
+}
+
+export async function listBlockedSellers(): Promise<ApiResult<BlockedSellerReview[]>> {
+  const r = await getJson("blocked-sellers");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseBlockedSellers(r.status, r.json);
+}
+
+export async function unblockBlockedSeller(
+  id: string,
+): Promise<ApiResult<BlockedSellerUnblock>> {
+  const r = await postJson(`blocked-sellers/${encodeURIComponent(id)}/unblock`, {});
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseBlockedSellerUnblock(r.status, r.json);
 }
 
 export async function parseListingUrl(

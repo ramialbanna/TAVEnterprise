@@ -15,6 +15,8 @@ import {
   AppUserSchema,
   StaffDirectoryListSchema,
   StaffDirectoryEntrySchema,
+  BlockedSellerReviewListSchema,
+  BlockedSellerUnblockSchema,
   KpisSchema,
   MmrCatalogSchema,
   MmrVinOkSchema,
@@ -33,6 +35,8 @@ import {
   type AppUserSummary,
   type AppUser,
   type StaffDirectoryEntry,
+  type BlockedSellerReview,
+  type BlockedSellerUnblock,
   type Kpis,
   type MmrCatalog,
   type MmrVinOk,
@@ -302,6 +306,20 @@ export function parseStaffDirectoryEntry(
   json: unknown,
 ): ApiResult<StaffDirectoryEntry> {
   return interpret(status, json, StaffDirectoryEntrySchema);
+}
+
+export function parseBlockedSellers(
+  status: number,
+  json: unknown,
+): ApiResult<BlockedSellerReview[]> {
+  return interpret(status, json, BlockedSellerReviewListSchema);
+}
+
+export function parseBlockedSellerUnblock(
+  status: number,
+  json: unknown,
+): ApiResult<BlockedSellerUnblock> {
+  return interpret(status, json, BlockedSellerUnblockSchema);
 }
 
 /**

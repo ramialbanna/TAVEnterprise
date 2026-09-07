@@ -4,6 +4,7 @@ import type { ApiResult } from "@/lib/app-api";
 import {
   getKpis,
   getSystemStatus,
+  listBlockedSellers,
   listHistoricalSales,
   listIngestRuns,
 } from "@/lib/app-api/client";
@@ -53,6 +54,10 @@ export function prefetchAdminStatus(queryClient: QueryClient): void {
   prefetch(queryClient, queryKeys.systemStatus, getSystemStatus);
 }
 
+export function prefetchBlockedSellers(queryClient: QueryClient): void {
+  prefetch(queryClient, queryKeys.blockedSellers, listBlockedSellers);
+}
+
 /**
  * Sidebar / tile hover — warm the destination React Query cache before the click.
  * Queue destinations stay in `queue-prefetch`; this covers the rest of the menu.
@@ -74,6 +79,10 @@ export function prefetchNavHref(
   }
   if (href === "/historical" || href.startsWith("/historical?")) {
     prefetchHistoricalData(queryClient);
+    return;
+  }
+  if (href === "/admin/blocked-sellers" || href.startsWith("/admin/blocked-sellers?")) {
+    prefetchBlockedSellers(queryClient);
     return;
   }
   if (href === "/admin" || href.startsWith("/admin?")) {

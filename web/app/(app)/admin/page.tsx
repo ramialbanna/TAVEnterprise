@@ -1,3 +1,6 @@
+import Link from "next/link";
+import type { Route } from "next";
+
 import { NewModeOpsGuard } from "@/components/app-shell/new-mode-ops-guard";
 import { auth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env";
@@ -33,6 +36,13 @@ export default async function AdminPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Admin / Integrations</h1>
         <p className="text-sm text-muted-foreground">
           Live operational status of the TAV API, intelligence worker, and ingestion sources.
+        </p>
+        <p className="mt-2 text-sm">
+          <Link href={"/admin/blocked-sellers" as Route} className="font-medium text-primary hover:underline">
+            Review blocked sellers
+          </Link>
+          {" — "}
+          Facebook profile and listing links for auto-blocks.
         </p>
       </header>
 
