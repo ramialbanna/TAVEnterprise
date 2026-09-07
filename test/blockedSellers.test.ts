@@ -13,6 +13,10 @@ import {
   normalizeSellerUrl,
   upsertBlockedSeller,
   groupBlockedSellerReviews,
+  shouldPersistBlockedSeller,
+  isRepeatSellerDealer,
+  facebookMarketplaceProfileId,
+  countLiveFacebookListingsForSellerUrl,
 } from "../src/persistence/blockedSellers";
 
 describe("blockedSellers normalization", () => {
@@ -28,8 +32,8 @@ describe("blockedSellers normalization", () => {
     ).toBe("url:https://facebook.com/marketplace/profile/abc");
   });
 
-  it("falls back to normalized seller name when URL missing", () => {
-    expect(buildBlockedSellerKey(undefined, "  Big   Dealer  ")).toBe("name:big dealer");
+  it("does not build a name-only key", () => {
+    expect(buildBlockedSellerKey(undefined, "  Big   Dealer  ")).toBeNull();
   });
 
   it("matches blocked sellers by key set", () => {
@@ -42,10 +46,9 @@ describe("blockedSellers normalization", () => {
     expect(isBlockedSeller(lookup, "https://facebook.com/other", "abc")).toBe(false);
   });
 
-  it("matches a name-only listing against a name key", () => {
+  it("does not match a name-only listing", () => {
     const lookup = { keys: new Set(["name:claudia gonzalez"]) };
-    expect(isBlockedSeller(lookup, null, "Claudia Gonzalez")).toBe(true);
-    expect(isBlockedSeller(lookup, null, "Someone Else")).toBe(false);
+    expect(isBlockedSeller(lookup, null, "Claudia Gonzalez")).toBe(false);
   });
 
   it("prefers profile URL: a live URL that is not blocked is shown even if the name is", () => {
@@ -81,6 +84,71 @@ describe("hasFacebookSellerUrlForQueue", () => {
 describe("normalizeSellerName", () => {
   it("case-folds and collapses whitespace", () => {
     expect(normalizeSellerName("  ABC   Motors  ")).toBe("abc motors");
+  });
+});
+
+describe("shouldPersistBlockedSeller / repeat seller", () => {
+  const url = "https://www.facebook.com/marketplace/profile/1";
+
+  it("persists a buyer flag with a URL even on one listing", () => {
+    expect(shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 1, buyerFlagged: true })).toBe(true);
+    expect(shouldPersistBlockedSeller({ sellerUrl: null, listingCount: 1, buyerFlagged: true })).toBe(false);
+  });
+
+  it("persists an auto dealer only after a second listing", () => {
+    expect(
+      shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 1, dealerEvidence: true }),
+    ).toBe(false);
+    expect(
+      shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 2, dealerEvidence: true }),
+    ).toBe(true);
+  });
+
+  it("treats 3+ live cars as a dealer", () => {
+    expect(isRepeatSellerDealer(2)).toBe(false);
+    expect(isRepeatSellerDealer(3)).toBe(true);
+  });
+
+  it("extracts the Marketplace profile id", () => {
+    expect(facebookMarketplaceProfileId("https://www.facebook.com/marketplace/profile/1000526149/")).toBe(
+      "1000526149",
+    );
+    expect(facebookMarketplaceProfileId("https://www.facebook.com/foo")).toBeNull();
+  });
+
+  it("counts distinct live listing URLs plus the current ad", async () => {
+    const db = {
+      from() {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  ilike() {
+                    return {
+                      gte: async () => ({
+                        data: [
+                          { listing_url: "https://www.facebook.com/marketplace/item/a/" },
+                          { listing_url: "https://www.facebook.com/marketplace/item/b" },
+                        ],
+                        error: null,
+                      }),
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    expect(
+      await countLiveFacebookListingsForSellerUrl(
+        db as never,
+        "https://www.facebook.com/marketplace/profile/1",
+        "https://www.facebook.com/marketplace/item/c/",
+      ),
+    ).toBe(3);
   });
 });
 
@@ -138,23 +206,41 @@ describe("item 74 blocked seller scope", () => {
       sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
       sellerName: "Lot Seller",
       reason: "dealer",
+      listingCount: 2,
     });
 
     expect(result).toEqual({
       inserted: true,
       sellerKey: "url:https://www.facebook.com/marketplace/profile/1000526149",
     });
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       source: "facebook",
       region: "houston_tx",
       seller_key: "url:https://www.facebook.com/marketplace/profile/1000526149",
-    });
-    expect(rows[1]).toMatchObject({
-      source: "facebook",
-      seller_key: "name:lot seller",
       seller_name: "lot seller",
     });
+  });
+
+  it("refuses a name-only auto block and a one-listing auto URL", async () => {
+    const db = { from() { return {}; } };
+    expect(
+      await upsertBlockedSeller(db as never, {
+        source: "facebook",
+        region: "dallas_tx",
+        sellerName: "Randy White",
+        reason: "dealer",
+      }),
+    ).toBeNull();
+    expect(
+      await upsertBlockedSeller(db as never, {
+        source: "facebook",
+        region: "dallas_tx",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1",
+        listingCount: 1,
+        reason: "dealer",
+      }),
+    ).toBeNull();
   });
 
   it("loads Facebook keys for any metro (Houston sees Dallas first-seen rows)", async () => {

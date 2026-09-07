@@ -485,29 +485,54 @@ async function sellerKeyIsBlocked(db, sellerKey) {
   return Boolean(data);
 }
 
+function facebookMarketplaceProfileId(raw) {
+  try {
+    const url = new URL(String(raw || "").trim());
+    const match = url.pathname.match(/\/marketplace\/profile\/(\d+)\/?$/i);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeListingUrl(raw) {
+  return String(raw || "")
+    .trim()
+    .split("?")[0]
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+async function countLiveFacebookListingsForSellerUrl(db, sellerUrl, extraListingUrl) {
+  const profileId = facebookMarketplaceProfileId(sellerUrl);
+  const urls = new Set();
+  if (extraListingUrl) urls.add(normalizeListingUrl(extraListingUrl));
+  if (!profileId) return urls.size;
+
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db
+    .from("normalized_listings")
+    .select("listing_url")
+    .eq("source", "facebook")
+    .ilike("seller_url", `%/marketplace/profile/${profileId}%`)
+    .gte("last_seen_at", since);
+  if (error) throw error;
+  for (const row of data ?? []) {
+    if (row.listing_url) urls.add(normalizeListingUrl(row.listing_url));
+  }
+  return urls.size;
+}
+
 async function persistBlockedSeller(db, row, sellerUrl, sellerName, sellerKey) {
+  if (!sellerKey || !sellerKey.startsWith("url:")) return { inserted: false, alreadyBlocked: false };
   const region = row.region || "dallas_tx";
   const name = sellerName ? normalizeSellerName(sellerName) : null;
-  const keys = [sellerKey];
-  if (name) {
-    const nameKey = `name:${name}`;
-    if (nameKey !== sellerKey) keys.push(nameKey);
-  }
-
-  let insertedAny = false;
-  let alreadyBlocked = false;
-  for (const key of keys) {
-    const isUrlKey = key.startsWith("url:");
-    const result = await persistBlockedSellerKey(db, {
-      region,
-      sellerKey: key,
-      sellerUrl: isUrlKey ? sellerUrl : null,
-      sellerName: name,
-    });
-    if (result.inserted) insertedAny = true;
-    if (result.alreadyBlocked) alreadyBlocked = true;
-  }
-  return { inserted: insertedAny, alreadyBlocked };
+  return persistBlockedSellerKey(db, {
+    region,
+    sellerKey,
+    sellerUrl,
+    sellerName: name,
+  });
 }
 
 async function persistBlockedSellerKey(db, { region, sellerKey, sellerUrl, sellerName }) {
@@ -718,11 +743,15 @@ async function processJobs({ page, jobs, args, db, writeEnabled, runState }) {
       await persistListingSeller(db, row, sellerUrl, sellerName);
       result.wrote = true;
 
-      const nameKey = sellerName ? `name:${normalizeSellerName(sellerName)}` : null;
-      const alreadyBlocked =
-        (await sellerKeyIsBlocked(db, sellerKey)) ||
-        (nameKey ? await sellerKeyIsBlocked(db, nameKey) : false);
-      if (alreadyBlocked || row.dealerSignal) {
+      const alreadyBlocked = await sellerKeyIsBlocked(db, sellerKey);
+      const listingCount = await countLiveFacebookListingsForSellerUrl(db, sellerUrl, row.listing_url);
+      const buyerFlagged = row.queue === "dealer_dismiss";
+      const dealerEvidence = row.dealerSignal || listingCount >= 3;
+      const persist =
+        alreadyBlocked ||
+        Boolean(sellerUrl) &&
+          (buyerFlagged || (dealerEvidence && listingCount >= 2));
+      if (persist) {
         const blocked = await persistBlockedSeller(db, row, sellerUrl, sellerName, sellerKey);
         result.blocked = true;
         result.blockedInserted = blocked.inserted;

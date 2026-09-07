@@ -33,6 +33,7 @@ vi.mock("../src/persistence/blockedSellers", async (importOriginal) => {
     ...actual,
     loadBlockedSellerLookup: vi.fn().mockResolvedValue(null),
     upsertBlockedSeller: vi.fn().mockResolvedValue(null),
+    countLiveFacebookListingsForSellerUrl: vi.fn().mockResolvedValue(1),
   };
 });
 
@@ -130,7 +131,11 @@ import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
 import { runCoxNoDataRetryPass } from "../src/ingest/coxNoDataRetryPass";
 import { runMmrRateLimitRetryPass } from "../src/ingest/mmrRateLimitRetryPass";
 import { writeFilteredOut } from "../src/persistence/filteredOut";
-import { loadBlockedSellerLookup, upsertBlockedSeller } from "../src/persistence/blockedSellers";
+import {
+  countLiveFacebookListingsForSellerUrl,
+  loadBlockedSellerLookup,
+  upsertBlockedSeller,
+} from "../src/persistence/blockedSellers";
 import { suppressOpportunityForBlockedSeller } from "../src/persistence/opportunityWorkflow";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
@@ -168,6 +173,7 @@ beforeEach(() => {
   vi.mocked(writeVehicleEnrichment).mockResolvedValue(undefined);
   vi.mocked(upsertBlockedSeller).mockResolvedValue(null);
   vi.mocked(loadBlockedSellerLookup).mockResolvedValue(null);
+  vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(1);
   vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(new Map());
 });
 
@@ -990,15 +996,92 @@ describe("POST /ingest — deadline-aware truncation", () => {
       expect.objectContaining({ reason_code: "dealer_listing" }),
     );
     expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(upsertBlockedSeller).not.toHaveBeenCalled();
+  });
+
+  it("item 71: does not persist a one-listing dealer URL", async () => {
+    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(1);
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-dealer-url-1",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/dealer-url-1",
+        title: "2018 Ford F-150 XLT",
+        description: "We finance! Bad credit OK. Visit our lot. Stock #A99",
+        sellerName: "Metro Auto Group",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+      }],
+    });
+    const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
+    const sig = await sign(payload, SECRET);
+    await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      dealerEnv,
+      expect.objectContaining({ reason_code: "dealer_listing" }),
+    );
+    expect(upsertBlockedSeller).not.toHaveBeenCalled();
+  });
+
+  it("item 71: persists a dealer URL after a second live listing", async () => {
+    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(2);
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-dealer-url-2",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/dealer-url-2",
+        title: "2018 Ford F-150 XLT",
+        description: "We finance! Bad credit OK. Visit our lot. Stock #A99",
+        sellerName: "Metro Auto Group",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+      }],
+    });
+    const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
+    const sig = await sign(payload, SECRET);
+    await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
     expect(upsertBlockedSeller).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         source: "facebook",
-        region: "dallas_tx",
-        sellerName: "Metro Auto Group",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+        listingCount: 2,
         reason: "dealer",
       }),
     );
+  });
+
+  it("item 71: 3+ live cars on one profile is a dealer even with empty copy", async () => {
+    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(3);
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-repeat-seller-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/repeat-1",
+        title: "2018 Honda Civic",
+        description: "",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+        sellerName: "Randy White",
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "dealer_listing",
+        details: expect.objectContaining({ source: "repeat_seller", listing_count: 3 }),
+      }),
+    );
+    expect(upsertBlockedSeller).toHaveBeenCalled();
   });
 
   it("item 71: does not filter dealers when SELLER_CLASSIFY_ENABLED is off", async () => {
@@ -1136,7 +1219,7 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(suppressOpportunityForBlockedSeller).toHaveBeenCalledWith(expect.anything(), "nl-existing");
   });
 
-  it("item 74 lock: new listing with blocked seller name never upserts", async () => {
+  it("item 74 lock: a name-only block key does not hide a listing", async () => {
     vi.mocked(loadBlockedSellerLookup).mockResolvedValue({
       keys: new Set(["name:claudia gonzalez"]),
     });
@@ -1158,15 +1241,14 @@ describe("POST /ingest — deadline-aware truncation", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json() as Record<string, unknown>;
-    expect(body.rejected).toBe(1);
-    expect(writeFilteredOut).toHaveBeenCalledWith(
+    expect(body.rejected).toBe(0);
+    expect(body.processed).toBe(1);
+    expect(upsertNormalizedListing).toHaveBeenCalled();
+    expect(writeFilteredOut).not.toHaveBeenCalledWith(
       expect.anything(),
       env,
       expect.objectContaining({ reason_code: "blocked_dealer" }),
     );
-    expect(upsertNormalizedListing).not.toHaveBeenCalled();
-    expect(getMmrLookupOutcome).not.toHaveBeenCalled();
-    expect(suppressOpportunityForBlockedSeller).not.toHaveBeenCalled();
   });
 
   it("item 74 lock: payload name keeps stored profile URL for the blocked check", async () => {

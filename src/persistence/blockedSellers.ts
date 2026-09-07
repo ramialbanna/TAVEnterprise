@@ -27,7 +27,15 @@ export interface UpsertBlockedSellerInput {
   reason?: BlockedSellerReason;
   flaggedByUserId?: string | null;
   normalizedListingId?: string | null;
+  /** Live Facebook listings for this seller URL, including the current ad. */
+  listingCount?: number;
 }
+
+/** Auto-blocks need more than one car. Buyer flags may persist a single URL. */
+export const BLOCKED_SELLER_AUTO_MIN_LISTINGS = 2;
+/** Same profile with this many live cars is a dealer even if the copy is empty. */
+export const REPEAT_SELLER_DEALER_MIN_LISTINGS = 3;
+export const LIVE_SELLER_LISTING_DAYS = 30;
 
 /** Strip query/hash, trailing slash, lowercase — stable dedupe for FB profile URLs. */
 export function normalizeSellerUrl(raw: string): string {
@@ -50,30 +58,78 @@ export function normalizeSellerName(raw: string): string {
   return raw.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** Primary: normalized URL. Fallback: normalized display name. */
+/** URL key only. Name-only keys are not written or matched. */
 export function buildBlockedSellerKey(
   sellerUrl?: string | null,
-  sellerName?: string | null,
+  _sellerName?: string | null,
 ): string | null {
-  const keys = listBlockedSellerKeys(sellerUrl, sellerName);
+  const keys = listBlockedSellerKeys(sellerUrl);
   return keys[0] ?? null;
 }
 
-/**
- * URL key first, then name. A listing with a profile URL is decided on that
- * URL only — a shared display name must not hide a different seller
- * (2026-08-31 lock: prefer URL before showing the card).
- */
-export function listBlockedSellerKeys(
-  sellerUrl?: string | null,
-  sellerName?: string | null,
-): string[] {
-  const keys: string[] = [];
+/** Persist and match on Facebook profile URL only. */
+export function listBlockedSellerKeys(sellerUrl?: string | null, _sellerName?: string | null): string[] {
   const url = sellerUrl ? normalizeSellerUrl(sellerUrl) : "";
-  if (url) keys.push(`url:${url}`);
-  const name = sellerName ? normalizeSellerName(sellerName) : "";
-  if (name) keys.push(`name:${name}`);
-  return keys;
+  return url ? [`url:${url}`] : [];
+}
+
+export function shouldPersistBlockedSeller(input: {
+  sellerUrl?: string | null;
+  listingCount: number;
+  buyerFlagged?: boolean;
+  dealerEvidence?: boolean;
+}): boolean {
+  if (!input.sellerUrl?.trim()) return false;
+  if (input.buyerFlagged) return true;
+  if (!input.dealerEvidence) return false;
+  return input.listingCount >= BLOCKED_SELLER_AUTO_MIN_LISTINGS;
+}
+
+export function isRepeatSellerDealer(listingCount: number): boolean {
+  return listingCount >= REPEAT_SELLER_DEALER_MIN_LISTINGS;
+}
+
+export function facebookMarketplaceProfileId(raw: string): string | null {
+  try {
+    const url = new URL(raw.trim());
+    const match = url.pathname.match(/\/marketplace\/profile\/(\d+)\/?$/i);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeListingUrl(raw: string): string {
+  return raw.trim().split("?")[0].replace(/\/+$/, "").toLowerCase();
+}
+
+/**
+ * Distinct live Facebook listing URLs on this seller profile (last 30 days),
+ * plus the current listing if it is not already stored.
+ */
+export async function countLiveFacebookListingsForSellerUrl(
+  db: SupabaseClient,
+  sellerUrl: string,
+  extraListingUrl?: string | null,
+): Promise<number> {
+  const profileId = facebookMarketplaceProfileId(sellerUrl);
+  const urls = new Set<string>();
+  if (extraListingUrl?.trim()) urls.add(normalizeListingUrl(extraListingUrl));
+  if (!profileId) return urls.size;
+
+  const since = new Date(Date.now() - LIVE_SELLER_LISTING_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db
+    .from("normalized_listings")
+    .select("listing_url")
+    .eq("source", BLOCKED_SELLER_V1_SOURCE)
+    .ilike("seller_url", `%/marketplace/profile/${profileId}%`)
+    .gte("last_seen_at", since);
+  if (error) throw error;
+
+  for (const row of (data ?? []) as Array<{ listing_url: string | null }>) {
+    if (row.listing_url) urls.add(normalizeListingUrl(row.listing_url));
+  }
+  return urls.size;
 }
 
 /** Marketplace profile href we persist. `profile.php` / `/people/` are not used. */
@@ -94,12 +150,10 @@ export function isBlockedSellerScope(source: string, _region?: string): boolean 
 export function isBlockedSeller(
   lookup: BlockedSellerLookup,
   sellerUrl?: string | null,
-  sellerName?: string | null,
+  _sellerName?: string | null,
 ): boolean {
   const url = sellerUrl ? normalizeSellerUrl(sellerUrl) : "";
-  if (url) return lookup.keys.has(`url:${url}`);
-  const name = sellerName ? normalizeSellerName(sellerName) : "";
-  return Boolean(name) && lookup.keys.has(`name:${name}`);
+  return Boolean(url) && lookup.keys.has(`url:${url}`);
 }
 
 /**
@@ -160,27 +214,29 @@ export async function upsertBlockedSeller(
   if (!isBlockedSellerScope(input.source, input.region)) return null;
 
   const url = input.sellerUrl ? normalizeSellerUrl(input.sellerUrl) || null : null;
+  if (!url) return null;
+  const persist = shouldPersistBlockedSeller({
+    sellerUrl: url,
+    listingCount: input.listingCount ?? 0,
+    buyerFlagged: Boolean(input.flaggedByUserId),
+    dealerEvidence: !input.flaggedByUserId,
+  });
+  if (!persist) return null;
+
   const name = input.sellerName ? normalizeSellerName(input.sellerName) || null : null;
-  const keys = listBlockedSellerKeys(url, name);
-  if (keys.length === 0) return null;
+  const sellerKey = `url:${url}`;
+  const inserted = await upsertBlockedSellerKey(db, {
+    source: input.source,
+    region: input.region,
+    sellerKey,
+    sellerUrl: url,
+    sellerName: name,
+    reason: input.reason ?? "dealer",
+    flaggedByUserId: input.flaggedByUserId ?? null,
+    normalizedListingId: input.normalizedListingId ?? null,
+  });
 
-  let insertedAny = false;
-  for (const sellerKey of keys) {
-    const isUrlKey = sellerKey.startsWith("url:");
-    const inserted = await upsertBlockedSellerKey(db, {
-      source: input.source,
-      region: input.region,
-      sellerKey,
-      sellerUrl: isUrlKey ? url : null,
-      sellerName: name,
-      reason: input.reason ?? "dealer",
-      flaggedByUserId: input.flaggedByUserId ?? null,
-      normalizedListingId: input.normalizedListingId ?? null,
-    });
-    if (inserted) insertedAny = true;
-  }
-
-  return { inserted: insertedAny, sellerKey: keys[0]! };
+  return { inserted, sellerKey };
 }
 
 async function upsertBlockedSellerKey(

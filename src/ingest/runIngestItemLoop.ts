@@ -49,9 +49,12 @@ import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerC
 import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
 import { buildLlmYmmsPrefetchInputs, buildLlmYmmsResolutionInput } from "./llmYmmsPrefetchInputs";
 import {
+  countLiveFacebookListingsForSellerUrl,
   hasFacebookSellerUrlForQueue,
   isBlockedSeller,
+  isRepeatSellerDealer,
   loadBlockedSellerLookup,
+  shouldPersistBlockedSeller,
   upsertBlockedSeller,
   type BlockedSellerLookup,
 } from "../persistence/blockedSellers";
@@ -373,6 +376,66 @@ export async function runIngestItemLoop(
       continue;
     }
 
+    let listingCount = 0;
+    if (listing.sellerUrl) {
+      try {
+        listingCount = await countLiveFacebookListingsForSellerUrl(db, listing.sellerUrl, listing.url);
+      } catch (err) {
+        logError("persistence", "ingest.seller_listing_count_failed", err, listingCtx);
+      }
+    }
+
+    if (isRepeatSellerDealer(listingCount)) {
+      log(
+        "ingest.dealer_listing_blocked",
+        {
+          seller_type: "dealer",
+          source: "repeat_seller",
+          listing_count: listingCount,
+          seller_url: listing.sellerUrl ?? null,
+          seller_name: listing.sellerName ?? null,
+          kpi: true,
+        },
+        listingCtx,
+      );
+      await writeFilteredOut(db, env, {
+        source,
+        source_run_id: run_id,
+        listing_url: listing.url,
+        reason_code: "dealer_listing",
+        details: {
+          seller_type: "dealer",
+          source: "repeat_seller",
+          listing_count: listingCount,
+          seller_url: listing.sellerUrl ?? null,
+          seller_name: listing.sellerName ?? null,
+        },
+        raw_listing_id: rawId,
+      });
+      try {
+        if (
+          shouldPersistBlockedSeller({
+            sellerUrl: listing.sellerUrl,
+            listingCount,
+            dealerEvidence: true,
+          })
+        ) {
+          await upsertBlockedSeller(db, {
+            source,
+            region,
+            sellerUrl: listing.sellerUrl,
+            sellerName: listing.sellerName,
+            reason: "dealer",
+            listingCount,
+          });
+        }
+      } catch (err) {
+        logError("persistence", "ingest.dealer_listing_blocklist_failed", err, listingCtx);
+      }
+      rejected++;
+      continue;
+    }
+
     if (env.SELLER_CLASSIFY_ENABLED === "true") {
       const allowLlm = Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
       const classification = await classifyListingSeller(
@@ -393,6 +456,7 @@ export async function runIngestItemLoop(
             confidence: classification.confidence,
             source: classification.source,
             signals: classification.signals,
+            listing_count: listingCount,
             seller_url: listing.sellerUrl ?? null,
             seller_name: listing.sellerName ?? null,
             kpi: true,
@@ -410,19 +474,29 @@ export async function runIngestItemLoop(
             source: classification.source,
             signals: classification.signals,
             reasoning: classification.reasoning,
+            listing_count: listingCount,
             seller_url: listing.sellerUrl ?? null,
             seller_name: listing.sellerName ?? null,
           },
           raw_listing_id: rawId,
         });
         try {
-          await upsertBlockedSeller(db, {
-            source,
-            region,
-            sellerUrl: listing.sellerUrl,
-            sellerName: listing.sellerName,
-            reason: "dealer",
-          });
+          if (
+            shouldPersistBlockedSeller({
+              sellerUrl: listing.sellerUrl,
+              listingCount,
+              dealerEvidence: true,
+            })
+          ) {
+            await upsertBlockedSeller(db, {
+              source,
+              region,
+              sellerUrl: listing.sellerUrl,
+              sellerName: listing.sellerName,
+              reason: "dealer",
+              listingCount,
+            });
+          }
         } catch (err) {
           logError("persistence", "ingest.dealer_listing_blocklist_failed", err, listingCtx);
         }
