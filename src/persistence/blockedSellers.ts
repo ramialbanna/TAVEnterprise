@@ -100,7 +100,8 @@ export function facebookMarketplaceProfileId(raw: string): string | null {
 }
 
 function normalizeListingUrl(raw: string): string {
-  return raw.trim().split("?")[0].replace(/\/+$/, "").toLowerCase();
+  const withoutQuery = raw.trim().split("?")[0] ?? "";
+  return withoutQuery.replace(/\/+$/, "").toLowerCase();
 }
 
 /**
