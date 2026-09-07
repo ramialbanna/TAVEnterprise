@@ -3,21 +3,36 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { listBlockedSellers, unblockBlockedSeller } from "@/lib/app-api/client";
 import { codeMessage } from "@/lib/app-api";
 import type { BlockedSellerReview } from "@/lib/app-api/schemas";
 import { queryKeys } from "@/lib/query";
+import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState, UnavailableState } from "@/components/data-state";
 import { cn } from "@/lib/utils";
 
-type OriginFilter = "all" | "auto" | "buyer" | "one_listing";
+import {
+  applyBlockedSellerQuery,
+  countBlockedSellerOrigins,
+  DEFAULT_QUERY,
+  displaySellerName,
+  queryIsFiltered,
+  SORT_OPTIONS,
+  type BlockedSellerQuery,
+  type ListingsFilter,
+  type OriginFilter,
+  type ProfileFilter,
+  type SortDir,
+  type SortKey,
+} from "./blocked-sellers-query";
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -25,16 +40,13 @@ const money = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-function displayName(name: string | null): string {
-  if (!name) return "Unknown seller";
-  return name.replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
+const selectClass =
+  "h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-function formatWhen(iso: string | null): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+function parseSortValue(value: string): { sortKey: SortKey; sortDir: SortDir } {
+  const [sortKey, sortDir] = value.split(":") as [SortKey, SortDir];
+  return { sortKey, sortDir };
 }
 
 export function BlockedSellersClient() {
@@ -44,8 +56,7 @@ export function BlockedSellersClient() {
     queryFn: listBlockedSellers,
   });
 
-  const [search, setSearch] = useState("");
-  const [origin, setOrigin] = useState<OriginFilter>("all");
+  const [filters, setFilters] = useState<BlockedSellerQuery>(DEFAULT_QUERY);
   const [openId, setOpenId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -63,23 +74,31 @@ export function BlockedSellersClient() {
     },
   });
 
-  const filtered = useMemo(() => {
-    const rows = query.data?.ok ? query.data.data : [];
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (origin === "auto" && row.origin !== "auto") return false;
-      if (origin === "buyer" && row.origin !== "buyer") return false;
-      if (origin === "one_listing" && row.listingCount !== 1) return false;
-      if (!q) return true;
-      return (
-        (row.sellerName ?? "").includes(q) ||
-        (row.sellerUrl ?? "").toLowerCase().includes(q)
-      );
+  const rows = query.data?.ok ? query.data.data : [];
+  const filtered = useMemo(() => applyBlockedSellerQuery(rows, filters), [rows, filters]);
+  const originCounts = useMemo(() => countBlockedSellerOrigins(rows), [rows]);
+  const filteredActive = queryIsFiltered(filters);
+
+  function update(partial: Partial<BlockedSellerQuery>) {
+    setFilters((current) => ({ ...current, ...partial }));
+  }
+
+  function toggleSort(key: SortKey) {
+    setFilters((current) => {
+      if (current.sortKey === key) {
+        return { ...current, sortDir: current.sortDir === "asc" ? "desc" : "asc" };
+      }
+      return { ...current, sortKey: key, sortDir: key === "sellerName" ? "asc" : "desc" };
     });
-  }, [query.data, search, origin]);
+  }
 
   if (query.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading blocked sellers…</p>;
+    return (
+      <div className="space-y-3" aria-busy="true" aria-label="Loading blocked sellers">
+        <Skeleton className="h-9 w-full sm:w-72" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
   }
 
   if (query.data && !query.data.ok) {
@@ -91,69 +110,219 @@ export function BlockedSellersClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search name or profile URL"
-          className="sm:max-w-sm"
-          aria-label="Search blocked sellers"
-        />
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter blocked sellers">
-          {(
-            [
-              ["all", "All"],
-              ["auto", "Auto"],
-              ["buyer", "Buyer flagged"],
-              ["one_listing", "One listing"],
-            ] as const
-          ).map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={origin === value ? "default" : "outline"}
-              onClick={() => setOrigin(value)}
-            >
-              {label}
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:p-4">
+        <div className="relative sm:max-w-sm">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <Input
+            value={filters.search}
+            onChange={(event) => update({ search: event.target.value })}
+            placeholder="Search name, URL, or listing"
+            className="pl-8"
+            aria-label="Search blocked sellers"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterSelect
+            id="blocked-origin"
+            label="Origin"
+            value={filters.origin}
+            onChange={(value) => update({ origin: value as OriginFilter })}
+            options={[
+              { value: "all", label: `All (${originCounts.all})` },
+              { value: "auto", label: `Auto (${originCounts.auto})` },
+              { value: "buyer", label: `Buyer (${originCounts.buyer})` },
+            ]}
+          />
+          <FilterSelect
+            id="blocked-listings"
+            label="Listings"
+            value={filters.listings}
+            onChange={(value) => update({ listings: value as ListingsFilter })}
+            options={[
+              { value: "all", label: "Any count" },
+              { value: "one", label: "One listing" },
+              { value: "many", label: "Multiple" },
+            ]}
+          />
+          <FilterSelect
+            id="blocked-profile"
+            label="Profile"
+            value={filters.profile}
+            onChange={(value) => update({ profile: value as ProfileFilter })}
+            options={[
+              { value: "all", label: "Any" },
+              { value: "has_url", label: "Has Facebook URL" },
+              { value: "name_only", label: "Name only" },
+            ]}
+          />
+          <FilterSelect
+            id="blocked-sort"
+            label="Sort"
+            value={`${filters.sortKey}:${filters.sortDir}`}
+            onChange={(value) => update(parseSortValue(value))}
+            options={SORT_OPTIONS.map((option) => ({
+              value: `${option.key}:${option.dir}`,
+              label: option.label,
+            }))}
+          />
+          {filteredActive ? (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setFilters(DEFAULT_QUERY)}>
+              Clear filters
             </Button>
-          ))}
+          ) : null}
         </div>
       </div>
 
       <p className="text-sm text-muted-foreground">
-        {filtered.length} seller{filtered.length === 1 ? "" : "s"}
-        {origin === "one_listing" ? " with one car — start here" : ""}
+        {filtered.length === rows.length
+          ? `${filtered.length} seller${filtered.length === 1 ? "" : "s"}`
+          : `${filtered.length} of ${rows.length} sellers`}
       </p>
 
       {filtered.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-sm text-muted-foreground">
-            No blocked sellers match this filter.
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          No blocked sellers match this filter.
+        </div>
       ) : (
-        <ul className="space-y-3">
-          {filtered.map((row) => (
-            <BlockedSellerCard
-              key={row.id}
-              row={row}
-              open={openId === row.id}
-              confirming={confirmId === row.id}
-              busy={unblock.isPending && unblock.variables === row.id}
-              onToggle={() => setOpenId((current) => (current === row.id ? null : row.id))}
-              onAskRemove={() => setConfirmId(row.id)}
-              onCancelRemove={() => setConfirmId(null)}
-              onConfirmRemove={() => unblock.mutate(row.id)}
-            />
-          ))}
-        </ul>
+        <div className="overflow-auto rounded-lg border border-border">
+          <table className="w-full min-w-[720px] caption-bottom text-sm">
+            <thead className="sticky top-0 z-10 bg-card">
+              <tr className="border-b border-border">
+                <SortableHeader
+                  label="Seller"
+                  sortKey="sellerName"
+                  currentKey={filters.sortKey}
+                  currentDir={filters.sortDir}
+                  onSort={toggleSort}
+                />
+                <th scope="col" className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                  Origin
+                </th>
+                <SortableHeader
+                  label="Listings"
+                  sortKey="listingCount"
+                  currentKey={filters.sortKey}
+                  currentDir={filters.sortDir}
+                  onSort={toggleSort}
+                  align="right"
+                />
+                <SortableHeader
+                  label="Blocked"
+                  sortKey="createdAt"
+                  currentKey={filters.sortKey}
+                  currentDir={filters.sortDir}
+                  onSort={toggleSort}
+                />
+                <th scope="col" className="px-3 py-2.5 text-left font-medium text-muted-foreground">
+                  Profile
+                </th>
+                <th scope="col" className="px-3 py-2.5 text-right font-medium text-muted-foreground">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row) => (
+                <BlockedSellerRow
+                  key={row.id}
+                  row={row}
+                  open={openId === row.id}
+                  confirming={confirmId === row.id}
+                  busy={unblock.isPending && unblock.variables === row.id}
+                  onToggle={() => setOpenId((current) => (current === row.id ? null : row.id))}
+                  onAskRemove={() => setConfirmId(row.id)}
+                  onCancelRemove={() => setConfirmId(null)}
+                  onConfirmRemove={() => unblock.mutate(row.id)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
 
-function BlockedSellerCard({
+function FilterSelect({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly { value: string; label: string }[];
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <select
+        id={id}
+        className={selectClass}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  currentKey,
+  currentDir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentKey: SortKey;
+  currentDir: SortDir;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = currentKey === sortKey;
+  const Icon = !active ? ArrowUpDown : currentDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th
+      scope="col"
+      className={cn("px-3 py-2.5 font-medium text-muted-foreground", align === "right" && "text-right")}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        aria-label={`Sort by ${label}`}
+        className={cn(
+          "inline-flex items-center gap-1 rounded-sm hover:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          align === "right" && "flex-row-reverse",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <Icon className={cn("size-3.5", active ? "text-foreground" : "opacity-50")} aria-hidden />
+      </button>
+    </th>
+  );
+}
+
+function BlockedSellerRow({
   row,
   open,
   confirming,
@@ -173,70 +342,76 @@ function BlockedSellerCard({
   onConfirmRemove: () => void;
 }) {
   return (
-    <li>
-      <Card>
-        <CardContent className="space-y-3 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold tracking-tight">
-                  {displayName(row.sellerName)}
-                </h2>
-                <Badge variant={row.origin === "auto" ? "review" : "secondary"}>
-                  {row.origin === "auto" ? "Auto" : "Buyer"}
-                </Badge>
-                <Badge variant={row.listingCount <= 1 ? "outline" : "neutral"}>
-                  {row.listingCount === 1 ? "1 listing" : `${row.listingCount} listings`}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Blocked {formatWhen(row.createdAt)} · {row.reason}
-              </p>
-              {row.sellerUrl ? (
-                <a
-                  href={row.sellerUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                >
-                  Facebook profile
-                  <ExternalLink className="size-3.5" aria-hidden />
-                </a>
-              ) : (
-                <p className="text-sm text-muted-foreground">No profile URL — name only</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onToggle}>
-                {open ? "Hide cars" : "Show cars"}
-              </Button>
-              {confirming ? (
-                <>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={busy}
-                    onClick={onConfirmRemove}
-                  >
-                    {busy ? "Removing…" : "Confirm remove"}
-                  </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={onCancelRemove}>
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <Button type="button" size="sm" variant="ghost" onClick={onAskRemove}>
-                  Remove from list
-                </Button>
-              )}
-            </div>
+    <>
+      <tr className="border-b border-border last:border-0 hover:bg-muted/40">
+        <td className="px-3 py-2.5 align-top">
+          <div className="min-w-0">
+            <p className="font-medium">{displaySellerName(row.sellerName)}</p>
+            <p className="text-xs text-muted-foreground">{row.reason}</p>
           </div>
-
-          {open ? <ListingList listings={row.listings} /> : null}
-        </CardContent>
-      </Card>
-    </li>
+        </td>
+        <td className="px-3 py-2.5 align-top">
+          <Badge variant={row.origin === "auto" ? "review" : "secondary"}>
+            {row.origin === "auto" ? "Auto" : "Buyer"}
+          </Badge>
+        </td>
+        <td className="px-3 py-2.5 text-right align-top tabular-nums">
+          {row.listingCount}
+        </td>
+        <td className="whitespace-nowrap px-3 py-2.5 align-top text-muted-foreground">
+          {formatDate(row.createdAt, { month: "short", day: "numeric", year: "numeric" })}
+        </td>
+        <td className="px-3 py-2.5 align-top">
+          {row.sellerUrl ? (
+            <a
+              href={row.sellerUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            >
+              Facebook
+              <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          ) : (
+            <span className="text-muted-foreground">Name only</span>
+          )}
+        </td>
+        <td className="px-3 py-2.5 align-top">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onToggle}>
+              {open ? "Hide cars" : "Show cars"}
+            </Button>
+            {confirming ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={onConfirmRemove}
+                >
+                  {busy ? "Removing…" : "Confirm remove"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={onCancelRemove}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button type="button" size="sm" variant="ghost" onClick={onAskRemove}>
+                Remove
+              </Button>
+            )}
+          </div>
+        </td>
+      </tr>
+      {open ? (
+        <tr className="border-b border-border bg-muted/20">
+          <td colSpan={6} className="px-3 py-3">
+            <ListingList listings={row.listings} />
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }
 
@@ -250,17 +425,17 @@ function ListingList({ listings }: { listings: BlockedSellerReview["listings"] }
   }
 
   return (
-    <ul className="divide-y divide-border rounded-md border border-border">
+    <ul className="divide-y divide-border rounded-md border border-border bg-card">
       {listings.map((listing) => (
         <li
           key={listing.id}
-          className={cn("flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between")}
+          className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{listing.title}</p>
             <p className="text-xs text-muted-foreground">
               {listing.price != null ? money.format(listing.price) : "No price"} · seen{" "}
-              {formatWhen(listing.firstSeenAt)}
+              {formatDate(listing.firstSeenAt, { month: "short", day: "numeric", year: "numeric" })}
             </p>
           </div>
           <div className="flex flex-wrap gap-3 text-sm">

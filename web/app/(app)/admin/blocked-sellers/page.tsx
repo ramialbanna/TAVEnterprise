@@ -13,8 +13,8 @@ export default function BlockedSellersPage() {
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Blocked sellers</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            People and lots hidden from Opportunities. Open the Facebook profile in a
-            logged-in session, then keep real dealers or remove private sellers.
+            Hidden from Opportunities. Sort and filter, open the Facebook profile, then keep
+            real dealers or remove private sellers.
           </p>
         </header>
         <BlockedSellersClient />
