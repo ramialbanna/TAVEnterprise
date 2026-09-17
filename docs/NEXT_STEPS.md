@@ -56,7 +56,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 1. **§76** — **live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Secrets not touched.
 2. **Fix MaxBuy** — shipped `887ce7a` 2026-09-17 (ingest passes live MMR; global benchmarks load). Do not leave it.
-3. **§77 Queue list speed** — cheap counts + filter/sort before MaxBuy hydrate. In repo; needs Worker + web deploy.
+3. **§77 Queue list speed** — **live.** Worker `2aef5476` + web `b037386`. Cheap counts + page-only MaxBuy. Secrets not touched.
 4. **§75 Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. Do not leave the schema open.
 5. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
 6. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
@@ -1013,7 +1013,7 @@ This is a schema hardening item, not a product feature. Do not leave the schema 
 
 ## 77 — Queue list speed
 
-**Opened:** 2026-09-17 · **Status:** [~] in repo · **Priority:** High
+**Opened:** 2026-09-17 · **Status:** [x] live · **Priority:** High
 
 Refresh on Opportunities showed a blank table for ~10s. In-session Home ↔ Opportunities was already fixed (§58). A reload kills the React Query cache; the remaining cost is Worker SQL.
 
@@ -1024,7 +1024,7 @@ Refresh on Opportunities showed a blank table for ~10s. In-session Home ↔ Oppo
 1. `GET /app/opportunities/counts` — one pass, all view totals + `new_today` (America/Chicago). Home + queue tabs use this. No MaxBuy, no list rows.
 2. List still assembles identity/valuation/workflow for view matching, then **filters/sorts**, then hydrates MaxBuy **only for the page slice**. Queue listing select drops `images`/`description`.
 
-**Needs** Worker + web deploy. Secrets not touched.
+**Deployed** 2026-09-17 Worker `2aef5476` + web `b037386`. Secrets not touched.
 
 **Not this item:** persist last rows in `sessionStorage` (refresh paint). Do that after this ships if the remaining wait is still too long.
 
@@ -1081,7 +1081,7 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 - [x] Stuck `running` `source_runs` — **cleared + deployed `0453cc02` 2026-09-07** (17 → `completed`). `upsertSourceRun` now keeps `truncated` / `failed` closed. Secrets not touched. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
 - [ ] **§75 Supabase RLS** — `tav` has no row-level security. Must be fixed.
-- [ ] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. In repo 2026-09-17; needs Worker + web deploy.
+- [x] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. **Deployed** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched.
 - [ ] List/detail flag UI cache lag (~60s)
 - [x] **Home ↔ Opportunities ~10s** (buyer 2026-08-31) — thin RSC + client cache; see §58
 
