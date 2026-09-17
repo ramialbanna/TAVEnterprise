@@ -71,6 +71,27 @@ describe("buildMmrLabMaxbuyRequest", () => {
     expect(built.askingPrice).toBeNull();
   });
 
+  it("forwards live MMR so MaxBuy does not re-call intel", () => {
+    const built = buildMmrLabMaxbuyRequest(
+      {
+        kind: "ymm",
+        selection: {
+          year: "2021",
+          make: "Ford",
+          model: "Bronco 4D",
+          style: "4D SUV BADLANDS",
+        },
+      },
+      "45000",
+      undefined,
+      { mmrValue: 48_000, adjustedMmr: 47_200, method: "year_make_model" },
+    );
+    expect("error" in built).toBe(false);
+    if ("error" in built) return;
+    expect(built.body.mmr_value).toBe(47_200);
+    expect(built.body.mmr_method).toBe("ymm");
+  });
+
   describe("mmrVinSessionFromResult — VIN year-decode fallback", () => {
     it("prefers Cox year/make/model when present", () => {
       const session = mmrVinSessionFromResult(F450_VIN, {

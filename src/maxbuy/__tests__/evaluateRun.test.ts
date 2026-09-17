@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { vehicleContextFromRequestFields } from "../evaluateRun";
+import { provenanceFromProvidedMmr, vehicleContextFromRequestFields } from "../evaluateRun";
 
 describe("vehicleContextFromRequestFields", () => {
   it("returns null when year/make/model are incomplete", () => {
@@ -44,5 +44,23 @@ describe("vehicleContextFromRequestFields", () => {
       cotCity: null,
       cotState: null,
     });
+  });
+});
+
+describe("provenanceFromProvidedMmr", () => {
+  it("skips intel when ingest/UI already supplied a live MMR", () => {
+    expect(
+      provenanceFromProvidedMmr({ mmr_value: 22_400, mmr_method: "ymm" }),
+    ).toMatchObject({
+      value: 22_400,
+      method: "ymm",
+      source: "provided",
+      missingReason: null,
+    });
+  });
+
+  it("returns null when no MMR was provided", () => {
+    expect(provenanceFromProvidedMmr({})).toBeNull();
+    expect(provenanceFromProvidedMmr({ mmr_value: 0 })).toBeNull();
   });
 });

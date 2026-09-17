@@ -285,6 +285,7 @@ export function OpportunityValuationBlock({
   );
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
+  const mmrResultRef = useRef<MmrVinOk | null>(null);
   const lookupRequestIdRef = useRef(0);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
@@ -322,6 +323,7 @@ export function OpportunityValuationBlock({
   const applyMmrResult = useCallback((data: MmrVinOk, prevAdj: MmrAdjustments) => {
     const pendingChanges = pendingMarginalChangesRef.current.slice();
     pendingMarginalChangesRef.current = [];
+    mmrResultRef.current = data;
     setView((currentView) => {
       if (currentView.kind === "ok") {
         setAttributeMarginals((prev) =>
@@ -343,7 +345,12 @@ export function OpportunityValuationBlock({
   const reEvaluateMaxbuy = useCallback(
     (session: MmrLabLookupSession, askPrice: string, adj?: MmrAdjustments) => {
       setPreferLiveMaxbuy(true);
-      const built = buildMmrLabMaxbuyRequest(session, askPrice, adj);
+      const built = buildMmrLabMaxbuyRequest(
+        session,
+        askPrice,
+        adj,
+        mmrResultRef.current,
+      );
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });
         return;
@@ -462,6 +469,7 @@ export function OpportunityValuationBlock({
           maxbuySession,
           laneAskPriceRef.current,
           adjForFetch,
+          mmrRes.data,
         );
         if ("error" in built) {
           if (keepPriorOnRefresh) {
@@ -550,6 +558,7 @@ export function OpportunityValuationBlock({
         maxbuySession,
         laneAskPriceRef.current,
         adj,
+        mmrRes.data,
       );
       if ("error" in built) {
         setMaxbuyView({ kind: "error", message: built.error });

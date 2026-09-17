@@ -286,6 +286,9 @@ export type MaxbuyEvaluateRequest = {
   region?: MaxbuyRegion;
   normalized_listing_id?: string;
   lead_id?: string;
+  /** Live MMR from ingest or the Lab lookup — skip MaxBuy's intel re-fetch. */
+  mmr_value?: number;
+  mmr_method?: "vin" | "ymm";
 };
 
 const PROXY_PREFIX = "/api/app";

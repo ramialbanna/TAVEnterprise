@@ -55,13 +55,35 @@ function effectiveMileageString(adjustments?: MmrAdjustments): string {
   return fromAdj !== null ? String(fromAdj) : "";
 }
 
+/** Prefer the adjusted wholesale the buyer is looking at. */
+export function mmrValueForMaxbuyEvaluate(
+  result: Pick<MmrVinOk, "mmrValue" | "adjustedMmr">,
+): number {
+  return result.adjustedMmr != null && result.adjustedMmr > 0
+    ? result.adjustedMmr
+    : result.mmrValue;
+}
+
+function attachProvidedMmr(
+  body: MaxbuyEvaluateRequest,
+  mmrValue?: number | null,
+  method?: MmrVinOk["method"],
+): MaxbuyEvaluateRequest {
+  if (mmrValue == null || mmrValue <= 0) return body;
+  body.mmr_value = mmrValue;
+  body.mmr_method = method === "vin" ? "vin" : "ymm";
+  return body;
+}
+
 /** Build `POST /app/maxbuy/evaluate` body from MMR Lab search session (P2.2). */
 export function buildMmrLabMaxbuyRequest(
   session: MmrLabLookupSession,
   laneAskPrice: string,
   adjustments?: MmrAdjustments,
+  mmr?: Pick<MmrVinOk, "mmrValue" | "adjustedMmr" | "method"> | null,
 ): { body: MaxbuyEvaluateRequest; askingPrice: number | null } | { error: string } {
   const mileage = effectiveMileageString(adjustments);
+  const provided = mmr ? mmrValueForMaxbuyEvaluate(mmr) : undefined;
 
   if (session.kind === "vin") {
     const built = buildMaxbuyEvaluateRequest({
@@ -83,11 +105,12 @@ export function buildMmrLabMaxbuyRequest(
     if (session.make) body.make = session.make;
     if (session.model) body.model = session.model;
     if (session.trim) body.trim = session.trim;
+    attachProvidedMmr(body, provided, mmr?.method);
     return { body, askingPrice: built.askingPrice };
   }
 
   const { selection } = session;
-  return buildMaxbuyEvaluateRequest({
+  const built = buildMaxbuyEvaluateRequest({
     vin: "",
     year: selection.year,
     make: selection.make,
@@ -97,4 +120,7 @@ export function buildMmrLabMaxbuyRequest(
     askingPrice: laneAskPrice,
     region: "",
   });
+  if ("error" in built) return built;
+  attachProvidedMmr(built.body, provided, mmr?.method);
+  return built;
 }

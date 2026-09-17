@@ -22,6 +22,9 @@ export const MaxbuyEvaluateRequestSchema = z
     region: z.enum(REGION_KEYS).optional(),
     normalized_listing_id: z.string().uuid().optional(),
     lead_id: z.string().uuid().optional(),
+    /** Ingest / UI already have a live MMR — skip the intel re-lookup (item 59). */
+    mmr_value: z.number().positive().optional(),
+    mmr_method: z.enum(["vin", "ymm"]).optional(),
   })
   .refine(
     (data) => {

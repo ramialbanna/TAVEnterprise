@@ -85,6 +85,8 @@ describe("buildIngestMaxbuyEvaluateBody (item 59)", () => {
       asking_price: 45_000,
       region: "dallas_tx",
       normalized_listing_id: "nl-1",
+      mmr_value: 48_000,
+      mmr_method: "ymm",
     });
   });
 
@@ -101,6 +103,12 @@ describe("buildIngestMaxbuyEvaluateBody (item 59)", () => {
       asking_price: 45_000,
       region: "dallas_tx",
       normalized_listing_id: "nl-2",
+      mmr_value: 48_000,
+      mmr_method: "ymm",
+      year: 2021,
+      make: "Ford",
+      model: "Bronco 4D",
+      trim: "4D SUV BADLANDS",
     });
   });
 

@@ -13,33 +13,44 @@ function asNumber(value: unknown): number | null {
 
 type BenchmarkRowMeta = { _benchmarkVersion?: string };
 
-export async function fetchPricingBenchmarkRows(
-  db: SupabaseClient,
-  segment: { year: number; make: string; model: string },
-): Promise<(PricingBenchmarkRow & BenchmarkRowMeta)[]> {
-  const { data, error } = await db
-    .from("v_maxbuy_pricing_benchmarks")
-    .select(
-      "resolution, year, make, model, trim, region, mileage_band, effective_n, weighted_sale_price, weighted_sale_pct_mmr, benchmark_version",
-    )
-    .eq("make", segment.make.toLowerCase())
-    .eq("model", segment.model.toLowerCase());
+const PRICING_SELECT =
+  "resolution, year, make, model, trim, region, mileage_band, effective_n, weighted_sale_price, weighted_sale_pct_mmr, benchmark_version";
 
-  if (error) throw error;
-
-  return (data ?? []).map((row) => ({
+function mapPricingRow(row: Record<string, unknown>): PricingBenchmarkRow & BenchmarkRowMeta {
+  return {
     resolution: row.resolution as PricingBenchmarkRow["resolution"],
     year: row.year != null ? Number(row.year) : undefined,
-    make: row.make ?? undefined,
-    model: row.model ?? undefined,
-    trim: row.trim ?? undefined,
-    region: row.region ?? undefined,
-    mileageBand: row.mileage_band ?? undefined,
+    make: (row.make as string | null) ?? undefined,
+    model: (row.model as string | null) ?? undefined,
+    trim: (row.trim as string | null) ?? undefined,
+    region: (row.region as string | null) ?? undefined,
+    mileageBand: (row.mileage_band as string | null) ?? undefined,
     effectiveN: Number(row.effective_n ?? 0),
     weightedSalePrice: asNumber(row.weighted_sale_price),
     weightedSalePctMmr: asNumber(row.weighted_sale_pct_mmr),
     _benchmarkVersion: row.benchmark_version as string | undefined,
-  }));
+  };
+}
+
+export async function fetchPricingBenchmarkRows(
+  db: SupabaseClient,
+  segment: { year: number; make: string; model: string },
+): Promise<(PricingBenchmarkRow & BenchmarkRowMeta)[]> {
+  // Global rows have NULL make/model — a make+model filter never returns them,
+  // which left unmatched Cox tokens with a synthetic empty global and $0 Max buy.
+  const [segmentResult, globalResult] = await Promise.all([
+    db
+      .from("v_maxbuy_pricing_benchmarks")
+      .select(PRICING_SELECT)
+      .eq("make", segment.make.toLowerCase())
+      .eq("model", segment.model.toLowerCase()),
+    db.from("v_maxbuy_pricing_benchmarks").select(PRICING_SELECT).eq("resolution", "global"),
+  ]);
+
+  if (segmentResult.error) throw segmentResult.error;
+  if (globalResult.error) throw globalResult.error;
+
+  return [...(segmentResult.data ?? []), ...(globalResult.data ?? [])].map(mapPricingRow);
 }
 
 export async function fetchTransportBenchmarkRows(
@@ -85,32 +96,41 @@ export async function fetchTransportBenchmarkRows(
   return rows;
 }
 
+const EXPENSE_SELECT =
+  "resolution, year, make, model, trim, region, mileage_band, effective_n, weighted_expense_total, benchmark_version";
+
+function mapExpenseRow(row: Record<string, unknown>): ExpenseBenchmarkRow & BenchmarkRowMeta {
+  return {
+    resolution: row.resolution as ExpenseBenchmarkRow["resolution"],
+    year: row.year != null ? Number(row.year) : undefined,
+    make: (row.make as string | null) ?? undefined,
+    model: (row.model as string | null) ?? undefined,
+    trim: (row.trim as string | null) ?? undefined,
+    region: (row.region as string | null) ?? undefined,
+    mileageBand: (row.mileage_band as string | null) ?? undefined,
+    effectiveN: Number(row.effective_n ?? 0),
+    weightedExpenseTotal: Number(row.weighted_expense_total ?? 0),
+    _benchmarkVersion: row.benchmark_version as string | undefined,
+  };
+}
+
 export async function fetchExpenseBenchmarkRows(
   db: SupabaseClient,
   segment: { year: number; make: string; model: string },
 ): Promise<(ExpenseBenchmarkRow & BenchmarkRowMeta)[]> {
-  const { data, error } = await db
-    .from("v_maxbuy_expense_benchmarks")
-    .select(
-      "resolution, year, make, model, trim, region, mileage_band, effective_n, weighted_expense_total, benchmark_version",
-    )
-    .eq("make", segment.make.toLowerCase())
-    .eq("model", segment.model.toLowerCase());
+  const [segmentResult, globalResult] = await Promise.all([
+    db
+      .from("v_maxbuy_expense_benchmarks")
+      .select(EXPENSE_SELECT)
+      .eq("make", segment.make.toLowerCase())
+      .eq("model", segment.model.toLowerCase()),
+    db.from("v_maxbuy_expense_benchmarks").select(EXPENSE_SELECT).eq("resolution", "global"),
+  ]);
 
-  if (error) throw error;
+  if (segmentResult.error) throw segmentResult.error;
+  if (globalResult.error) throw globalResult.error;
 
-  return (data ?? []).map((row) => ({
-    resolution: row.resolution as ExpenseBenchmarkRow["resolution"],
-    year: row.year != null ? Number(row.year) : undefined,
-    make: row.make ?? undefined,
-    model: row.model ?? undefined,
-    trim: row.trim ?? undefined,
-    region: row.region ?? undefined,
-    mileageBand: row.mileage_band ?? undefined,
-    effectiveN: Number(row.effective_n ?? 0),
-    weightedExpenseTotal: Number(row.weighted_expense_total ?? 0),
-    _benchmarkVersion: row.benchmark_version as string | undefined,
-  }));
+  return [...(segmentResult.data ?? []), ...(globalResult.data ?? [])].map(mapExpenseRow);
 }
 
 type BenchmarkVersionCarrier = BenchmarkRowMeta;

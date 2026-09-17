@@ -186,4 +186,66 @@ describe("maxbuy scoring", () => {
     expect(result.hardGateTriggered).toBe("GATE_MMR_MISSING");
     expect(result.estimatedBadges).toContain("ESTIMATED_MILES");
   });
+
+  it("uses global sale_pct_mmr × live MMR when make/model have no TAV history", () => {
+    const result = scoreMaxBuy({
+      segment: SEGMENT,
+      mmr: {
+        value: 20_000,
+        method: "ymm",
+        source: "provided",
+        cacheAgeSeconds: 0,
+        missingReason: null,
+        observedAt: "2026-09-17T00:00:00.000Z",
+      },
+      askingPrice: 17_000,
+      mileageEstimated: false,
+      targetNetGross: 800,
+      hardGate: null,
+      benchmarks: resolveBenchmarks(
+        [{
+          resolution: "global",
+          effectiveN: 12_000,
+          weightedSalePrice: 43_704,
+          weightedSalePctMmr: 1.0414,
+        }],
+        [{ resolution: "global", effectiveN: 100, weightedTransportCost: 450 }],
+        [{ resolution: "global", effectiveN: 100, weightedExpenseTotal: 700 }],
+        SEGMENT,
+      ),
+    });
+
+    expect(result.reasonCodes).toContain("benchmark_global_fallback");
+    expect(result.hardGateTriggered).toBeNull();
+    expect(result.expectedSalePrice).toBe(20_828);
+    expect(result.recommendedMaxBuy).toBe(18_878);
+    expect(result.verdict).not.toBe("PASS");
+  });
+
+  it("returns $0 Max buy when global pricing has neither pct nor sale price", () => {
+    const result = scoreMaxBuy({
+      segment: SEGMENT,
+      mmr: {
+        value: 20_000,
+        method: "ymm",
+        source: "provided",
+        cacheAgeSeconds: 0,
+        missingReason: null,
+        observedAt: "2026-09-17T00:00:00.000Z",
+      },
+      askingPrice: 17_000,
+      mileageEstimated: false,
+      targetNetGross: 800,
+      hardGate: null,
+      benchmarks: resolveBenchmarks(
+        [],
+        [{ resolution: "global", effectiveN: 100, weightedTransportCost: 450 }],
+        [{ resolution: "global", effectiveN: 100, weightedExpenseTotal: 700 }],
+        SEGMENT,
+      ),
+    });
+
+    expect(result.recommendedMaxBuy).toBe(0);
+    expect(result.expectedSalePrice).toBe(0);
+  });
 });

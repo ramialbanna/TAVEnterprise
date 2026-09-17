@@ -25,7 +25,7 @@ import {
   type VehicleContext,
 } from "./persistence/vehicleContext";
 import { mileageBand, resolveBenchmarks, scoreMaxBuy } from "./scoring";
-import type { ScoreMaxBuyResult, SegmentKey } from "./scoring/types";
+import type { MmrProvenance, ScoreMaxBuyResult, SegmentKey } from "./scoring/types";
 import type { MaxbuyWorkerEnv } from "./types/env";
 import { decodeVinModelYear, isValidVinCheckDigit, normalizeVin } from "./vin";
 import { getSupabaseClient } from "../persistence/supabase";
@@ -89,6 +89,21 @@ export type MaxbuyEvaluateResponse = {
     model_artifact_hash: null;
   };
 };
+
+/** Use the live MMR ingest/UI already paid for — MaxBuy's intel re-lookup is 401. */
+export function provenanceFromProvidedMmr(
+  request: Pick<MaxbuyEvaluateRequest, "mmr_value" | "mmr_method">,
+): MmrProvenance | null {
+  if (request.mmr_value == null || request.mmr_value <= 0) return null;
+  return {
+    value: request.mmr_value,
+    method: request.mmr_method === "vin" ? "vin" : "ymm",
+    source: "provided",
+    cacheAgeSeconds: 0,
+    missingReason: null,
+    observedAt: new Date().toISOString(),
+  };
+}
 
 /** Build vehicle context from YMM fields on a VIN-path evaluate request (MMR Lab fallback). */
 export function vehicleContextFromRequestFields(
@@ -300,31 +315,37 @@ export async function runEvaluate(
   };
 
   // ── MMR lookup ───────────────────────────────────────────────────────────────
-  const mmrMileage = mileage ?? undefined;
-  let mmrLookup = hasVin && vin
-    ? await lookupMmrByVin(env, { vin, mileage: mmrMileage, year: vehicleCtx.year })
-    : { ok: false as const, missingReason: "vin_absent", method: null as null };
+  const providedMmr = provenanceFromProvidedMmr(request);
+  let mmr: MmrProvenance;
+  if (providedMmr) {
+    mmr = providedMmr;
+  } else {
+    const mmrMileage = mileage ?? undefined;
+    let mmrLookup = hasVin && vin
+      ? await lookupMmrByVin(env, { vin, mileage: mmrMileage, year: vehicleCtx.year })
+      : { ok: false as const, missingReason: "vin_absent", method: null as null };
 
-  if (!hasVin || !mmrLookup.ok || (mmrLookup.ok && mmrLookup.envelope.mmr_value == null)) {
-    mmrLookup = await lookupMmrByYmm(env, {
-      year: vehicleCtx.year,
-      make: vehicleCtx.make,
-      model: vehicleCtx.model,
-      trim: vehicleCtx.trim === "base" ? undefined : vehicleCtx.trim,
-      mileage: mmrMileage,
-    });
+    if (!hasVin || !mmrLookup.ok || (mmrLookup.ok && mmrLookup.envelope.mmr_value == null)) {
+      mmrLookup = await lookupMmrByYmm(env, {
+        year: vehicleCtx.year,
+        make: vehicleCtx.make,
+        model: vehicleCtx.model,
+        trim: vehicleCtx.trim === "base" ? undefined : vehicleCtx.trim,
+        mileage: mmrMileage,
+      });
+    }
+
+    mmr = mmrLookup.ok
+      ? mmrEnvelopeToProvenance(mmrLookup.envelope, mmrLookup.method)
+      : {
+          value: null,
+          method: null as null,
+          source: null,
+          cacheAgeSeconds: null,
+          missingReason: mmrLookup.missingReason,
+          observedAt: null,
+        };
   }
-
-  const mmr = mmrLookup.ok
-    ? mmrEnvelopeToProvenance(mmrLookup.envelope, mmrLookup.method)
-    : {
-        value: null,
-        method: null as null,
-        source: null,
-        cacheAgeSeconds: null,
-        missingReason: mmrLookup.missingReason,
-        observedAt: null,
-      };
 
   // Title/condition gates require a VIN — not evaluated on YMM-only runs.
   const hardGate = vin ? runHardGates({ vin }) : null;

@@ -37,16 +37,26 @@ export function mmrEnvelopeToProvenance(
   };
 }
 
+function intelTransport(env: MaxbuyWorkerEnv): { baseUrl: string; useBinding: boolean } | null {
+  const hasBinding = env.INTEL_WORKER !== undefined;
+  // Prefer the internal binding host. The public workers.dev URL is Access-gated
+  // and is why ingest-time Max buy was 401 on every row (intel_http_401).
+  const baseUrl = hasBinding
+    ? INTEL_SERVICE_BINDING_BASE
+    : env.INTEL_WORKER_URL;
+  if (!baseUrl || !isConfiguredSecret(env.INTEL_WORKER_SECRET)) return null;
+  return { baseUrl, useBinding: hasBinding };
+}
+
 export async function lookupMmrByVin(
   env: MaxbuyWorkerEnv,
   input: { vin: string; mileage?: number; year?: number },
 ): Promise<MmrLookupResult> {
-  const hasBinding = env.INTEL_WORKER !== undefined;
-  const baseUrl =
-    env.INTEL_WORKER_URL || (hasBinding ? INTEL_SERVICE_BINDING_BASE : "");
-  if (!baseUrl || !isConfiguredSecret(env.INTEL_WORKER_SECRET)) {
+  const transport = intelTransport(env);
+  if (!transport) {
     return { ok: false, missingReason: "not_configured", method: null };
   }
+  const { baseUrl, useBinding } = transport;
 
   const body: Record<string, unknown> = { vin: input.vin };
   if (input.mileage !== undefined) body.mileage = input.mileage;
@@ -59,7 +69,7 @@ export async function lookupMmrByVin(
   });
 
   const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
-  const response = hasBinding
+  const response = useBinding
     ? await env.INTEL_WORKER!.fetch(`${baseUrl}/mmr/vin`, init)
     : await fetch(`${baseUrl}/mmr/vin`, init);
 
@@ -81,12 +91,11 @@ export async function lookupMmrByYmm(
   env: MaxbuyWorkerEnv,
   input: { year: number; make: string; model: string; trim?: string; mileage?: number },
 ): Promise<MmrLookupResult> {
-  const hasBinding = env.INTEL_WORKER !== undefined;
-  const baseUrl =
-    env.INTEL_WORKER_URL || (hasBinding ? INTEL_SERVICE_BINDING_BASE : "");
-  if (!baseUrl || !isConfiguredSecret(env.INTEL_WORKER_SECRET)) {
+  const transport = intelTransport(env);
+  if (!transport) {
     return { ok: false, missingReason: "not_configured", method: null };
   }
+  const { baseUrl, useBinding } = transport;
 
   const body: Record<string, unknown> = {
     year: input.year,
@@ -103,7 +112,7 @@ export async function lookupMmrByYmm(
   });
 
   const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
-  const response = hasBinding
+  const response = useBinding
     ? await env.INTEL_WORKER!.fetch(`${baseUrl}/mmr/year-make-model`, init)
     : await fetch(`${baseUrl}/mmr/year-make-model`, init);
 

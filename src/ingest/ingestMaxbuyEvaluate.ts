@@ -29,8 +29,17 @@ export function buildIngestMaxbuyEvaluateBody(
   const region = listing.region;
   if (!region) return null;
 
+  const providedMmr = {
+    mmr_value: mmrResult.mmrValue,
+    mmr_method: mmrResult.method === "vin" ? "vin" : "ymm",
+  };
+
   const vin = listing.vin?.trim();
   if (vin) {
+    const year = listing.year;
+    const make = mmrResult.lookupMake ?? listing.make;
+    const model = mmrResult.lookupModel ?? listing.model;
+    const trim = mmrResult.lookupTrim ?? listing.trim;
     return {
       contract_version: MAXBUY_CONTRACT_VERSION,
       vin,
@@ -38,6 +47,11 @@ export function buildIngestMaxbuyEvaluateBody(
       asking_price: listing.price,
       region,
       normalized_listing_id: normalizedListingId,
+      ...providedMmr,
+      ...(year != null ? { year } : {}),
+      ...(make?.trim() ? { make } : {}),
+      ...(model?.trim() ? { model } : {}),
+      ...(trim?.trim() ? { trim: trim.trim() } : {}),
     };
   }
 
@@ -56,6 +70,7 @@ export function buildIngestMaxbuyEvaluateBody(
     asking_price: listing.price,
     region: region as RegionKey,
     normalized_listing_id: normalizedListingId,
+    ...providedMmr,
   };
   if (trim?.trim()) body.trim = trim.trim();
   return body;

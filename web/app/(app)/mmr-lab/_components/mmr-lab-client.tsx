@@ -160,6 +160,7 @@ export function MmrLabClient() {
   }, []);
 
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
+  const mmrResultRef = useRef<MmrVinOk | null>(null);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [adjustmentBaseline, setAdjustmentBaseline] = useState<MmrAdjustmentBaseline | null>(null);
   const [attributeMarginals, setAttributeMarginals] = useState<MmrAttributeMarginals>(
@@ -188,7 +189,7 @@ export function MmrLabClient() {
     askPrice: string,
     adj?: MmrAdjustments,
   ) => {
-    const built = buildMmrLabMaxbuyRequest(session, askPrice, adj);
+    const built = buildMmrLabMaxbuyRequest(session, askPrice, adj, mmrResultRef.current);
     if ("error" in built) {
       setMaxbuyView({ kind: "error", message: built.error });
       return;
@@ -216,6 +217,7 @@ export function MmrLabClient() {
     // if we clear it after calling setView.
     const pendingChanges = pendingMarginalChangesRef.current.slice();
     pendingMarginalChangesRef.current = [];
+    mmrResultRef.current = data;
     setView((currentView) => {
       if (currentView.kind === "ok") {
         setAttributeMarginals((prev) =>
@@ -469,7 +471,7 @@ export function MmrLabClient() {
         const maxbuySession = mmrVinSessionFromResult(session.vin, mmrRes.data);
         lookupSessionRef.current = maxbuySession;
 
-        const built = buildMmrLabMaxbuyRequest(maxbuySession, laneAskPrice);
+        const built = buildMmrLabMaxbuyRequest(maxbuySession, laneAskPrice, undefined, mmrRes.data);
         if ("error" in built) {
           setMaxbuyView({ kind: "error", message: built.error });
           return;
@@ -484,32 +486,33 @@ export function MmrLabClient() {
         return;
       }
 
-      const built = buildMmrLabMaxbuyRequest(session, laneAskPrice);
-      if ("error" in built) {
-        setMaxbuyView({ kind: "error", message: built.error });
+      try {
         const mmrRes = await mmrPromise;
-        if (mmrRes.ok) setView({ kind: "ok", result: mmrRes.data });
-        else if (mmrRes.kind === "unavailable") setView({ kind: "unavailable", reason: mmrRes.error });
-        else setView({ kind: "error", error: mmrRes });
-        return;
-      }
+        if (!mmrRes.ok) {
+          if (mmrRes.kind === "unavailable") {
+            setView({ kind: "unavailable", reason: mmrRes.error });
+          } else {
+            setView({ kind: "error", error: mmrRes });
+          }
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+          return;
+        }
 
-      const [mmrSettled, maxbuySettled] = await Promise.allSettled([
-        mmrPromise,
-        postMaxbuyEvaluate(built.body),
-      ]);
+        applyMmrResult(mmrRes.data, EMPTY_MMR_ADJUSTMENTS);
 
-      if (mmrSettled.status === "fulfilled") {
-        const res = mmrSettled.value;
-        if (res.ok) applyMmrResult(res.data, EMPTY_MMR_ADJUSTMENTS); else if (res.kind === "unavailable") setView({ kind: "unavailable", reason: res.error });
-        else setView({ kind: "error", error: res });
-      } else {
+        const built = buildMmrLabMaxbuyRequest(session, laneAskPrice, undefined, mmrRes.data);
+        if ("error" in built) {
+          setMaxbuyView({ kind: "error", message: built.error });
+          return;
+        }
+        try {
+          const maxbuyRes = await postMaxbuyEvaluate(built.body);
+          setMaxbuyView(applyMaxbuyResult(maxbuyRes, built.askingPrice));
+        } catch {
+          setMaxbuyView(MAXBUY_FETCH_FAILED);
+        }
+      } catch {
         setView({ kind: "error", error: mmrTransportError() });
-      }
-
-      if (maxbuySettled.status === "fulfilled") {
-        setMaxbuyView(applyMaxbuyResult(maxbuySettled.value, built.askingPrice));
-      } else {
         setMaxbuyView(MAXBUY_FETCH_FAILED);
       }
     },
