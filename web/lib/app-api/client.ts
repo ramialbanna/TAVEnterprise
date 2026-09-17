@@ -17,6 +17,7 @@ import {
   parseIngestRuns,
   parseIngestRunDetail,
   parseOpportunities,
+  parseOpportunityCounts,
   parseOpportunityDetail,
   parseManualSubmission,
   parseAppUsers,
@@ -45,6 +46,7 @@ import type {
   IngestRunDetail,
   OpportunityRow,
   OpportunityListPage,
+  OpportunityViewCounts,
   OpportunityDetail,
   ManualSubmissionResult,
   ParsedListingFields,
@@ -453,6 +455,12 @@ export async function listOpportunitiesPage(
     filter,
     options,
   );
+}
+
+export async function getOpportunityCounts(): Promise<ApiResult<OpportunityViewCounts>> {
+  const r = await getJson("opportunities/counts");
+  if (r === FETCH_FAILED) return clientTransportError();
+  return parseOpportunityCounts(r.status, r.json);
 }
 
 export async function getOpportunity(id: string): Promise<ApiResult<OpportunityDetail>> {

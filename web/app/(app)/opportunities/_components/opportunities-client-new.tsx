@@ -2,7 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Sparkles, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ import {
   claimOpportunity,
   dismissOpportunity,
   getAppMe,
+  getOpportunityCounts,
   listOpportunitiesPage,
   type OpportunitiesPageFilter,
   type OpportunitySort,
@@ -22,13 +23,11 @@ import { PAGE_COPY } from "@/lib/copy/opportunities-labels";
 import type { DismissReasonCode } from "@/lib/opportunities/dismiss-reasons";
 import {
   prefetchHomeCounts,
-  queueCountFilter,
   queueListFilter,
   QUEUE_LIST_STALE_TIME_MS,
   viewerFetchOptions,
 } from "@/lib/opportunities/queue-prefetch";
 import {
-  countFirstSeenToday,
   DEFAULT_QUEUE_VIEW,
   formatQueueSummaryLine,
 } from "@/lib/opportunities/queue-views";
@@ -48,8 +47,6 @@ import { OpportunitiesTourNew } from "./opportunities-tour-new";
 import { ManualSubmitDialog } from "./manual-submit-dialog";
 import type { OpportunityRow } from "@/lib/app-api/schemas";
 
-const SUMMARY_FETCH_LIMIT = 100;
-/** Keep the open queue current without a full page refresh. */
 const LIST_POLL = {
   staleTime: QUEUE_LIST_STALE_TIME_MS,
   refetchInterval: OPPORTUNITIES_REFETCH_MS,
@@ -69,11 +66,6 @@ const QUEUE_VIEWS = new Set<OpportunityView>([
 function parseViewParam(raw: string | null): OpportunityView {
   if (raw && QUEUE_VIEWS.has(raw as OpportunityView)) return raw as OpportunityView;
   return DEFAULT_QUEUE_VIEW;
-}
-
-function extractTotal(result: ApiResult<OpportunityListPage> | undefined): number | undefined {
-  if (!result?.ok) return undefined;
-  return result.data.total;
 }
 
 function listPageFilter(
@@ -239,49 +231,10 @@ export function OpportunitiesClientNew({
     [meQuery.isSuccess, queryClient, sort, view, viewerOpts, viewerUserId],
   );
 
-  const summaryQueries = useQueries({
-    queries: [
-      {
-        queryKey: queryKeys.opportunitiesPage(queueCountFilter("needs_action"), viewerUserId),
-        queryFn: () => listOpportunitiesPage(queueCountFilter("needs_action"), viewerOpts),
-        ...LIST_POLL,
-      },
-      {
-        queryKey: queryKeys.opportunitiesPage(queueCountFilter("mine"), viewerUserId),
-        queryFn: () => listOpportunitiesPage(queueCountFilter("mine"), viewerOpts),
-        enabled: meQuery.isSuccess,
-        ...LIST_POLL,
-      },
-      {
-        queryKey: queryKeys.opportunitiesPage(queueCountFilter("worth_a_look"), viewerUserId),
-        queryFn: () => listOpportunitiesPage(queueCountFilter("worth_a_look"), viewerOpts),
-        ...LIST_POLL,
-      },
-      {
-        queryKey: queryKeys.opportunitiesPage(queueCountFilter("scraper_review"), viewerUserId),
-        queryFn: () => listOpportunitiesPage(queueCountFilter("scraper_review"), viewerOpts),
-        ...LIST_POLL,
-      },
-      {
-        queryKey: queryKeys.opportunitiesPage(queueCountFilter("flagged_leads"), viewerUserId),
-        queryFn: () => listOpportunitiesPage(queueCountFilter("flagged_leads"), viewerOpts),
-        ...LIST_POLL,
-      },
-      {
-        queryKey: ["opportunities-summary", "new-today", viewerUserId] as const,
-        queryFn: () =>
-          listOpportunitiesPage(
-            {
-              limit: SUMMARY_FETCH_LIMIT,
-              offset: 0,
-              sort: "last_seen_desc",
-              view: "all",
-            },
-            viewerOpts,
-          ),
-        ...LIST_POLL,
-      },
-    ],
+  const countsQuery = useQuery({
+    queryKey: queryKeys.opportunityCounts,
+    queryFn: getOpportunityCounts,
+    ...LIST_POLL,
   });
 
   useEffect(() => {
@@ -294,7 +247,7 @@ export function OpportunitiesClientNew({
       if (result.ok) {
         toast.success(PAGE_COPY.claimAction);
         void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
-        void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.opportunityCounts });
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(row.id) });
         setSelected(result.data);
         setClaimFeedbackRow(result.data);
@@ -313,7 +266,7 @@ export function OpportunitiesClientNew({
         setDismissTarget(null);
         if (selected?.id === variables.row.id) setSelected(null);
         void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
-        void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.opportunityCounts });
         void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(variables.row.id) });
         return;
       }
@@ -325,20 +278,17 @@ export function OpportunitiesClientNew({
   const showingPlaceholder = query.isPlaceholderData === true;
   const claimActor = meQuery.data?.ok ? meQuery.data.data : null;
 
+  const counts = countsQuery.data?.ok === true ? countsQuery.data.data : undefined;
   const tabCounts: Partial<Record<OpportunityView, number>> = {
-    needs_action: extractTotal(summaryQueries[0].data),
-    mine: extractTotal(summaryQueries[1].data),
-    worth_a_look: extractTotal(summaryQueries[2].data),
-    scraper_review: extractTotal(summaryQueries[3].data),
-    flagged_leads: extractTotal(summaryQueries[4].data),
+    needs_action: counts?.needs_action,
+    mine: counts?.mine,
+    worth_a_look: counts?.worth_a_look,
+    scraper_review: counts?.scraper_review,
+    flagged_leads: counts?.flagged_leads,
   };
 
   const needsYou = tabCounts.needs_action ?? 0;
-  const newTodayResult = summaryQueries[5].data;
-  const newToday =
-    newTodayResult?.ok === true
-      ? countFirstSeenToday(newTodayResult.data.items)
-      : 0;
+  const newToday = counts?.new_today ?? 0;
 
   function handleViewChange(nextView: OpportunityView) {
     if (nextView === view) return;

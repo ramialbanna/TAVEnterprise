@@ -7,9 +7,10 @@ import type { AppUser } from "@/lib/app-api/schemas";
 vi.mock("@/lib/app-api/client", () => ({
   getAppMe: vi.fn(),
   listOpportunitiesPage: vi.fn(),
+  getOpportunityCounts: vi.fn(),
 }));
 
-import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
+import { getAppMe, getOpportunityCounts, listOpportunitiesPage } from "@/lib/app-api/client";
 import {
   prefetchHomeCounts,
   prefetchNavHref,
@@ -21,6 +22,7 @@ import { DEFAULT_PAGE_SIZE } from "./table-preferences";
 
 const mockedMe = vi.mocked(getAppMe);
 const mockedList = vi.mocked(listOpportunitiesPage);
+const mockedCounts = vi.mocked(getOpportunityCounts);
 
 const me: ApiResult<AppUser> = {
   ok: true,
@@ -45,6 +47,19 @@ describe("queue-prefetch", () => {
     vi.clearAllMocks();
     mockedMe.mockResolvedValue(me);
     mockedList.mockResolvedValue(page());
+    mockedCounts.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        needs_action: 0,
+        mine: 0,
+        worth_a_look: 0,
+        scraper_review: 0,
+        flagged_leads: 0,
+        all: 0,
+        new_today: 0,
+      },
+    });
   });
 
   it("queueListFilter defaults to the buyer table page", () => {
@@ -81,19 +96,13 @@ describe("queue-prefetch", () => {
     });
   });
 
-  it("prefetchHomeCounts loads Needs action and Mine totals", async () => {
+  it("prefetchHomeCounts loads tab totals from the counts endpoint", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     prefetchHomeCounts(client, { me });
     await vi.waitFor(() => {
-      expect(mockedList).toHaveBeenCalledWith(queueCountFilter("needs_action"), {
-        viewerUserId: "u1",
-        viewerDisplayName: "Alex",
-      });
-      expect(mockedList).toHaveBeenCalledWith(queueCountFilter("mine"), {
-        viewerUserId: "u1",
-        viewerDisplayName: "Alex",
-      });
+      expect(mockedCounts).toHaveBeenCalled();
     });
+    expect(mockedList).not.toHaveBeenCalled();
   });
 
   it("prefetchNavHref maps Home and Opportunities", async () => {

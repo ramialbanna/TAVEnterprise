@@ -55,11 +55,13 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 ### Do next (priority)
 
 1. **§76** — **live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Secrets not touched.
-2. **Fix MaxBuy** — noted 2026-09-09. Do not leave it.
-3. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
-4. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
-5. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76.
-6. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
+2. **Fix MaxBuy** — shipped `887ce7a` 2026-09-17 (ingest passes live MMR; global benchmarks load). Do not leave it.
+3. **§77 Queue list speed** — cheap counts + filter/sort before MaxBuy hydrate. In repo; needs Worker + web deploy.
+4. **§75 Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. Do not leave the schema open.
+5. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
+6. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
+7. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76.
+8. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
 
 ### Key commands
 
@@ -235,7 +237,8 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
-| **75** | **Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. | **High** | [ ] noted 2026-09-08. Do not leave the schema open. |
+| **75** | **Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. | **High** | [ ] noted 2026-09-08. Do not leave the schema open. See §75. |
+| **77** | **Queue list speed** — cheap counts + hydrate only the page | **High** | [~] in repo 2026-09-17. Needs Worker + web deploy. |
 
 Shipped and closed items are archived at the bottom.
 
@@ -985,6 +988,48 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 
 ---
 
+## 75 — Supabase RLS
+
+**Opened:** 2026-09-08 · **Status:** [ ] not done · **Priority:** High
+
+`tav` tables have **no row-level security**. The Worker uses the service role key, so every table is fully readable/writable to anyone who holds that key — and to the `anon`/`authenticated` roles if those ever get grants.
+
+This is a schema hardening item, not a product feature. Do not leave the schema open.
+
+**Do**
+
+- Enable RLS on every `tav` table the app uses.
+- Service role stays the Worker path (RLS does not apply to service role unless `FORCE ROW LEVEL SECURITY`).
+- If the dashboard ever talks to Supabase directly, policies must match Auth.js roles. Today it must not; the browser goes through `/api/app/*`.
+- Add policies last, after a table inventory. A half-enabled RLS rollout that blocks the Worker is worse than no RLS.
+
+**Do not**
+
+- Put the service role key in the browser, AppSheet, or Vercel `NEXT_PUBLIC_*`.
+- Flip `FORCE ROW LEVEL SECURITY` on Worker-facing tables without a staging soak.
+- Treat “the dashboard exists” as “client-side Supabase is fine.”
+
+---
+
+## 77 — Queue list speed
+
+**Opened:** 2026-09-17 · **Status:** [~] in repo · **Priority:** High
+
+Refresh on Opportunities showed a blank table for ~10s. In-session Home ↔ Opportunities was already fixed (§58). A reload kills the React Query cache; the remaining cost is Worker SQL.
+
+**Cause.** Tab badges and “new today” each called `GET /app/opportunities` with `limit=1` or `limit=100`. Pagination is applied **after** hydrating up to 1,500 listings + MaxBuy, so six of those calls stacked the same slow assembler. Default page size is 500.
+
+**In repo (2026-09-17)**
+
+1. `GET /app/opportunities/counts` — one pass, all view totals + `new_today` (America/Chicago). Home + queue tabs use this. No MaxBuy, no list rows.
+2. List still assembles identity/valuation/workflow for view matching, then **filters/sorts**, then hydrates MaxBuy **only for the page slice**. Queue listing select drops `images`/`description`.
+
+**Needs** Worker + web deploy. Secrets not touched.
+
+**Not this item:** persist last rows in `sessionStorage` (refresh paint). Do that after this ships if the remaining wait is still too long.
+
+---
+
 ## 69 — Dealer seller blacklist (pre-ingest)
 
 **Status:** [~] **URL keys only**. Ingest + default views hide blocked URLs. **§76:** empty-seller Facebook is shown with Seller unchecked. Vendor `extraListingData.seller` object is still often `{}`.
@@ -1036,6 +1081,7 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 - [x] Stuck `running` `source_runs` — **cleared + deployed `0453cc02` 2026-09-07** (17 → `completed`). `upsertSourceRun` now keeps `truncated` / `failed` closed. Secrets not touched. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
 - [ ] **§75 Supabase RLS** — `tav` has no row-level security. Must be fixed.
+- [ ] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. In repo 2026-09-17; needs Worker + web deploy.
 - [ ] List/detail flag UI cache lag (~60s)
 - [x] **Home ↔ Opportunities ~10s** (buyer 2026-08-31) — thin RSC + client cache; see §58
 

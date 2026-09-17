@@ -418,6 +418,17 @@ export const OpportunityListPageSchema = z.object({
 });
 export type OpportunityListPage = z.infer<typeof OpportunityListPageSchema>;
 
+export const OpportunityViewCountsSchema = z.object({
+  needs_action: z.number(),
+  mine: z.number(),
+  worth_a_look: z.number(),
+  scraper_review: z.number(),
+  flagged_leads: z.number(),
+  all: z.number(),
+  new_today: z.number(),
+});
+export type OpportunityViewCounts = z.infer<typeof OpportunityViewCountsSchema>;
+
 export const OpportunityActionTypeSchema = z.enum([
   "submitted",
   "assigned",

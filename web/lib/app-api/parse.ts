@@ -9,6 +9,7 @@ import {
   IngestRunDetailSchema,
   OpportunityRowListSchema,
   OpportunityListPageSchema,
+  OpportunityViewCountsSchema,
   OpportunityDetailSchema,
   ManualSubmissionResultSchema,
   AppUserSummaryListSchema,
@@ -30,6 +31,7 @@ import {
   type IngestRunDetail,
   type OpportunityRow,
   type OpportunityListPage,
+  type OpportunityViewCounts,
   type OpportunityDetail,
   type ManualSubmissionResult,
   type AppUserSummary,
@@ -273,6 +275,13 @@ export function parseOpportunitiesPage(
   }
 
   return pageResult;
+}
+
+export function parseOpportunityCounts(
+  status: number,
+  json: unknown,
+): ApiResult<OpportunityViewCounts> {
+  return interpret(status, json, OpportunityViewCountsSchema);
 }
 
 export function parseOpportunityDetail(status: number, json: unknown): ApiResult<OpportunityDetail> {

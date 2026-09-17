@@ -5,14 +5,12 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Briefcase, PlusCircle, Search, Target } from "lucide-react";
 
-import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
+import { getAppMe, getOpportunityCounts } from "@/lib/app-api/client";
 import { NEW_ANALYTICS_HREF } from "@/lib/app-shell/nav-new";
 import { prefetchNavHref } from "@/lib/app-shell/nav-prefetch";
 import {
   prefetchOpportunitiesQueue,
-  queueCountFilter,
   QUEUE_LIST_STALE_TIME_MS,
-  viewerFetchOptions,
 } from "@/lib/opportunities/queue-prefetch";
 import { queryKeys } from "@/lib/query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,36 +27,19 @@ export function DashboardHomeNew({ initialCounts = {} }: { initialCounts?: HomeC
     queryFn: getAppMe,
     staleTime: QUEUE_LIST_STALE_TIME_MS,
   });
-  const viewerOpts = viewerFetchOptions(meQuery.data);
-  const viewerUserId = viewerOpts?.viewerUserId ?? null;
-  const meReady = !meQuery.isPending;
-
-  const needsFilter = queueCountFilter("needs_action");
-  const mineFilter = queueCountFilter("mine");
-
-  const needsQuery = useQuery({
-    queryKey: queryKeys.opportunitiesPage(needsFilter, viewerUserId),
-    queryFn: () => listOpportunitiesPage(needsFilter, viewerOpts),
+  const countsQuery = useQuery({
+    queryKey: queryKeys.opportunityCounts,
+    queryFn: getOpportunityCounts,
     staleTime: QUEUE_LIST_STALE_TIME_MS,
-    enabled: meReady,
-  });
-  const mineQuery = useQuery({
-    queryKey: queryKeys.opportunitiesPage(mineFilter, viewerUserId),
-    queryFn: () => listOpportunitiesPage(mineFilter, viewerOpts),
-    staleTime: QUEUE_LIST_STALE_TIME_MS,
-    enabled: meReady && meQuery.isSuccess,
   });
 
   useEffect(() => {
     prefetchOpportunitiesQueue(queryClient, { me: meQuery.data });
   }, [meQuery.data, queryClient]);
 
-  const needsYou =
-    needsQuery.data?.ok === true
-      ? needsQuery.data.data.total
-      : initialCounts.needsYou;
-  const mineCount =
-    mineQuery.data?.ok === true ? mineQuery.data.data.total : initialCounts.mine;
+  const counts = countsQuery.data?.ok === true ? countsQuery.data.data : undefined;
+  const needsYou = counts?.needs_action ?? initialCounts.needsYou;
+  const mineCount = counts?.mine ?? initialCounts.mine;
 
   const dealsLabel =
     needsYou === undefined

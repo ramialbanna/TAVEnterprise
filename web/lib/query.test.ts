@@ -29,6 +29,7 @@ describe("queryKeys", () => {
       { view: "mine" },
       "u1",
     ]);
+    expect(queryKeys.opportunityCounts).toEqual(["opportunity-counts"]);
   });
 
   it("opportunities-page keys match invalidateQueries prefix", () => {

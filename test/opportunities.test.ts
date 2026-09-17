@@ -15,6 +15,8 @@ import {
   sortOpportunityRows,
   paginateOpportunityRows,
   mergeQueueListingIds,
+  countOpportunityViews,
+  isFirstSeenTodayInQueueTz,
   SCRAPER_REVIEW_BADGE,
   SCRAPER_REVIEW_WINDOW_MS,
   type OpportunityRow,
@@ -466,6 +468,58 @@ describe("opportunity list views and pagination", () => {
       "fresh-1",
     ]);
     expect(mergeQueueListingIds(["a", "b", "c"], ["d"], 2)).toEqual(["a", "b"]);
+  });
+});
+
+describe("countOpportunityViews", () => {
+  it("counts each view from one assembled set without a second hydrate", () => {
+    const now = new Date("2026-09-17T18:00:00.000Z");
+    const needs = sampleRow({
+      id: "needs",
+      assignedTo: null,
+      receivedAt: "2026-09-17T17:30:00.000Z",
+      firstSeenAt: "2026-09-17T17:30:00.000Z",
+    });
+    const mine = sampleRow({
+      id: "mine",
+      assignedTo: "u1",
+      receivedAt: "2026-09-16T12:00:00.000Z",
+      firstSeenAt: "2026-09-16T12:00:00.000Z",
+    });
+    const worth = sampleRow({
+      id: "worth",
+      assignedTo: "other",
+      spread: 2_000,
+      mmrValue: 22_000,
+      receivedAt: "2026-09-10T12:00:00.000Z",
+      lastSeenAt: "2026-09-16T12:00:00.000Z",
+      firstSeenAt: "2026-09-10T12:00:00.000Z",
+    });
+    const flagged = sampleRow({
+      id: "flagged",
+      status: "bad_lead",
+      firstSeenAt: "2026-09-17T10:00:00.000Z",
+    });
+    const counts = countOpportunityViews(
+      [needs, mine, worth, flagged],
+      { viewerUserId: "u1" },
+      new Map(),
+      null,
+      now,
+    );
+    expect(counts.needs_action).toBe(1);
+    expect(counts.mine).toBe(1);
+    expect(counts.worth_a_look).toBe(1);
+    expect(counts.flagged_leads).toBe(1);
+    expect(counts.all).toBe(3);
+    expect(counts.new_today).toBe(1);
+    expect(counts.scraper_review).toBe(0);
+  });
+
+  it("isFirstSeenTodayInQueueTz uses America/Chicago, not UTC midnight", () => {
+    const now = new Date("2026-09-18T04:30:00.000Z");
+    expect(isFirstSeenTodayInQueueTz("2026-09-17T17:00:00.000Z", now)).toBe(true);
+    expect(isFirstSeenTodayInQueueTz("2026-09-16T12:00:00.000Z", now)).toBe(false);
   });
 });
 

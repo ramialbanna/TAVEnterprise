@@ -180,6 +180,20 @@ export interface OpportunityListPage {
   offset: number;
 }
 
+/** Tab badges + "new today" — one Worker pass, no 1,500-row MaxBuy hydrate. */
+export interface OpportunityViewCounts {
+  needs_action: number;
+  mine: number;
+  worth_a_look: number;
+  scraper_review: number;
+  flagged_leads: number;
+  all: number;
+  new_today: number;
+}
+
+/** Closers sit in Texas — "new today" is the America/Chicago calendar day. */
+export const QUEUE_COUNT_TIME_ZONE = "America/Chicago";
+
 /** Minimum spread ($) for `view=worth_a_look`. */
 export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
 
@@ -224,6 +238,10 @@ export interface ScraperReviewMapOptions {
 
 const LISTING_COLUMNS =
   "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, images, description, seller_name, seller_url, city, state";
+
+/** Queue list/count — skip listing images + description (detail-only, huge over 1,500 rows). */
+const QUEUE_LISTING_COLUMNS =
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, seller_name, seller_url, city, state";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -794,6 +812,65 @@ function applyViewFilter(
   });
 }
 
+const QUEUE_COUNT_DAY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: QUEUE_COUNT_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** True when `firstSeenAt` falls on today's America/Chicago calendar date. */
+export function isFirstSeenTodayInQueueTz(
+  firstSeenAt: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!firstSeenAt) return false;
+  const seen = new Date(firstSeenAt);
+  if (Number.isNaN(seen.getTime())) return false;
+  return QUEUE_COUNT_DAY_FORMAT.format(seen) === QUEUE_COUNT_DAY_FORMAT.format(now);
+}
+
+const QUEUE_COUNT_VIEWS: OpportunityView[] = [
+  "needs_action",
+  "mine",
+  "worth_a_look",
+  "scraper_review",
+  "flagged_leads",
+  "all",
+];
+
+/** Apply each queue view to already-assembled rows — used by GET /app/opportunities/counts. */
+export function countOpportunityViews(
+  rows: OpportunityRow[],
+  filter: Pick<OpportunityListFilter, "viewerUserId" | "scraperReviewMode">,
+  workflowByListing: Map<string, WorkflowDisplayContext>,
+  blockedSellerLookup: BlockedSellerLookup | null | undefined,
+  now: Date = new Date(),
+): OpportunityViewCounts {
+  const counts: OpportunityViewCounts = {
+    needs_action: 0,
+    mine: 0,
+    worth_a_look: 0,
+    scraper_review: 0,
+    flagged_leads: 0,
+    all: 0,
+    new_today: 0,
+  };
+  const base: OpportunityListFilter = {
+    limit: 0,
+    viewerUserId: filter.viewerUserId,
+    scraperReviewMode: filter.scraperReviewMode,
+  };
+  for (const view of QUEUE_COUNT_VIEWS) {
+    const viewed = applyViewFilter(rows, { ...base, view }, workflowByListing, blockedSellerLookup);
+    counts[view] = viewed.length;
+    if (view === "all") {
+      counts.new_today = viewed.filter((row) => isFirstSeenTodayInQueueTz(row.firstSeenAt, now)).length;
+    }
+  }
+  return counts;
+}
+
 export function paginateOpportunityRows(
   rows: OpportunityRow[],
   offset: number,
@@ -1037,7 +1114,7 @@ async function fetchRecentListings(
 ): Promise<ListingRow[]> {
   let q = db
     .from("normalized_listings")
-    .select(LISTING_COLUMNS)
+    .select(QUEUE_LISTING_COLUMNS)
     .order("last_seen_at", { ascending: false })
     .limit(limit);
   if (filter.source) q = q.eq("source", filter.source);
@@ -1069,7 +1146,7 @@ async function fetchListingsByIds(
 
   const parts = await Promise.all(
     chunkIds(listingIds).map(async (chunk) => {
-      let q = db.from("normalized_listings").select(LISTING_COLUMNS).in("id", chunk);
+      let q = db.from("normalized_listings").select(QUEUE_LISTING_COLUMNS).in("id", chunk);
       if (filter.source) q = q.eq("source", filter.source);
       if (filter.region) q = q.eq("region", filter.region);
       const { data, error } = await q;
@@ -1161,27 +1238,54 @@ function assembleRows(
   return rows;
 }
 
-export async function listOpportunities(
+async function attachMaxbuySummaries(
+  db: SupabaseClient,
+  items: OpportunityRow[],
+): Promise<OpportunityRow[]> {
+  if (items.length === 0) return items;
+  const summaries = await fetchMaxbuySummaries(
+    db,
+    items.map((item) => item.id),
+  );
+  if (summaries.size === 0) return items;
+  return items.map((item) => {
+    const summary = summaries.get(item.id);
+    return summary ? { ...item, maxbuySummary: summary } : item;
+  });
+}
+
+async function loadAssembledQueue(
   db: SupabaseClient,
   filter: OpportunityListFilter,
-): Promise<OpportunityListPage> {
-  const offset = filter.offset ?? 0;
-  const includeRecent = filter.view !== "mine" && filter.view !== "flagged_leads";
+  opts: { seedForCounts?: boolean } = {},
+): Promise<{
+  rows: OpportunityRow[];
+  workflowByListing: Map<string, WorkflowDisplayContext>;
+  blockedSellerLookup: BlockedSellerLookup | null;
+}> {
+  const seedForCounts = opts.seedForCounts === true;
+  const includeRecent =
+    seedForCounts || (filter.view !== "mine" && filter.view !== "flagged_leads");
+  const leadFilter = seedForCounts ? { ...filter, view: undefined } : filter;
 
-  const [recentListings, leadIds, manualIds, mineIds, blockedSellerLookup] = await Promise.all([
-    includeRecent
-      ? fetchRecentListings(db, filter, RECENT_LISTING_FETCH)
-      : Promise.resolve([] as ListingRow[]),
-    fetchLeadQueueListingIds(db, filter, QUEUE_LEAD_FETCH),
-    fetchRecentManualListingIds(db, filter, QUEUE_LEAD_FETCH),
-    filter.view === "mine" && filter.viewerUserId
-      ? fetchMineWorkflowListingIds(db, filter.viewerUserId, QUEUE_LEAD_FETCH)
-      : Promise.resolve([] as string[]),
-    loadBlockedSellerLookup(db, "facebook").catch(() => null),
-  ]);
+  const [recentListings, leadIds, flaggedLeadIds, manualIds, mineIds, blockedSellerLookup] =
+    await Promise.all([
+      includeRecent
+        ? fetchRecentListings(db, filter, RECENT_LISTING_FETCH)
+        : Promise.resolve([] as ListingRow[]),
+      fetchLeadQueueListingIds(db, leadFilter, QUEUE_LEAD_FETCH),
+      seedForCounts
+        ? fetchLeadQueueListingIds(db, { ...filter, view: "flagged_leads" }, QUEUE_LEAD_FETCH)
+        : Promise.resolve([] as string[]),
+      fetchRecentManualListingIds(db, filter, QUEUE_LEAD_FETCH),
+      (seedForCounts || filter.view === "mine") && filter.viewerUserId
+        ? fetchMineWorkflowListingIds(db, filter.viewerUserId, QUEUE_LEAD_FETCH)
+        : Promise.resolve([] as string[]),
+      loadBlockedSellerLookup(db, "facebook").catch(() => null),
+    ]);
 
   const listingIds = mergeQueueListingIds(
-    [...leadIds, ...mineIds, ...manualIds],
+    [...leadIds, ...flaggedLeadIds, ...mineIds, ...manualIds],
     recentListings.map((listing) => listing.id as string),
     MAX_HYDRATE,
   );
@@ -1201,39 +1305,51 @@ export async function listOpportunities(
   const allListingIds = allListings.map((listing) => listing.id as string);
 
   const { valuations, leads } = await loadOpportunityContext(db, allListingIds);
-  const [manualByListing, workflowByListing, maxbuySummaryByListing] = await Promise.all([
+  const [manualByListing, workflowByListing] = await Promise.all([
     fetchManualSubmissionContext(db, allListingIds),
     fetchWorkflowMapChunked(db, allListingIds),
-    fetchMaxbuySummaries(db, allListingIds),
   ]);
-
-  const candidateIds = [
-    ...new Set(
-      buildListingDiagnostics(allListings, valuations, leads)
-        .map((d) => d.vehicle_candidate_id)
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-  const candidateCounts = await fetchCandidateCounts(db, candidateIds);
-
-  const review: ScraperReviewMapOptions = {
-    enabled: filter.scraperReviewMode === true,
-  };
 
   const rows = assembleRows(
     allListings,
     valuations,
     leads,
-    candidateCounts,
+    new Map(),
     manualByListing,
     workflowByListing,
-    maxbuySummaryByListing,
-    review,
+    new Map(),
+    { enabled: filter.scraperReviewMode === true },
   );
+  return { rows, workflowByListing, blockedSellerLookup };
+}
+
+export async function listOpportunityCounts(
+  db: SupabaseClient,
+  opts: { viewerUserId?: string; scraperReviewMode?: boolean } = {},
+): Promise<OpportunityViewCounts> {
+  const filter: OpportunityListFilter = {
+    limit: 0,
+    viewerUserId: opts.viewerUserId,
+    scraperReviewMode: opts.scraperReviewMode,
+  };
+  const { rows, workflowByListing, blockedSellerLookup } = await loadAssembledQueue(db, filter, {
+    seedForCounts: true,
+  });
+  return countOpportunityViews(rows, filter, workflowByListing, blockedSellerLookup);
+}
+
+export async function listOpportunities(
+  db: SupabaseClient,
+  filter: OpportunityListFilter,
+): Promise<OpportunityListPage> {
+  const offset = filter.offset ?? 0;
+  const { rows, workflowByListing, blockedSellerLookup } = await loadAssembledQueue(db, filter);
   const filtered = applyListFilter(rows, filter);
   const viewed = applyViewFilter(filtered, filter, workflowByListing, blockedSellerLookup);
   sortOpportunityRows(viewed, filter.sort ?? "last_seen_desc");
-  return paginateOpportunityRows(viewed, offset, filter.limit);
+  const page = paginateOpportunityRows(viewed, offset, filter.limit);
+  page.items = await attachMaxbuySummaries(db, page.items);
+  return page;
 }
 
 export async function getOpportunityDetail(

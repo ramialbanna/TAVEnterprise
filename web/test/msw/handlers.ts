@@ -66,6 +66,18 @@ export const handlers = [
     return ok({ ...ingestRunDetail, run: match });
   }),
 
+  http.get("/api/app/opportunities/counts", () =>
+    ok({
+      needs_action: opportunities.length,
+      mine: 0,
+      worth_a_look: 0,
+      scraper_review: 0,
+      flagged_leads: 0,
+      all: opportunities.length,
+      new_today: 0,
+    }),
+  ),
+
   http.get("/api/app/opportunities", ({ request }) => {
     const limit = Number(new URL(request.url).searchParams.get("limit") ?? "");
     const rows =

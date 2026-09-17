@@ -13,7 +13,7 @@
  *
  * Implemented here: GET /app/system-status, GET /app/kpis, GET /app/import-batches,
  * GET /app/historical-sales, POST /app/mmr/vin, GET /app/ingest-runs,
- * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/:id,
+ * GET /app/ingest-runs/:id, GET /app/opportunities, GET /app/opportunities/counts, GET /app/opportunities/:id,
  * GET /app/me, GET /app/users, GET /app/directory,
  * GET /app/blocked-sellers, POST /app/blocked-sellers/:id/unblock,
  * POST /app/directory, POST /app/directory/:id/deactivate,
@@ -37,7 +37,7 @@ import type { HistoricalSalesFilter } from "../persistence/historicalSales";
 import { getLastCronRun } from "../persistence/cronRuns";
 import { listSourceRuns, getSourceRunDetail } from "../persistence/ingestRuns";
 import type { IngestRunListFilter } from "../persistence/ingestRuns";
-import { listOpportunities, getOpportunityDetail } from "../persistence/opportunities";
+import { listOpportunities, listOpportunityCounts, getOpportunityDetail } from "../persistence/opportunities";
 import type { OpportunityListFilter, OpportunityType, OpportunitySort, OpportunityView } from "../persistence/opportunities";
 import { listActiveUsers } from "../persistence/users";
 import { resolveAppUser } from "../auth/resolveAppUser";
@@ -338,6 +338,9 @@ export async function handleApp(request: Request, env: Env, ctx: ExecutionContex
     }
     if (request.method === "GET" && pathname === "/app/opportunities") {
       return await handleOpportunitiesList(request, env, url);
+    }
+    if (request.method === "GET" && pathname === "/app/opportunities/counts") {
+      return await handleOpportunityCounts(request, env);
     }
     const opportunityActionMatch = pathname.match(OPPORTUNITY_ACTION_RE);
     if (request.method === "POST" && opportunityActionMatch) {
@@ -1261,6 +1264,32 @@ async function handleOpportunitiesList(
     return json({ ok: true, data: page.items });
   } catch (err) {
     log("app.opportunities.query_failed", { filter, error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+}
+
+/**
+ * GET /app/opportunities/counts — tab badges + "new today" without hydrating MaxBuy
+ * or returning 500 list rows. Same view rules as GET /app/opportunities.
+ */
+async function handleOpportunityCounts(request: Request, env: Env): Promise<Response> {
+  let db: ReturnType<typeof getSupabaseClient>;
+  try {
+    db = getSupabaseClient(env);
+  } catch (err) {
+    log("app.opportunity_counts.client_init_failed", { error: serializeError(err) });
+    return json({ ok: false, error: "db_error" }, 503);
+  }
+
+  const user = await resolveAppUser(request, env);
+  try {
+    const data = await listOpportunityCounts(db, {
+      viewerUserId: user?.id,
+      scraperReviewMode: env.SCRAPER_REVIEW_MODE === "true",
+    });
+    return json({ ok: true, data });
+  } catch (err) {
+    log("app.opportunity_counts.query_failed", { error: serializeError(err) });
     return json({ ok: false, error: "db_error" }, 503);
   }
 }

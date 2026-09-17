@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { ApiResult } from "@/lib/app-api";
 import {
   getAppMe,
+  getOpportunityCounts,
   listOpportunitiesPage,
   type ListOpportunitiesPageOptions,
   type OpportunitiesPageFilter,
@@ -93,10 +94,15 @@ export function prefetchHomeCounts(
   queryClient: QueryClient,
   opts?: { me?: ApiResult<AppUser> },
 ): void {
+  if (opts?.me) {
+    queryClient.setQueryData(queryKeys.appMe, opts.me);
+  }
   prefetchMe(queryClient);
-  const me = cachedMe(queryClient, opts?.me);
-  prefetchPage(queryClient, queueCountFilter("needs_action"), me);
-  prefetchPage(queryClient, queueCountFilter("mine"), me);
+  void queryClient.prefetchQuery({
+    queryKey: queryKeys.opportunityCounts,
+    queryFn: getOpportunityCounts,
+    staleTime: QUEUE_LIST_STALE_TIME_MS,
+  });
 }
 
 function parseViewFromHref(href: string): OpportunityView {

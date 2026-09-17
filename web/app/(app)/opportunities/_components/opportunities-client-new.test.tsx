@@ -21,15 +21,17 @@ vi.mock("@/lib/app-api/client", async (importOriginal) => {
   return {
     ...actual,
     listOpportunitiesPage: vi.fn(),
+    getOpportunityCounts: vi.fn(),
     getAppMe: vi.fn(),
     claimOpportunity: vi.fn(),
     dismissOpportunity: vi.fn(),
   };
 });
 
-import { dismissOpportunity, getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
+import { dismissOpportunity, getAppMe, getOpportunityCounts, listOpportunitiesPage } from "@/lib/app-api/client";
 
 const mockedList = vi.mocked(listOpportunitiesPage);
+const mockedCounts = vi.mocked(getOpportunityCounts);
 const mockedMe = vi.mocked(getAppMe);
 const mockedDismiss = vi.mocked(dismissOpportunity);
 
@@ -110,19 +112,25 @@ describe("OpportunitiesClientNew", () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
       },
     });
+    mockedCounts.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        needs_action: 1,
+        mine: 0,
+        worth_a_look: 0,
+        scraper_review: 0,
+        flagged_leads: 0,
+        all: 1,
+        new_today: 1,
+      },
+    });
     mockedList.mockImplementation(async (filter) => {
       if (filter?.view === "worth_a_look") {
         return page([], 0);
       }
       if (filter?.view === "mine") {
         return page([], 0);
-      }
-      if (filter?.view === "all" && filter.limit === 100) {
-        return page([sampleRow], 1);
-      }
-      if (filter?.limit === 1) {
-        const total = filter.view === "needs_action" ? 1 : 0;
-        return page([], total);
       }
       return page([sampleRow], 1);
     });
@@ -239,16 +247,22 @@ describe("OpportunitiesClientNew", () => {
       };
     });
 
+    mockedCounts.mockImplementation(async () => ({
+      ok: true as const,
+      status: 200,
+      data: {
+        needs_action: dismissed ? 0 : 1,
+        mine: 0,
+        worth_a_look: 0,
+        scraper_review: 0,
+        flagged_leads: dismissed ? 1 : 0,
+        all: dismissed ? 0 : 1,
+        new_today: dismissed ? 0 : 1,
+      },
+    }));
     mockedList.mockImplementation(async (filter) => {
       if (filter?.view === "worth_a_look") return page([], 0);
       if (filter?.view === "mine") return page([], 0);
-      if (filter?.view === "all" && filter.limit === 100) {
-        return dismissed ? page([], 0) : page([sampleRow], 1);
-      }
-      if (filter?.limit === 1) {
-        const total = filter.view === "needs_action" && !dismissed ? 1 : 0;
-        return page([], total);
-      }
       return dismissed ? page([], 0) : page([sampleRow], 1);
     });
 

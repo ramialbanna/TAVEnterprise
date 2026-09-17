@@ -50,7 +50,7 @@ function invalidateOpportunityQueries(
   void queryClient.invalidateQueries({ queryKey: queryKeys.opportunity(opportunityId) });
   void queryClient.invalidateQueries({ queryKey: ["opportunities"] });
   void queryClient.invalidateQueries({ queryKey: ["opportunities-page"] });
-  void queryClient.invalidateQueries({ queryKey: ["opportunities-summary"] });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.opportunityCounts });
 }
 
 export function OpportunityDetailClientNew({

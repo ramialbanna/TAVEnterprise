@@ -229,6 +229,17 @@ export async function mockAppApi(page: Page, overrides: AppApiOverrides = {}): P
       : e2eOpportunitiesPage(opportunitiesItems);
 
   await page.route("**/api/app/me", (route) => respond(route, overrides.appMe ?? E2E_APP_ME));
+  await page.route("**/api/app/opportunities/counts", (route) =>
+    respond(route, {
+      needs_action: opportunitiesItems.length,
+      mine: 0,
+      worth_a_look: 0,
+      scraper_review: 0,
+      flagged_leads: 0,
+      all: opportunitiesItems.length,
+      new_today: 0,
+    }),
+  );
   await page.route("**/api/app/opportunities", (route) => {
     const url = route.request().url();
     const paginated = url.includes("offset=") || url.includes("view=");

@@ -76,6 +76,7 @@ export const queryKeys = {
   /** Flat key so `invalidateQueries({ queryKey: ["opportunities-page"] })` matches (incl. viewer). */
   opportunitiesPage: (filter?: OpportunitiesPageKeyFilter, viewerUserId?: string | null) =>
     ["opportunities-page", filter ?? {}, viewerUserId ?? null] as const,
+  opportunityCounts: ["opportunity-counts"] as const,
   opportunity: (id: string) => ["opportunity", id] as const,
   appUsers: ["app-users"] as const,
   appMe: ["app-me"] as const,

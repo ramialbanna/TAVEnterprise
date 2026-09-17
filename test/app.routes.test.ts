@@ -7,7 +7,7 @@ import { getLastCronRun } from "../src/persistence/cronRuns";
 import { getMmrValueFromWorker } from "../src/valuation/workerClient";
 import type * as WorkerClientModule from "../src/valuation/workerClient";
 import { listSourceRuns, getSourceRunDetail } from "../src/persistence/ingestRuns";
-import { listOpportunities, getOpportunityDetail, patchOpportunityFields } from "../src/persistence/opportunities";
+import { listOpportunities, listOpportunityCounts, getOpportunityDetail, patchOpportunityFields } from "../src/persistence/opportunities";
 import { listActiveUsers } from "../src/persistence/users";
 import { resolveAppUser } from "../src/auth/resolveAppUser";
 import {
@@ -72,6 +72,7 @@ vi.mock("../src/persistence/ingestRuns", () => ({
 
 vi.mock("../src/persistence/opportunities", () => ({
   listOpportunities: vi.fn(),
+  listOpportunityCounts: vi.fn(),
   getOpportunityDetail: vi.fn(),
   patchOpportunityFields: vi.fn(),
 }));
@@ -1563,6 +1564,53 @@ describe("GET /app/opportunities", () => {
   it("returns 503 db_error when the query fails", async () => {
     vi.mocked(listOpportunities).mockRejectedValue(new Error("db down"));
     const res = await worker.fetch(authedReq("/app/opportunities"), makeEnv(), ctx);
+    expect(res.status).toBe(503);
+  });
+});
+
+describe("GET /app/opportunities/counts", () => {
+  const COUNTS = {
+    needs_action: 3,
+    mine: 1,
+    worth_a_look: 8,
+    scraper_review: 0,
+    flagged_leads: 2,
+    all: 12,
+    new_today: 4,
+  };
+
+  it("returns view totals from one counts call", async () => {
+    vi.mocked(listOpportunityCounts).mockResolvedValue(COUNTS);
+    vi.mocked(resolveAppUser).mockResolvedValue({
+      id: "u1",
+      email: "alex@texasautovalue.com",
+      displayName: "Alex",
+      role: "closer",
+      isActive: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const res = await worker.fetch(authedReq("/app/opportunities/counts"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; data: typeof COUNTS };
+    expect(body.ok).toBe(true);
+    expect(body.data).toEqual(COUNTS);
+    expect(vi.mocked(listOpportunityCounts).mock.calls[0]![1]).toMatchObject({
+      viewerUserId: "u1",
+    });
+    expect(vi.mocked(listOpportunities)).not.toHaveBeenCalled();
+  });
+
+  it("does not 404 counts as an opportunity id", async () => {
+    vi.mocked(listOpportunityCounts).mockResolvedValue(COUNTS);
+    const res = await worker.fetch(authedReq("/app/opportunities/counts"), makeEnv(), ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(getOpportunityDetail)).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 db_error when the query fails", async () => {
+    vi.mocked(listOpportunityCounts).mockRejectedValue(new Error("db down"));
+    const res = await worker.fetch(authedReq("/app/opportunities/counts"), makeEnv(), ctx);
     expect(res.status).toBe(503);
   });
 });

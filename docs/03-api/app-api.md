@@ -82,6 +82,7 @@ do not.
 | GET | `/app/ingest-runs` | Recent source runs (Ingest Monitor) |
 | GET | `/app/ingest-runs/:id` | One source run + diagnostics |
 | GET | `/app/opportunities` | v2 Opportunities queue (read-only) |
+| GET | `/app/opportunities/counts` | Queue tab totals + new today (no list rows) |
 | GET | `/app/opportunities/:id` | One opportunity detail |
 | GET | `/app/me` | Current authenticated staff profile (auto-provisions `tav.users`) |
 | GET | `/app/users` | Active staff directory for assignment pickers |
@@ -578,6 +579,28 @@ View semantics:
 - `all` — no view filter (default when `view` is omitted in paginated mode)
 
 Failure: query error → `503 db_error`.
+
+### `GET /app/opportunities/counts`
+
+Tab badges and the "new today" stat. One Worker pass over the same view rules as
+`GET /app/opportunities`, without MaxBuy hydration or a 500-row payload.
+
+Success → `200 { "ok": true, "data": {
+  "needs_action": number,
+  "mine": number,
+  "worth_a_look": number,
+  "scraper_review": number,
+  "flagged_leads": number,
+  "all": number,
+  "new_today": number
+} }`.
+
+`mine` is `0` when there is no signed-in user. `new_today` is first-seen on the
+America/Chicago calendar day. Failure → `503 db_error`.
+
+The list endpoint itself now filters/sorts the assembled queue, then hydrates
+MaxBuy **only for the page slice** (`limit`/`offset`). Candidate counts stay
+on detail.
 
 ### `GET /app/opportunities/:id`
 

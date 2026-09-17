@@ -4,6 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 vi.mock("@/lib/app-api/client", () => ({
   getAppMe: vi.fn(),
   listOpportunitiesPage: vi.fn(),
+  getOpportunityCounts: vi.fn(),
   getKpis: vi.fn(),
   getSystemStatus: vi.fn(),
   listHistoricalSales: vi.fn(),
@@ -12,12 +13,14 @@ vi.mock("@/lib/app-api/client", () => ({
 }));
 
 import {
+  getAppMe,
   getKpis,
   getSystemStatus,
   listHistoricalSales,
   listBlockedSellers,
   listIngestRuns,
   listOpportunitiesPage,
+  getOpportunityCounts,
 } from "@/lib/app-api/client";
 import { HISTORICAL_SALES_DEFAULT_LIMIT, INGEST_RUNS_DEFAULT_LIMIT } from "@/lib/query";
 
@@ -29,6 +32,8 @@ const mockedSales = vi.mocked(listHistoricalSales);
 const mockedIngest = vi.mocked(listIngestRuns);
 const mockedBlocked = vi.mocked(listBlockedSellers);
 const mockedList = vi.mocked(listOpportunitiesPage);
+const mockedCounts = vi.mocked(getOpportunityCounts);
+const mockedMe = vi.mocked(getAppMe);
 
 describe("nav-prefetch", () => {
   beforeEach(() => {
@@ -39,6 +44,20 @@ describe("nav-prefetch", () => {
     mockedIngest.mockResolvedValue({ ok: true, status: 200, data: [] });
     mockedBlocked.mockResolvedValue({ ok: true, status: 200, data: [] });
     mockedList.mockResolvedValue({ ok: true, status: 200, data: { items: [], total: 0, offset: 0 } });
+    mockedCounts.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        needs_action: 0,
+        mine: 0,
+        worth_a_look: 0,
+        scraper_review: 0,
+        flagged_leads: 0,
+        all: 0,
+        new_today: 0,
+      },
+    });
+    mockedMe.mockResolvedValue({ ok: true, status: 200, data: {} as never });
   });
 
   it("prefetchNavHref warms Analytics KPIs, status, and sales", async () => {

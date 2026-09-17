@@ -5,13 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DashboardHomeNew } from "./dashboard-home-new";
 
 vi.mock("@/lib/app-api/client", () => ({
-  listOpportunitiesPage: vi.fn(),
+  getOpportunityCounts: vi.fn(),
   getAppMe: vi.fn(),
 }));
 
-import { getAppMe, listOpportunitiesPage } from "@/lib/app-api/client";
+import { getAppMe, getOpportunityCounts } from "@/lib/app-api/client";
 
-const mockedList = vi.mocked(listOpportunitiesPage);
+const mockedCounts = vi.mocked(getOpportunityCounts);
 const mockedMe = vi.mocked(getAppMe);
 
 function renderHome() {
@@ -37,7 +37,19 @@ beforeEach(() => {
       updatedAt: "2026-01-01T00:00:00.000Z",
     },
   });
-  mockedList.mockResolvedValue({ ok: true, status: 200, data: { items: [], total: 0, offset: 0 } });
+  mockedCounts.mockResolvedValue({
+    ok: true,
+    status: 200,
+    data: {
+      needs_action: 0,
+      mine: 0,
+      worth_a_look: 0,
+      scraper_review: 0,
+      flagged_leads: 0,
+      all: 0,
+      new_today: 0,
+    },
+  });
 });
 
 describe("DashboardHomeNew", () => {
