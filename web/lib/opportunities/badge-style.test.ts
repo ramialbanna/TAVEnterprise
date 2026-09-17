@@ -28,8 +28,8 @@ describe("killed opportunity badges (§76)", () => {
 });
 
 describe("badgeTone", () => {
-  it("marks Seller unchecked as review", () => {
-    expect(badgeTone("Seller unchecked")).toBe("review");
+  it("marks Seller unchecked as error", () => {
+    expect(badgeTone("Seller unchecked")).toBe("error");
   });
 });
 

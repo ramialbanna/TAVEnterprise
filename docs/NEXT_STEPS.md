@@ -23,7 +23,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
 | **Worker** | `0543ff2e` (`tav-aip-production`) | **§76** fail-open Facebook + Seller unchecked. Secrets not touched. |
-| **Web** | pending git push | Seller unchecked chip + kill Estimated YMMS / MMR / Possible duplicate |
+| **Web** | `80fff9f` on Vercel | Seller unchecked chip + kill Estimated YMMS / MMR / Possible duplicate. Secrets not touched. |
 | **Fly enrich** | redeployed 2026-09-07, machine `2870647c500408`, `ord` | URL-only persist. Default queue **`needs_action`**. Health: https://tav-seller-enrich.fly.dev/ |
 
 ### This session (2026-09-07 afternoon)
@@ -54,7 +54,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ### Do next (priority)
 
-1. **§76** — **Worker live `0543ff2e`.** Facebook without `seller_url` lands with **Seller unchecked**. Web still needs Vercel (git push). Secrets not touched.
+1. **§76** — **live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Secrets not touched.
 2. **Fix MaxBuy** — noted 2026-09-09. Do not leave it.
 3. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
 4. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
@@ -950,7 +950,7 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 **Product**
 
 1. **Show** Facebook Opportunities rows that have no `seller_url`. Do not wait on Fly.
-2. Chip **`Seller unchecked`** — same family as **First seen** / **Mileage unknown** (real pill, not a muted meta dot). Amber / `review` tone. Facebook only. Drop the chip when a profile URL exists.
+2. Chip **`Seller unchecked`** — same family as **First seen** / **Mileage unknown** (real pill, not a muted meta dot). Red / `error` tone. Facebook only. Drop the chip when a profile URL exists.
 3. **Still hide** rows whose profile URL is in `blocked_sellers`. `flagged_leads` unchanged.
 4. A display name without a URL is **not** a check. Chip stays.
 5. When Fly later writes a URL: chip goes away; if that URL is blocked, the card drops (existing `isBlockedSellerOpportunity` / ingest `blocked_dealer`).
@@ -981,7 +981,7 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 - [x] Those rows show **Seller unchecked**; rows with a URL do not (code)
 - [x] Blocked URLs still hidden (code)
 - [x] Estimated YMMS / Estimated MMR / Possible duplicate never appear on list or detail (code)
-- [x] Worker + web deployed — Worker `0543ff2e` 2026-09-17. Secrets not touched. Web rides the next Vercel deploy.
+- [x] Worker + web deployed — Worker `0543ff2e` + web `80fff9f` 2026-09-17. Secrets not touched.
 
 ---
 

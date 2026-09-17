@@ -33,7 +33,7 @@ export function isMetaBadge(badge: string): boolean {
 export function badgeTone(badge: string): BadgeTone {
   if (badge === "Near miss") return "review";
   if (badge === "Scraper review" || badge === "No MMR") return "review";
-  if (badge === "Seller unchecked") return "review";
+  if (badge === "Seller unchecked") return "error";
   if (badge === "Manual submission") return "healthy";
   if (badge === "First seen") return "healthy";
   return "neutral";
