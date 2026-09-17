@@ -2,13 +2,14 @@ import type { OpportunityRow } from "@/lib/app-api/schemas";
 import { Badge } from "@/components/ui/badge";
 import { MetaBadgeDot } from "@/components/ui/meta-badge";
 
-import { badgeTone, isMetaBadge } from "@/lib/opportunities/badge-style";
+import { badgeTone, isMetaBadge, visibleOpportunityBadges } from "@/lib/opportunities/badge-style";
 
 export function OpportunityBadges({ badges }: { badges: string[] }) {
-  if (badges.length === 0) return <span className="text-muted-foreground">—</span>;
+  const visible = visibleOpportunityBadges(badges);
+  if (visible.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {badges.map((badge) =>
+      {visible.map((badge) =>
         isMetaBadge(badge) ? (
           <MetaBadgeDot key={badge} label={badge} />
         ) : (

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { MetaBadgeDot } from "@/components/ui/meta-badge";
 
 import { formatOpportunityBadge, formatOpportunityType } from "@/lib/copy/opportunities-labels";
-import { badgeTone, isMetaBadge } from "@/lib/opportunities/badge-style";
+import { badgeTone, isMetaBadge, visibleOpportunityBadges } from "@/lib/opportunities/badge-style";
 
 export function OpportunityBadgesNew({
   badges,
@@ -12,10 +12,11 @@ export function OpportunityBadgesNew({
   badges: string[];
   compact?: boolean;
 }) {
-  if (badges.length === 0) return compact ? null : <span className="text-muted-foreground">—</span>;
+  const visible = visibleOpportunityBadges(badges);
+  if (visible.length === 0) return compact ? null : <span className="text-muted-foreground">—</span>;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {badges.map((badge) =>
+      {visible.map((badge) =>
         isMetaBadge(badge) ? (
           <MetaBadgeDot key={badge} label={formatOpportunityBadge(badge)} compact={compact} />
         ) : (

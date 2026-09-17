@@ -158,9 +158,8 @@ export function isBlockedSeller(
 }
 
 /**
- * Facebook cards may land on the buyer sheet only after we have a seller URL
- * we can check against `blocked_sellers`. Name-only is not enough — a blocked
- * dealer can change the display name on a new listing.
+ * True when a Facebook listing has a profile URL we can match to `blocked_sellers`.
+ * Name-only is not a check (§76). Empty URL still shows the card, chipped Seller unchecked.
  */
 export function hasFacebookSellerUrlForQueue(sellerUrl?: string | null): boolean {
   return Boolean(sellerUrl?.trim());
@@ -177,8 +176,8 @@ export function isBlockedSellerOpportunity(
 }
 
 /**
- * Default queue views: hide until a Facebook seller URL exists, then hide if
- * that seller is blacklisted. Flagged leads stay auditable.
+ * Facebook listing whose seller profile URL is not attached yet (§76 chip).
+ * Name-only is not a check. Does not hide the card — only `blocked_sellers` does.
  */
 export function isPendingFacebookSellerIdentity(
   source?: string | null,
@@ -472,48 +471,15 @@ export function groupBlockedSellerReviews(
   });
 }
 
-const LISTING_REVIEW_COLUMNS =
-  "id, title, listing_url, price, year, make, model, seller_url, seller_name, first_seen_at";
-
-function quoteOrValue(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
 async function loadListingsForBlockedSellers(
   db: SupabaseClient,
   urls: string[],
-  names: string[],
 ): Promise<BlockedSellerListingRow[]> {
-  const byId = new Map<string, BlockedSellerListingRow>();
-
-  if (urls.length > 0) {
-    const urlVariants = urls.flatMap((url) => [url, `${url}/`]);
-    const { data, error } = await db
-      .from("normalized_listings")
-      .select(LISTING_REVIEW_COLUMNS)
-      .eq("source", "facebook")
-      .in("seller_url", urlVariants);
-    if (error) throw error;
-    for (const row of (data ?? []) as BlockedSellerListingRow[]) {
-      byId.set(row.id, row);
-    }
-  }
-
-  for (let i = 0; i < names.length; i += 25) {
-    const chunk = names.slice(i, i + 25);
-    const orFilter = chunk.map((name) => `seller_name.ilike.${quoteOrValue(name)}`).join(",");
-    const { data, error } = await db
-      .from("normalized_listings")
-      .select(LISTING_REVIEW_COLUMNS)
-      .eq("source", "facebook")
-      .or(orFilter);
-    if (error) throw error;
-    for (const row of (data ?? []) as BlockedSellerListingRow[]) {
-      byId.set(row.id, row);
-    }
-  }
-
-  return [...byId.values()];
+  if (urls.length === 0) return [];
+  const urlVariants = [...new Set(urls.flatMap((url) => [url, `${url}/`]))];
+  const { data, error } = await db.rpc("listings_for_seller_urls", { p_urls: urlVariants });
+  if (error) throw error;
+  return (data ?? []) as BlockedSellerListingRow[];
 }
 
 export async function listBlockedSellerReviews(
@@ -535,22 +501,14 @@ export async function listBlockedSellerReviews(
         .filter(Boolean),
     ),
   ];
-  const names = [
-    ...new Set(
-      rows
-        .map((row) => (row.seller_name ? normalizeSellerName(row.seller_name) : ""))
-        .filter(Boolean),
-    ),
-  ];
 
-  const listings = await loadListingsForBlockedSellers(db, urls, names);
+  const listings = await loadListingsForBlockedSellers(db, urls);
   const listingIds = listings.map((row) => row.id);
   const queueListingIds = new Set<string>();
   if (listingIds.length > 0) {
-    const { data: leads, error: leadsError } = await db
-      .from("leads")
-      .select("normalized_listing_id")
-      .in("normalized_listing_id", listingIds);
+    const { data: leads, error: leadsError } = await db.rpc("lead_ids_for_listings", {
+      p_ids: listingIds,
+    });
     if (leadsError) throw leadsError;
     for (const lead of leads ?? []) {
       const id = (lead as { normalized_listing_id?: string }).normalized_listing_id;

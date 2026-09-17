@@ -252,8 +252,6 @@ function ingestMmrProvenance(opportunity: OpportunityDetail): string {
   if (opportunity.estimateFlags.mileage || opportunity.mileage == null) {
     bits.push("mileage unknown");
   }
-  if (opportunity.estimateFlags.style) bits.push("style estimated");
-  if (opportunity.estimateFlags.mmr) bits.push("estimated MMR");
   return bits.join(" · ");
 }
 

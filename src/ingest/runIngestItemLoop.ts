@@ -50,7 +50,6 @@ import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
 import { buildLlmYmmsPrefetchInputs, buildLlmYmmsResolutionInput } from "./llmYmmsPrefetchInputs";
 import {
   countLiveFacebookListingsForSellerUrl,
-  hasFacebookSellerUrlForQueue,
   isBlockedSeller,
   isRepeatSellerDealer,
   loadBlockedSellerLookup,
@@ -893,10 +892,7 @@ export async function runIngestItemLoop(
             },
             listingCtx,
           );
-          if (
-            grade === "excellent" &&
-            (source !== "facebook" || hasFacebookSellerUrlForQueue(listing.sellerUrl))
-          ) {
+          if (grade === "excellent") {
             excellentLeads.push({
               leadId: lead.id,
               finalScore,

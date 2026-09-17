@@ -34,6 +34,8 @@ vi.mock("../src/persistence/retry", () => ({
 vi.mock("../src/persistence/sourceRuns", () => ({
   upsertSourceRun: vi.fn(),
   completeSourceRunSafe: vi.fn().mockResolvedValue(undefined),
+  isTerminalSourceRunStatus: (status: string) =>
+    status === "completed" || status === "truncated" || status === "failed",
 }));
 
 import { ingestCore } from "../src/ingest/handleIngest";
@@ -139,6 +141,21 @@ describe("dispatchApifyIngest", () => {
     expect(body.idempotent).toBe(true);
     expect(body.processed).toBe(20);
     expect(ctx.waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("returns idempotent response when source run already truncated", async () => {
+    vi.mocked(upsertSourceRun).mockResolvedValueOnce({
+      id: "sr-trunc",
+      status: "truncated",
+      processed: 14,
+      rejected: 2,
+      created_leads: 1,
+    });
+    const res = await dispatchApifyIngest(makeEnvelope(20), env, ctx);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.idempotent).toBe(true);
+    expect(body.processed).toBe(14);
+    expect(vi.mocked(runIngestItemLoop)).not.toHaveBeenCalled();
   });
 });
 

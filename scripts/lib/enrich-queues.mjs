@@ -15,7 +15,7 @@ export const DEALER_SIGNAL_QUEUE = "dealer_signal";
 export const DEFAULT_ENRICH_QUEUE = "needs_action";
 
 /** Mirror `NEEDS_ACTION_MAX_AGE_MS` in opportunities.ts */
-export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
 /** Mirror `CLAIM_EXPIRING_SOON_MS` in opportunities.ts */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 

@@ -301,9 +301,47 @@ describe("buildOpportunityBadges", () => {
     expect(badges).toContain("Seen again #2");
     expect(badges).toContain("Price changed");
     expect(badges).toContain("Estimated miles");
-    expect(badges).toContain("Estimated MMR");
-    expect(badges).toContain("Possible duplicate");
+    expect(badges).not.toContain("Estimated YMMS");
+    expect(badges).not.toContain("Estimated MMR");
+    expect(badges).not.toContain("Possible duplicate");
     expect(badges).not.toContain("Near miss");
+  });
+
+  it("marks Seller unchecked for Facebook with no profile URL", () => {
+    const badges = buildOpportunityBadges({
+      scrapeCount: 1,
+      priceChanged: false,
+      mileageChanged: false,
+      mileageUnknown: true,
+      hasLead: true,
+      hasMmr: true,
+      isManualSubmission: false,
+      estimateFlags: { mileage: false, style: true, mmr: true },
+      candidateListingCount: 2,
+      sellerUnchecked: true,
+    });
+    expect(badges).toContain("Seller unchecked");
+    expect(badges).toContain("First seen");
+    expect(badges).toContain("Mileage unknown");
+    expect(badges).not.toContain("Estimated YMMS");
+    expect(badges).not.toContain("Estimated MMR");
+    expect(badges).not.toContain("Possible duplicate");
+  });
+
+  it("does not mark Seller unchecked when the profile URL exists", () => {
+    const badges = buildOpportunityBadges({
+      scrapeCount: 1,
+      priceChanged: false,
+      mileageChanged: false,
+      mileageUnknown: false,
+      hasLead: true,
+      hasMmr: true,
+      isManualSubmission: false,
+      estimateFlags: { mileage: false, style: false, mmr: false },
+      candidateListingCount: 1,
+      sellerUnchecked: false,
+    });
+    expect(badges).not.toContain("Seller unchecked");
   });
 
   it("marks manual submissions", () => {
@@ -341,7 +379,7 @@ describe("opportunity list views and pagination", () => {
   const now = new Date("2026-05-21T12:00:00.000Z");
 
   it("matchesNeedsAction for unassigned and expiring claims", () => {
-    expect(matchesNeedsAction(sampleRow({ assignedTo: null }), null, now)).toBe(true);
+    expect(matchesNeedsAction(sampleRow({ assignedTo: null, receivedAt: "2026-05-21T11:30:00.000Z" }), null, now)).toBe(true);
     const wall = new Date();
     const workflow = {
       claimedByUserId: "user-1",
@@ -350,17 +388,17 @@ describe("opportunity list views and pagination", () => {
     expect(matchesNeedsAction(sampleRow({ assignedTo: "user-2" }), workflow, wall)).toBe(true);
   });
 
-  it("drops Needs action rows older than 24 hours", () => {
+  it("drops Needs action rows older than 1 hour", () => {
     expect(
       matchesNeedsAction(
-        sampleRow({ assignedTo: null, receivedAt: "2026-05-19T12:00:00.000Z" }),
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-21T10:00:00.000Z" }),
         null,
         now,
       ),
     ).toBe(false);
     expect(
       matchesNeedsAction(
-        sampleRow({ assignedTo: null, receivedAt: "2026-05-20T13:00:00.000Z" }),
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-21T11:30:00.000Z" }),
         null,
         now,
       ),
@@ -431,12 +469,12 @@ describe("opportunity list views and pagination", () => {
   });
 });
 
-describe("isHiddenBlockedSellerOpportunity (item 74 lock)", () => {
+describe("isHiddenBlockedSellerOpportunity (item 76 fail-open)", () => {
   const lookup = {
     keys: new Set(["name:claudia gonzalez", "url:https://www.facebook.com/marketplace/profile/61560214693807"]),
   };
 
-  it("hides a Facebook card with no seller URL — cannot prove the seller is not blocked", () => {
+  it("shows a Facebook card with no seller URL — Seller unchecked, not hidden", () => {
     expect(
       isHiddenBlockedSellerOpportunity(
         sampleRow({
@@ -447,10 +485,10 @@ describe("isHiddenBlockedSellerOpportunity (item 74 lock)", () => {
         lookup,
         "needs_action",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
-  it("hides a Facebook card that only has a display name until GoLogin attaches a profile URL", () => {
+  it("shows a Facebook card that only has a display name", () => {
     expect(
       isHiddenBlockedSellerOpportunity(
         sampleRow({
@@ -461,7 +499,7 @@ describe("isHiddenBlockedSellerOpportunity (item 74 lock)", () => {
         lookup,
         "needs_action",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("hides a Facebook card whose seller URL is already blocked", () => {

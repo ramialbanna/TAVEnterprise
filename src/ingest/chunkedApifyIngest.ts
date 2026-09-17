@@ -5,6 +5,7 @@ import { withRetry } from "../persistence/retry";
 import {
   upsertSourceRun,
   completeSourceRunSafe,
+  isTerminalSourceRunStatus,
   type SourceRunRecord,
 } from "../persistence/sourceRuns";
 import { log, logError } from "../logging/logger";
@@ -60,8 +61,8 @@ export async function dispatchApifyIngest(
     return json({ ok: false, error: "service_unavailable" }, 503);
   }
 
-  if (run.status === "completed") {
-    log("ingest.idempotent_return", { chunked: true }, ctx);
+  if (isTerminalSourceRunStatus(run.status)) {
+    log("ingest.idempotent_return", { chunked: true, status: run.status }, ctx);
     return json(
       {
         ok: true,

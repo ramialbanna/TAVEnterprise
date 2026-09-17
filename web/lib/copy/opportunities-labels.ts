@@ -33,6 +33,7 @@ export const BADGE_LABELS: Record<string, string> = {
   "Mileage unknown": "Mileage unknown",
   "Scraper review": "Unprocessed lead",
   "No MMR": "No MMR",
+  "Seller unchecked": "Seller unchecked",
 };
 
 /** Maps workflow status values to buyer-friendly labels. */

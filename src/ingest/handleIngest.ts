@@ -3,7 +3,7 @@ import { verifyHmac } from "../auth/hmac";
 import { IngestRequestSchema, type IngestRequest } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
 import { withRetry } from "../persistence/retry";
-import { upsertSourceRun, completeSourceRunSafe } from "../persistence/sourceRuns";
+import { upsertSourceRun, completeSourceRunSafe, isTerminalSourceRunStatus } from "../persistence/sourceRuns";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
@@ -91,8 +91,8 @@ export async function ingestCore(
     return json({ ok: false, error: "service_unavailable" }, 503);
   }
 
-  if (run.status === "completed") {
-    log("ingest.idempotent_return", {}, ctx);
+  if (isTerminalSourceRunStatus(run.status)) {
+    log("ingest.idempotent_return", { status: run.status }, ctx);
     return json(
       {
         ok: true,

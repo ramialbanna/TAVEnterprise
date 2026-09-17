@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-09-07 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-09-17 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -15,16 +15,16 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git HEAD:** `763e0e7` — blocked-sellers table with sort/filter. **Pushed** to `origin/main` (Vercel auto-deploys `web/`). Prior: `927c3c1` (page + Worker API), `bd98987` (CI follow-ups).
+- **Git HEAD:** `574b6c4` — CI typecheck fix after URL-only block list. **Pushed** to `origin/main`. Prior: `ebdcfba` (URL-only persist), `763e0e7` (admin table sort/filter), `927c3c1` (page + API).
 - `.gitignore` excludes `scripts/_tmp-*`.
 
 ### Production
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `8d56e2a1` (`tav-aip-production`) | `GET /app/blocked-sellers` + `POST /app/blocked-sellers/:id/unblock` (admin only). §72 still on earlier `6bcd175b`. View filter in `2b262630`. |
-| **Web** | `763e0e7` on Vercel | `/admin/blocked-sellers` — table, search, origin / listing-count / profile filters, sort. |
-| **Fly enrich** | v6, machine `2870647c500408`, `ord` | Default queue **`needs_action`** only. CMD: `--write --loop --cloud`. Health: https://tav-seller-enrich.fly.dev/ |
+| **Worker** | `0543ff2e` (`tav-aip-production`) | **§76** fail-open Facebook + Seller unchecked. Secrets not touched. |
+| **Web** | pending git push | Seller unchecked chip + kill Estimated YMMS / MMR / Possible duplicate |
+| **Fly enrich** | redeployed 2026-09-07, machine `2870647c500408`, `ord` | URL-only persist. Default queue **`needs_action`**. Health: https://tav-seller-enrich.fly.dev/ |
 
 ### This session (2026-09-07 afternoon)
 
@@ -33,7 +33,8 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 - **Nobody in `tav.users` was admin** — every row was `closer`, so the page redirected to Opportunities. Promoted **`rami@texasautovalue.com`** and **`automation@texasautovalue.com`** to `admin`. `twillio1@texasautovalue.com` is still `closer`.
 - **Table cleanup** (`763e0e7`): sort (newest default, or click Seller / Listings / Blocked), filters for origin / one-vs-many listings / has-URL vs name-only, search also matches listing titles.
 - **Soak auto-block review — done 2026-09-07** (human pass on `/admin/blocked-sellers`).
-- **Block list is URL-only (2026-09-07).** Stopped writing `name:` keys. Auto persist needs 2+ live cars. Buyer flag may persist one URL. Same profile with 3+ live cars is a dealer even if the copy is empty. Deleted **106** name-only `blocked_sellers` rows; **19** URL rows remain. **Needs Worker + Fly deploy** or production will keep writing name keys.
+- **Block list is URL-only — shipped + deployed 2026-09-07.** Stopped writing `name:` keys. Auto persist needs 2+ live cars. Buyer flag may persist one URL. Same profile with 3+ live cars is a dealer even if the copy is empty. Deleted **106** name-only rows; **19** URL rows remain. Worker `41c65562` + Fly redeployed. CI typecheck fix `574b6c4`. Secrets not touched.
+- **§68 Worker deploy — `0453cc02` 2026-09-07.** `upsertSourceRun` treats `truncated` / `failed` as terminal. 17 stale rows marked `completed` so retries cannot reopen them. Secrets not touched.
 
 ### Where things stand
 
@@ -41,14 +42,24 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **§72 / §73 — Claude still dark.** Ingest is alias → matcher ≥80 → last-resort. Deduped hit **79.4%** last 7d (19,893 listings, 2026-09-07) / **77.7%** last 24h. `model_variant_missing` **0**. `llm_unavailable` still #1 miss. 7d decisions: **9,674** `alias_hit` / **267** `offline_hit` / **0** `llm_hit`. Ceiling without credits ~79–80%. Path to ≥85% is credits + §73 vision. Sample-only eval is done; 200-row Claude run still **401**.
 
-**§68 — stuck `running` rows recurred.** Cleared 2026-09-03; **13** `source_runs` older than 30m again as of 2026-09-07.
+**§68 — stuck `running` rows cleared + deployed 2026-09-07.** 17 stale rows marked `completed`. Worker `0453cc02` keeps `truncated` / `failed` closed on retry. **0** older than 30m.
+
+**§75 — Supabase has no RLS.** `tav` tables are open. Must be fixed. Noted 2026-09-08.
+
+**§69 admin page 400 — 2026-09-09.** `/admin/blocked-sellers` showed `db_error` then `upstream_unavailable`. Cause: listing join was one giant PostgREST GET, then chunked sequential scans past the 12s proxy. **Fix:** RPC `listings_for_seller_urls` + seller_url index (migration `0073`). **Deployed** Worker `79606324`. Secrets not touched.
+
+**§59 MaxBuy — fix next.** Noted 2026-09-09.
+
+**§76 — sheet is empty because the proxy is empty (2026-09-17).** Last 24h Facebook attach is ~2 / 3,587 `seller_url`. The 2026-08-31 lock hides every Facebook card until Fly writes a profile URL, so Needs action is **0**. **Product change (agreed, not shipped):** fail-open those cards onto the sheet with a **Seller unchecked** chip. Still hide URLs that are already in `blocked_sellers`. Kill **Estimated YMMS / Estimated MMR / Possible duplicate** — never show them again. See §76.
 
 ### Do next (priority)
 
-1. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
-2. **§68** — reconcile stuck `running` `source_runs` if they are still stale.
-3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban.
-4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
+1. **§76** — **Worker live `0543ff2e`.** Facebook without `seller_url` lands with **Seller unchecked**. Web still needs Vercel (git push). Secrets not touched.
+2. **Fix MaxBuy** — noted 2026-09-09. Do not leave it.
+3. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
+4. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
+5. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76.
+6. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
 
 ### Key commands
 
@@ -78,9 +89,11 @@ cd web && npm run lint && npm run typecheck && npm test
 - Run `npm run gologin:enrich:daemon` locally while Fly is up (same `fb_buyer_10` profile).
 - Reset the §74 soak clock on a proxy top-up.
 - Create more Facebook accounts (action 6) unless this login is checkpointed.
-- `wrangler rollback` the view filter — Needs action will show unenriched Facebook again.
 - Compare MMR hit rates using raw snapshot counts — use **deduped** latest snapshot per listing.
 - Re-soak proven-aware last-resort. It is closed; F-series listing-word trims are a §73 problem.
+- Write `name:` keys to `blocked_sellers`. URL only. A one-listing person name must not ban the name.
+- Treat a Facebook **display name** as a checked seller. Chip stays until a profile URL exists.
+- Render **Estimated YMMS**, **Estimated MMR**, or **Possible duplicate** on Opportunities. Dead chips.
 
 ### Current MMR snapshot (2026-09-07, deduped)
 
@@ -213,14 +226,16 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 |---|------|----------|--------|
 | **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **Next:** credits → §73 vision |
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04** (575 pool / 200 sample); 200-row Claude run **blocked on Anthropic 401** |
-| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos, `SELLER_CLASSIFY_ENABLED=true` |
-| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07** — path works; limiter is proxy GB. Writes after refill **confirmed**. Auto-block review **done**. Action 6 only on checkpoint. |
-| **69** | **Dealer seller blacklist** | **High** | [~] ingest + views hide blocked keys **and** empty-seller Facebook (**live** `2b262630`). Fly attaches URLs. Vendor `extraListingData.seller` still `{}`. |
-| **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stuck `running` **recurred** — 13 rows >30m as of 2026-09-07 |
-| **59** | **Max buy / YMMS linkage at ingest** — shipped, soak ongoing | **High** | [~] |
+| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. |
+| **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [~] **in repo 2026-09-17.** Needs Worker + web deploy. Kill Estimated YMMS / Estimated MMR / Possible duplicate |
+| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07**. Writes after refill **confirmed**. Auto-block review **done**. URL-only list **live**. Action 6 only on checkpoint. Limiter is proxy GB. Sheet gate **reversed by §76**. |
+| **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. Admin list RPC Worker `79606324` (2026-09-09). Vendor `extraListingData.seller` still `{}`. |
+| **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stale `running` **cleared + deployed** `0453cc02` 2026-09-07 |
+| **59** | **Max buy / YMMS linkage at ingest** — shipped, soak ongoing. **Needs a fix pass** (noted 2026-09-09) | **High** | [~] |
 | **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
+| **75** | **Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. | **High** | [ ] noted 2026-09-08. Do not leave the schema open. |
 
 Shipped and closed items are archived at the bottom.
 
@@ -534,7 +549,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 
 ## 71 — AI dealer listing detection (pre-ingest)
 
-**Status:** [~] **live** 2026-08-14. Production `b0973f27`, staging `1bb8e1bb`. `SELLER_CLASSIFY_ENABLED=true` both envs (dashboard + `wrangler.toml`). Soak — watch private-party false positives.
+**Status:** [~] **live** 2026-08-14. URL-only persist + 3-car repeat-seller **live** Worker `41c65562` / Fly 2026-09-07. `SELLER_CLASSIFY_ENABLED=true`. Still open: photo-labelled eval before tightening 0.85.
 
 **Goal:** detect dealership listings from listing text and photos **before** Y/M/M/S and MMR run, so first-time dealer inventory is filtered without waiting for a buyer dismiss (§69) or vendor seller fields.
 
@@ -560,7 +575,8 @@ Do not wire a production vision tier until this file has a real summary (text-on
 | Filter point | After adapter, before Y/M/M/S — same hook as `isBlockedSeller` in `runIngestItemLoop.ts` |
 | Auto-reject gate | `seller_type=dealer` **and** `confidence >= 0.85`, tuned on the eval |
 | Lower confidence | Ingest continues unchanged (no private-party regressions) |
-| On reject | `writeFilteredOut(reason_code: "dealer_listing")` + log `ingest.dealer_listing_blocked`; upsert `blocked_sellers` when a seller key exists |
+| On reject | `writeFilteredOut(reason_code: "dealer_listing")` + log `ingest.dealer_listing_blocked`. Persist `blocked_sellers` **URL only**, and only if **2+ live cars** or a buyer flag. |
+| Repeat seller | Same Marketplace profile with **3+** live listings (last 30d) is a dealer even if the copy is empty (`repeat_seller`) |
 | Flag | `SELLER_CLASSIFY_ENABLED="true"` production + staging as of 2026-08-14 |
 | Model tier | Haiku or cheapest sufficient |
 
@@ -574,7 +590,7 @@ Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer
 
 ## 74 — Seller identity via GoLogin / logged-in Facebook
 
-**Status:** [~] Needs-action-only enrich **live** Fly v6 2026-09-03. View filter **live** Worker `2b262630`. **48h soak closed 2026-09-07** — path works when proxy has data; every stop was empty residential GB, not a Facebook checkpoint. Proxy **refilled 2026-09-07**; writes **confirmed** the same day. Soak auto-block review **done**. Action 6 only if this login is checkpointed. **Unblocks:** §69 · **Does not replace:** §71
+**Status:** [~] Needs-action-only enrich **live**. View filter **live** `2b262630`. **48h soak closed 2026-09-07**. Writes after refill **confirmed**. Auto-block review **done**. URL-only block list **live** Worker `41c65562` + Fly 2026-09-07. Action 6 only if this login is checkpointed. **Unblocks:** §69 · **Does not replace:** §71
 
 **Goal:** get a stable seller key (`seller_url`, else `seller_name`) onto Facebook listings we already ingest, using the GoLogin profile + Facebook account we already have, so the shipped blacklist can start matching.
 
@@ -584,7 +600,7 @@ Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer
 
 | Slice | State |
 |-------|--------|
-| Opportunities hide Facebook until `seller_url`, then hide if blocked | **Live** production `2b262630` (`isPendingFacebookSellerIdentity` / `isHiddenBlockedSellerOpportunity`). `flagged_leads` still shows all. |
+| Opportunities hide Facebook until `seller_url`, then hide if blocked | **Was live** `2b262630`. **§76 reverses the empty-URL hide** — show + **Seller unchecked**. Blocked URLs still hidden. |
 | Excellent-lead email waits on Facebook seller URL | **Live** (`runIngestItemLoop.ts`) |
 | Enrich caps / Chicago hours / 30–90s jitter | **Off by default** (`0` = unlimited). `--hours` / `--max-per-day` restore the old 25/h 40/d window. |
 | Daemon queue | Default **`needs_action`** (`enrich-queues.mjs`, `matchesWouldBeNeedsAction`). Legacy `--queue unprocessed|dealer_*`. Fly **v6** 2026-09-03. |
@@ -628,34 +644,37 @@ Clock **2026-09-03 ~13:56Z** → **2026-09-05 13:56Z**. Reading taken 2026-09-07
 | Totals 2026-09-07 | **5,441** Facebook rows with URL · **3,358** distinct profiles · **76** `blocked_dealer` filters since soak start. |
 | Account | **No checkpoint.** Do not start action 6 for a ban that did not happen. |
 | Backlog at reading | Last 24h: **1,235** would-be Needs action Facebook rows with **no** `seller_url` — the sheet stays empty of new Facebook until Fly catches up after the refill. |
-| Auto-blocks | **11** new `blocked_sellers`, all `dealer`, **0** buyer flags. Only **IMD Motors** is an obvious lot. Person names (some 1 listing: Randy White, Adrian Rodriguez, Jose Muniz) are the private-party contamination risk. Review before leaving them. |
+| Auto-blocks | **11** new during soak. Human review **done**. Then **URL-only lock**: deleted **106** `name:` rows; **19** URL rows remain. |
 | Proxy | Refilled **2026-09-07**. Same-day confirm: Fly health ok, `ok wrote needs_action`, URLs **5,506**, pool **~30.5 / 42 GB**. Do **not** reset the soak clock. Treat 503 as empty GB until traffic is checked. |
-| Admin UI | `/admin/blocked-sellers` live (`927c3c1` API + `763e0e7` table). `tav.users` had **zero** admins — `rami@` and `automation@` set to `admin` 2026-09-07. |
+| Admin UI | `/admin/blocked-sellers` live (`927c3c1` API + `763e0e7` table). `rami@` and `automation@` set to `admin` 2026-09-07. |
 
-### Product lock 2026-08-31 — seller identity before the card lands — **LIVE**
+### Product lock 2026-08-31 — seller identity before the card lands — **REVERSED by §76 (2026-09-17)**
 
-Buyer: when listings come in, **identify the seller, check `blocked_sellers`, and do not put that listing on the website** if they are already blocked. Opportunities / Needs action must not be the place we discover a known dealer. **No fail-open onto the sheet.**
+Buyer: when listings come in, **identify the seller, check `blocked_sellers`, and do not put that listing on the website** if they are already blocked. That part stays. The **no fail-open** half is what emptied Needs action whenever the GoLogin proxy hit zero.
 
-**Live production `2b262630`** (Worker + Fly enrich, not GoLogin in ingest):
+**2026-09-17:** empty proxy → ~0 Facebook attach → **0 leads on the sheet**. Fail-open Facebook with no `seller_url`, chip **Seller unchecked**. Hide only when the URL is already in `blocked_sellers`. Name-only is still not a check.
+
+**Was live production `2b262630`** (Worker + Fly enrich, not GoLogin in ingest):
 
 1. Resolve seller **payload name/url → stored identity on that listing URL** (payload fills gaps per field; a name-only payload keeps a stored profile URL).
 2. `isBlockedSeller` matches **URL keys only**. Name-only keys are not written or matched (2026-09-07).
 3. `upsertBlockedSeller` writes the **URL key only**. Auto persist needs **2+ live cars**. Buyer dismiss may persist a single URL. **3+ live cars** on one profile is a dealer even if the copy is empty.
 4. Ingest `writeFilteredOut(blocked_dealer)` **before** `upsertNormalizedListing` / MMR / lead. If that listing URL already exists, stamp seller + suppress workflow to `bad_lead`.
-5. Default Opportunities views (`needs_action`, `mine`, `worth_a_look`, `all`, scraper review) **hide** Facebook rows with **no seller URL** and rows whose seller is in the table. `flagged_leads` keeps them for audit. Name-only is not enough to show the card.
+5. Default Opportunities views (`needs_action`, `mine`, `worth_a_look`, `all`, scraper review) **hide** Facebook rows whose seller **URL is in the table**. `flagged_leads` keeps them for audit. **§76:** Facebook with **no seller URL** is shown, with **Seller unchecked**. Name-only is not enough to drop the chip.
 6. Numeric `marketplace_listing_seller.id` maps to `sellerUrl` when the vendor sends it (still usually hollow).
-7. Excellent-lead email is suppressed until a Facebook seller URL exists, so buyers are not pinged about a card that is not on the sheet.
+7. Excellent-lead email: still suppressed until a Facebook seller URL exists **until §76 is implemented** — then re-decide. If the card is on the sheet, pinging is no longer lying. If Fly later attaches a blocked URL the card drops; SMS already sent is the cost of fail-open.
 
 Still true:
 
-- Worker cannot open Facebook. Ingest still upserts the listing (GoLogin needs `listing_url`). The **buyer sheet waits** until GoLogin Cloud (or the vendor) attaches a seller URL, then the blacklist check decides show vs drop.
-- Name-only keys are weaker than `/marketplace/profile/{id}`. A blocked dealer can change the display name — do not admit on name alone.
+- Worker cannot open Facebook. Ingest still upserts the listing (GoLogin needs `listing_url`).
+- Name-only keys are weaker than `/marketplace/profile/{id}`. A blocked dealer can change the display name — do not treat a name as checked.
+- Known dealers **without** a stored URL on this listing can land on Needs action until Fly attaches the URL and `isBlockedSeller` fires. That is the accepted trade for a non-empty sheet.
 
 **Proxy (2026-08-28 evening):** Rami US residential **attached** to `fb_buyer_10_Marcus Vance_MA`. `proxy.mode=geolocation`, host `geo.floppydata.com`. Freeze this IP.
 
 ### Product path — GoLogin is the sheet gate (uncapped test)
 
-Worker still does not launch a browser. Facebook cards **do not appear on Opportunities** until a seller URL exists and is not blocked. Enrich on this one account is **uncapped** so we can test instant attach: no 40/day, no 25/hour, no Chicago window, no 30–90s delay. Account burn is accepted. Halt on checkpoint / login wall still stops the run.
+Worker still does not launch a browser. **§76:** Facebook cards **do** appear without a seller URL, chipped **Seller unchecked**; they hide once a URL is attached and that URL is blocked. Enrich on this one account is **uncapped** so we can test instant attach: no 40/day, no 25/hour, no Chicago window, no 30–90s delay. Account burn is accepted. Halt on checkpoint / login wall still stops the run.
 
 | Layer | Job |
 |-------|-----|
@@ -672,15 +691,15 @@ Worker still does not launch a browser. Facebook cards **do not appear on Opport
 
 Fly exists to keep **known dealers off Needs action**. Buyers work that tab. All / Worth a look / Mine / Unprocessed / dealer-dismiss / `dealer_listing` are not the product. Do not spend GB or the Facebook account on those queues.
 
-**Needs action does not fill until Fly has checked.** Ingest still upserts the listing (Worker cannot open Facebook). The card stays off that tab until Fly attaches a `seller_url` and `blocked_sellers` is checked. Blocked → never shown. Not blocked → then it lands. The tab is the **result** of the check, not the inbox Fly works from.
+**Needs action no longer waits on Fly (§76).** Ingest still upserts the listing (Worker cannot open Facebook). The card lands with **Seller unchecked**. Blocked URL → never shown. Fly still only visits `seller_url IS NULL` rows so the chip can clear (or the card can drop) when GB remains.
 
 **Queue — only this (live):**
 
-Facebook listings that **would** be Needs action: active lead / near_miss with MMR / manual submission, last 24h, unassigned or expiring claim, `seller_url` IS NULL. Implemented in `loadNeedsActionQueue` + `matchesWouldBeNeedsAction` (`scripts/lib/enrich-queues.mjs`). Same skips: VIN-priced, >5 days old, Craigslist.
+Facebook listings that **would** be Needs action: active lead / near_miss with MMR / manual submission, last **1h**, unassigned or expiring claim, `seller_url` IS NULL. Implemented in `loadNeedsActionQueue` + `matchesWouldBeNeedsAction` (`scripts/lib/enrich-queues.mjs`). Same skips: VIN-priced, >5 days old, Craigslist.
 
 **Do not also visit:** Unprocessed ocean, dealer dismiss, `dealer_listing` (unless `--queue` override).
 
-**View filter:** **live** `2b262630` — empty-seller Facebook off default views until Fly writes URL.
+**View filter:** **§76** — empty-seller Facebook **on** default views with **Seller unchecked**. Blocked URLs still hidden. Was `2b262630`.
 
 Pre-deploy snapshot 2026-09-02 ~15:40Z: Facebook `seller_url` **1,284**; Needs action ≈ 342 Facebook / 42 with URL (stale — expect different counts after filter + needs-action queue).
 
@@ -715,7 +734,7 @@ What gets accounts flagged here is **volume + mechanical Marketplace clicks + IP
 - Intercept GraphQL from a logged-out session. If we ever read a payload, it is only inside this same logged-in Orbita tab after a real navigation.
 - Keep going after a checkpoint “to finish the queue.”
 - Run the other Facebook accounts in parallel, or add a feed-scroll / like bot.
-- Show a Facebook card on default Opportunities views without a seller URL. Unknown seller = off the sheet until GoLogin (or the vendor) attaches one, then check `blocked_sellers`.
+- Treat a Facebook card as checked because it has a display name. Chip stays until `/marketplace/profile/{id}`. Blocked URLs still stay off the sheet.
 
 **Known risk:** this profile is a **Mac** fingerprint on a **Windows** box. It worked for n=2. If Facebook checkpoints, move the job to a Mac or a Windows-fingerprint profile — do not keep hammering.
 
@@ -912,6 +931,7 @@ Uncapped on one login still dies if Facebook checkpoints. **The soak did not che
 - [x] **Needs action waits on seller URL + blocked check** — view filter live production `2b262630` (2026-09-03)
 - [x] Host `--loop --cloud` on Fly (`tav-seller-enrich`, `fly.seller-enrich.toml`, machine `2870647c500408`, 2026-08-31). Worker is the wrong runtime. Do not also run the local daemon on the same profile. Trial 5-minute stop cleared after a card was added.
 - [x] **48h soak closed 2026-09-07.** Account alive (no checkpoint). `seller_url` climbed on needs-action rows whenever proxy GB remained (~38% of new Facebook on Sep 3–5; **5,441** with URL, **5,506** after refill confirm). Always-on failed only when the proxy hit zero. Admin page + sort/filter **shipped**. Soak auto-block review **done 2026-09-07**.
+- [x] **URL-only block list (2026-09-07):** no `name:` keys. Auto persist after 2+ live cars. Buyer flag may persist one URL. 3+ live cars on one profile = dealer. Worker `41c65562` + Fly redeployed. 106 name rows deleted.
 - [x] Mirror on detail shows seller name/URL when enriched (UI 2026-09-02, commit `75d69f3`)
 - [ ] **Create Facebook accounts via GoLogin** — not next. Soak did not checkpoint. Build signup only after this login is banned.
 
@@ -921,11 +941,55 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 
 ---
 
+## 76 — Fail-open Facebook + Seller unchecked chip
+
+**Opened:** 2026-09-17 · **Status:** [~] **in repo**, not deployed
+
+**Why.** The 2026-08-31 lock (`isPendingFacebookSellerIdentity` → hide) made GoLogin the admission ticket for every Facebook card. When residential GB hits zero, Fly stops writing `seller_url`, and Needs action goes to **0** even though ingest is still creating leads. 2026-09-17: ~2 / 3,587 new Facebook rows in 24h had a seller URL.
+
+**Product**
+
+1. **Show** Facebook Opportunities rows that have no `seller_url`. Do not wait on Fly.
+2. Chip **`Seller unchecked`** — same family as **First seen** / **Mileage unknown** (real pill, not a muted meta dot). Amber / `review` tone. Facebook only. Drop the chip when a profile URL exists.
+3. **Still hide** rows whose profile URL is in `blocked_sellers`. `flagged_leads` unchanged.
+4. A display name without a URL is **not** a check. Chip stays.
+5. When Fly later writes a URL: chip goes away; if that URL is blocked, the card drops (existing `isBlockedSellerOpportunity` / ingest `blocked_dealer`).
+6. Kill these badges **forever** — do not render, do not ship them again:
+   - `Estimated YMMS` (`estimateFlags.style` / last-resort)
+   - `Estimated MMR` (`estimateFlags.mmr`)
+   - `Possible duplicate` (`candidateListingCount > 1`)
+7. **Keep** First seen, Mileage unknown, Near miss / Almost a deal, Price changed, Seen again, Mileage changed, No MMR, Scraper review. **Estimated miles** stays.
+8. **Excellent-lead SMS sends** even without a seller URL — the card is on the sheet.
+
+**Shipped in repo (2026-09-17)**
+
+- `isHiddenBlockedSellerOpportunity` no longer hides pending identity. Blocked URLs still hidden.
+- `buildOpportunityBadges` adds **Seller unchecked**; dropped the three dead chips.
+- Web `visibleOpportunityBadges` strips those three even if an older Worker still sends them.
+- Excellent-lead SMS no longer waits on `seller_url`.
+
+**This is not**
+
+- Turning Fly off. Enrich still attaches URLs when GB remains; that is still how we drop known dealers after the fact.
+- Creating more Facebook accounts (§74 action 6).
+- Admitting on `name:` keys.
+- Rolling back URL-only persist.
+
+### Exit criteria
+
+- [x] Facebook with no `seller_url` appears on Needs action / default views (code)
+- [x] Those rows show **Seller unchecked**; rows with a URL do not (code)
+- [x] Blocked URLs still hidden (code)
+- [x] Estimated YMMS / Estimated MMR / Possible duplicate never appear on list or detail (code)
+- [x] Worker + web deployed — Worker `0543ff2e` 2026-09-17. Secrets not touched. Web rides the next Vercel deploy.
+
+---
+
 ## 69 — Dealer seller blacklist (pre-ingest)
 
-**Status:** [~] table has rows; ingest + default views hide blocked keys and empty-seller Facebook (**live** `2b262630`). Fly attaches URLs for matching. Vendor `extraListingData.seller` object is still often `{}`.
+**Status:** [~] **URL keys only**. Ingest + default views hide blocked URLs. **§76:** empty-seller Facebook is shown with Seller unchecked. Vendor `extraListingData.seller` object is still often `{}`.
 
-When a buyer dismisses with reason `dealer`, the seller is auto-added to `blocked_sellers`; ingest skips matching sellers before LLM and MMR. Seller key is `seller_url` (normalised: strip query params and trailing slashes, case-fold path), falling back to `seller_name`.
+When a buyer dismisses with reason `dealer` **and** a Facebook profile URL exists, that URL is added to `blocked_sellers`. Auto-blocks need the URL **and** 2+ live cars. Name-only keys are not written or matched. Ingest skips matching URLs before LLM and MMR.
 
 **The seller slot is often hollow on the Apify payload** (`extraListingData.seller` `{}`). Detailed Fetch *is* enabled — we get `description`, `condition`, `location`, `creation_time` from the same object. Escalate alongside the §73 gallery finding. §71 still filters first-time dealer *listings* without a seller key. **§74** fills `seller_url` so this table can match. **Buyer 2026-08-31:** matching is not enough if the card already showed — block before Opportunities.
 
@@ -970,7 +1034,8 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 ### Open ops
 
-- [~] Stuck `running` `source_runs` rows — **cleared 2026-09-03** (131 → 0), **recurred** — **13** older than 30m as of 2026-09-07. Same likely cause: `completeSourceRunSafe` in `waitUntil` did not persist. Reconcile again; do not leave them `running`.
+- [x] Stuck `running` `source_runs` — **cleared + deployed `0453cc02` 2026-09-07** (17 → `completed`). `upsertSourceRun` now keeps `truncated` / `failed` closed. Secrets not touched. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
+- [ ] **§75 Supabase RLS** — `tav` has no row-level security. Must be fixed.
 - [ ] List/detail flag UI cache lag (~60s)
 - [x] **Home ↔ Opportunities ~10s** (buyer 2026-08-31) — thin RSC + client cache; see §58
 
@@ -978,7 +1043,7 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 ## 59 — Max buy / Y/M/M/S linkage at ingest
 
-**Status:** [~] shipped `c49c49f`, production `c244a655`; soak ongoing.
+**Status:** [~] shipped `c49c49f`, production `c244a655`; soak ongoing. **Fix pass needed — noted 2026-09-09.** Do not skip this.
 
 **Was:** Y/M/M/S → MMR worked (~68% hit, Cox `lookup_trim` stored on every hit) but was **not linked to Max buy**. Ingest never called Max buy; detail auto-run required `opportunity.style` from `listing.trim` (null on 66% of MMR hits) even though `valuation_snapshots.lookup_trim` had the Cox style; Max buy re-ran MMR with parsed fields or `"base"` instead of the resolved tokens. **0 of 3,537** new listings got a `maxbuy_recommendations` row.
 

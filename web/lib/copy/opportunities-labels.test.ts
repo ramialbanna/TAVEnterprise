@@ -40,6 +40,7 @@ describe("formatOpportunityBadge", () => {
     expect(formatOpportunityBadge("Near miss")).toBe("Almost a deal");
     expect(formatOpportunityBadge("Manual submission")).toBe("Submitted by team");
     expect(formatOpportunityBadge("Scraper review")).toBe("Unprocessed lead");
+    expect(formatOpportunityBadge("Seller unchecked")).toBe("Seller unchecked");
   });
 
   it("passes through unknown badges", () => {

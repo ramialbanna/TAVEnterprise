@@ -8,6 +8,15 @@ export type SourceRunRecord = {
   created_leads: number;
 };
 
+export type SourceRunTerminalStatus = "completed" | "failed" | "truncated";
+
+const TERMINAL_SOURCE_RUN_STATUSES = new Set<string>(["completed", "failed", "truncated"]);
+
+/** True once ingest has finished — webhook retries must not reopen the row. */
+export function isTerminalSourceRunStatus(status: string): boolean {
+  return TERMINAL_SOURCE_RUN_STATUSES.has(status);
+}
+
 type SourceRunInsert = {
   source: string;
   run_id: string;
@@ -17,8 +26,8 @@ type SourceRunInsert = {
 };
 
 // Upserts the source_run and returns it.
-// If the run already has status='completed', returns the stored row immediately
-// so the caller can short-circuit without reprocessing items.
+// Terminal statuses (completed / truncated / failed) short-circuit so a
+// webhook retry cannot reopen the row.
 export async function upsertSourceRun(
   db: SupabaseClient,
   params: SourceRunInsert,
@@ -33,8 +42,10 @@ export async function upsertSourceRun(
 
   if (selectErr) throw selectErr;
 
-  // Idempotency gate: return stored counters, skip reprocessing.
-  if (existing !== null && (existing as SourceRunRecord).status === "completed") {
+  // Idempotency gate: any terminal status stays put. Treating only
+  // `completed` as done was why the 2026-09-03 reconcile recurred —
+  // Apify retried the same run_id and flipped `truncated` back to running.
+  if (existing !== null && isTerminalSourceRunStatus((existing as SourceRunRecord).status)) {
     return toRecord(existing);
   }
 
@@ -60,8 +71,6 @@ export async function upsertSourceRun(
 
   return toRecord(data);
 }
-
-export type SourceRunTerminalStatus = "completed" | "failed" | "truncated";
 
 export interface SourceRunCompletion {
   processed:      number;

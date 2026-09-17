@@ -13,6 +13,7 @@ import {
   normalizeSellerUrl,
   upsertBlockedSeller,
   groupBlockedSellerReviews,
+  listBlockedSellerReviews,
   shouldPersistBlockedSeller,
   isRepeatSellerDealer,
   facebookMarketplaceProfileId,
@@ -390,6 +391,59 @@ describe("groupBlockedSellerReviews", () => {
     expect(reviews[0]?.listingCount).toBe(1);
     expect(reviews[1]?.origin).toBe("buyer");
     expect(reviews[1]?.listingCount).toBe(2);
+  });
+});
+
+describe("listBlockedSellerReviews listing lookup", () => {
+  it("loads matching cars in one RPC instead of a giant PostgREST GET .in()", async () => {
+    const sellerCount = 80;
+    const blockedRows = Array.from({ length: sellerCount }, (_, i) => ({
+      id: `bs-${i}`,
+      source: "facebook",
+      region: "dallas_tx",
+      seller_key: `url:https://www.facebook.com/marketplace/profile/${i}`,
+      seller_url: `https://www.facebook.com/marketplace/profile/${i}`,
+      seller_name: `seller ${i}`,
+      reason: "dealer",
+      flagged_by_user_id: null,
+      normalized_listing_id: null,
+      created_at: "2026-09-09T00:00:00Z",
+    }));
+    const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+
+    const thenable = (data: unknown[]) => ({
+      select() {
+        return this;
+      },
+      order() {
+        return this;
+      },
+      then(
+        onFulfilled?: (value: { data: unknown[]; error: null }) => unknown,
+        onRejected?: (reason: unknown) => unknown,
+      ) {
+        return Promise.resolve({ data, error: null }).then(onFulfilled, onRejected);
+      },
+    });
+
+    const db = {
+      from(table: string) {
+        if (table === "blocked_sellers") return thenable(blockedRows);
+        throw new Error(`unexpected table ${table}`);
+      },
+      async rpc(name: string, args: Record<string, unknown>) {
+        rpcCalls.push({ name, args });
+        return { data: [], error: null };
+      },
+    };
+
+    const reviews = await listBlockedSellerReviews(db as never);
+    expect(reviews).toHaveLength(sellerCount);
+    expect(rpcCalls.map((call) => call.name)).toEqual(["listings_for_seller_urls"]);
+    const urls = rpcCalls[0]?.args.p_urls as string[];
+    expect(urls).toHaveLength(sellerCount * 2);
+    expect(urls[0]).toBe("https://www.facebook.com/marketplace/profile/0");
+    expect(urls[1]).toBe("https://www.facebook.com/marketplace/profile/0/");
   });
 });
 

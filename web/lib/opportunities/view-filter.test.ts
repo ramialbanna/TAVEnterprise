@@ -58,17 +58,17 @@ describe("view-filter", () => {
     expect(filtered[0]?.assignedTo).toBeNull();
   });
 
-  it("drops needs_action rows older than 24 hours", () => {
+  it("drops needs_action rows older than 1 hour", () => {
     const now = new Date("2026-05-21T12:00:00.000Z");
     const fresh = row({
       id: "fresh",
       assignedTo: null,
-      receivedAt: "2026-05-21T10:00:00.000Z",
+      receivedAt: "2026-05-21T11:30:00.000Z",
     });
     const stale = row({
       id: "stale",
       assignedTo: null,
-      receivedAt: "2026-05-19T12:00:00.000Z",
+      receivedAt: "2026-05-21T10:00:00.000Z",
     });
     expect(filterOpportunityRowsByView([fresh, stale], "needs_action", { now })).toEqual([fresh]);
   });

@@ -13,6 +13,8 @@ vi.mock("../src/persistence/sourceRuns", () => ({
   upsertSourceRun: vi.fn(),
   completeSourceRun: vi.fn(),
   completeSourceRunSafe: vi.fn().mockResolvedValue(undefined),
+  isTerminalSourceRunStatus: (status: string) =>
+    status === "completed" || status === "truncated" || status === "failed",
 }));
 
 vi.mock("../src/persistence/rawListings", () => ({
@@ -284,6 +286,24 @@ describe("POST /ingest", () => {
     expect(vi.mocked(insertRawListing)).not.toHaveBeenCalled();
   });
 
+  it("returns stored counters for a truncated run without reopening it", async () => {
+    vi.mocked(upsertSourceRun).mockResolvedValue({
+      id: "run-uuid-trunc",
+      status: "truncated",
+      processed: 5,
+      rejected: 1,
+      created_leads: 0,
+    });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.processed).toBe(5);
+    expect(vi.mocked(insertRawListing)).not.toHaveBeenCalled();
+    expect(vi.mocked(completeSourceRunSafe)).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when upsertSourceRun exhausts retries", async () => {
     vi.mocked(upsertSourceRun).mockRejectedValue(new TypeError("network failure"));
     const sig = await sign(VALID_PAYLOAD, SECRET);
@@ -479,14 +499,18 @@ describe("POST /ingest", () => {
     );
   });
 
-  it("does not dispatch excellent lead alert for Facebook with no seller URL", async () => {
+  it("dispatches excellent lead alert for Facebook with no seller URL once the card is on the sheet", async () => {
     vi.mocked(computeFinalScore).mockReturnValueOnce({ finalScore: 92, grade: "excellent" });
     vi.mocked(upsertLead).mockResolvedValueOnce({ id: "lead-excellent", created: true });
 
     const sig = await sign(VALID_PAYLOAD, SECRET);
     await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
 
-    expect(vi.mocked(sendExcellentLeadSummary)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendExcellentLeadSummary)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining([expect.objectContaining({ leadId: "lead-excellent", finalScore: 92 })]),
+      expect.objectContaining({ runId: "run-001", source: "facebook" }),
+    );
   });
 
   it("does not dispatch alert when grade is good (not excellent)", async () => {

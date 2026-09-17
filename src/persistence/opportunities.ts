@@ -190,7 +190,7 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
 /** Unworked Needs action rows drop off after this age. */
-export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
 
 /**
  * Max age of `first_seen_at` for scraper-review inclusion (item 55).
@@ -212,6 +212,9 @@ export function isScraperReviewYearEligible(year: number | null): boolean {
 export const SCRAPER_REVIEW_BADGE = "Scraper review";
 
 export const NO_MMR_BADGE = "No MMR";
+
+/** Facebook with no profile URL — sheet still shows the card (§76). */
+export const SELLER_UNCHECKED_BADGE = "Seller unchecked";
 
 export interface ScraperReviewMapOptions {
   enabled: boolean;
@@ -364,23 +367,20 @@ export function buildOpportunityBadges(input: {
   candidateListingCount: number | null;
   scraperReview?: boolean;
   noMmr?: boolean;
+  sellerUnchecked?: boolean;
 }): string[] {
   const badges: string[] = [];
   if (input.isManualSubmission) badges.push("Manual submission");
   if (input.scraperReview) badges.push(SCRAPER_REVIEW_BADGE);
   if (input.noMmr) badges.push(NO_MMR_BADGE);
+  if (input.sellerUnchecked) badges.push(SELLER_UNCHECKED_BADGE);
   if (input.scrapeCount <= 1) badges.push("First seen");
   else badges.push(`Seen again #${input.scrapeCount - 1}`);
   if (input.priceChanged) badges.push("Price changed");
   if (input.mileageChanged) badges.push("Mileage changed");
   if (input.mileageUnknown) badges.push("Mileage unknown");
   if (input.estimateFlags.mileage) badges.push("Estimated miles");
-  if (input.estimateFlags.style) badges.push("Estimated YMMS");
-  if (input.estimateFlags.mmr) badges.push("Estimated MMR");
   if (!input.hasLead && input.hasMmr) badges.push("Near miss");
-  if (input.candidateListingCount !== null && input.candidateListingCount > 1) {
-    badges.push("Possible duplicate");
-  }
   return badges;
 }
 
@@ -494,6 +494,10 @@ function mapToOpportunityRow(
     candidateListingCount,
     scraperReview,
     noMmr,
+    sellerUnchecked: isPendingFacebookSellerIdentity(
+      asString(listing.source),
+      asString(listing.seller_url),
+    ),
   });
 
   const assignedTo =
@@ -630,8 +634,8 @@ function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter):
 }
 
 /**
- * Default queue views must not show a Facebook card until we have a seller URL
- * and that seller is not in `blocked_sellers`. Flagged leads keep them.
+ * Default queue views hide Facebook whose profile URL is in `blocked_sellers`.
+ * Empty seller URL is shown with Seller unchecked (§76). Flagged leads keep blocked rows.
  */
 export function isHiddenBlockedSellerOpportunity(
   row: Pick<OpportunityRow, "source"> & {
@@ -642,7 +646,6 @@ export function isHiddenBlockedSellerOpportunity(
   view?: OpportunityListFilter["view"],
 ): boolean {
   if (view === "flagged_leads") return false;
-  if (isPendingFacebookSellerIdentity(row.source, row.listingSellerUrl)) return true;
   return isBlockedSellerOpportunity(lookup, {
     source: row.source,
     sellerUrl: row.listingSellerUrl,
@@ -656,7 +659,7 @@ function needsActionReceivedAt(
   return row.receivedAt ?? row.firstSeenAt ?? row.lastSeenAt;
 }
 
-/** True when the opportunity is still within the 24h Needs action window. */
+/** True when the opportunity is still within the 1h Needs action window. */
 export function isWithinNeedsActionAge(
   row: Pick<OpportunityRow, "receivedAt" | "firstSeenAt" | "lastSeenAt">,
   now: Date = new Date(),
@@ -758,7 +761,7 @@ function applyViewFilter(
   }
 
   // Default queue views exclude dismissed / terminal statuses (items 45/47)
-  // and Facebook cards with no seller URL or a blocked seller (item 74).
+  // and Facebook whose seller URL is already in `blocked_sellers` (§76).
   const active = rows.filter(
     (row) =>
       !isSuppressedFromActiveQueue(row.status) &&

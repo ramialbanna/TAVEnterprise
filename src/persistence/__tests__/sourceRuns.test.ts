@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { completeSourceRun, completeSourceRunSafe } from "../sourceRuns";
+import {
+  completeSourceRun,
+  completeSourceRunSafe,
+  isTerminalSourceRunStatus,
+  upsertSourceRun,
+} from "../sourceRuns";
 import type { SupabaseClient } from "../supabase";
 
 function makeDb(error: unknown = null): { db: SupabaseClient; updateSpy: ReturnType<typeof vi.fn> } {
@@ -11,6 +16,82 @@ function makeDb(error: unknown = null): { db: SupabaseClient; updateSpy: ReturnT
   } as unknown as SupabaseClient;
   return { db, updateSpy };
 }
+
+describe("isTerminalSourceRunStatus", () => {
+  it("treats completed, truncated, and failed as terminal", () => {
+    expect(isTerminalSourceRunStatus("completed")).toBe(true);
+    expect(isTerminalSourceRunStatus("truncated")).toBe(true);
+    expect(isTerminalSourceRunStatus("failed")).toBe(true);
+    expect(isTerminalSourceRunStatus("running")).toBe(false);
+  });
+});
+
+function makeUpsertDb(existing: Record<string, unknown> | null): {
+  db: SupabaseClient;
+  upsertSpy: ReturnType<typeof vi.fn>;
+} {
+  const upsertSpy = vi.fn();
+  const maybeSingle = vi.fn().mockResolvedValue({ data: existing, error: null });
+  const selectChain = {
+    eq: vi.fn(() => selectChain),
+    maybeSingle,
+  };
+  const db = {
+    from: vi.fn(() => ({
+      select: vi.fn(() => selectChain),
+      upsert: upsertSpy,
+    })),
+  } as unknown as SupabaseClient;
+  return { db, upsertSpy };
+}
+
+describe("upsertSourceRun — terminal statuses stay closed", () => {
+  const params = {
+    source: "facebook" as const,
+    run_id: "retry-1",
+    region: "dallas_tx",
+    scraped_at: "2026-09-07T15:00:00.000Z",
+    item_count: 20,
+  };
+
+  it.each(["completed", "truncated", "failed"] as const)(
+    "returns the stored %s row and does not upsert back to running",
+    async (status) => {
+      const existing = {
+        id: "run-closed",
+        status,
+        processed: 12,
+        rejected: 3,
+        created_leads: 1,
+      };
+      const { db, upsertSpy } = makeUpsertDb(existing);
+      const run = await upsertSourceRun(db, params);
+      expect(run).toEqual(existing);
+      expect(upsertSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("upserts a still-running row", async () => {
+    const { db, upsertSpy } = makeUpsertDb({
+      id: "run-open",
+      status: "running",
+      processed: 0,
+      rejected: 0,
+      created_leads: 0,
+    });
+    upsertSpy.mockReturnValue({
+      select: vi.fn(() => ({
+        single: vi.fn().mockResolvedValue({
+          data: { id: "run-open", status: "running", processed: 0, rejected: 0, created_leads: 0 },
+          error: null,
+        }),
+      })),
+    });
+    const run = await upsertSourceRun(db, params);
+    expect(run.status).toBe("running");
+    expect(upsertSpy).toHaveBeenCalledOnce();
+  });
+});
 
 describe("completeSourceRun — status + error_message", () => {
   it("defaults to status='completed' and error_message=null when caller omits them", async () => {

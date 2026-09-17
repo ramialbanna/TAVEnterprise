@@ -26,10 +26,10 @@ describe("enrich queues", () => {
 
 describe("matchesWouldBeNeedsAction", () => {
   const now = new Date("2026-09-03T12:00:00.000Z");
-  const recent = "2026-09-03T10:00:00.000Z";
-  const stale = "2026-09-01T10:00:00.000Z";
+  const recent = "2026-09-03T11:30:00.000Z";
+  const stale = "2026-09-03T10:00:00.000Z";
 
-  it("accepts unassigned lead within 24h", () => {
+  it("accepts unassigned lead within 1h", () => {
     const ctx = buildNeedsActionEnrichContext({
       listing: { first_seen_at: recent, last_seen_at: recent },
       lead: { created_at: recent, status: "new", assigned_to: null },

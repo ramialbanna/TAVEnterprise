@@ -286,7 +286,7 @@ describe("OpportunityValuationBlock", () => {
     expect(screen.getByText("MMR")).toBeInTheDocument();
     expect(screen.getByText("$33,500")).toBeInTheDocument();
     expect(
-      screen.getByText(/from listing ingest · mileage unknown · style estimated/i),
+      screen.getByText(/from listing ingest · mileage unknown/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/add vehicle identity/i)).toBeNull();
   });

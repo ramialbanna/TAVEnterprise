@@ -10,8 +10,8 @@ export type StoredSeller = {
 /**
  * Item 74 — payload seller wins per field; empty Facebook slots reuse the
  * row we already enriched. A name-only payload must not drop a stored profile
- * URL. Facebook cards stay off the buyer sheet until a seller URL exists
- * (2026-08-31 lock, tightened 2026-08-31: no fail-open onto Opportunities).
+ * URL. Facebook cards with no seller URL still land on the sheet (§76) with
+ * Seller unchecked; blocked profile URLs stay hidden.
  */
 export function resolveListingSeller(
   payload: { sellerUrl?: string | null; sellerName?: string | null },
