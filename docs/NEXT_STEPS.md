@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-09-17 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-09-21 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -8,25 +8,31 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ---
 
-## Fresh chat handoff (2026-09-07)
+## Fresh chat handoff (2026-09-21)
 
 **Read this first.** Detail lives in the item sections below. Do not re-run the §74 48h soak — it is closed.
 
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git HEAD:** `574b6c4` — CI typecheck fix after URL-only block list. **Pushed** to `origin/main`. Prior: `ebdcfba` (URL-only persist), `763e0e7` (admin table sort/filter), `927c3c1` (page + API).
+- **Git HEAD:** `ca0700d` — Needs action sheet **24h**; GoLogin enrich stays **1h**. **Pushed** to `origin/main`. Disk-prune + §78 Worker code is **live** (`6aeff6a4`) but those files may still be uncommitted locally.
 - `.gitignore` excludes `scripts/_tmp-*`.
 
 ### Production
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `0543ff2e` (`tav-aip-production`) | **§76** fail-open Facebook + Seller unchecked. Secrets not touched. |
-| **Web** | `80fff9f` on Vercel | Seller unchecked chip + kill Estimated YMMS / MMR / Possible duplicate. Secrets not touched. |
-| **Fly enrich** | redeployed 2026-09-07, machine `2870647c500408`, `ord` | URL-only persist. Default queue **`needs_action`**. Health: https://tav-seller-enrich.fly.dev/ |
+| **Worker** | `6aeff6a4` (`tav-aip-production`) | **§78** Cox identity write-back + disk leak stop (known FB fields, one drift row per field per run, daily `prune_ingest_payloads`). Secrets not touched. Prior: `b9cad046` (Needs action 24h), `0543ff2e` (§76). |
+| **Web** | `ca0700d` on Vercel Production | Needs action client filter **24h**. Secrets not touched. |
+| **Fly enrich** | still last-hour queue (no Fly redeploy 2026-09-21) | Enrich window is **not** the sheet window. Health: https://tav-seller-enrich.fly.dev/ |
 
-### This session (2026-09-07 afternoon)
+### This session (2026-09-21)
+
+- **Needs action 24h / enrich 1h — live.** Tab was 1h (same constant as GoLogin), so the sheet showed ~9 leads. Split: Worker + web `ca0700d` / Worker `b9cad046`. Fly still only visits the last hour of would-be Needs action so a proxy refill does not walk a 24h backlog.
+- **Disk 81% — leak stopped, prune applied, VACUUM FULL done 2026-09-21.** `schema_drift_events` had **3.1M** `unexpected_field` rows (`isPending` / `isLive` / `isSold` / `isHidden` on every listing). Truncated. `raw_listings` kept last **14d** (~281k); older payloads deleted. Migration `0074` (`ON DELETE SET NULL`, `prune_ingest_payloads`, FK indexes). Daily cron calls prune (cap 25k). Worker `6aeff6a4`. `VACUUM (FULL, ANALYZE)` ran: `raw_listings` 2034 MB → 752 MB, DB 4962 MB → 3681 MB. Dashboard % may lag.
+- **§78 — Worker live `6aeff6a4`.** Matcher no longer prices GLC 300 as AMG 43; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. Git catch-up still needed for those files.
+
+### Earlier session (2026-09-07 afternoon)
 
 - **Fly recovery confirmed** after the proxy refill: health ok, `ok wrote needs_action`, URLs **5,506**, proxy **~30.5 / 42 GB** (~11.5 GB left). Monitor still shows leftover 503s in logs (not a current outage).
 - **`/admin/blocked-sellers` shipped** (`927c3c1` + Worker `8d56e2a1`). Groups url+name keys; Facebook + Marketplace links; remove from list.
@@ -42,26 +48,27 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **§72 / §73 — Claude still dark.** Ingest is alias → matcher ≥80 → last-resort. Deduped hit **79.4%** last 7d (19,893 listings, 2026-09-07) / **77.7%** last 24h. `model_variant_missing` **0**. `llm_unavailable` still #1 miss. 7d decisions: **9,674** `alias_hit` / **267** `offline_hit` / **0** `llm_hit`. Ceiling without credits ~79–80%. Path to ≥85% is credits + §73 vision. Sample-only eval is done; 200-row Claude run still **401**.
 
-**§68 — stuck `running` rows cleared + deployed 2026-09-07.** 17 stale rows marked `completed`. Worker `0453cc02` keeps `truncated` / `failed` closed on retry. **0** older than 30m.
+**§68 — stuck `running` recurred.** Cleared + deployed `0453cc02` 2026-09-07. Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m, oldest Sep 7). Watch; do not treat the 09-07 zero as current.
 
-**§75 — Supabase has no RLS.** `tav` tables are open. Must be fixed. Noted 2026-09-08.
+**§75 — RLS live 2026-09-21.** Migration `0075`. All 54 `tav` tables have RLS on, **no FORCE**, no anon policies. `anon`/`authenticated` SELECT + RPC execute revoked. Service role still reads (207k listings).
 
 **§69 admin page 400 — 2026-09-09.** `/admin/blocked-sellers` showed `db_error` then `upstream_unavailable`. Cause: listing join was one giant PostgREST GET, then chunked sequential scans past the 12s proxy. **Fix:** RPC `listings_for_seller_urls` + seller_url index (migration `0073`). **Deployed** Worker `79606324`. Secrets not touched.
 
-**§59 MaxBuy — fix next.** Noted 2026-09-09.
+**§59 MaxBuy — ingest linkage shipped; identity write-back is §78.** Noted 2026-09-09 / 2026-09-21.
 
-**§76 — sheet is empty because the proxy is empty (2026-09-17).** Last 24h Facebook attach is ~2 / 3,587 `seller_url`. The 2026-08-31 lock hides every Facebook card until Fly writes a profile URL, so Needs action is **0**. **Product change (agreed, not shipped):** fail-open those cards onto the sheet with a **Seller unchecked** chip. Still hide URLs that are already in `blocked_sellers`. Kill **Estimated YMMS / Estimated MMR / Possible duplicate** — never show them again. See §76.
+**§78 — ingest Cox identity — live Worker `6aeff6a4` 2026-09-21.** Buyer Refresh on a 2022 GLC 300 failed even though ingest already had MMR + MaxBuy. Listing stayed `glc 300` / trim empty while the snapshot priced AMG GLC 43 (`styles[0]`). Matcher now prefers leftover series numbers + SUV over `styles[0]`; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+
+**§76 — live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Needs action sheet is **24h** (`ca0700d` / `b9cad046`); enrich stays **1h**.
+
+**Disk — prune + VACUUM FULL done 2026-09-21.** `raw_listings` 2034 MB → 752 MB. DB 4962 MB → 3681 MB.
 
 ### Do next (priority)
 
-1. **§76** — **live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Secrets not touched.
-2. **Fix MaxBuy** — shipped `887ce7a` 2026-09-17 (ingest passes live MMR; global benchmarks load). Do not leave it.
-3. **§77 Queue list speed** — **live.** Worker `2aef5476` + web `b037386`. Cheap counts + page-only MaxBuy. Secrets not touched.
-4. **§75 Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. Do not leave the schema open.
-5. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
-6. **§68** — **done** Worker `0453cc02`. Watch that new runs do not stick `running`. Recurred 2026-09-17 (~57 stale `running`).
-7. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76.
-8. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
+1. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
+2. **§68** — **81** `source_runs` stuck `running` (2026-09-21). Recurred after `0453cc02`.
+3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
+4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
+5. **Git catch-up** — commit local disk-prune + §78 + §75 files so git matches Worker `6aeff6a4` + migration `0075`.
 
 ### Key commands
 
@@ -96,6 +103,7 @@ cd web && npm run lint && npm run typecheck && npm test
 - Write `name:` keys to `blocked_sellers`. URL only. A one-listing person name must not ban the name.
 - Treat a Facebook **display name** as a checked seller. Chip stays until a profile URL exists.
 - Render **Estimated YMMS**, **Estimated MMR**, or **Possible duplicate** on Opportunities. Dead chips.
+- Couple the Needs action **sheet** window to the GoLogin enrich window. Sheet is 24h; enrich is 1h.
 
 ### Current MMR snapshot (2026-09-07, deduped)
 
@@ -173,7 +181,7 @@ Rules:
 2. VIN decode must write Cox-catalog-compatible dropdown values (reuse `matchCatalogOption`). Orphan free text in a select is a failure.
 3. Failed decode: keep user input, show an error, never clear YMM or wipe a prior good valuation (items 49, 50).
 4. One shared identity → valuation pipeline for detail and MMR Lab.
-5. Ingest identity must persist and display on detail end-to-end. Blank Cox dropdowns while the queue shows a wholesale number is a bug.
+5. Ingest identity must persist and display on detail end-to-end. Blank Cox dropdowns while the queue shows a wholesale number is a bug. **§78** writes Cox tokens onto `normalized_listings` after MMR.
 
 ---
 
@@ -185,10 +193,10 @@ Rules:
 
 | Stage | Path |
 |-------|------|
-| Ingest loop | `src/ingest/runIngestItemLoop.ts` |
+| Ingest loop | `src/ingest/runIngestItemLoop.ts`, `applyCoxIdentityFromMmr.ts` |
 | Retry pass | `src/ingest/coxNoDataRetryPass.ts` |
 | Identity ladder | `src/valuation/resolveListingWithLLM.ts`, `src/valuation/workerClient.ts` |
-| Offline matcher | `src/valuation/matchListingToCoxCatalog.ts`, `resolveListingToCatalog.ts` |
+| Offline matcher | `src/valuation/matchListingToCoxCatalog.ts`, `resolveListingToCatalog.ts`, `selectCatalogStyle.ts`, `catalogStyleTokens.ts` |
 | Alias lookup / learn | `src/persistence/mmrStyleAliases.ts`, `src/valuation/learnIngestStyleAlias.ts`, `catalogAliasValidation.ts` |
 | Year floor | `src/valuation/valuationEligibility.ts` |
 | FB parser | `src/sources/facebook.ts`, `listingParseHygiene.ts` |
@@ -229,16 +237,17 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **Next:** credits → §73 vision |
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04** (575 pool / 200 sample); 200-row Claude run **blocked on Anthropic 401** |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. |
-| **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [~] **in repo 2026-09-17.** Needs Worker + web deploy. Kill Estimated YMMS / Estimated MMR / Possible duplicate |
+| **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
 | **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07**. Writes after refill **confirmed**. Auto-block review **done**. URL-only list **live**. Action 6 only on checkpoint. Limiter is proxy GB. Sheet gate **reversed by §76**. |
 | **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. Admin list RPC Worker `79606324` (2026-09-09). Vendor `extraListingData.seller` still `{}`. |
-| **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stale `running` **cleared + deployed** `0453cc02` 2026-09-07 |
-| **59** | **Max buy / YMMS linkage at ingest** — shipped, soak ongoing. **Needs a fix pass** (noted 2026-09-09) | **High** | [~] |
+| **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stale `running` recurred **~81** on 2026-09-21 (oldest Sep 7). Disk prune + VACUUM FULL **done**. |
+| **59** | **Max buy / YMMS linkage at ingest** — ingest MaxBuy shipped. Listing identity write-back is §78 | **High** | [~] |
 | **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
-| **75** | **Supabase RLS** — `tav` tables have **no RLS**. Must be fixed. | **High** | [ ] noted 2026-09-08. Do not leave the schema open. See §75. |
-| **77** | **Queue list speed** — cheap counts + hydrate only the page | **High** | [~] in repo 2026-09-17. Needs Worker + web deploy. |
+| **75** | **Supabase RLS** — lock `tav` from Data API anon/authenticated | **High** | [x] **live** migration `0075` 2026-09-21. No FORCE. Service role unchanged. |
+| **77** | **Queue list speed** — cheap counts + hydrate only the page | **High** | [x] **live** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched. |
+| **78** | **Ingest Cox identity write-back** — store the Y/M/M/S ingest priced; do not leave listing as parsed `glc 300` | **High** | [x] **live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed. |
 
 Shipped and closed items are archived at the bottom.
 
@@ -291,6 +300,8 @@ Investigation found **three** separate places a usable answer was discarded, not
 Every last-resort pick sets `lookupTrimEstimated`, which already drives `confidence: "low"` and `normalizationConfidence: "partial"` — so the queue badges it as an estimated style rather than presenting a guess as fact. Logged as `ingest.mmr_last_resort_catalog_pick` with `source`, so the two paths can be measured separately.
 
 **Accepted trade-off:** on a genuine coin flip (CR-V AWD vs FWD with no drivetrain evidence) we now return a flagged estimate instead of nothing. Per §72 action 9 — a closer who spots a difference can correct it, and the detail-page Apply button already exists.
+
+**Do not fall back to `styles[0]` when leftover tokens are absent.** 2022 Mercedes `GLC 300` Sport Utility was priced as `4D SEDAN AMG GLC 43 4MATIC` because that was first in the Cox list. Series numbers in leftover (`300`) and `Sport Utility` → `SUV` must constrain the style pool. After a hit, write Cox tokens onto the listing — **§78**.
 
 **Measured:** last-resort drove `model_variant_missing` to 0% and hit to 88.1%. The gate then skipped unbookable last-resort guesses, so mvm is **1.6%** and hit **90.0%**. Partial of hits is still high (89.1%). `trim_missing` leftover is mostly 2012.
 
@@ -451,6 +462,7 @@ Logs: `ingest.mmr_no_data_retry`, `valuation.recovered_after_no_data`, `ingest.c
 - [x] Proven-aware last-resort ranking — close-score booked pick; leftover listing words not sent. **Live** production `78f79974` / staging `7136a656` (2026-08-24 19:00Z). `AUTO_LOOKUP_MIN` still 80. **Soaked ~10d 2026-09-03:** npb flat **4.8%**, hit **79.0%** deduped — deploy correct, F-series npb not materially reduced.
 - [x] `llm_ymms_decisions` links to `normalized_listing_id` — callers pass listing id (2026-08-28). Historical rows stay null.
 - [~] MMR hit **≥ 85%** on eligible inventory — **90.0%** post-gate with Claude (2026-08-15). Claude-offline: **79.4%** last 7d (2026-09-07). **`llm_unavailable` is still #1** — credits + §73 vision are the path to exit, not more last-resort soak.
+- [x] **§78** — Cox Y/M/M/S from ingest lands on `normalized_listings` so Refresh uses the same identity. **Live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
 
 ---
 
@@ -698,7 +710,7 @@ Fly exists to keep **known dealers off Needs action**. Buyers work that tab. All
 
 **Queue — only this (live):**
 
-Facebook listings that **would** be Needs action: active lead / near_miss with MMR / manual submission, last **1h**, unassigned or expiring claim, `seller_url` IS NULL. Implemented in `loadNeedsActionQueue` + `matchesWouldBeNeedsAction` (`scripts/lib/enrich-queues.mjs`). Same skips: VIN-priced, >5 days old, Craigslist.
+Facebook listings that **would** be Needs action: active lead / near_miss with MMR / manual submission, last **1h** (enrich only — sheet is **24h**), unassigned or expiring claim, `seller_url` IS NULL. Implemented in `loadNeedsActionQueue` + `matchesWouldBeNeedsAction` (`scripts/lib/enrich-queues.mjs`). `ENRICH_NEEDS_ACTION_MAX_AGE_MS` is **not** the Opportunities tab window (`NEEDS_ACTION_MAX_AGE_MS` = 24h, live `ca0700d` / `b9cad046`). Same skips: VIN-priced, >5 days old, Craigslist.
 
 **Do not also visit:** Unprocessed ocean, dealer dismiss, `dealer_listing` (unless `--queue` override).
 
@@ -946,7 +958,7 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 
 ## 76 — Fail-open Facebook + Seller unchecked chip
 
-**Opened:** 2026-09-17 · **Status:** [~] **in repo**, not deployed
+**Opened:** 2026-09-17 · **Status:** [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet window **24h** (`ca0700d` / `b9cad046`); enrich stays **1h**.
 
 **Why.** The 2026-08-31 lock (`isPendingFacebookSellerIdentity` → hide) made GoLogin the admission ticket for every Facebook card. When residential GB hits zero, Fly stops writing `seller_url`, and Needs action goes to **0** even though ingest is still creating leads. 2026-09-17: ~2 / 3,587 new Facebook rows in 24h had a seller URL.
 
@@ -964,7 +976,7 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 7. **Keep** First seen, Mileage unknown, Near miss / Almost a deal, Price changed, Seen again, Mileage changed, No MMR, Scraper review. **Estimated miles** stays.
 8. **Excellent-lead SMS sends** even without a seller URL — the card is on the sheet.
 
-**Shipped in repo (2026-09-17)**
+**Shipped + deployed (2026-09-17)**
 
 - `isHiddenBlockedSellerOpportunity` no longer hides pending identity. Blocked URLs still hidden.
 - `buildOpportunityBadges` adds **Seller unchecked**; dropped the three dead chips.
@@ -990,24 +1002,25 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 
 ## 75 — Supabase RLS
 
-**Opened:** 2026-09-08 · **Status:** [ ] not done · **Priority:** High
+**Opened:** 2026-09-08 · **Status:** [x] **live** migration `0075` 2026-09-21 · **Priority:** High
 
-`tav` tables have **no row-level security**. The Worker uses the service role key, so every table is fully readable/writable to anyone who holds that key — and to the `anon`/`authenticated` roles if those ever get grants.
+`tav` is an exposed Data API schema. Migration 0002 had granted `SELECT` on every table to `anon`/`authenticated`. RLS was off, so the publishable key could read listings, users, valuations, MaxBuy.
 
-This is a schema hardening item, not a product feature. Do not leave the schema open.
+**Shipped (no FORCE, no anon policies)**
 
-**Do**
+- RLS enabled on all **54** ordinary `tav` tables. `FORCE ROW LEVEL SECURITY` stays off so service role still bypasses.
+- `REVOKE SELECT` (and other DML) on all tables/views/MVs from `anon` and `authenticated`.
+- `REVOKE EXECUTE` on all `tav` functions from `PUBLIC` / `anon` / `authenticated`; `GRANT EXECUTE` kept for `service_role`.
+- Default privileges no longer re-grant table SELECT to Data API roles, or function EXECUTE to PUBLIC.
 
-- Enable RLS on every `tav` table the app uses.
-- Service role stays the Worker path (RLS does not apply to service role unless `FORCE ROW LEVEL SECURITY`).
-- If the dashboard ever talks to Supabase directly, policies must match Auth.js roles. Today it must not; the browser goes through `/api/app/*`.
-- Add policies last, after a table inventory. A half-enabled RLS rollout that blocks the Worker is worse than no RLS.
+**Verified 2026-09-21:** `service_role` reads `normalized_listings` (207,280 rows), `opportunity_workflow`, `v_source_health`, `listings_for_seller_urls`. `anon` `SELECT` on `normalized_listings` → permission denied. `authenticated` on `users` → denied. `anon` `purge_expired_activity()` → denied. 0 RLS policies. 0 tables FORCE.
 
 **Do not**
 
 - Put the service role key in the browser, AppSheet, or Vercel `NEXT_PUBLIC_*`.
 - Flip `FORCE ROW LEVEL SECURITY` on Worker-facing tables without a staging soak.
-- Treat “the dashboard exists” as “client-side Supabase is fine.”
+- Add `USING (true)` policies for `anon`.
+- Treat “the dashboard exists” as “client-side Supabase is fine.” The browser still goes through `/api/app/*`.
 
 ---
 
@@ -1027,6 +1040,27 @@ Refresh on Opportunities showed a blank table for ~10s. In-session Home ↔ Oppo
 **Deployed** 2026-09-17 Worker `2aef5476` + web `b037386`. Secrets not touched.
 
 **Not this item:** persist last rows in `sessionStorage` (refresh paint). Do that after this ships if the remaining wait is still too long.
+
+---
+
+## 78 — Ingest Cox identity write-back
+
+**Opened:** 2026-09-17 · **Status:** [x] **live** Worker `6aeff6a4` 2026-09-21 · **Priority:** High
+
+Buyer opened a 2022 Mercedes-Benz GLC 300 SUV. Ingest already had MMR **$34,900** and MaxBuy **$33,179**. Refresh valuation then showed MMR not available and killed the saved MaxBuy card.
+
+**Cause.** Ingest priced Cox `GLC` + `4D SEDAN AMG GLC 43 4MATIC` (first catalog style) and left the listing as parsed `glc 300` / trim empty. Detail fills Series from `lookup_trim` when listing trim is empty, so Refresh sent Cox `glc 300` + AMG 43 — a pair that is not in the catalog. Live MMR failed; MaxBuy never ran.
+
+The buyer should not pick Y/M/M/S again. Ingest already did the lookup.
+
+**Live Worker `6aeff6a4` (2026-09-21)**
+
+1. Catalog matcher: leftover model numbers (`300`) and `Sport Utility` → `SUV`. Do not fall back to `styles[0]` when that style lacks the leftover tokens. GLC 300 Sport Utility → `GLC` + a **GLC 300 SUV** style, not AMG 43.
+2. After a successful YMM MMR hit (including cox-no-data and rate-limit retries), write Cox `lookup_make` / `lookup_model` / `lookup_trim` onto `normalized_listings.make/model/trim`. Refresh then uses the same identity ingest priced.
+
+Secrets not touched. Rows already in the queue keep the old identity until ingest runs them again. Git catch-up still needed so local HEAD matches this Worker.
+
+Files: `src/valuation/selectCatalogStyle.ts`, `resolveCatalogStyleFromEvidence.ts`, `resolveListingToCatalog.ts`, `matchListingToCoxCatalog.ts`, `catalogStyleTokens.ts`, `src/ingest/applyCoxIdentityFromMmr.ts`, `runIngestItemLoop.ts`, `coxNoDataRetryPass.ts`, `mmrRateLimitRetryPass.ts`, `src/persistence/normalizedListings.ts`.
 
 ---
 
@@ -1079,9 +1113,12 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 ### Open ops
 
-- [x] Stuck `running` `source_runs` — **cleared + deployed `0453cc02` 2026-09-07** (17 → `completed`). `upsertSourceRun` now keeps `truncated` / `failed` closed. Secrets not touched. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
-- [ ] **§75 Supabase RLS** — `tav` has no row-level security. Must be fixed.
+- [~] Stuck `running` `source_runs` — cleared + deployed `0453cc02` 2026-09-07 (17 → `completed`). Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m). `upsertSourceRun` keeps `truncated` / `failed` closed. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
+- [x] **§75 Supabase RLS** — migration `0075` 2026-09-21. RLS on, no FORCE, anon SELECT/EXECUTE revoked.
 - [x] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. **Deployed** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched.
+- [x] **§78 Ingest Cox identity** — matcher + listing write-back. **Live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+- [x] **Disk leak + prune (2026-09-21)** — `schema_drift_events` truncated (3.1M expected FB flags); `raw_listings` kept last 14d (~281k). Migration `0074` + daily `prune_ingest_payloads`. Worker `6aeff6a4`.
+- [x] **VACUUM FULL** — `tav.raw_listings` 2034 MB → 752 MB; `schema_drift_events` 264 kB → 96 kB. DB 4962 MB → 3681 MB (2026-09-21).
 - [ ] List/detail flag UI cache lag (~60s)
 - [x] **Home ↔ Opportunities ~10s** (buyer 2026-08-31) — thin RSC + client cache; see §58
 
@@ -1089,11 +1126,11 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 ## 59 — Max buy / Y/M/M/S linkage at ingest
 
-**Status:** [~] shipped `c49c49f`, production `c244a655`; soak ongoing. **Fix pass needed — noted 2026-09-09.** Do not skip this.
+**Status:** [~] shipped `c49c49f`, production `c244a655`; soak ongoing. **§78 identity write-back is live** Worker `6aeff6a4` 2026-09-21 (listing make/model/trim used to stay parsed while Cox tokens lived only on `valuation_snapshots.lookup_*`). Existing queue rows stay wrong until re-ingest.
 
 **Was:** Y/M/M/S → MMR worked (~68% hit, Cox `lookup_trim` stored on every hit) but was **not linked to Max buy**. Ingest never called Max buy; detail auto-run required `opportunity.style` from `listing.trim` (null on 66% of MMR hits) even though `valuation_snapshots.lookup_trim` had the Cox style; Max buy re-ran MMR with parsed fields or `"base"` instead of the resolved tokens. **0 of 3,537** new listings got a `maxbuy_recommendations` row.
 
-**Now:** ingest-time Max buy evaluation plus an identity bridge from the Cox tokens. `buildIngestMaxbuyEvaluateBody` / `scheduleIngestMaxbuyEvaluate` run on every hit, including retry-recovered listings.
+**Now:** ingest-time Max buy evaluation plus an identity bridge from the Cox tokens. `buildIngestMaxbuyEvaluateBody` / `scheduleIngestMaxbuyEvaluate` run on every hit, including retry-recovered listings. **§78** also writes those Cox tokens onto the listing row so Refresh does not rebuild a fake YMM from parsed model + ingest trim.
 
 ---
 

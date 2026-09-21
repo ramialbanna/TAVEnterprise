@@ -1,8 +1,35 @@
 # Completed Tasks — MMR Lab
 
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-21
 
-Archived completed work items from `NEXT_STEPS.md`. Each entry preserves the original exit criteria and implementation notes. §74 is still open on NEXT_STEPS (48h soak); the slices below are shipped.
+Archived completed work items from `NEXT_STEPS.md`. Each entry preserves the original exit criteria and implementation notes. §74 soak is closed; remaining limiter is proxy GB. The slices below are shipped.
+
+---
+
+## 2026-09-21 — Needs action 24h, disk prune, §78 live, §75 RLS
+
+### Needs action sheet 24h / GoLogin enrich 1h
+
+- Tab was 1h (same constant as enrich), so the sheet showed ~9 leads.
+- Split: `NEEDS_ACTION_MAX_AGE_MS` = **24h** (Worker + web). `ENRICH_NEEDS_ACTION_MAX_AGE_MS` = **1h** (Fly still only walks the last hour after a proxy refill).
+- Git `ca0700d` (pushed). Worker `b9cad046`. Vercel Production `ca0700d`. Fly not redeployed.
+
+### Disk leak + prune
+
+- `schema_drift_events` had **3.1M** `unexpected_field` rows (`isPending` / `isLive` / `isSold` / `isHidden` on every listing). Truncated. Known FB aliases added; one drift row per unseen field per run.
+- `raw_listings` kept last **14d** (~281k). Migration `0074` (`ON DELETE SET NULL`, `prune_ingest_payloads`, FK indexes). Daily cron cap 25k.
+- Worker `6aeff6a4`. **VACUUM (FULL, ANALYZE)** ran 2026-09-21: `raw_listings` 2034 MB → 752 MB, `schema_drift_events` 264 kB → 96 kB, DB 4962 MB → 3681 MB.
+
+### §78 ingest Cox identity
+
+- Matcher no longer prices GLC 300 as AMG 43; ingest writes Cox make/model/style onto the listing.
+- **Live** Worker `6aeff6a4`. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+
+### §75 Supabase RLS
+
+- Migration `0075_tav_rls_lockdown.sql` applied. RLS on all 54 `tav` tables, **no FORCE**, no anon policies.
+- Revoked `anon`/`authenticated` SELECT on tables/views/MVs and EXECUTE on functions. Default privileges no longer re-grant those.
+- Verified: `service_role` still reads listings (207,280). `anon`/`authenticated` permission denied.
 
 ---
 
