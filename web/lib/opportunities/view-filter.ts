@@ -7,7 +7,7 @@ import { isSuppressedFromActiveQueue } from "./dismiss-reasons";
 export const WORTH_A_LOOK_MIN_SPREAD = 1_000;
 export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
-export const NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
+export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const SCRAPER_REVIEW_BADGE = "Scraper review";
 

@@ -203,8 +203,8 @@ export const WORTH_A_LOOK_MAX_STALE_DAYS = 7;
 /** Claim window ending within this many ms counts as needs-action. */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
-/** Unworked Needs action rows drop off after this age. */
-export const NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
+/** Unworked Needs action rows stay on the sheet for this age. Enrich is a separate 1h window. */
+export const NEEDS_ACTION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Max age of `first_seen_at` for scraper-review inclusion (item 55).
@@ -677,7 +677,7 @@ function needsActionReceivedAt(
   return row.receivedAt ?? row.firstSeenAt ?? row.lastSeenAt;
 }
 
-/** True when the opportunity is still within the 1h Needs action window. */
+/** True when the opportunity is still within the 24h Needs action sheet window. */
 export function isWithinNeedsActionAge(
   row: Pick<OpportunityRow, "receivedAt" | "firstSeenAt" | "lastSeenAt">,
   now: Date = new Date(),
@@ -770,9 +770,9 @@ function applyViewFilter(
   filter: OpportunityListFilter,
   workflowByListing: Map<string, WorkflowDisplayContext>,
   blockedSellerLookup?: BlockedSellerLookup | null,
+  now: Date = new Date(),
 ): OpportunityRow[] {
   const view = filter.view ?? "all";
-  const now = new Date();
 
   if (view === "flagged_leads") {
     return rows.filter((row) => matchesFlaggedLeads(row));
@@ -862,7 +862,13 @@ export function countOpportunityViews(
     scraperReviewMode: filter.scraperReviewMode,
   };
   for (const view of QUEUE_COUNT_VIEWS) {
-    const viewed = applyViewFilter(rows, { ...base, view }, workflowByListing, blockedSellerLookup);
+    const viewed = applyViewFilter(
+      rows,
+      { ...base, view },
+      workflowByListing,
+      blockedSellerLookup,
+      now,
+    );
     counts[view] = viewed.length;
     if (view === "all") {
       counts.new_today = viewed.filter((row) => isFirstSeenTodayInQueueTz(row.firstSeenAt, now)).length;

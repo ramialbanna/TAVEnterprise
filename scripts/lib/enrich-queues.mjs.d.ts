@@ -1,6 +1,8 @@
 export const QUEUE_NAMES: string[];
 export const DEALER_SIGNAL_QUEUE: string;
 export const DEFAULT_ENRICH_QUEUE: string;
+export const ENRICH_NEEDS_ACTION_MAX_AGE_MS: number;
+/** @deprecated Use ENRICH_NEEDS_ACTION_MAX_AGE_MS — not the 24h sheet window. */
 export const NEEDS_ACTION_MAX_AGE_MS: number;
 export const CLAIM_EXPIRING_SOON_MS: number;
 export const SUPPRESSED_QUEUE_STATUSES: Set<string>;

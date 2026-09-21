@@ -14,8 +14,14 @@ export const QUEUE_NAMES = [
 export const DEALER_SIGNAL_QUEUE = "dealer_signal";
 export const DEFAULT_ENRICH_QUEUE = "needs_action";
 
-/** Mirror `NEEDS_ACTION_MAX_AGE_MS` in opportunities.ts */
-export const NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
+/**
+ * GoLogin only visits the last hour of would-be Needs action rows.
+ * The Opportunities tab is 24h (`NEEDS_ACTION_MAX_AGE_MS` in opportunities.ts).
+ * Keep this shorter so a proxy refill does not walk a full-day backlog.
+ */
+export const ENRICH_NEEDS_ACTION_MAX_AGE_MS = 60 * 60 * 1000;
+/** @deprecated Use ENRICH_NEEDS_ACTION_MAX_AGE_MS — not the 24h sheet window. */
+export const NEEDS_ACTION_MAX_AGE_MS = ENRICH_NEEDS_ACTION_MAX_AGE_MS;
 /** Mirror `CLAIM_EXPIRING_SOON_MS` in opportunities.ts */
 export const CLAIM_EXPIRING_SOON_MS = 4 * 60 * 60 * 1000;
 
@@ -54,7 +60,7 @@ export function isWithinNeedsActionAge(row, now = new Date()) {
   if (!raw) return true;
   const received = new Date(raw).getTime();
   if (Number.isNaN(received)) return true;
-  return now.getTime() - received <= NEEDS_ACTION_MAX_AGE_MS;
+  return now.getTime() - received <= ENRICH_NEEDS_ACTION_MAX_AGE_MS;
 }
 
 export function isActiveClaim(workflow, now = new Date()) {
@@ -69,7 +75,7 @@ export function isExpiringClaim(workflow, now = new Date()) {
 }
 
 /**
- * Mirror `matchesNeedsAction` in opportunities.ts for enrich queue selection.
+ * Same rules as `matchesNeedsAction`, except age is the 1h enrich window, not the 24h sheet.
  * Callers pass rows that already have seller_url IS NULL — the view filter is not applied here.
  */
 export function matchesWouldBeNeedsAction(ctx, now = new Date()) {

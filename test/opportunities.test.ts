@@ -390,10 +390,24 @@ describe("opportunity list views and pagination", () => {
     expect(matchesNeedsAction(sampleRow({ assignedTo: "user-2" }), workflow, wall)).toBe(true);
   });
 
-  it("drops Needs action rows older than 1 hour", () => {
+  it("keeps Needs action rows from the last 24 hours and drops older", () => {
     expect(
       matchesNeedsAction(
         sampleRow({ assignedTo: null, receivedAt: "2026-05-21T10:00:00.000Z" }),
+        null,
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      matchesNeedsAction(
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-20T12:00:00.000Z" }),
+        null,
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      matchesNeedsAction(
+        sampleRow({ assignedTo: null, receivedAt: "2026-05-20T11:00:00.000Z" }),
         null,
         now,
       ),

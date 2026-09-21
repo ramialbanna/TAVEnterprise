@@ -90,7 +90,7 @@ describe("matchesWouldBeNeedsAction", () => {
     expect(matchesWouldBeNeedsAction(ctx, now)).toBe(true);
   });
 
-  it("rejects listings older than the Needs action window", () => {
+  it("rejects listings older than the 1h enrich window (not the 24h sheet)", () => {
     const ctx = buildNeedsActionEnrichContext({
       listing: { first_seen_at: stale, last_seen_at: stale },
       lead: { created_at: stale, status: "new", assigned_to: null },

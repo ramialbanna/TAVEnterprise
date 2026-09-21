@@ -58,19 +58,27 @@ describe("view-filter", () => {
     expect(filtered[0]?.assignedTo).toBeNull();
   });
 
-  it("drops needs_action rows older than 1 hour", () => {
+  it("keeps needs_action rows from the last 24 hours and drops older", () => {
     const now = new Date("2026-05-21T12:00:00.000Z");
-    const fresh = row({
-      id: "fresh",
-      assignedTo: null,
-      receivedAt: "2026-05-21T11:30:00.000Z",
-    });
-    const stale = row({
-      id: "stale",
+    const twoHoursOld = row({
+      id: "two-hours",
       assignedTo: null,
       receivedAt: "2026-05-21T10:00:00.000Z",
     });
-    expect(filterOpportunityRowsByView([fresh, stale], "needs_action", { now })).toEqual([fresh]);
+    const almostDay = row({
+      id: "almost-day",
+      assignedTo: null,
+      receivedAt: "2026-05-20T12:00:00.000Z",
+    });
+    const tooOld = row({
+      id: "too-old",
+      assignedTo: null,
+      receivedAt: "2026-05-20T11:00:00.000Z",
+    });
+    expect(filterOpportunityRowsByView([twoHoursOld, almostDay, tooOld], "needs_action", { now })).toEqual([
+      twoHoursOld,
+      almostDay,
+    ]);
   });
 
   it("excludes bad_lead and other suppressed statuses from all default views", () => {
