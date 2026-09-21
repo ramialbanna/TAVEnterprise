@@ -66,4 +66,23 @@ describe("selectCatalogStyleForListing", () => {
 
     expect(selected?.style).toBe("4D CREW CAB XLT");
   });
+
+  it("picks a GLC 300 SUV style instead of the first AMG catalog row", () => {
+    const selected = selectCatalogStyleForListing({
+      title: "2022 Mercedes-Benz GLC · GLC 300 Sport Utility 4D",
+      trim: "300 sport",
+      styles: [
+        "4D SEDAN AMG GLC 43 4MATIC",
+        "4D SEDAN GLC 300 4MATIC",
+        "4D SUV AMG GLC 43 4MATIC",
+        "4D SUV GLC 300",
+        "4D SUV GLC 300 4MATIC",
+      ],
+    });
+
+    expect(selected?.style).toMatch(/GLC 300/);
+    expect(selected?.style).toMatch(/SUV/);
+    expect(selected?.style).not.toMatch(/AMG/);
+    expect(selected?.isEstimated).toBe(false);
+  });
 });

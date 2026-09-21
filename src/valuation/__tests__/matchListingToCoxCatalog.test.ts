@@ -142,4 +142,48 @@ describe("matchListingToCoxCatalog", () => {
     expect(clean?.autoLookup).toBe(true);
     expect(garbage).toBeNull();
   });
+
+  it("prefers GLC 300 SUV over AMG GLC 43 when the listing says Sport Utility", () => {
+    const glcRows: CoxCatalogTreeRow[] = [
+      {
+        year: 2022,
+        make: "MERCEDES-BENZ",
+        model: "GLC",
+        style: "4D SEDAN AMG GLC 43 4MATIC",
+        searchText: "",
+        variantKind: null,
+      },
+      {
+        year: 2022,
+        make: "MERCEDES-BENZ",
+        model: "GLC",
+        style: "4D SUV GLC 300",
+        searchText: "",
+        variantKind: null,
+      },
+      {
+        year: 2022,
+        make: "MERCEDES-BENZ",
+        model: "GLC",
+        style: "4D SUV GLC 300 4MATIC",
+        searchText: "",
+        variantKind: null,
+      },
+    ];
+
+    const result = matchListingToCoxCatalog(
+      {
+        year: 2022,
+        make: "mercedes-benz",
+        model: "glc 300",
+        trim: null,
+        title: "2022 Mercedes-Benz GLC · GLC 300 Sport Utility 4D",
+      },
+      glcRows,
+    );
+
+    expect(result?.autoLookup).toBe(true);
+    expect(result?.model).toBe("GLC");
+    expect(result?.style).toBe("4D SUV GLC 300");
+  });
 });

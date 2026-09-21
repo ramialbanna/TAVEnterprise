@@ -3,6 +3,11 @@
  * `web/.../resolve-catalog-style.ts` for ingest (item 46 / 55 Phase B).
  */
 
+import {
+  extractCatalogSeriesNumbers,
+  styleHasWholeToken,
+} from "./catalogStyleTokens";
+
 export type CatalogStyleResolution = {
   style: string;
   isEstimated: boolean;
@@ -40,30 +45,38 @@ export function resolveCatalogStyleFromEvidence(
   if (options.length === 0) return null;
 
   const trimmed = trim?.trim() ?? "";
+  const series = extractCatalogSeriesNumbers(trimmed);
+  const pool =
+    series.length > 0
+      ? options.filter((style) => series.every((n) => styleHasWholeToken(style, n)))
+      : options;
+
   if (!trimmed) {
     return { style: options[0]!, isEstimated: true };
   }
 
-  const exact = options.find((style) => style === trimmed);
+  if (pool.length === 0) return null;
+
+  const exact = pool.find((style) => style === trimmed);
   if (exact) return { style: exact, isEstimated: false };
 
-  const caseInsensitive = options.find(
+  const caseInsensitive = pool.find(
     (style) => style.toLowerCase() === trimmed.toLowerCase(),
   );
   if (caseInsensitive) return { style: caseInsensitive, isEstimated: false };
 
-  const scored = options
+  const scored = pool
     .map((style) => ({ style, score: scoreStyle(style, trimmed) }))
     .filter((row) => row.score >= 3)
     .sort((a, b) => b.score - a.score);
 
   if (scored.length === 0 || !scored[0]) {
-    return { style: options[0]!, isEstimated: true };
+    return { style: pool[0]!, isEstimated: true };
   }
 
   const [best, second] = scored;
   if (second && second.score === best.score) {
-    return { style: options[0]!, isEstimated: true };
+    return { style: best.style, isEstimated: true };
   }
 
   return { style: best.style, isEstimated: best.score < 100 };

@@ -523,8 +523,22 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   "is_pending",
   "is_sold",
   "is_viewer_seller",
+  "isHidden",
+  "isLive",
+  "isPending",
+  "isSold",
   "delivery_types",
   "origin_group",
+  // Detail-mode / custom-vehicle-scraper aliases. These used to write
+  // ~3M schema_drift_events rows (isPending/isLive/isSold/isHidden alone).
+  "year",
+  "make",
+  "model",
+  "trim",
+  "creation_time",
+  "comparable_price",
+  "comparable_price_type",
+  "__isMarketplaceListingWithComparablePrice",
 ]);
 
 export type SchemaDriftEvent = {

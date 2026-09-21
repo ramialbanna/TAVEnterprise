@@ -961,6 +961,15 @@ describe("detectFacebookDrift", () => {
       price: "$18,000",
       mileage: "62000",
       description: "clean title",
+      isPending: false,
+      isLive: true,
+      isSold: false,
+      isHidden: false,
+      make: "Toyota",
+      model: "Camry",
+      trim: "SE",
+      year: 2020,
+      creation_time: 1778443122,
     });
     expect(events).toHaveLength(0);
   });

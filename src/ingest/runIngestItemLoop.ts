@@ -12,6 +12,7 @@ import {
   stampNormalizedListingSeller,
   upsertNormalizedListing,
 } from "../persistence/normalizedListings";
+import { applyCoxIdentityFromMmr } from "./applyCoxIdentityFromMmr";
 import { suppressOpportunityForBlockedSeller } from "../persistence/opportunityWorkflow";
 import {
   applyResolvedSeller,
@@ -27,7 +28,7 @@ import { writeValuationMissSnapshot } from "../persistence/valuationSnapshots";
 import { parseFacebookItem, detectFacebookDrift } from "../sources/facebook";
 import { parseCraigslistItem, detectCraigslistDrift } from "../sources/craigslist";
 import type { AdapterContext } from "../sources/facebook";
-import { writeSchemaDrift } from "../persistence/schemaDrift";
+import { takeUnseenDriftEvents, writeSchemaDrift } from "../persistence/schemaDrift";
 import { computeIdentityKey } from "../dedupe/fingerprint";
 import { computeStaleScore } from "../stale/scorer";
 import { computeDealScore } from "../scoring/deal";
@@ -195,6 +196,7 @@ export async function runIngestItemLoop(
   const excellentLeads: ExcellentLeadSummary[] = [];
   const retryCandidates: CoxNoDataRetryCandidate[] = [];
   const rateLimitRetryCandidates: MmrRateLimitRetryCandidate[] = [];
+  const seenDriftFields = new Set<string>();
 
   for (const item of items) {
     const i = itemIndexOffset + localIndex++;
@@ -256,12 +258,14 @@ export async function runIngestItemLoop(
 
     if (typeof item === "object" && item !== null && !Array.isArray(item)) {
       const itemRec = item as Record<string, unknown>;
-      const driftEvents =
+      const driftEvents = takeUnseenDriftEvents(
         source === "facebook"
           ? detectFacebookDrift(itemRec)
           : source === "craigslist"
             ? detectCraigslistDrift(itemRec)
-            : [];
+            : [],
+        seenDriftFields,
+      );
       if (driftEvents.length > 0) {
         try {
           await Promise.all(
@@ -730,6 +734,7 @@ export async function runIngestItemLoop(
           { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true },
           listingCtx,
         );
+        await applyCoxIdentityFromMmr(db, normResult.id, mmrResult, listingCtx);
       } catch (err) {
         logError("valuation", "ingest.snapshot_failed", err, listingCtx);
         try {

@@ -206,15 +206,16 @@ Recent production runs are completing but often show **`created_leads = 0`** —
 
 ## 8. Repo and Branch State
 
-**Living checklist:** [NEXT_STEPS.md](../NEXT_STEPS.md) — start at **Fresh chat handoff (2026-09-03 session)**.
+**Living checklist:** [NEXT_STEPS.md](../NEXT_STEPS.md) — start at **Fresh chat handoff (2026-09-21)**.
 
 | Fact | Value |
 |------|--------|
-| **Git HEAD (local)** | `75d69f3` — listing mirror on detail |
-| **Uncommitted** | ~94 files — §72 Worker bundle, §74 enrich queue, docs (**production already deployed** Worker `2b262630`, Fly v6) |
-| **Worker production** | `2b262630` (2026-09-03) — `npx wrangler deploy --env production` |
-| **Fly enrich** | `tav-seller-enrich` v6, `ord`, queue=`needs_action` |
-| **Main goal** | §72 MMR hit **79%** offline; §74 soak in progress |
+| **Git HEAD (pushed)** | disk-prune + §78 catch-up — matches Worker `6aeff6a4`. Prior `6f37651` (§75), `ca0700d` (Needs action 24h) |
+| **Uncommitted** | none for §78 / prune |
+| **Worker production** | `6aeff6a4` (2026-09-21) — §78 + disk leak stop / daily prune |
+| **Web production** | Needs action 24h (`ca0700d` app; later commits are docs/SQL/Worker catch-up) |
+| **Fly enrich** | `tav-seller-enrich`, `ord`, queue=`needs_action`, last-hour window (no Fly redeploy 2026-09-21) |
+| **Main goal** | §72 MMR hit **~79%** Claude-offline; **open:** §73 credits, §68 stuck runs |
 
 Historical GitHub `main` snapshot (2026-05-23) and Phase 4–8 notes below are **stale** — use NEXT_STEPS for current work.
 

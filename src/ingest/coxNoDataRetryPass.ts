@@ -16,6 +16,7 @@ import type { NormalizedListingInput } from "../types/domain";
 import { retryMmrAfterCoxNoData } from "../valuation/workerClient";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
+import { applyCoxIdentityFromMmr } from "./applyCoxIdentityFromMmr";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import {
@@ -104,6 +105,7 @@ export async function runCoxNoDataRetryPass(params: {
         valuation: fromMmrResult(outcome.result),
       });
       recovered += 1;
+      await applyCoxIdentityFromMmr(db, candidate.normalizedListingId, outcome.result, listingCtx);
 
       log(
         "valuation.recovered_after_no_data",

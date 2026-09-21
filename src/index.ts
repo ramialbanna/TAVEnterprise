@@ -7,6 +7,7 @@ import { getSupabaseClient } from "./persistence/supabase";
 import { runStaleSweep } from "./stale/engine";
 import { recordCronRunSafe } from "./persistence/cronRuns";
 import { runCoxCatalogSync } from "./catalog/syncCoxCatalogTree";
+import { pruneIngestPayloads } from "./persistence/pruneIngestPayloads";
 import { log, serializeError } from "./logging/logger";
 import { VERSION } from "./version";
 
@@ -86,6 +87,28 @@ export default {
         detail: { error: serializeError(err) },
       });
       log("cron.cox_catalog_sync.failed", { error: serializeError(err) });
+    }
+
+    log("cron.prune_ingest_payloads.started");
+    const pruneStartedAt = new Date().toISOString();
+    try {
+      const result = await pruneIngestPayloads(db);
+      await recordCronRunSafe(db, {
+        jobName: "prune_ingest_payloads",
+        startedAt: pruneStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "ok",
+        detail: result,
+      });
+    } catch (err) {
+      await recordCronRunSafe(db, {
+        jobName: "prune_ingest_payloads",
+        startedAt: pruneStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "failed",
+        detail: { error: serializeError(err) },
+      });
+      log("cron.prune_ingest_payloads.failed", { error: serializeError(err) });
     }
   },
 };

@@ -23,6 +23,7 @@ Claude API access is now available. The approach:
 5. **Alias fast-path stays first.** `mmr_style_aliases` lookup (already in `resolveListingToCatalog.ts`) runs before any Claude call — an alias hit skips the LLM entirely. This is both a cost control and a correctness win (a closer already confirmed that exact mapping once).
 6. **Photos are v2, not v1.** Not blocking the initial rollout. See §8.
 7. **Carry-forward rules, unchanged:** never let the model call Cox/Manheim directly; never invent mileage or trim; AI is a proposer, never a source of truth.
+8. **§78 (live Worker `6aeff6a4` 2026-09-21):** after MMR hits, persist Cox `lookup_make` / `lookup_model` / `lookup_trim` onto `normalized_listings`. Matcher must not take `styles[0]` when leftover tokens (e.g. `300`) are missing from that style. Existing queue rows stay wrong until re-ingest. Full tracker: [`NEXT_STEPS.md`](NEXT_STEPS.md) §78.
 
 ## 3. Why a single completion call, not an agent
 

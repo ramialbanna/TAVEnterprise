@@ -15,7 +15,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git HEAD:** `ca0700d` — Needs action sheet **24h**; GoLogin enrich stays **1h**. **Pushed** to `origin/main`. Disk-prune + §78 Worker code is **live** (`6aeff6a4`) but those files may still be uncommitted locally.
+- **Git HEAD:** disk-prune + §78 catch-up **pushed** (matches Worker `6aeff6a4`). Prior: `6f37651` (§75 RLS), `ca0700d` (Needs action sheet **24h**; GoLogin enrich stays **1h**).
 - `.gitignore` excludes `scripts/_tmp-*`.
 
 ### Production
@@ -23,14 +23,15 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
 | **Worker** | `6aeff6a4` (`tav-aip-production`) | **§78** Cox identity write-back + disk leak stop (known FB fields, one drift row per field per run, daily `prune_ingest_payloads`). Secrets not touched. Prior: `b9cad046` (Needs action 24h), `0543ff2e` (§76). |
-| **Web** | `ca0700d` on Vercel Production | Needs action client filter **24h**. Secrets not touched. |
+| **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | still last-hour queue (no Fly redeploy 2026-09-21) | Enrich window is **not** the sheet window. Health: https://tav-seller-enrich.fly.dev/ |
 
 ### This session (2026-09-21)
 
 - **Needs action 24h / enrich 1h — live.** Tab was 1h (same constant as GoLogin), so the sheet showed ~9 leads. Split: Worker + web `ca0700d` / Worker `b9cad046`. Fly still only visits the last hour of would-be Needs action so a proxy refill does not walk a 24h backlog.
 - **Disk 81% — leak stopped, prune applied, VACUUM FULL done 2026-09-21.** `schema_drift_events` had **3.1M** `unexpected_field` rows (`isPending` / `isLive` / `isSold` / `isHidden` on every listing). Truncated. `raw_listings` kept last **14d** (~281k); older payloads deleted. Migration `0074` (`ON DELETE SET NULL`, `prune_ingest_payloads`, FK indexes). Daily cron calls prune (cap 25k). Worker `6aeff6a4`. `VACUUM (FULL, ANALYZE)` ran: `raw_listings` 2034 MB → 752 MB, DB 4962 MB → 3681 MB. Dashboard % may lag.
-- **§78 — Worker live `6aeff6a4`.** Matcher no longer prices GLC 300 as AMG 43; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. Git catch-up still needed for those files.
+- **§78 — Worker live `6aeff6a4`.** Matcher no longer prices GLC 300 as AMG 43; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. **Git catch-up done** (this commit).
+- **§75 RLS — live + git `6f37651` pushed.** Migration `0075` on all 54 `tav` tables, no FORCE, no anon policies. `anon`/`authenticated` SELECT + RPC execute revoked. `service_role` still reads (207k listings). Verified permission denied for Data API roles.
 
 ### Earlier session (2026-09-07 afternoon)
 
@@ -50,13 +51,13 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **§68 — stuck `running` recurred.** Cleared + deployed `0453cc02` 2026-09-07. Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m, oldest Sep 7). Watch; do not treat the 09-07 zero as current.
 
-**§75 — RLS live 2026-09-21.** Migration `0075`. All 54 `tav` tables have RLS on, **no FORCE**, no anon policies. `anon`/`authenticated` SELECT + RPC execute revoked. Service role still reads (207k listings).
+**§75 — RLS live 2026-09-21.** Migration `0075`. Git **`6f37651` pushed**. All 54 `tav` tables have RLS on, **no FORCE**, no anon policies. `anon`/`authenticated` SELECT + RPC execute revoked. Service role still reads (207k listings).
 
 **§69 admin page 400 — 2026-09-09.** `/admin/blocked-sellers` showed `db_error` then `upstream_unavailable`. Cause: listing join was one giant PostgREST GET, then chunked sequential scans past the 12s proxy. **Fix:** RPC `listings_for_seller_urls` + seller_url index (migration `0073`). **Deployed** Worker `79606324`. Secrets not touched.
 
 **§59 MaxBuy — ingest linkage shipped; identity write-back is §78.** Noted 2026-09-09 / 2026-09-21.
 
-**§78 — ingest Cox identity — live Worker `6aeff6a4` 2026-09-21.** Buyer Refresh on a 2022 GLC 300 failed even though ingest already had MMR + MaxBuy. Listing stayed `glc 300` / trim empty while the snapshot priced AMG GLC 43 (`styles[0]`). Matcher now prefers leftover series numbers + SUV over `styles[0]`; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+**§78 — ingest Cox identity — live Worker `6aeff6a4` 2026-09-21.** Buyer Refresh on a 2022 GLC 300 failed even though ingest already had MMR + MaxBuy. Listing stayed `glc 300` / trim empty while the snapshot priced AMG GLC 43 (`styles[0]`). Matcher now prefers leftover series numbers + SUV over `styles[0]`; ingest writes Cox make/model/style onto the listing. Existing queue rows stay wrong until re-ingest. **Git catch-up done.**
 
 **§76 — live.** Worker `0543ff2e` + web `80fff9f`. Facebook without `seller_url` lands with **Seller unchecked**. Needs action sheet is **24h** (`ca0700d` / `b9cad046`); enrich stays **1h**.
 
@@ -68,7 +69,6 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 2. **§68** — **81** `source_runs` stuck `running` (2026-09-21). Recurred after `0453cc02`.
 3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
 4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
-5. **Git catch-up** — commit local disk-prune + §78 + §75 files so git matches Worker `6aeff6a4` + migration `0075`.
 
 ### Key commands
 
@@ -245,9 +245,9 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
-| **75** | **Supabase RLS** — lock `tav` from Data API anon/authenticated | **High** | [x] **live** migration `0075` 2026-09-21. No FORCE. Service role unchanged. |
+| **75** | **Supabase RLS** — lock `tav` from Data API anon/authenticated | **High** | [x] **live** migration `0075` 2026-09-21. Git `6f37651` pushed. No FORCE. Service role unchanged. |
 | **77** | **Queue list speed** — cheap counts + hydrate only the page | **High** | [x] **live** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched. |
-| **78** | **Ingest Cox identity write-back** — store the Y/M/M/S ingest priced; do not leave listing as parsed `glc 300` | **High** | [x] **live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed. |
+| **78** | **Ingest Cox identity write-back** — store the Y/M/M/S ingest priced; do not leave listing as parsed `glc 300` | **High** | [x] **live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest. |
 
 Shipped and closed items are archived at the bottom.
 
@@ -462,7 +462,7 @@ Logs: `ingest.mmr_no_data_retry`, `valuation.recovered_after_no_data`, `ingest.c
 - [x] Proven-aware last-resort ranking — close-score booked pick; leftover listing words not sent. **Live** production `78f79974` / staging `7136a656` (2026-08-24 19:00Z). `AUTO_LOOKUP_MIN` still 80. **Soaked ~10d 2026-09-03:** npb flat **4.8%**, hit **79.0%** deduped — deploy correct, F-series npb not materially reduced.
 - [x] `llm_ymms_decisions` links to `normalized_listing_id` — callers pass listing id (2026-08-28). Historical rows stay null.
 - [~] MMR hit **≥ 85%** on eligible inventory — **90.0%** post-gate with Claude (2026-08-15). Claude-offline: **79.4%** last 7d (2026-09-07). **`llm_unavailable` is still #1** — credits + §73 vision are the path to exit, not more last-resort soak.
-- [x] **§78** — Cox Y/M/M/S from ingest lands on `normalized_listings` so Refresh uses the same identity. **Live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+- [x] **§78** — Cox Y/M/M/S from ingest lands on `normalized_listings` so Refresh uses the same identity. **Live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest.
 
 ---
 
@@ -1002,7 +1002,7 @@ Stop the script (`SELLER_ENRICH_ENABLED` off). Enriched columns can stay. To und
 
 ## 75 — Supabase RLS
 
-**Opened:** 2026-09-08 · **Status:** [x] **live** migration `0075` 2026-09-21 · **Priority:** High
+**Opened:** 2026-09-08 · **Status:** [x] **live** migration `0075` 2026-09-21 · Git `6f37651` pushed · **Priority:** High
 
 `tav` is an exposed Data API schema. Migration 0002 had granted `SELECT` on every table to `anon`/`authenticated`. RLS was off, so the publishable key could read listings, users, valuations, MaxBuy.
 
@@ -1058,7 +1058,7 @@ The buyer should not pick Y/M/M/S again. Ingest already did the lookup.
 1. Catalog matcher: leftover model numbers (`300`) and `Sport Utility` → `SUV`. Do not fall back to `styles[0]` when that style lacks the leftover tokens. GLC 300 Sport Utility → `GLC` + a **GLC 300 SUV** style, not AMG 43.
 2. After a successful YMM MMR hit (including cox-no-data and rate-limit retries), write Cox `lookup_make` / `lookup_model` / `lookup_trim` onto `normalized_listings.make/model/trim`. Refresh then uses the same identity ingest priced.
 
-Secrets not touched. Rows already in the queue keep the old identity until ingest runs them again. Git catch-up still needed so local HEAD matches this Worker.
+Secrets not touched. Rows already in the queue keep the old identity until ingest runs them again. Git includes these files (catch-up 2026-09-21) so HEAD matches Worker `6aeff6a4`.
 
 Files: `src/valuation/selectCatalogStyle.ts`, `resolveCatalogStyleFromEvidence.ts`, `resolveListingToCatalog.ts`, `matchListingToCoxCatalog.ts`, `catalogStyleTokens.ts`, `src/ingest/applyCoxIdentityFromMmr.ts`, `runIngestItemLoop.ts`, `coxNoDataRetryPass.ts`, `mmrRateLimitRetryPass.ts`, `src/persistence/normalizedListings.ts`.
 
@@ -1114,9 +1114,9 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 ### Open ops
 
 - [~] Stuck `running` `source_runs` — cleared + deployed `0453cc02` 2026-09-07 (17 → `completed`). Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m). `upsertSourceRun` keeps `truncated` / `failed` closed. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
-- [x] **§75 Supabase RLS** — migration `0075` 2026-09-21. RLS on, no FORCE, anon SELECT/EXECUTE revoked.
+- [x] **§75 Supabase RLS** — migration `0075` 2026-09-21. Git `6f37651` pushed. RLS on, no FORCE, anon SELECT/EXECUTE revoked.
 - [x] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. **Deployed** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched.
-- [x] **§78 Ingest Cox identity** — matcher + listing write-back. **Live** Worker `6aeff6a4` 2026-09-21. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+- [x] **§78 Ingest Cox identity** — matcher + listing write-back. **Live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest.
 - [x] **Disk leak + prune (2026-09-21)** — `schema_drift_events` truncated (3.1M expected FB flags); `raw_listings` kept last 14d (~281k). Migration `0074` + daily `prune_ingest_payloads`. Worker `6aeff6a4`.
 - [x] **VACUUM FULL** — `tav.raw_listings` 2034 MB → 752 MB; `schema_drift_events` 264 kB → 96 kB. DB 4962 MB → 3681 MB (2026-09-21).
 - [ ] List/detail flag UI cache lag (~60s)

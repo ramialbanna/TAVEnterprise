@@ -23,13 +23,14 @@ Archived completed work items from `NEXT_STEPS.md`. Each entry preserves the ori
 ### §78 ingest Cox identity
 
 - Matcher no longer prices GLC 300 as AMG 43; ingest writes Cox make/model/style onto the listing.
-- **Live** Worker `6aeff6a4`. Existing queue rows stay wrong until re-ingest. Git catch-up still needed.
+- **Live** Worker `6aeff6a4`. Existing queue rows stay wrong until re-ingest. Git catch-up **done**.
 
 ### §75 Supabase RLS
 
 - Migration `0075_tav_rls_lockdown.sql` applied. RLS on all 54 `tav` tables, **no FORCE**, no anon policies.
 - Revoked `anon`/`authenticated` SELECT on tables/views/MVs and EXECUTE on functions. Default privileges no longer re-grant those.
 - Verified: `service_role` still reads listings (207,280). `anon`/`authenticated` permission denied.
+- Git `6f37651` **pushed** to `origin/main`.
 
 ---
 

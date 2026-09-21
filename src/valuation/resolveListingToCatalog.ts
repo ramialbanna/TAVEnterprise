@@ -14,6 +14,7 @@ import {
 } from "./selectCatalogModelVariant";
 import { selectCatalogStyleForListing, rankCatalogStylesForListing } from "./selectCatalogStyle";
 import { resolveCatalogStyleFromEvidence } from "./resolveCatalogStyleFromEvidence";
+import { extractCatalogSeriesNumbers, styleHasWholeToken } from "./catalogStyleTokens";
 import { matchListingToCoxCatalog, type CoxCatalogTreeRow } from "./matchListingToCoxCatalog";
 import { isCatalogAliasValid, normalizeCatalogAliasTokens } from "./catalogAliasValidation";
 import type { MmrStyleAlias } from "../persistence/mmrStyleAliases";
@@ -400,13 +401,8 @@ async function resolveModel(
     };
   }
 
-  if (!leftoverStyleEvidence) {
-    leftoverStyleEvidence = leftoverModelTokens(args.modelRaw, matchedModel);
-  }
-
   const trimEvidence =
-    args.styleRaw ||
-    leftoverStyleEvidence ||
+    [leftoverStyleEvidence, args.styleRaw].filter(Boolean).join(" ").trim() ||
     extractTitleTrim(args.title) ||
     extractTitleTrim(args.description) ||
     "";
@@ -581,16 +577,11 @@ export async function resolveListingToCatalogForIngest(
         stylesRes.items.some(
           (style) => style.toLowerCase() === evidenceTrim.toLowerCase(),
         );
+      const seriesTokens = extractCatalogSeriesNumbers(evidenceTrim);
       const hasTokenEvidence =
-        evidenceTrim.length > 0 &&
-        stylesRes.items.some((style) => {
-          const token = evidenceTrim.toUpperCase();
-          const normalized = style.toUpperCase();
-          return new RegExp(`(?:^| )${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: |$)`).test(
-            normalized,
-          );
-        });
-      if (hasStrongEvidence || hasTokenEvidence) {
+        seriesTokens.length > 0 &&
+        seriesTokens.every((token) => styleHasWholeToken(evidenceStyle.style, token));
+      if ((hasStrongEvidence || hasTokenEvidence) && !evidenceStyle.isEstimated) {
         return {
           make: matchedMake,
           model: matchedModel,

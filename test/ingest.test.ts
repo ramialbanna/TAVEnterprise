@@ -44,6 +44,7 @@ vi.mock("../src/persistence/normalizedListings", () => ({
   setNormalizedListingEntryMethod: vi.fn().mockResolvedValue(undefined),
   loadStoredSellersByListingUrls: vi.fn().mockResolvedValue(new Map()),
   stampNormalizedListingSeller: vi.fn().mockResolvedValue(undefined),
+  updateNormalizedListingYmms: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../src/persistence/opportunityWorkflow", async (importOriginal) => {
@@ -70,9 +71,13 @@ vi.mock("../src/persistence/leads", () => ({
   upsertLead: vi.fn(),
 }));
 
-vi.mock("../src/persistence/schemaDrift", () => ({
-  writeSchemaDrift: vi.fn(),
-}));
+vi.mock("../src/persistence/schemaDrift", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/schemaDrift")>();
+  return {
+    ...actual,
+    writeSchemaDrift: vi.fn(),
+  };
+});
 
 vi.mock("../src/persistence/buyBoxScoreAttributions", () => ({
   insertBuyBoxScoreAttribution: vi.fn().mockResolvedValue("attr-uuid"),
@@ -118,7 +123,7 @@ vi.mock("../src/scoring/lead", async () => {
 
 import { upsertSourceRun, completeSourceRun, completeSourceRunSafe } from "../src/persistence/sourceRuns";
 import { insertRawListing } from "../src/persistence/rawListings";
-import { upsertNormalizedListing, loadStoredSellersByListingUrls, stampNormalizedListingSeller } from "../src/persistence/normalizedListings";
+import { upsertNormalizedListing, loadStoredSellersByListingUrls, stampNormalizedListingSeller, updateNormalizedListingYmms } from "../src/persistence/normalizedListings";
 import { upsertVehicleCandidate } from "../src/persistence/vehicleCandidates";
 import { linkNormalizedListingToCandidate } from "../src/persistence/duplicateGroups";
 import { fetchActiveBuyBoxRules } from "../src/persistence/buyBoxRules";
@@ -177,6 +182,7 @@ beforeEach(() => {
   vi.mocked(loadBlockedSellerLookup).mockResolvedValue(null);
   vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(1);
   vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(new Map());
+  vi.mocked(updateNormalizedListingYmms).mockResolvedValue(undefined);
 });
 
 async function sign(body: string, secret: string): Promise<string> {
@@ -451,6 +457,24 @@ describe("POST /ingest", () => {
       expect.anything(),
       expect.objectContaining({ event_type: "unexpected_field", field_path: "verification_status" }),
     );
+    expect(vi.mocked(writeSchemaDrift)).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a given unknown field only once per ingest run", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-drift-dup",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [
+        { url: "https://fb.com/item/drift-a", title: "2020 Toyota Camry SE, 62k miles", verification_status: "verified" },
+        { url: "https://fb.com/item/drift-b", title: "2021 Honda Civic EX, 30k miles", verification_status: "verified" },
+      ],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    expect(res.status).toBe(200);
+    expect(vi.mocked(writeSchemaDrift)).toHaveBeenCalledTimes(1);
   });
 
   it("ingest still returns 200 when writeSchemaDrift throws", async () => {
@@ -888,6 +912,24 @@ describe("POST /ingest — vehicle_enrichments normalization write", () => {
     expect(body.ok).toBe(true);
     // Snapshot still written despite enrichment failure
     expect(vi.mocked(writeValuationSnapshot)).toHaveBeenCalledOnce();
+  });
+
+  it("writes Cox lookup identity onto the listing after a YMM hit", async () => {
+    vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+      kind: "hit",
+      result: {
+        ...WORKER_YMM_MMR_RESULT,
+        lookupTrim: "4D SUV GLC 300",
+      },
+    });
+    const sig = await sign(VALID_PAYLOAD, SECRET);
+    await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+
+    expect(vi.mocked(updateNormalizedListingYmms)).toHaveBeenCalledWith(
+      expect.anything(),
+      "norm-uuid",
+      { make: "Toyota", model: "Camry", trim: "4D SUV GLC 300" },
+    );
   });
 });
 

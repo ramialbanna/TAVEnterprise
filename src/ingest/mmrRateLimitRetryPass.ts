@@ -13,6 +13,7 @@ import type { LlmYmmsResolution } from "../valuation/resolveListingWithLLM";
 import { getMmrLookupOutcome } from "../valuation/workerClient";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
+import { applyCoxIdentityFromMmr } from "./applyCoxIdentityFromMmr";
 import { log, logError } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import {
@@ -108,6 +109,7 @@ export async function runMmrRateLimitRetryPass(params: {
         valuation: fromMmrResult(outcome.result),
       });
       recovered += 1;
+      await applyCoxIdentityFromMmr(db, candidate.normalizedListingId, outcome.result, listingCtx);
 
       log(
         "valuation.recovered_after_rate_limit",

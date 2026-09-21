@@ -195,7 +195,7 @@ export type NormalizedListingInput = {
 ## 5. Validation Rules
 - Wrapper Zod schema: `source` ∈ allowed, `items` non-empty, `run_id` & `region` preferred.
 - Listing minimum: `source` + (`url` OR `sourceListingId`) + `title` + at least partial YMM (extracted from title if needed).
-- Invalid → `tav.filtered_out` (business reason), `tav.dead_letters` (transient/infra), or `tav.schema_drift_events` (unexpected shape).
+- Invalid → `tav.filtered_out` (business reason), `tav.dead_letters` (transient/infra), or `tav.schema_drift_events` (unexpected shape). Known Facebook aliases (`isPending` / `isLive` / `isSold` / `isHidden`, YMMS, `creation_time`, comparable prices) are **not** drift — log each unseen field **once per ingest run**. `raw_listings` retention is **14 days** via `prune_ingest_payloads` (migration `0074`).
 - **Never silently drop.** Every rejection has a `reason_code`.
 
 ## 6. Deduplication Strategy
@@ -304,7 +304,7 @@ Assignment v1: by region → buyer capacity → priority → source → specialt
 
 Tables (full DDL lives in `supabase/schema.sql`):
 - `source_runs` — scraper run telemetry
-- `raw_listings` — untouched payload
+- `raw_listings` — untouched payload (14-day retention; prune via `prune_ingest_payloads`)
 - `normalized_listings` — cleaned per-platform listing (with freshness fields)
 - `vehicle_candidates` — fuzzy identity rollup
 - `duplicate_groups` — group + confidence
@@ -314,7 +314,7 @@ Tables (full DDL lives in `supabase/schema.sql`):
 - `lead_actions` — audit
 - `purchase_outcomes` — closes the loop
 - `dead_letters` — final-failure capture
-- `schema_drift_events` — unexpected fields
+- `schema_drift_events` — unexpected fields (one row per unseen field per run, not per listing)
 - `filtered_out` — business-reason rejections
 
 **Required indexes:** `source`, `region`, `freshness_status`, `status`, `assigned_to`, `created_at`, `last_seen_at`, `(year, make, model)`, `identity_key`, `listing_url`, `source_listing_id`, `grade`, `score`.

@@ -1,3 +1,9 @@
+import {
+  expandSportUtilitySignals,
+  isCatalogSeriesNumber,
+  styleHasWholeToken,
+} from "./catalogStyleTokens";
+
 export interface CatalogStyleSelectionInput {
   styles: readonly string[];
   title?: string | null;
@@ -126,14 +132,46 @@ function collectSignals(
   const evidence = normalizeToken([title, trim, description].filter(Boolean).join(" "));
   const signals: string[] = [];
   const explicitTrim = normalizeToken(trim ?? "");
-  if (explicitTrim) signals.push(explicitTrim);
+  if (explicitTrim) {
+    signals.push(explicitTrim);
+    for (const token of explicitTrim.split(" ")) {
+      if (token && !signals.includes(token)) signals.push(token);
+    }
+  }
 
   for (const signal of SIGNALS) {
     const normalized = normalizeToken(signal);
     if (!normalized || signals.includes(normalized)) continue;
     if (hasPhrase(evidence, normalized)) signals.push(normalized);
   }
-  return signals;
+
+  for (const token of evidence.split(" ")) {
+    if (isCatalogSeriesNumber(token) && !signals.includes(token)) signals.push(token);
+  }
+
+  return expandSportUtilitySignals(signals);
+}
+
+function unmatchedStyleTokenCount(style: string, evidence: string): number {
+  const ev = new Set(normalizeToken(evidence).split(" ").filter(Boolean));
+  if (ev.has("SPORT") && ev.has("UTILITY")) ev.add("SUV");
+  let extra = 0;
+  for (const token of normalizeToken(style).split(" ")) {
+    if (token.length <= 1) continue;
+    if (!ev.has(token)) extra += 1;
+  }
+  return extra;
+}
+
+function leftoverTrimHits(
+  styles: readonly string[],
+  trim?: string | null,
+): string[] {
+  const tokens = normalizeToken(trim ?? "")
+    .split(" ")
+    .filter((token) => token.length >= 2);
+  if (tokens.length === 0) return [];
+  return styles.filter((style) => tokens.some((token) => styleHasWholeToken(style, token)));
 }
 
 function scoreStyle(style: string, signals: readonly string[]): { score: number; matched: string[] } {
@@ -144,7 +182,12 @@ function scoreStyle(style: string, signals: readonly string[]): { score: number;
   for (const signal of signals) {
     if (!hasPhrase(normalizedStyle, signal)) continue;
     matched.push(signal);
-    score += HIGH_VALUE_SIGNALS.has(signal) ? 6 : signal.length <= 3 ? 4 : 3;
+    score +=
+      HIGH_VALUE_SIGNALS.has(signal) || isCatalogSeriesNumber(signal)
+        ? 6
+        : signal.length <= 3
+          ? 4
+          : 3;
   }
 
   return { score, matched };
@@ -167,18 +210,56 @@ export function selectCatalogStyleForListing(
     return { style: styles[0]!, matchedSignals: [], isEstimated: true };
   }
 
-  const scored = styles
-    .map((style) => ({ style, ...scoreStyle(style, signals) }))
+  const listingSeries = signals.filter(isCatalogSeriesNumber);
+  const eligible =
+    listingSeries.length === 0
+      ? styles
+      : styles.filter((style) => listingSeries.some((n) => styleHasWholeToken(style, n)));
+  const pool = eligible.length > 0 ? eligible : styles;
+
+  const evidence = [input.title, input.trim, input.description].filter(Boolean).join(" ");
+  const scored = pool
+    .map((style) => ({
+      style,
+      ...scoreStyle(style, signals),
+      extra: unmatchedStyleTokenCount(style, evidence),
+    }))
     .filter((row) => row.score >= 6)
-    .sort((a, b) => b.score - a.score || b.matched.length - a.matched.length);
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.matched.length - a.matched.length ||
+        a.extra - b.extra,
+    );
 
   if (scored.length === 0) {
+    const leftoverHits = leftoverTrimHits(pool, input.trim);
+    if (leftoverHits.length > 0) {
+      leftoverHits.sort((a, b) => unmatchedStyleTokenCount(a, evidence) - unmatchedStyleTokenCount(b, evidence));
+      return {
+        style: leftoverHits[0]!,
+        matchedSignals: [],
+        isEstimated: leftoverHits.length > 1,
+      };
+    }
+    if (listingSeries.length > 0 && eligible.length > 0) {
+      return {
+        style: eligible[0]!,
+        matchedSignals: listingSeries,
+        isEstimated: eligible.length > 1,
+      };
+    }
     return { style: styles[0]!, matchedSignals: [], isEstimated: true };
   }
   const [best, second] = scored;
   if (!best) return null;
-  if (second && second.score === best.score && second.matched.length === best.matched.length) {
-    return { style: styles[0]!, matchedSignals: best.matched, isEstimated: true };
+  if (
+    second &&
+    second.score === best.score &&
+    second.matched.length === best.matched.length &&
+    second.extra === best.extra
+  ) {
+    return { style: best.style, matchedSignals: best.matched, isEstimated: true };
   }
   return { style: best.style, matchedSignals: best.matched, isEstimated: false };
 }

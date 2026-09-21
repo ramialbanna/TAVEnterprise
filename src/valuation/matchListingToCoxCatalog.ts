@@ -54,6 +54,12 @@ function tokenSet(value: string): Set<string> {
   return new Set(normalizeToken(value).split(" ").filter(Boolean));
 }
 
+function expandListingTokens(tokens: Set<string>): Set<string> {
+  const out = new Set(tokens);
+  if (out.has("sport") && out.has("utility")) out.add("suv");
+  return out;
+}
+
 function overlapScore(listingTokens: Set<string>, candidateTokens: Set<string>, weight: number): number {
   if (listingTokens.size === 0 || candidateTokens.size === 0) return 0;
   let hits = 0;
@@ -145,7 +151,7 @@ export function matchListingToCoxCatalog(
   const evidence = normalizeToken(
     [buildListingCatalogEvidenceText(input), input.make, input.model].filter(Boolean).join(" "),
   );
-  const listingTokens = tokenSet(evidence);
+  const listingTokens = expandListingTokens(tokenSet(evidence));
 
   const scored = treeRows
     .map((row) => ({

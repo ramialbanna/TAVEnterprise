@@ -107,3 +107,21 @@ export async function upsertNormalizedListing(
     mileageChanged: row.mileage_changed,
   };
 }
+
+/** Persist the Cox Y/M/M/S ingest actually sent to Manheim. */
+export async function updateNormalizedListingYmms(
+  db: SupabaseClient,
+  listingId: string,
+  identity: { make: string; model: string; trim: string },
+): Promise<void> {
+  const make = identity.make.trim();
+  const model = identity.model.trim();
+  const trim = identity.trim.trim();
+  if (!listingId || !make || !model || !trim) return;
+
+  const { error } = await db
+    .from("normalized_listings")
+    .update({ make, model, trim })
+    .eq("id", listingId);
+  if (error) throw error;
+}

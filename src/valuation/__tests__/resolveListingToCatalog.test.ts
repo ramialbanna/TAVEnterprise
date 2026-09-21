@@ -88,7 +88,7 @@ describe("resolveListingToCatalogForIngest", () => {
     expect(result.make).toBe("Kia");
     expect(result.model).toBe("Sportage");
     expect(result.style).toMatch(/FE/i);
-    expect(result.styleEstimated).toBe(true);
+    expect(result.styleEstimated).toBe(false);
   });
 
   it("selects drivetrain model variant when catalog splits the model", async () => {
@@ -228,5 +228,45 @@ describe("resolveListingToCatalogForIngest", () => {
     expect(result.make).toBe("Ford");
     expect(result.model).toBe("F-150");
     expect(result.style).toBe("4D CREW CAB XLT");
+  });
+
+  it("does not value a GLC 300 SUV as the first AMG catalog style", async () => {
+    const fetchCatalog = mockCatalog({
+      "/catalog/years/2022/makes": {
+        catalogState: "connected",
+        items: ["MERCEDES-BENZ"],
+      },
+      "/catalog/years/2022/makes/MERCEDES-BENZ/models": {
+        catalogState: "connected",
+        items: ["GLC"],
+      },
+      "/catalog/years/2022/makes/MERCEDES-BENZ/models/GLC/styles": {
+        catalogState: "connected",
+        items: [
+          "4D SEDAN AMG GLC 43 4MATIC",
+          "4D SEDAN GLC 300 4MATIC",
+          "4D SUV AMG GLC 43 4MATIC",
+          "4D SUV GLC 300",
+          "4D SUV GLC 300 4MATIC",
+        ],
+      },
+    });
+
+    const result = await resolveListingToCatalogForIngest(
+      {
+        year: 2022,
+        make: "mercedes-benz",
+        model: "glc 300",
+        trim: "sport",
+        title: "2022 Mercedes-Benz GLC · GLC 300 Sport Utility 4D",
+      },
+      fetchCatalog,
+    );
+
+    expect(result.make).toBe("MERCEDES-BENZ");
+    expect(result.model).toBe("GLC");
+    expect(result.style).toMatch(/GLC 300/);
+    expect(result.style).toMatch(/SUV/);
+    expect(result.style).not.toMatch(/AMG/);
   });
 });
