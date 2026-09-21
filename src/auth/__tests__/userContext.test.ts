@@ -1,9 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { extractUserContext, canForceRefresh } from "../userContext";
+import { extractUserContext, canForceRefresh, readBuyerEmail } from "../userContext";
 
 function makeRequest(headers: Record<string, string> = {}): Request {
   return new Request("https://example.com/", { headers });
 }
+
+describe("readBuyerEmail", () => {
+  it("returns the signed-in buyer", () => {
+    expect(readBuyerEmail(makeRequest({
+      "X-TAV-Authenticated-User-Email": "rami@texasautovalue.com",
+    }))).toBe("rami@texasautovalue.com");
+  });
+
+  it("ignores the internal service identity", () => {
+    expect(readBuyerEmail(makeRequest({
+      "X-TAV-Authenticated-User-Email": "service@tav-internal",
+    }))).toBeNull();
+  });
+});
 
 describe("extractUserContext", () => {
   it("returns all-null context when no Cloudflare Access headers are present", () => {

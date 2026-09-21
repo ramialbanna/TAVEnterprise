@@ -96,7 +96,6 @@ export function MmrSummaryCard(props: Props) {
   } = props;
 
   const interactive = allowAdjustments && (phase === "ready" || phase === "recomputing");
-  const busy = phase === "loading" || phase === "recomputing";
 
   if (phase === "loading") {
     return (
@@ -123,14 +122,10 @@ export function MmrSummaryCard(props: Props) {
           <>
             <div className="space-y-1">
               <div className="text-2xl font-semibold tabular-nums text-primary">
-                {busy ? (
-                  <Skeleton className="h-8 w-32" />
-                ) : (
-                  <MmrMoney value={adjustedMmr} />
-                )}
+                <MmrMoney value={adjustedMmr} />
               </div>
               <div className="text-sm tabular-nums text-muted-foreground">
-                {busy ? DASH : <MmrRange low={rangeLow} high={rangeHigh} />}
+                <MmrRange low={rangeLow} high={rangeHigh} />
               </div>
             </div>
 

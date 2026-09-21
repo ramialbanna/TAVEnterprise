@@ -762,6 +762,45 @@ describe("POST /app/mmr/vin", () => {
     expect(request).toEqual({ vin: VIN, force_refresh: true });
   });
 
+  it("forwards the signed-in buyer on refresh so the click has its own cap", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
+    const res = await worker.fetch(
+      authedReq("/app/mmr/vin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-TAV-Authenticated-User-Email": "rami@texasautovalue.com",
+        },
+        body: JSON.stringify({ vin: VIN, refresh_valuation: true }),
+      }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const init = intelFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("X-TAV-Authenticated-User-Email")).toBe(
+      "rami@texasautovalue.com",
+    );
+  });
+
+  it("does not forward the buyer email when refresh is off", async () => {
+    const intelFetch = vi.fn().mockResolvedValue(intelOk(vinEnvelope));
+    await worker.fetch(
+      authedReq("/app/mmr/vin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-TAV-Authenticated-User-Email": "rami@texasautovalue.com",
+        },
+        body: JSON.stringify({ vin: VIN }),
+      }),
+      intelEnv(intelFetch),
+      ctx,
+    );
+    const init = intelFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("X-TAV-Authenticated-User-Email")).toBeNull();
+  });
+
   it("maps base wholesale to mmrValue when Cox returns separate base and adjusted tiers", async () => {
     const intelFetch = vi.fn().mockResolvedValue(intelOk({
       ...vinEnvelope,

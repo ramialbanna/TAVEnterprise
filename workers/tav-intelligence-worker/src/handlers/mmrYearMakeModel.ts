@@ -1,7 +1,7 @@
 import { okResponse } from "../types/api";
 import { AuthError, ValidationError } from "../errors";
 import { MmrYearMakeModelLookupRequestSchema } from "../validate";
-import { canForceRefreshMmrLookup } from "../auth/userContext";
+import { canForceRefreshMmrLookup, readBuyerEmail } from "../auth/userContext";
 import { performMmrLookup } from "../services/mmrLookup";
 import { buildMmrLookupDeps } from "../services/mmrLookupDeps";
 import type { HandlerArgs } from "./types";
@@ -45,6 +45,9 @@ export async function handleMmrYearMakeModel(args: HandlerArgs): Promise<Respons
       requestId:    args.requestId,
       forceRefresh: parsed.data.force_refresh,
       userContext:  args.userContext,
+      ...(parsed.data.force_refresh
+        ? { refreshBuyerEmail: readBuyerEmail(args.request) ?? undefined }
+        : {}),
     },
     buildMmrLookupDeps(args.env),
   );

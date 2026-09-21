@@ -166,6 +166,9 @@ function shouldRunMaxbuyOnFreshLookup(opportunity: OpportunityDetail): boolean {
   return false;
 }
 
+/** Refresh must come back or give the button up. The page proxy cuts off at 12s. */
+const REFRESH_TIMEOUT_MS = 20_000;
+
 async function fetchMmrForSession(
   session: MmrLabLookupSession,
   opts?: { refresh?: boolean; adjustments?: MmrAdjustments },
@@ -177,16 +180,23 @@ async function fetchMmrForSession(
     if (refresh) {
       const request = buildMmrRecomputeRequest(session, adj);
       const refreshFlag = { refresh_valuation: true as const };
+      const signal = AbortSignal.timeout(REFRESH_TIMEOUT_MS);
       if (session.kind === "vin") {
-        return await postMmrVin({
-          ...(request as MmrVinRequest),
-          ...refreshFlag,
-        });
+        return await postMmrVin(
+          {
+            ...(request as MmrVinRequest),
+            ...refreshFlag,
+          },
+          { signal },
+        );
       }
-      return await postMmrYmm({
-        ...(request as MmrYmmRequest),
-        ...refreshFlag,
-      });
+      return await postMmrYmm(
+        {
+          ...(request as MmrYmmRequest),
+          ...refreshFlag,
+        },
+        { signal },
+      );
     }
 
     if (session.kind === "vin") {
@@ -287,6 +297,8 @@ export function OpportunityValuationBlock({
   const lookupSessionRef = useRef<MmrLabLookupSession | null>(null);
   const mmrResultRef = useRef<MmrVinOk | null>(null);
   const lookupRequestIdRef = useRef(0);
+  const refreshGenRef = useRef(0);
+  const refreshInFlightRef = useRef(false);
   const recomputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMarginalChangesRef = useRef<(keyof MmrAttributeMarginals)[]>([]);
   const laneAskPriceRef = useRef<string>(laneAskPriceFromOpportunity(opportunity));
@@ -389,10 +401,11 @@ export function OpportunityValuationBlock({
   const runLookup = useCallback(
     async (
       session: MmrLabLookupSession,
-      opts?: { runMaxbuy?: boolean; refresh?: boolean; requestId?: number },
+      opts?: { runMaxbuy?: boolean; refresh?: boolean; requestId?: number; refreshGen?: number },
     ) => {
       const runMaxbuy = opts?.runMaxbuy ?? true;
       const refresh = opts?.refresh === true;
+      const refreshGen = opts?.refreshGen ?? 0;
       const requestId = opts?.requestId ?? ++lookupRequestIdRef.current;
       lookupRequestIdRef.current = requestId;
 
@@ -509,7 +522,9 @@ export function OpportunityValuationBlock({
           setMaxbuyView(MAXBUY_FETCH_FAILED);
         }
       } finally {
-        if (isCurrentRequest()) {
+        const latestRefresh = !refresh || refreshGen === refreshGenRef.current;
+        if (latestRefresh) {
+          if (refresh) refreshInFlightRef.current = false;
           setMmrRecomputing(false);
         }
       }
@@ -612,14 +627,18 @@ export function OpportunityValuationBlock({
   }, [runMmrRecompute, view]);
 
   const handleRunFresh = useCallback(() => {
+    if (refreshInFlightRef.current) return;
     const session = sessionFromOpportunity(opportunity);
     if (!session) return;
+    refreshInFlightRef.current = true;
     const runMaxbuy = shouldRunMaxbuyOnFreshLookup(opportunity);
     const requestId = ++lookupRequestIdRef.current;
+    const refreshGen = ++refreshGenRef.current;
     void runLookup(session, {
       runMaxbuy,
       refresh: true,
       requestId,
+      refreshGen,
     });
   }, [opportunity, runLookup]);
 
@@ -748,8 +767,18 @@ export function OpportunityValuationBlock({
 
       {!insufficientMmr && canRunFresh ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={handleRunFresh}>
-            <RefreshCw className="size-3.5" aria-hidden /> Refresh valuation
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRunFresh}
+            disabled={mmrRecomputing}
+          >
+            <RefreshCw
+              className={mmrRecomputing ? "size-3.5 animate-spin" : "size-3.5"}
+              aria-hidden
+            />
+            {mmrRecomputing ? "Refreshing…" : "Refresh valuation"}
           </Button>
         </div>
       ) : null}

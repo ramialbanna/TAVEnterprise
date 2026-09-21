@@ -45,6 +45,12 @@ export const RATE_LIMIT_USER_LIVE_PER_WINDOW = 10;
 export const RATE_LIMIT_GLOBAL_LIVE_PER_WINDOW = 60;
 
 /**
+ * Live Manheim calls from the Refresh valuation button, per signed-in buyer.
+ * Separate from the shared ingest cap so listing ingest cannot block a click.
+ */
+export const RATE_LIMIT_REFRESH_PER_WINDOW = 10;
+
+/**
  * Maximum number of poll attempts before giving up with CacheLockError.
  * Computed from LOCK_TIMEOUT_MS / LOCK_RETRY_INTERVAL_MS so a waiter never
  * blocks longer than the lock could legitimately be held. Phase G may tune

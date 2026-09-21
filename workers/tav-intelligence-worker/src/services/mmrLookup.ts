@@ -94,6 +94,11 @@ export interface MmrLookupArgs {
   forceRefresh?: boolean;
   /** Cloudflare Access identity — used to populate audit records. */
   userContext?:  UserContext;
+  /**
+   * Signed-in buyer for a Refresh valuation click.
+   * Live call counts on that person's own cap, not the ingest cap.
+   */
+  refreshBuyerEmail?: string;
   /** Override clock for deterministic mileage inference in tests. */
   now?:          () => Date;
 }
@@ -281,7 +286,12 @@ export async function performMmrLookup(
 
         // Rate-limit guard — only fires on live upstream calls, never on
         // cache hits (the early-return paths above bypass this entirely).
-        await deps.rateLimiter?.check(userCtx.email, requestId);
+        const refreshBuyerEmail = args.refreshBuyerEmail?.trim();
+        if (refreshBuyerEmail) {
+          await deps.rateLimiter?.check(refreshBuyerEmail, requestId, "refresh");
+        } else {
+          await deps.rateLimiter?.check(userCtx.email, requestId);
+        }
 
         // Live Manheim call.
         const result =

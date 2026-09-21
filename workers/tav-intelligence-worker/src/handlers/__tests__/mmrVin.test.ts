@@ -92,6 +92,30 @@ describe("handleMmrVin", () => {
     expect(body.data?.cache_hit).toBe(false);
   });
 
+  it("passes the buyer email into the refresh cap", async () => {
+    const args = buildArgs({
+      authed: true,
+      body: JSON.stringify({ vin: "1HGCM82633A123456", force_refresh: true }),
+    });
+    args.userContext = {
+      userId: "service@tav-internal",
+      email: "service@tav-internal",
+      name: "TAV Service",
+      roles: [],
+    };
+    args.request = new Request("https://example.test/mmr/vin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-TAV-Authenticated-User-Email": "rami@texasautovalue.com",
+      },
+      body: JSON.stringify({ vin: "1HGCM82633A123456", force_refresh: true }),
+    });
+    await handleMmrVin(args);
+    const lookupArgs = vi.mocked(performMmrLookup).mock.calls.at(-1)?.[0];
+    expect(lookupArgs?.refreshBuyerEmail).toBe("rami@texasautovalue.com");
+  });
+
   it("throws AuthError when force_refresh used without allowlist membership", async () => {
     const args = buildArgs({
       authed: true,

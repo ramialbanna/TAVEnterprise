@@ -4,6 +4,7 @@ import { RateLimitError } from "../../errors";
 import {
   RATE_LIMIT_USER_LIVE_PER_WINDOW,
   RATE_LIMIT_GLOBAL_LIVE_PER_WINDOW,
+  RATE_LIMIT_REFRESH_PER_WINDOW,
   RATE_LIMIT_WINDOW_SECONDS,
 } from "../../cache/constants";
 
@@ -92,6 +93,28 @@ describe("KvRateLimiter — global limit", () => {
 });
 
 // ── Null email (anonymous) ────────────────────────────────────────────────────
+
+describe("KvRateLimiter — refresh bucket", () => {
+  it("admits a refresh when the shared global cap is already full", async () => {
+    const globalKey = `rate:live:global:${windowKey()}`;
+    const kv = makeKv({ [globalKey]: String(RATE_LIMIT_GLOBAL_LIVE_PER_WINDOW) });
+    const limiter = new KvRateLimiter(kv as unknown as KVNamespace);
+    await expect(limiter.check(USER_EMAIL, REQ_ID, "refresh")).resolves.toBeUndefined();
+    const refreshKey = `rate:live:refresh:${USER_EMAIL}:${windowKey()}`;
+    expect(kv.put).toHaveBeenCalledWith(refreshKey, "1", expect.anything());
+    const globalPuts = kv.put.mock.calls.filter(([k]: string[]) => k === globalKey);
+    expect(globalPuts).toHaveLength(0);
+  });
+
+  it("throws when that buyer is already at the refresh cap", async () => {
+    const refreshKey = `rate:live:refresh:${USER_EMAIL}:${windowKey()}`;
+    const kv = makeKv({ [refreshKey]: String(RATE_LIMIT_REFRESH_PER_WINDOW) });
+    const limiter = new KvRateLimiter(kv as unknown as KVNamespace);
+    const err = await limiter.check(USER_EMAIL, REQ_ID, "refresh").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RateLimitError);
+    expect(kv.put).not.toHaveBeenCalled();
+  });
+});
 
 describe("KvRateLimiter — null email", () => {
   it("skips the per-user check when email is null", async () => {

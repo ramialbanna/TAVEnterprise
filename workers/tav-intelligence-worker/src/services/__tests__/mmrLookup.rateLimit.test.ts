@@ -79,6 +79,29 @@ describe("mmrLookup — rate limiter passes", () => {
     expect(rateLimiter.check).toHaveBeenCalledWith(USER_CTX.email, "req-rl-1");
     expect(vi.mocked(deps.client.lookupByVin)).toHaveBeenCalledOnce();
   });
+
+  it("counts a buyer refresh on the refresh cap, not the shared ingest cap", async () => {
+    const rateLimiter = { check: vi.fn().mockResolvedValue(undefined) };
+    const deps = makeMissDeps({ rateLimiter });
+
+    await performMmrLookup(
+      {
+        input: VIN_INPUT,
+        requestId: "req-rl-refresh",
+        userContext: USER_CTX,
+        forceRefresh: true,
+        refreshBuyerEmail: "buyer@texasautovalue.com",
+      },
+      deps,
+    );
+
+    expect(rateLimiter.check).toHaveBeenCalledWith(
+      "buyer@texasautovalue.com",
+      "req-rl-refresh",
+      "refresh",
+    );
+    expect(vi.mocked(deps.client.lookupByVin)).toHaveBeenCalledOnce();
+  });
 });
 
 // ── Test 2: over limit — 429 before any Manheim call ─────────────────────────

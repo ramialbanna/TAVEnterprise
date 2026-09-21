@@ -41,6 +41,7 @@ import { listOpportunities, listOpportunityCounts, getOpportunityDetail } from "
 import type { OpportunityListFilter, OpportunityType, OpportunitySort, OpportunityView } from "../persistence/opportunities";
 import { listActiveUsers } from "../persistence/users";
 import { resolveAppUser } from "../auth/resolveAppUser";
+import { readBuyerEmail, TAV_USER_EMAIL_HEADER } from "../auth/userContext";
 import type { AppUser } from "../persistence/users";
 import {
   submitManualOpportunity,
@@ -823,16 +824,20 @@ async function fetchIntelMmrLookup(
   method: "vin" | "year_make_model",
   confidence: "high" | "medium",
   styleName?: string,
+  buyerEmail?: string | null,
 ): Promise<Response> {
   if (!env.INTEL_WORKER_URL && env.INTEL_WORKER === undefined) {
     return json({ ok: true, data: { mmrValue: null, missingReason: "intel_worker_not_configured" } });
   }
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (buyerEmail) headers[TAV_USER_EMAIL_HEADER] = buyerEmail;
+
   let res: Response | null;
   try {
     res = await fetchIntelWorker(env, intelPath, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -905,7 +910,16 @@ async function handleMmrVin(request: Request, env: Env): Promise<Response> {
   }
   if (refresh_valuation) body.force_refresh = true;
 
-  return fetchIntelMmrLookup(env, "/mmr/vin", body, "mmr_vin", "vin", "high");
+  return fetchIntelMmrLookup(
+    env,
+    "/mmr/vin",
+    body,
+    "mmr_vin",
+    "vin",
+    "high",
+    undefined,
+    refresh_valuation ? readBuyerEmail(request) : null,
+  );
 }
 
 type AppCatalogData = z.infer<typeof IntelCatalogEnvelopeSchema>["data"];
@@ -1023,6 +1037,7 @@ async function handleMmrYmm(request: Request, env: Env): Promise<Response> {
     "year_make_model",
     "medium",
     style,
+    refresh_valuation ? readBuyerEmail(request) : null,
   );
 }
 

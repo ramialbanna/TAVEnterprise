@@ -2,8 +2,9 @@
  * KV-backed fixed-window rate limiter for live Manheim calls.
  *
  * Window keys:
- *   rate:live:user:<email>:<window>   — per-user counter
- *   rate:live:global:<window>         — global counter
+ *   rate:live:user:<email>:<window>      — per-user counter (shared with ingest)
+ *   rate:live:global:<window>            — global counter (shared with ingest)
+ *   rate:live:refresh:<email>:<window>   — Refresh valuation button, per buyer
  *
  * where <window> = Math.floor(epoch_ms / window_ms).
  *
@@ -16,12 +17,13 @@
  * KV TTL is 2× the window (120s), satisfying the platform minimum of 60s.
  */
 
-import type { RateLimiter } from "./rateLimiter";
+import type { RateLimitBucket, RateLimiter } from "./rateLimiter";
 import { RateLimitError } from "../errors";
 import {
   RATE_LIMIT_WINDOW_SECONDS,
   RATE_LIMIT_USER_LIVE_PER_WINDOW,
   RATE_LIMIT_GLOBAL_LIVE_PER_WINDOW,
+  RATE_LIMIT_REFRESH_PER_WINDOW,
 } from "../cache/constants";
 import { log } from "../utils/logger";
 
@@ -30,8 +32,33 @@ const KV_TTL_SECONDS = RATE_LIMIT_WINDOW_SECONDS * 2; // 120s — above KV 60s m
 export class KvRateLimiter implements RateLimiter {
   constructor(private kv: KVNamespace) {}
 
-  async check(userEmail: string | null, requestId: string): Promise<void> {
+  async check(
+    userEmail: string | null,
+    requestId: string,
+    bucket: RateLimitBucket = "shared",
+  ): Promise<void> {
     const window = Math.floor(Date.now() / (RATE_LIMIT_WINDOW_SECONDS * 1000));
+
+    if (bucket === "refresh") {
+      if (!userEmail) {
+        return this.check(userEmail, requestId, "shared");
+      }
+      const refreshKey = `rate:live:refresh:${userEmail}:${window}`;
+      const rawRefresh = await this.kv.get(refreshKey);
+      const refreshCount = rawRefresh === null ? 0 : parseInt(rawRefresh, 10);
+      if (refreshCount >= RATE_LIMIT_REFRESH_PER_WINDOW) {
+        log("mmr.rate_limit.refresh_exceeded", {
+          requestId, userEmail, count: refreshCount,
+          limit: RATE_LIMIT_REFRESH_PER_WINDOW, window,
+        });
+        throw new RateLimitError(
+          `Refresh valuation rate limit exceeded: max ${RATE_LIMIT_REFRESH_PER_WINDOW} per ${RATE_LIMIT_WINDOW_SECONDS}s window`,
+          { limit: RATE_LIMIT_REFRESH_PER_WINDOW, windowSeconds: RATE_LIMIT_WINDOW_SECONDS },
+        );
+      }
+      await this.kv.put(refreshKey, String(refreshCount + 1), { expirationTtl: KV_TTL_SECONDS });
+      return;
+    }
 
     if (userEmail !== null) {
       const userKey = `rate:live:user:${userEmail}:${window}`;

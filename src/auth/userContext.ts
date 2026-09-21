@@ -99,6 +99,16 @@ export function canForceRefreshMmrLookup(
   return canForceRefresh(ctx, managerAllowlist);
 }
 
+/**
+ * Email of the signed-in buyer on this request.
+ * The internal service identity is not a buyer.
+ */
+export function readBuyerEmail(request: Request): string | null {
+  const email = extractUserContext(request).email;
+  if (!email || email.toLowerCase() === TAV_SERVICE_USER_EMAIL) return null;
+  return email;
+}
+
 function readHeader(headers: Headers, name: string): string | null {
   const v = headers.get(name);
   if (v === null) return null;

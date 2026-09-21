@@ -674,13 +674,17 @@ export async function postMaxbuyPass(
   return parseMaxbuyPass(r.status, r.json);
 }
 
-export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinOk>> {
+export async function postMmrVin(
+  body: MmrVinRequest,
+  init?: { signal?: AbortSignal },
+): Promise<ApiResult<MmrVinOk>> {
   let res: Response;
   try {
     res = await fetch(`${PROXY_PREFIX}/mmr/vin`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(body),
+      signal: init?.signal,
     });
   } catch {
     return clientTransportError();
@@ -688,13 +692,17 @@ export async function postMmrVin(body: MmrVinRequest): Promise<ApiResult<MmrVinO
   return parseMmrVin(res.status, await readJson(res));
 }
 
-export async function postMmrYmm(body: MmrYmmRequest): Promise<ApiResult<MmrVinOk>> {
+export async function postMmrYmm(
+  body: MmrYmmRequest,
+  init?: { signal?: AbortSignal },
+): Promise<ApiResult<MmrVinOk>> {
   let res: Response;
   try {
     res = await fetch(`${PROXY_PREFIX}/mmr/ymm`, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(body),
+      signal: init?.signal,
     });
   } catch {
     return clientTransportError();
