@@ -5,6 +5,7 @@ export const HOUR_END: number;
 export const DEFAULT_MAX_PER_HOUR: number;
 export const DEFAULT_MAX_PER_DAY: number;
 export const FATAL_SKIP_REASONS: Set<string>;
+export const READY_PROFILES: { key: string; id: string }[];
 
 export class SessionHaltedError extends Error {
   reason: string;
@@ -17,12 +18,19 @@ export function chicagoParts(date?: Date): { day: string; hour: number };
 export function emptyState(): {
   haltedAt: string | null;
   haltReason: string | null;
+  haltNotifiedAt: string | null;
+  activeProfileId: string | null;
+  pausedProfileIds: string[];
   days: Record<string, unknown>;
 };
 export function loadState(filePath?: string): ReturnType<typeof emptyState>;
 export function saveState(state: ReturnType<typeof emptyState>, filePath?: string): void;
 export function clearHalt(state: ReturnType<typeof emptyState>): ReturnType<typeof emptyState>;
 export function halt(state: ReturnType<typeof emptyState>, reason: string): ReturnType<typeof emptyState>;
+export function switchToNextProfile(
+  state: ReturnType<typeof emptyState>,
+  currentProfileId: string,
+): { key: string; id: string } | null;
 export function isWithinHours(date?: Date, hourStart?: number, hourEnd?: number): boolean;
 export function usageOn(
   state: ReturnType<typeof emptyState>,

@@ -58,6 +58,7 @@ import {
   recordVisit,
   remainingCapacity,
   saveState,
+  switchToNextProfile,
 } from "./lib/gologin-antiban.mjs";
 import {
   assertQueueName,
@@ -66,6 +67,7 @@ import {
   matchesWouldBeNeedsAction,
 } from "./lib/enrich-queues.mjs";
 import { stopCloudProfile } from "./lib/gologin-cloud.mjs";
+import { notifyHaltOnce } from "./lib/halt-alert.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DEV_VARS = path.join(ROOT, ".dev.vars");
@@ -665,7 +667,15 @@ async function closeSession(session) {
   }
 }
 
-async function processJobs({ page, jobs, args, db, writeEnabled, runState }) {
+function noteProfileSwitch(runState, currentProfileId, reason) {
+  const next = switchToNextProfile(runState, currentProfileId);
+  if (next) {
+    console.error(`${reason} on ${currentProfileId} — switching to fb_buyer_${next.key}`);
+  }
+  return next;
+}
+
+async function processJobs({ page, jobs, args, db, writeEnabled, runState, profileId }) {
   const results = [];
   let halted = false;
   let sessionDead = false;
@@ -732,6 +742,7 @@ async function processJobs({ page, jobs, args, db, writeEnabled, runState }) {
 
     if (FATAL_SKIP_REASONS.has(extracted.skipReason)) {
       halt(runState, extracted.skipReason);
+      noteProfileSwitch(runState, profileId, extracted.skipReason);
       saveState(runState);
       halted = true;
       results.push(result);
@@ -770,7 +781,8 @@ async function processJobs({ page, jobs, args, db, writeEnabled, runState }) {
 
 function gologinCreds(env) {
   const token = (env.GOLOGIN_API_TOKEN || env.GL_API_TOKEN || "").trim();
-  const profileId = (env.GOLOGIN_PROFILE_ID || "").trim();
+  const stored = (loadState().activeProfileId || "").trim();
+  const profileId = stored || (env.GOLOGIN_PROFILE_ID || "").trim();
   if (isPlaceholder(token) || isPlaceholder(profileId)) {
     console.error("Need GOLOGIN_API_TOKEN and GOLOGIN_PROFILE_ID in .dev.vars");
     process.exit(1);
@@ -805,6 +817,7 @@ async function openWarmedSession(args, env) {
     await closeSession(session);
     const runState = loadState();
     halt(runState, warmed.skipReason);
+    noteProfileSwitch(runState, session.profileId, warmed.skipReason);
     saveState(runState);
     throw new SessionHaltedError(warmed.skipReason, `halted on warmup: ${warmed.skipReason}`);
   }
@@ -883,6 +896,7 @@ async function runOneShot(args, env, db, writeEnabled, capOpts) {
       db,
       writeEnabled,
       runState,
+      profileId: session.profileId,
     });
     summary.results = processed.results;
     if (processed.halted) {
@@ -969,6 +983,7 @@ async function runDaemon(args, env, db, writeEnabled, capOpts) {
       console.error(
         `halted (${runState.haltReason}) at ${runState.haltedAt} — sleeping ${HALT_POLL_MS}ms until --clear-halt`,
       );
+      await notifyHaltOnce(runState, env);
       await sleep(HALT_POLL_MS);
       continue;
     }
@@ -1023,6 +1038,7 @@ async function runDaemon(args, env, db, writeEnabled, capOpts) {
         db,
         writeEnabled,
         runState,
+        profileId: session.profileId,
       });
       for (const result of processed.results) {
         rememberListingSkip(listingSkipUntil, result.listingUrl, result.skipReason);
@@ -1039,6 +1055,10 @@ async function runDaemon(args, env, db, writeEnabled, capOpts) {
       await closeSession(session);
       session = null;
       if (err instanceof SessionHaltedError) {
+        if (!loadState().haltedAt) {
+          console.error("profile switched — relaunching");
+          continue;
+        }
         await sleep(HALT_POLL_MS);
         continue;
       }
@@ -1073,6 +1093,8 @@ async function main() {
   const runState = loadState();
   if (args.clearHalt) {
     clearHalt(runState);
+    runState.pausedProfileIds = [];
+    runState.activeProfileId = null;
     saveState(runState);
     console.error("cleared halt latch");
     if (!args.loop && !args.queueOnly && !args.url && !args.write) return;

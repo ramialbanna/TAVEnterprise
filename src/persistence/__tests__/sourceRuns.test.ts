@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  STALE_SOURCE_RUN_ERROR,
+  closeStaleSourceRuns,
   completeSourceRun,
   completeSourceRunSafe,
   isTerminalSourceRunStatus,
@@ -29,8 +31,12 @@ describe("isTerminalSourceRunStatus", () => {
 function makeUpsertDb(existing: Record<string, unknown> | null): {
   db: SupabaseClient;
   upsertSpy: ReturnType<typeof vi.fn>;
+  updateSpy: ReturnType<typeof vi.fn>;
 } {
   const upsertSpy = vi.fn();
+  const updateSpy = vi.fn(() => ({
+    eq: vi.fn().mockResolvedValue({ error: null }),
+  }));
   const maybeSingle = vi.fn().mockResolvedValue({ data: existing, error: null });
   const selectChain = {
     eq: vi.fn(() => selectChain),
@@ -40,9 +46,10 @@ function makeUpsertDb(existing: Record<string, unknown> | null): {
     from: vi.fn(() => ({
       select: vi.fn(() => selectChain),
       upsert: upsertSpy,
+      update: updateSpy,
     })),
   } as unknown as SupabaseClient;
-  return { db, upsertSpy };
+  return { db, upsertSpy, updateSpy };
 }
 
 describe("upsertSourceRun — terminal statuses stay closed", () => {
@@ -71,6 +78,24 @@ describe("upsertSourceRun — terminal statuses stay closed", () => {
     },
   );
 
+  it("closes a running row older than 30 minutes instead of reopening it", async () => {
+    const { db, upsertSpy, updateSpy } = makeUpsertDb({
+      id: "run-stale",
+      status: "running",
+      processed: 4,
+      rejected: 1,
+      created_leads: 0,
+      created_at: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+    });
+    const run = await upsertSourceRun(db, params);
+    expect(run.status).toBe("completed");
+    expect(run.processed).toBe(4);
+    expect(upsertSpy).not.toHaveBeenCalled();
+    const payload = updateSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.status).toBe("completed");
+    expect(payload.error_message).toBe(STALE_SOURCE_RUN_ERROR);
+  });
+
   it("upserts a still-running row", async () => {
     const { db, upsertSpy } = makeUpsertDb({
       id: "run-open",
@@ -78,6 +103,7 @@ describe("upsertSourceRun — terminal statuses stay closed", () => {
       processed: 0,
       rejected: 0,
       created_leads: 0,
+      created_at: new Date().toISOString(),
     });
     upsertSpy.mockReturnValue({
       select: vi.fn(() => ({
@@ -90,6 +116,26 @@ describe("upsertSourceRun — terminal statuses stay closed", () => {
     const run = await upsertSourceRun(db, params);
     expect(run.status).toBe("running");
     expect(upsertSpy).toHaveBeenCalledOnce();
+  });
+});
+
+describe("closeStaleSourceRuns", () => {
+  it("marks running rows older than the cutoff completed", async () => {
+    const select = vi.fn().mockResolvedValue({ data: [{ id: "a" }, { id: "b" }], error: null });
+    const lt = vi.fn(() => ({ select }));
+    const eq = vi.fn(() => ({ lt }));
+    const update = vi.fn(() => ({ eq }));
+    const db = { from: vi.fn(() => ({ update })) } as unknown as SupabaseClient;
+
+    const result = await closeStaleSourceRuns(db, Date.parse("2026-09-22T16:00:00.000Z"));
+
+    expect(result).toEqual({ closed: 2 });
+    expect(update).toHaveBeenCalledWith({
+      status: "completed",
+      error_message: STALE_SOURCE_RUN_ERROR,
+    });
+    expect(eq).toHaveBeenCalledWith("status", "running");
+    expect(lt).toHaveBeenCalledWith("created_at", "2026-09-22T15:30:00.000Z");
   });
 });
 

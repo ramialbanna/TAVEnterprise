@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-09-21 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-09-30 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -22,7 +22,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `6aeff6a4` (`tav-aip-production`) | **§78** Cox identity write-back + disk leak stop (known FB fields, one drift row per field per run, daily `prune_ingest_payloads`). Secrets not touched. Prior: `b9cad046` (Needs action 24h), `0543ff2e` (§76). |
+| **Worker** | `8f682640` (`tav-aip-production`) | **§68** close `source_runs` left `running` > 30m. Also the Refresh MMR keep-on-screen commit (`66af8fc`). Secrets not touched. Prior: `6aeff6a4` (§78 + disk prune), `3e3f973c`. |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | still last-hour queue (no Fly redeploy 2026-09-21) | Enrich window is **not** the sheet window. Health: https://tav-seller-enrich.fly.dev/ |
 
@@ -49,7 +49,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **§72 / §73 — Claude still dark.** Ingest is alias → matcher ≥80 → last-resort. Deduped hit **79.4%** last 7d (19,893 listings, 2026-09-07) / **77.7%** last 24h. `model_variant_missing` **0**. `llm_unavailable` still #1 miss. 7d decisions: **9,674** `alias_hit` / **267** `offline_hit` / **0** `llm_hit`. Ceiling without credits ~79–80%. Path to ≥85% is credits + §73 vision. Sample-only eval is done; 200-row Claude run still **401**.
 
-**§68 — stuck `running` recurred.** Cleared + deployed `0453cc02` 2026-09-07. Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m, oldest Sep 7). Watch; do not treat the 09-07 zero as current.
+**§68 — stuck `running` closed 2026-09-22.** 88 rows older than 30m marked `completed` (`error_message = stale_running_closed`). Oldest was Sep 7. One `running` row younger than 30m was left (live ingest). Worker `8f682640`: a webhook retry of a `running` row older than 30m closes it instead of reprocessing; daily cron `close_stale_source_runs` is the backstop. Secrets not touched. Also shipped the already-pushed Refresh MMR keep-on-screen commit (`66af8fc`), which was not on the previous Worker.
 
 **§75 — RLS live 2026-09-21.** Migration `0075`. Git **`6f37651` pushed**. All 54 `tav` tables have RLS on, **no FORCE**, no anon policies. `anon`/`authenticated` SELECT + RPC execute revoked. Service role still reads (207k listings).
 
@@ -65,8 +65,8 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ### Do next (priority)
 
-1. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
-2. **§68** — **81** `source_runs` stuck `running` (2026-09-21). Recurred after `0453cc02`.
+1. **§74 profile failover — not built.** When Facebook locks the current GoLogin profile, stop using it and switch the Fly lookup to the next ready profile in `fb_buyer_01`–`fb_buyer_10`. One profile at a time. Do not run them together. **`fb_buyer_11` has no Facebook account** — skip it. Nick confirmed 2026-09-28 that **1–10 do**. Most of 01–09 have not been opened since June and several have no proxy; a switch only works after that profile is logged in and has its own proxy. `fb_buyer_10` (Marcus) checkpointed again **2026-09-29 00:34 UTC** and is still halted as of 2026-09-30. The sheet stays **Seller unchecked** while it waits.
+2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
 3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
 4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
 
@@ -238,9 +238,9 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04** (575 pool / 200 sample); 200-row Claude run **blocked on Anthropic 401** |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
-| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07**. Writes after refill **confirmed**. Auto-block review **done**. URL-only list **live**. Action 6 only on checkpoint. Limiter is proxy GB. Sheet gate **reversed by §76**. |
+| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07**. **2026-09-30:** `fb_buyer_10` checkpointed again **2026-09-29 00:34 UTC** and is still halted. **Next:** failover across `fb_buyer_01`–`10` (11 has no Facebook account). Text alert deployed 2026-09-28 but Twilio returns **502**, so no SMS arrived. |
 | **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. Admin list RPC Worker `79606324` (2026-09-09). Vendor `extraListingData.seller` still `{}`. |
-| **68** | **Ingest throughput + fast validation playbook** | **High** | [~] stale `running` recurred **~81** on 2026-09-21 (oldest Sep 7). Disk prune + VACUUM FULL **done**. |
+| **68** | **Ingest throughput + fast validation playbook** | **High** | [x] stale `running` **done 2026-09-22** (88 closed). 30m close **live** Worker `8f682640`. Disk prune + VACUUM FULL **done**. |
 | **59** | **Max buy / YMMS linkage at ingest** — ingest MaxBuy shipped. Listing identity write-back is §78 | **High** | [~] |
 | **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
@@ -883,7 +883,15 @@ When `--write` attaches a seller_key that is already in `blocked_sellers`, hide 
 
 **6. Scale — create Facebook accounts via GoLogin (still open, not next).**
 
-Uncapped on one login still dies if Facebook checkpoints. **The soak did not checkpoint.** Do not build signup until this login is banned. Then: new profile + own US residential + Facebook created in that browser + Marketplace. One tab per profile, not overlapping IPs. The existing ~10 `fb_buyer_*` profiles are shells until they have live Facebook logins. Do not run a second profile in parallel with Fly on `fb_buyer_10`.
+Uncapped on one login still dies if Facebook checkpoints. **The soak did not checkpoint.** Do not build signup. **`fb_buyer_01` through `fb_buyer_10` already have Facebook accounts** (Nick, 2026-09-28). **`fb_buyer_11` does not.** Do not run a second profile in parallel with the one Fly is using.
+
+**7. Profile failover — NOT BUILT. Do this next for seller checks.**
+
+`fb_buyer_10` (Marcus) has checkpointed repeatedly (2026-09-25 20:26 UTC, 2026-09-27 14:23 UTC, **2026-09-29 00:34 UTC**). Each time Fly latches `halted (checkpoint)` and sleeps until a human clears it. While it sleeps, new Facebook leads stay **Seller unchecked**.
+
+Build a one-at-a-time switch: on checkpoint or login wall, mark that profile paused and start the next ready profile in `fb_buyer_01`–`fb_buyer_10`. Skip 11. Do not open two profiles at once. A profile is ready only if someone has confirmed it is logged into Facebook and it has its own proxy. Most of 01–09 were last opened in June 2026 and several have `proxyType` empty — do not point Fly at those until that is true.
+
+Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-aip-production`, which should SMS `HALT_ALERT_SMS_TO`. It is **not working** — logs are `halt alert failed: 502` every minute since the 2026-09-29 halt, and no text arrived. Fix that or replace it when the failover ships. Do not put the phone number in this file.
 
 ### Rami token / residential (2026-08-28) — do not re-derive
 
@@ -1081,7 +1089,7 @@ Two landmines from v1 — **fixed and live** `78f79974` (2026-08-24):
 
 ## 68 — Ingest throughput + fast validation playbook
 
-**Status:** [~] playbook in use; scope statement below corrected.
+**Status:** [x] stuck `running` closed 2026-09-22 (88 rows, Worker `8f682640`). Playbook below stays the validation rule.
 
 **Rule:** validate changes in **hours** — single Apify run + `source_runs` row + queue spot-check — not 1–3 day soaks.
 
@@ -1113,7 +1121,7 @@ The `2008`/`2009`/`2010` exclusions are why pre-2011 volume collapsed and the ne
 
 ### Open ops
 
-- [~] Stuck `running` `source_runs` — cleared + deployed `0453cc02` 2026-09-07 (17 → `completed`). Recurred 2026-09-17 (~57) and **2026-09-21 (~81** older than 30m). `upsertSourceRun` keeps `truncated` / `failed` closed. Remaining risk: Worker dying mid-chunked ingest before `completeSourceRunSafe`.
+- [x] Stuck `running` `source_runs` — cleared 2026-09-22 (**88** → `completed`, `stale_running_closed`). **Live** Worker `8f682640`. `upsertSourceRun` closes a `running` row older than 30m instead of reprocessing it. Daily cron `close_stale_source_runs` is the backstop. Worker can still die mid-chunk before `completeSourceRunSafe`; the close stops the retry from reopening that row.
 - [x] **§75 Supabase RLS** — migration `0075` 2026-09-21. Git `6f37651` pushed. RLS on, no FORCE, anon SELECT/EXECUTE revoked.
 - [x] **§77 Queue list speed** — cheap counts + page-only MaxBuy hydrate. **Deployed** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched.
 - [x] **§78 Ingest Cox identity** — matcher + listing write-back. **Live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest.

@@ -27,6 +27,13 @@ export interface Env {
   TWILIO_AUTH_TOKEN: string;
   TWILIO_FROM_NUMBER: string;
   ALERT_TO_NUMBER: string;
+  /**
+   * Bearer secret for POST /internal/seller-enrich-halt.
+   * Unset means that route stays closed. Not the deal-alert number.
+   */
+  HALT_ALERT_SECRET?: string;
+  /** SMS destination when Facebook locks the seller lookup. E.164. */
+  HALT_ALERT_SMS_TO?: string;
 
   // ── Cloudflare KV ──────────────────────────────────────────────────────────
   TAV_KV: KVNamespace;

@@ -13,19 +13,24 @@ export interface ExcellentLeadSummary {
   listingPrice?: number;
 }
 
-// Sends a Twilio SMS to ALERT_TO_NUMBER. Returns false (does not throw) on failure.
-export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContext): Promise<boolean> {
+/** SMS to one E.164 number. Returns false (does not throw) on failure. */
+export async function sendSmsTo(
+  env: Env,
+  to: string,
+  message: string,
+  logCtx?: LogContext,
+): Promise<boolean> {
   if (
     !env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me" ||
     !env.TWILIO_AUTH_TOKEN || env.TWILIO_AUTH_TOKEN === "replace_me" ||
     !env.TWILIO_FROM_NUMBER || env.TWILIO_FROM_NUMBER === "replace_me" ||
-    !env.ALERT_TO_NUMBER || env.ALERT_TO_NUMBER === "replace_me"
+    !to || to === "replace_me"
   ) return false;
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const credentials = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
   const body = new URLSearchParams({
-    To: env.ALERT_TO_NUMBER,
+    To: to,
     From: env.TWILIO_FROM_NUMBER,
     Body: message,
   });
@@ -48,6 +53,11 @@ export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContex
     log("alert.sms_failed", { reason_code: "network_timeout", error: err instanceof Error ? err.message : String(err) }, logCtx);
     return false;
   }
+}
+
+// Sends a Twilio SMS to ALERT_TO_NUMBER. Returns false (does not throw) on failure.
+export async function sendSmsAlert(env: Env, message: string, logCtx?: LogContext): Promise<boolean> {
+  return sendSmsTo(env, env.ALERT_TO_NUMBER, message, logCtx);
 }
 
 // POSTs a JSON payload to ALERT_WEBHOOK_URL. Returns false (does not throw) on failure.

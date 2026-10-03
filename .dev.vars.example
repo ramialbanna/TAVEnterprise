@@ -43,6 +43,9 @@ TWILIO_ACCOUNT_SID=replace_me
 TWILIO_AUTH_TOKEN=replace_me
 TWILIO_FROM_NUMBER=replace_me
 ALERT_TO_NUMBER=replace_me
+# Text when Facebook locks the seller lookup. Not the deal-alert number.
+HALT_ALERT_SECRET=replace_me
+HALT_ALERT_SMS_TO=replace_me
 
 # ── Admin / frontend API ───────────────────────────────────────────────────────
 ADMIN_API_SECRET=replace_me

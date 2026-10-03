@@ -13,4 +13,4 @@ COPY scripts/ ./scripts/
 
 RUN mkdir -p /data
 
-CMD ["node", "scripts/enrich-facebook-sellers.mjs", "--write", "--loop", "--cloud"]
+CMD ["node", "scripts/enrich-facebook-sellers.mjs", "--write", "--loop", "--cloud", "--hours"]
