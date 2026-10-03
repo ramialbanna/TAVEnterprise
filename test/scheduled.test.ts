@@ -16,6 +16,13 @@ vi.mock("../src/catalog/syncCoxCatalogTree", () => ({
 vi.mock("../src/persistence/pruneIngestPayloads", () => ({
   pruneIngestPayloads: vi.fn(),
 }));
+vi.mock("../src/persistence/sourceRuns", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/persistence/sourceRuns")>();
+  return {
+    ...actual,
+    closeStaleSourceRuns: vi.fn(),
+  };
+});
 vi.mock("../src/persistence/cronRuns", () => ({
   recordCronRunSafe: vi.fn().mockResolvedValue(undefined),
   recordCronRun: vi.fn(),
@@ -26,6 +33,7 @@ import worker from "../src/index";
 import { runStaleSweep } from "../src/stale/engine";
 import { runCoxCatalogSync } from "../src/catalog/syncCoxCatalogTree";
 import { pruneIngestPayloads } from "../src/persistence/pruneIngestPayloads";
+import { closeStaleSourceRuns } from "../src/persistence/sourceRuns";
 import { recordCronRunSafe } from "../src/persistence/cronRuns";
 
 const env = {} as unknown as Env;
@@ -47,17 +55,19 @@ describe("scheduled() — daily cron jobs", () => {
       rowCount: 100,
     });
     vi.mocked(pruneIngestPayloads).mockResolvedValue({ driftDeleted: 10, rawDeleted: 20 });
+    vi.mocked(closeStaleSourceRuns).mockResolvedValue({ closed: 4 });
 
     await worker.scheduled(event, env, ctx);
 
     expect(vi.mocked(runStaleSweep)).toHaveBeenCalledOnce();
     expect(vi.mocked(pruneIngestPayloads)).toHaveBeenCalledOnce();
+    expect(vi.mocked(closeStaleSourceRuns)).toHaveBeenCalledOnce();
     expect(vi.mocked(runCoxCatalogSync)).toHaveBeenCalledWith(
       env,
       expect.anything(),
       { mode: "missing" },
     );
-    expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledTimes(4);
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -82,6 +92,14 @@ describe("scheduled() — daily cron jobs", () => {
         detail: { driftDeleted: 10, rawDeleted: 20 },
       }),
     );
+    expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        jobName: "close_stale_source_runs",
+        status: "ok",
+        detail: { closed: 4 },
+      }),
+    );
   });
 
   it("records a failed stale sweep and rethrows without running catalog sync", async () => {
@@ -92,6 +110,7 @@ describe("scheduled() — daily cron jobs", () => {
 
     expect(vi.mocked(runCoxCatalogSync)).not.toHaveBeenCalled();
     expect(vi.mocked(pruneIngestPayloads)).not.toHaveBeenCalled();
+    expect(vi.mocked(closeStaleSourceRuns)).not.toHaveBeenCalled();
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledOnce();
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledWith(
       expect.anything(),
@@ -107,11 +126,13 @@ describe("scheduled() — daily cron jobs", () => {
     vi.mocked(runStaleSweep).mockResolvedValue({ updated: 2 });
     vi.mocked(runCoxCatalogSync).mockRejectedValue(new Error("catalog timeout"));
     vi.mocked(pruneIngestPayloads).mockResolvedValue({ driftDeleted: 0, rawDeleted: 0 });
+    vi.mocked(closeStaleSourceRuns).mockResolvedValue({ closed: 0 });
 
     await worker.scheduled(event, env, ctx);
 
     expect(vi.mocked(pruneIngestPayloads)).toHaveBeenCalledOnce();
-    expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(closeStaleSourceRuns)).toHaveBeenCalledOnce();
+    expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledTimes(4);
     expect(vi.mocked(recordCronRunSafe)).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({

@@ -19,6 +19,12 @@ export const DEFAULT_MAX_PER_HOUR = 0;
 export const DEFAULT_MAX_PER_DAY = 0;
 export const FATAL_SKIP_REASONS = new Set(["checkpoint", "login_wall"]);
 
+/** Logged-in profiles, in switch order. One at a time. Skip 11 (no Facebook account). */
+export const READY_PROFILES = [
+  { key: "08", id: "6a395e22bd022c01732d1faa" },
+  { key: "09", id: "6a395e5bbd022c01732d1fc5" },
+];
+
 /** Puppeteer / CDP failures that mean the GoLogin Cloud tab is gone, not the listing. */
 const DEAD_BROWSER_RE =
   /target closed|session closed|protocol error|connection closed|connection reset|navigating frame was detached|frame was detached|browser (has been )?closed|page crashed|websocket is not open|not connected/i;
@@ -61,16 +67,31 @@ export function chicagoParts(date = new Date()) {
 }
 
 export function emptyState() {
-  return { haltedAt: null, haltReason: null, days: {} };
+  return {
+    haltedAt: null,
+    haltReason: null,
+    haltNotifiedAt: null,
+    activeProfileId: null,
+    pausedProfileIds: [],
+    days: {},
+  };
 }
 
 export function loadState(filePath = STATE_PATH) {
   if (!fs.existsSync(filePath)) return emptyState();
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const paused = Array.isArray(parsed.pausedProfileIds)
+      ? parsed.pausedProfileIds.filter((id) => typeof id === "string" && id.trim())
+      : [];
     return {
       haltedAt: parsed.haltedAt ?? null,
       haltReason: parsed.haltReason ?? null,
+      haltNotifiedAt: parsed.haltNotifiedAt ?? null,
+      activeProfileId: typeof parsed.activeProfileId === "string" && parsed.activeProfileId.trim()
+        ? parsed.activeProfileId.trim()
+        : null,
+      pausedProfileIds: paused,
       days: parsed.days && typeof parsed.days === "object" ? parsed.days : {},
     };
   } catch {
@@ -85,7 +106,24 @@ export function saveState(state, filePath = STATE_PATH) {
 export function clearHalt(state) {
   state.haltedAt = null;
   state.haltReason = null;
+  state.haltNotifiedAt = null;
   return state;
+}
+
+/**
+ * Pause the profile Facebook just locked and move to the next ready one.
+ * Returns that profile, or null when every ready profile is already paused.
+ * A switch clears the halt latch so the daemon opens the next profile.
+ */
+export function switchToNextProfile(state, currentProfileId) {
+  if (!Array.isArray(state.pausedProfileIds)) state.pausedProfileIds = [];
+  const current = String(currentProfileId || "").trim();
+  if (current && !state.pausedProfileIds.includes(current)) state.pausedProfileIds.push(current);
+  const next = READY_PROFILES.find((profile) => !state.pausedProfileIds.includes(profile.id)) ?? null;
+  if (!next) return null;
+  state.activeProfileId = next.id;
+  clearHalt(state);
+  return next;
 }
 
 export function halt(state, reason) {

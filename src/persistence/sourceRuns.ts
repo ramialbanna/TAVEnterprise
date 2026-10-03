@@ -12,6 +12,11 @@ export type SourceRunTerminalStatus = "completed" | "failed" | "truncated";
 
 const TERMINAL_SOURCE_RUN_STATUSES = new Set<string>(["completed", "failed", "truncated"]);
 
+/** A `running` row older than this was abandoned mid-ingest. Webhook retries must not reopen it. */
+export const STALE_SOURCE_RUN_MS = 30 * 60 * 1000;
+
+export const STALE_SOURCE_RUN_ERROR = "stale_running_closed";
+
 /** True once ingest has finished — webhook retries must not reopen the row. */
 export function isTerminalSourceRunStatus(status: string): boolean {
   return TERMINAL_SOURCE_RUN_STATUSES.has(status);
@@ -35,7 +40,7 @@ export async function upsertSourceRun(
   // Check for an existing run first to support the idempotency gate.
   const { data: existing, error: selectErr } = await db
     .from("source_runs")
-    .select("id, status, processed, rejected, created_leads")
+    .select("id, status, processed, rejected, created_leads, created_at")
     .eq("source", params.source)
     .eq("run_id", params.run_id)
     .maybeSingle();
@@ -47,6 +52,21 @@ export async function upsertSourceRun(
   // Apify retried the same run_id and flipped `truncated` back to running.
   if (existing !== null && isTerminalSourceRunStatus((existing as SourceRunRecord).status)) {
     return toRecord(existing);
+  }
+
+  // Chunked ingest can die before completeSourceRunSafe. The row stays
+  // `running`, and the next webhook retry reprocesses the whole dataset.
+  // Close it instead of flipping it back to running.
+  if (existing !== null && isStaleRunning(existing as Record<string, unknown>)) {
+    const row = toRecord(existing as Record<string, unknown>);
+    await completeSourceRun(db, row.id, {
+      processed: row.processed,
+      rejected: row.rejected,
+      created_leads: row.created_leads,
+      status: "completed",
+      error_message: STALE_SOURCE_RUN_ERROR,
+    });
+    return { ...row, status: "completed" };
   }
 
   // Insert or update to running.
@@ -132,6 +152,34 @@ export async function completeSourceRunSafe(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+}
+
+/**
+ * Close `running` source_runs the worker abandoned. Daily cron backstop for
+ * runs Apify stopped retrying; upsertSourceRun closes the same rows on the
+ * next webhook so a retry cannot reprocess them.
+ */
+export async function closeStaleSourceRuns(
+  db: SupabaseClient,
+  nowMs: number = Date.now(),
+): Promise<{ closed: number }> {
+  const cutoff = new Date(nowMs - STALE_SOURCE_RUN_MS).toISOString();
+  const { data, error } = await db
+    .from("source_runs")
+    .update({ status: "completed", error_message: STALE_SOURCE_RUN_ERROR })
+    .eq("status", "running")
+    .lt("created_at", cutoff)
+    .select("id");
+
+  if (error) throw error;
+  return { closed: Array.isArray(data) ? data.length : 0 };
+}
+
+function isStaleRunning(row: Record<string, unknown>, nowMs: number = Date.now()): boolean {
+  if (row.status !== "running") return false;
+  const createdAt = Date.parse(String(row.created_at ?? ""));
+  if (!Number.isFinite(createdAt)) return false;
+  return nowMs - createdAt >= STALE_SOURCE_RUN_MS;
 }
 
 function toRecord(row: Record<string, unknown>): SourceRunRecord {

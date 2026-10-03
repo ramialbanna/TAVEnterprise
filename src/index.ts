@@ -8,6 +8,8 @@ import { runStaleSweep } from "./stale/engine";
 import { recordCronRunSafe } from "./persistence/cronRuns";
 import { runCoxCatalogSync } from "./catalog/syncCoxCatalogTree";
 import { pruneIngestPayloads } from "./persistence/pruneIngestPayloads";
+import { closeStaleSourceRuns } from "./persistence/sourceRuns";
+import { handleSellerEnrichHalt } from "./alerts/sellerEnrichHalt";
 import { log, serializeError } from "./logging/logger";
 import { VERSION } from "./version";
 
@@ -25,6 +27,10 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/apify-webhook") {
       return handleApifyWebhook(request, env, ctx);
+    }
+
+    if (request.method === "POST" && url.pathname === "/internal/seller-enrich-halt") {
+      return handleSellerEnrichHalt(request, env);
     }
 
     if (url.pathname.startsWith("/admin")) {
@@ -109,6 +115,29 @@ export default {
         detail: { error: serializeError(err) },
       });
       log("cron.prune_ingest_payloads.failed", { error: serializeError(err) });
+    }
+
+    log("cron.close_stale_source_runs.started");
+    const closeStartedAt = new Date().toISOString();
+    try {
+      const result = await closeStaleSourceRuns(db);
+      await recordCronRunSafe(db, {
+        jobName: "close_stale_source_runs",
+        startedAt: closeStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "ok",
+        detail: result,
+      });
+      log("cron.close_stale_source_runs.completed", result);
+    } catch (err) {
+      await recordCronRunSafe(db, {
+        jobName: "close_stale_source_runs",
+        startedAt: closeStartedAt,
+        finishedAt: new Date().toISOString(),
+        status: "failed",
+        detail: { error: serializeError(err) },
+      });
+      log("cron.close_stale_source_runs.failed", { error: serializeError(err) });
     }
   },
 };

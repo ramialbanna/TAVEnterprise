@@ -8,11 +8,27 @@ import {
   isCloudUnavailableError,
   isDeadBrowserError,
   isWithinHours,
+  READY_PROFILES,
   recordVisit,
   remainingCapacity,
+  switchToNextProfile,
 } from "@scripts/gologin-antiban";
 
 describe("gologin antiban caps", () => {
+  it("moves from fb_buyer_08 to fb_buyer_09 after a lock, one at a time", () => {
+    const first = READY_PROFILES[0]!;
+    const second = READY_PROFILES[1]!;
+    const state = halt(emptyState(), "checkpoint");
+    const next = switchToNextProfile(state, first.id);
+    expect(next?.key).toBe("09");
+    expect(state.haltedAt).toBeNull();
+    expect(state.activeProfileId).toBe(second.id);
+    halt(state, "login_wall");
+    expect(switchToNextProfile(state, second.id)).toBeNull();
+    expect(state.haltedAt).not.toBeNull();
+    expect(state.pausedProfileIds).toEqual([first.id, second.id]);
+  });
+
   it("halts until a human clears the latch", () => {
     const state = halt(emptyState(), "checkpoint");
     expect(() => assertCanRun(state, { skipHours: true })).toThrow(SessionHaltedError);
