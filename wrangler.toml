@@ -3,6 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 workers_dev = true
 account_id = "1a9ff831a8db512a04f8d96f90f76bfd"
+# Keep variables set in the Cloudflare dashboard on deploy instead of
+# overwriting them from this file. Secrets are never touched by a deploy.
+keep_vars = true
 
 # KV namespace for valuation cache and DLQ overflow.
 # REQUIRED before deploy — replace all placeholder IDs with real namespace IDs:
@@ -123,7 +126,8 @@ MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 LLM_YMMS_ENABLED = "true"
 LLM_YMMS_MODEL = "claude-sonnet-5"
 SELLER_CLASSIFY_ENABLED = "true"
-SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
+# Matches Cloudflare production (set in the dashboard 2026-10-10).
+SELLER_CLASSIFY_MODEL = "claude-haiku-5-5"
 [[env.production.kv_namespaces]]
 binding = "TAV_KV"
 id = "e61e291003f647a5ad0ffce778ac6631"
@@ -141,3 +145,13 @@ service = "maxbuy-worker-production"
 [env.production.observability]
 enabled = true
 head_sampling_rate = 1
+# Spelled out to match the live dashboard settings exactly (2026-10-10).
+[env.production.observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+[env.production.observability.traces]
+enabled = false
+head_sampling_rate = 1
+persist = true
