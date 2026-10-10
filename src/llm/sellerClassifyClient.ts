@@ -7,6 +7,7 @@ import type { Env } from "../types/env";
 import { isConfiguredSecret } from "../types/envValidation";
 import { log } from "../logging/logger";
 import { selectSellerClassifyImageUrls } from "../apify/listingMedia";
+import { fetchImageAsBase64, type InlineImageSource } from "./inlineImage";
 import {
   SELLER_CLASSIFY_SYSTEM_PROMPT,
   SELLER_CLASSIFY_TOOL,
@@ -20,29 +21,46 @@ const ANTHROPIC_VERSION = "2023-06-01";
 const MAX_TOKENS = 256;
 /** Vision + tool JSON. Ingest skips the call when less than this remains on the batch clock. */
 export const SELLER_CLASSIFY_TIMEOUT_MS = 8_000;
+/** Photo download share of the budget; the Anthropic call gets the rest. */
+const SELLER_CLASSIFY_IMAGE_TIMEOUT_MS = 2_500;
 
 type SellerClassifyContentBlock =
   | { type: "text"; text: string }
-  | { type: "image"; source: { type: "url"; url: string } };
+  | { type: "image"; source: InlineImageSource };
 
-function buildSellerClassifyUserContent(args: {
-  title?: string | null;
-  description?: string | null;
-  sellerName?: string | null;
-  imageUrls?: string[] | null;
-}): SellerClassifyContentBlock[] {
+/**
+ * Photos are downloaded here and sent as base64. Anthropic cannot fetch
+ * Facebook CDN links itself (robots.txt), so a URL source returns 400.
+ * A photo that fails to download is dropped and the call goes text-only.
+ */
+async function buildSellerClassifyUserContent(
+  args: {
+    title?: string | null;
+    description?: string | null;
+    sellerName?: string | null;
+    imageUrls?: string[] | null;
+  },
+  model: string,
+): Promise<SellerClassifyContentBlock[]> {
   const imageUrls = selectSellerClassifyImageUrls(args.imageUrls);
-  const blocks: SellerClassifyContentBlock[] = imageUrls.map((url) => ({
-    type: "image",
-    source: { type: "url", url },
-  }));
+  const downloads = await Promise.all(
+    imageUrls.map((url) => fetchImageAsBase64(url, SELLER_CLASSIFY_IMAGE_TIMEOUT_MS)),
+  );
+  const blocks: SellerClassifyContentBlock[] = [];
+  for (const download of downloads) {
+    if (download.ok) {
+      blocks.push({ type: "image", source: download.source });
+    } else {
+      log("ingest.seller_classify_image_unavailable", { model, reason: download.reason });
+    }
+  }
   blocks.push({
     type: "text",
     text: buildSellerClassifyUserPrompt({
       title: args.title,
       description: args.description,
       sellerName: args.sellerName,
-      imageCount: imageUrls.length,
+      imageCount: blocks.length,
     }),
   });
   return blocks;
@@ -92,9 +110,12 @@ export async function callAnthropicForSellerClassify(args: {
   }
 
   const model = env.SELLER_CLASSIFY_MODEL || "claude-haiku-4-5";
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SELLER_CLASSIFY_TIMEOUT_MS);
   const startedAt = Date.now();
+  const content = await buildSellerClassifyUserContent(args, model);
+  // The photo download already spent part of the budget; the total stays within SELLER_CLASSIFY_TIMEOUT_MS.
+  const remainingMs = Math.max(1, SELLER_CLASSIFY_TIMEOUT_MS - (Date.now() - startedAt));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), remainingMs);
 
   let res: Response;
   try {
@@ -112,7 +133,7 @@ export async function callAnthropicForSellerClassify(args: {
         messages: [
           {
             role: "user",
-            content: buildSellerClassifyUserContent(args),
+            content,
           },
         ],
         tools: [SELLER_CLASSIFY_TOOL],
@@ -141,7 +162,19 @@ export async function callAnthropicForSellerClassify(args: {
     return { kind: "rate_limited" };
   }
   if (!res.ok) {
-    log("ingest.seller_classify_http_error", { model, status: res.status, latency_ms: latencyMs });
+    let responseText = "";
+    try {
+      responseText = await res.text();
+      if (responseText.length > 500) responseText = responseText.slice(0, 500) + "...[truncated]";
+    } catch {
+      /* body unreadable */
+    }
+    log("ingest.seller_classify_http_error", {
+      model,
+      status: res.status,
+      latency_ms: latencyMs,
+      response_text: responseText,
+    });
     return { kind: "http_error", status: res.status };
   }
 
