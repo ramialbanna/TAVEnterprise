@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "./supabase";
+import { log } from "../logging/logger";
 
 export type MmrStyleAlias = {
   alias: string;
@@ -19,20 +20,31 @@ export function buildListingStyleAliasKey(
   return axes.length > 0 ? `${base}|${axes.join("|")}` : base;
 }
 
+/**
+ * The primary key allows several canonical mappings per alias key (e.g. one
+ * listing phrase learned as both a 2WD and a 4WD model). Such a key is
+ * ambiguous, so it is not a hit: the caller falls through to the next key or
+ * to Claude rather than pricing one of the guesses.
+ */
 export async function lookupMmrStyleAlias(
   db: SupabaseClient,
   aliasKey: string,
 ): Promise<MmrStyleAlias | null> {
   if (!aliasKey.replace(/\|/g, "").trim()) return null;
 
-  const { data, error } = await db
+  const { data: rows, error } = await db
     .schema("tav")
     .from("mmr_style_aliases")
     .select("alias, canonical_make, canonical_model, canonical_style, source")
     .eq("alias", aliasKey)
-    .maybeSingle();
+    .limit(2);
   if (error) throw error;
-  if (!data) return null;
+  if (!rows || rows.length === 0) return null;
+  if (rows.length > 1) {
+    log("llm_ymms.alias_ambiguous", { alias: aliasKey });
+    return null;
+  }
+  const data = rows[0]!;
 
   return {
     alias: data.alias as string,
