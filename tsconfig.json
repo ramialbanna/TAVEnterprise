@@ -8,7 +8,8 @@
     "baseUrl": ".",
     "paths": {
       "@scripts/enrich-queues": ["scripts/lib/enrich-queues.mjs.d.ts"],
-      "@scripts/gologin-antiban": ["scripts/lib/gologin-antiban.mjs.d.ts"]
+      "@scripts/gologin-antiban": ["scripts/lib/gologin-antiban.mjs.d.ts"],
+      "@scripts/proxy-balance": ["scripts/lib/proxy-balance.mjs.d.ts"]
     },
     "strict": true,
     "noUncheckedIndexedAccess": true,
