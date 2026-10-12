@@ -16,14 +16,16 @@ The user's top concern on any change is: **do not lose secrets.**
 ## The agent never
 
 - Runs `wrangler secret put`, `delete`, `bulk` or `list`, or `wrangler delete`.
-- Reads, lists or inspects secrets through any MCP or API (Cloudflare, Vercel, Supabase, GitHub, Fly, Twilio). Not even names.
-- Runs `fly secrets set`, `unset`, `import` or `list`, or `gh secret` / `gh variable`.
+- Reads, lists or inspects secrets through any MCP or API (Cloudflare, Vercel, Supabase, GitHub, Twilio). Not even names.
+- Runs `gh secret` / `gh variable`.
 - Opens, greps or prints `.dev.vars` / `.env*`. Not even to check which entries are filled in.
 - Runs a script that loads `.dev.vars` or other credentials. Write the script; the user runs it and the agent reads the output file.
 - Runs `wrangler deploy` (any env, any worker) or `wrangler versions deploy` / `rollback`. Give the user the exact command instead.
 - Writes a secret value into `wrangler.toml`, source, tests, docs or chat.
 
 If a task needs any of the above: stop, say exactly what and why, and give the user the command to run.
+
+**Fly is the exception (user, 2026-10-12).** The agent may log in, deploy, restart and manage `tav-seller-enrich` on Fly, including Fly secrets when a task needs it. Still never print or paste a secret value.
 
 ## Things that can wipe secrets or vars on a deploy
 
