@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       "@scripts/enrich-queues": path.resolve(rootDir, "scripts/lib/enrich-queues.mjs"),
       "@scripts/gologin-antiban": path.resolve(rootDir, "scripts/lib/gologin-antiban.mjs"),
+      "@scripts/proxy-balance": path.resolve(rootDir, "scripts/lib/proxy-balance.mjs"),
     },
   },
   test: {

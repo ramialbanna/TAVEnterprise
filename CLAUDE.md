@@ -88,6 +88,7 @@ Use **`/review`** to run reviewers in parallel partitioned by layer.
 ## 9. Guardrails
 - Never `rm -rf`, `DROP`, force-push, or `git reset --hard` without explicit confirmation.
 - Service role key, Manheim creds, Twilio creds, HMAC secret: Cloudflare secrets only. Never echoed, never logged.
+- **Never change, list or read any secret** (Cloudflare, Supabase, GitHub, `.dev.vars`), and never run `wrangler deploy` — the user deploys. Fly (`tav-seller-enrich`) is the exception: the agent may deploy and manage it. Deploys once lost ~5 production secrets, and `.dev.vars` does not hold all of them, so a lost one cannot be rebuilt. Full rule: `.cursor/rules/wrangler-deploy-safety.mdc`.
 - Touching `src/sources/`, `src/persistence/`, `supabase/migrations/`, or anything that changes the four-concept boundary? **Open a plan first.**
 - Every rejected listing has a `reason_code`. Silent drops are forbidden.
 - Stale-detection regressions are blockers, not nits.

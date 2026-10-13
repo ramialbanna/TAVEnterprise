@@ -68,6 +68,7 @@ import {
 } from "./lib/enrich-queues.mjs";
 import { stopCloudProfile } from "./lib/gologin-cloud.mjs";
 import { notifyHaltOnce } from "./lib/halt-alert.mjs";
+import { DEFAULT_GOLOGIN_WORKSPACE_ID, startProxyBalancePoller } from "./lib/proxy-balance.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const DEV_VARS = path.join(ROOT, ".dev.vars");
@@ -942,8 +943,15 @@ function dropCooledDown(jobs, listingSkipUntil) {
 }
 
 async function runDaemon(args, env, db, writeEnabled, capOpts) {
-  gologinCreds(env);
+  const { token } = gologinCreds(env);
   startHealthServer();
+  const stopProxyPoller = writeEnabled
+    ? startProxyBalancePoller({
+        db,
+        token,
+        workspaceId: (env.GOLOGIN_WORKSPACE_ID || DEFAULT_GOLOGIN_WORKSPACE_ID).trim(),
+      })
+    : () => {};
   let session = null;
   let stopping = false;
   const listingSkipUntil = new Map();
@@ -952,6 +960,7 @@ async function runDaemon(args, env, db, writeEnabled, capOpts) {
     if (stopping) return;
     stopping = true;
     console.error("daemon stopping…");
+    stopProxyPoller();
     await closeSession(session);
     session = null;
   };
