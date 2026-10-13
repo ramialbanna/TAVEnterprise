@@ -261,7 +261,19 @@ async function main() {
   const sonnetDeps = depsFor(args.sonnetModel);
 
   // The resolver's structured per-call logs go to stdout and would bury the summary.
-  console.log = () => {};
+  // Keep only Anthropic HTTP failures so the summary can say why calls failed.
+  const httpErrors: Record<string, { count: number; sample: string }> = {};
+  console.log = (line?: unknown) => {
+    if (typeof line !== "string" || !line.includes("llm_ymms.anthropic_http_error")) return;
+    try {
+      const event = JSON.parse(line) as { model?: string; status?: number; response_text?: string };
+      const key = `${event.model ?? "?"} ${event.status ?? "?"}`;
+      httpErrors[key] ??= { count: 0, sample: (event.response_text ?? "").slice(0, 300) };
+      httpErrors[key].count += 1;
+    } catch {
+      /* not a structured log line */
+    }
+  };
 
   console.error(`Loading Sonnet decisions from the last ${args.hours}h (limit ${args.limit})...`);
   const decisions = await loadSonnetDecisions(db, args);
@@ -424,11 +436,15 @@ async function main() {
       sonnet_rerun_cost_usd: costUsd(results.flatMap((r) => (r.sonnetRerun ? [r.sonnetRerun] : [])), "sonnet"),
     }),
     haiku_cost_usd: costUsd(results.map((r) => r.haiku), "haiku"),
-    verdict: passes
-      ? `PASS — Haiku matches ≥${AGREEMENT_BAR * 100}% of Cox-priced Sonnet picks. Review disagreements before switching.`
-      : coxVerified.length < 50
-        ? "INCONCLUSIVE — fewer than 50 Cox-priced Sonnet picks in the sample. Raise --limit or --hours."
-        : `FAIL — stay on Sonnet (bar is ${AGREEMENT_BAR * 100}% agreement on Cox-priced picks).`,
+    anthropic_http_errors: httpErrors,
+    verdict:
+      haikuPicks.length === 0
+        ? "INCONCLUSIVE — Haiku returned no usable answers. See anthropic_http_errors."
+        : passes
+          ? `PASS — Haiku matches ≥${AGREEMENT_BAR * 100}% of Cox-priced Sonnet picks. Review disagreements before switching.`
+          : coxVerified.length < 50
+            ? "INCONCLUSIVE — fewer than 50 Cox-priced Sonnet picks in the sample. Raise --limit or --hours."
+            : `FAIL — stay on Sonnet (bar is ${AGREEMENT_BAR * 100}% agreement on Cox-priced picks).`,
   };
 
   const disagreements = results
