@@ -19,10 +19,17 @@ export const DEFAULT_MAX_PER_HOUR = 0;
 export const DEFAULT_MAX_PER_DAY = 0;
 export const FATAL_SKIP_REASONS = new Set(["checkpoint", "login_wall"]);
 
-/** Logged-in profiles, in switch order. One at a time. Skip 11 (no Facebook account). */
+/**
+ * Failover order after the default profile (fb_buyer_10) locks.
+ * One at a time. Each of these has its own geolocation proxy and was opened
+ * after June 2026. fb_buyer_03–07 still have a proxy but were last opened in
+ * June, so they are not targets. fb_buyer_11 has no Facebook account and no proxy.
+ */
 export const READY_PROFILES = [
   { key: "08", id: "6a395e22bd022c01732d1faa" },
   { key: "09", id: "6a395e5bbd022c01732d1fc5" },
+  { key: "01", id: "6a3956c33b7366ab1056f0af" },
+  { key: "02", id: "6a3956c33b7366ab1056f09d" },
 ];
 
 /** Puppeteer / CDP failures that mean the GoLogin Cloud tab is gone, not the listing. */

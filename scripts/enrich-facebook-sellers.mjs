@@ -991,8 +991,26 @@ async function runDaemon(args, env, db, writeEnabled, capOpts) {
         await closeSession(session);
         session = null;
       }
+      const lockedId = runState.activeProfileId || String(env.GOLOGIN_PROFILE_ID || "").trim();
+      const lockReason = runState.haltReason;
+      const next = FATAL_SKIP_REASONS.has(lockReason)
+        ? switchToNextProfile(runState, lockedId)
+        : null;
+      if (next) {
+        saveState(runState);
+        if (args.cloud && lockedId) {
+          try {
+            await stopCloudProfile(token, lockedId);
+          } catch (err) {
+            console.error(`cloud slot free failed: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+        console.error(`halted (${lockReason}) on ${lockedId} — switching to fb_buyer_${next.key}`);
+        continue;
+      }
+      if (FATAL_SKIP_REASONS.has(runState.haltReason)) saveState(runState);
       console.error(
-        `halted (${runState.haltReason}) at ${runState.haltedAt} — sleeping ${HALT_POLL_MS}ms until --clear-halt`,
+        `halted (${runState.haltReason}) at ${runState.haltedAt} — no ready profile left, sleeping ${HALT_POLL_MS}ms until --clear-halt`,
       );
       await notifyHaltOnce(runState, env);
       await sleep(HALT_POLL_MS);

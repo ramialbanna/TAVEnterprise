@@ -72,12 +72,12 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ### Do next (priority)
 
-1. **§74 profile failover — not built.** Still needed for the cars Facebook does not identify. When Facebook locks the current GoLogin profile, stop using it and switch the Fly lookup to the next ready profile in `fb_buyer_01`–`fb_buyer_10`. One profile at a time. Do not run them together. **`fb_buyer_11` has no Facebook account** — skip it. Nick confirmed 2026-09-28 that **1–10 do**. Most of 01–09 have not been opened since June and several have no proxy; a switch only works after that profile is logged in and has its own proxy. `fb_buyer_10` (Marcus) checkpointed again **2026-09-29 00:34 UTC** and is still halted as of 2026-09-30. The sheet stays **Seller unchecked** while it waits.
+1. **§74 profile failover — live on Fly 2026-10-19.** On checkpoint or login wall, pause that profile and open the next one, one at a time: **08 → 09 → 01 → 02**. Skip **03–07** (last opened June 2026) and **11** (no Facebook account, no proxy). `fb_buyer_10` stays paused. The running profile on this deploy is **08**. Text only when that list is exhausted. The SMS path still returns **502**.
 2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. The gallery to send is §81. Then R2 capture + prod vision tier (ambiguous subset only).
 3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
 4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` / `llm_ymms.skipped_clean_scraper_identity` in Workers Logs. Do not soak last-resort again.
 5. **§80 contact keys — code is in Worker `2a216392`, migration `0078` is applied.** Same phone, website, WhatsApp number, or email on 3 different cars in 30 days drops the listing (`contact_repeat`). The table has **0 rows**, so nothing has dropped yet. Buyer-flag memory and copied-description matching are not built.
-6. **Redeploy Fly** so the `scraper_dealership` queue skip leaves the repo. Git catch-up is this commit.
+6. **Fly redeploy — done 2026-10-19.** `scraper_dealership` queue skip and the profile switch are on `tav-seller-enrich`. Git catch-up is this commit.
 
 ### Key commands
 
@@ -248,7 +248,7 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). 200-row Claude run still **blocked on Anthropic 401**. |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. No-login text keys are **§80** (not started). |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
-| **74** | **Seller identity via GoLogin / logged-in FB** — fallback after §81 | **High** | [~] **48h soak closed 2026-09-07**. GoLogin only when the scraper did not send a profile id or a dealership. `fb_buyer_10` checkpointed **2026-09-29 00:34 UTC**. Failover across `fb_buyer_01`–`10` still not built. |
+| **74** | **Seller identity via GoLogin / logged-in FB** — fallback after §81 | **High** | [~] **48h soak closed 2026-09-07**. GoLogin only when the scraper did not send a profile id or a dealership. Failover **live on Fly 2026-10-19**: **08 → 09 → 01 → 02**, one at a time. 03–07 and 11 are not targets. Running profile is **08**. |
 | **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. §81 stores a numeric profile id as `seller_url` and drops a named dealership. A name or `pfbid` is not a block key. |
 | **68** | **Ingest throughput + fast validation playbook** | **High** | [x] stale `running` **done 2026-09-22** (88 closed). 30m close **live** Worker `8f682640`. Disk prune + VACUUM FULL **done**. |
 | **59** | **Max buy / YMMS linkage at ingest** — ingest MaxBuy shipped. Listing identity write-back is §78 | **High** | [~] |
@@ -979,13 +979,13 @@ When `--write` attaches a seller_key that is already in `blocked_sellers`, hide 
 
 Uncapped on one login still dies if Facebook checkpoints. **The soak did not checkpoint.** Do not build signup. **`fb_buyer_01` through `fb_buyer_10` already have Facebook accounts** (Nick, 2026-09-28). **`fb_buyer_11` does not.** Do not run a second profile in parallel with the one Fly is using.
 
-**7. Profile failover — NOT BUILT. Do this next for seller checks.**
+**7. Profile failover — LIVE on Fly 2026-10-19.**
 
-`fb_buyer_10` (Marcus) has checkpointed repeatedly (2026-09-25 20:26 UTC, 2026-09-27 14:23 UTC, **2026-09-29 00:34 UTC**). Each time Fly latches `halted (checkpoint)` and sleeps until a human clears it. While it sleeps, new Facebook leads stay **Seller unchecked**.
+`fb_buyer_10` (Marcus) checkpointed repeatedly (2026-09-25 20:26 UTC, 2026-09-27 14:23 UTC, **2026-09-29 00:34 UTC**) and stays paused. On checkpoint or login wall, Fly pauses that profile and opens the next ready one. One at a time. Order: **08 → 09 → 01 → 02**. Each has a geolocation proxy and was opened after June 2026. **03–07** still have a proxy but were last opened in June, so they are not targets. **11** has no Facebook account and no proxy. Do not open two profiles at once.
 
-Build a one-at-a-time switch: on checkpoint or login wall, mark that profile paused and start the next ready profile in `fb_buyer_01`–`fb_buyer_10`. Skip 11. Do not open two profiles at once. A profile is ready only if someone has confirmed it is logged into Facebook and it has its own proxy. Most of 01–09 were last opened in June 2026 and several have `proxyType` empty — do not point Fly at those until that is true.
+The running profile after the 2026-10-19 deploy is **08**. It warmed up and wrote seller URLs. `--clear-halt` still wipes the paused list and returns to `GOLOGIN_PROFILE_ID`.
 
-Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-aip-production`, which should SMS `HALT_ALERT_SMS_TO`. It is **not working** — logs are `halt alert failed: 502` every minute since the 2026-09-29 halt, and no text arrived. Fix that or replace it when the failover ships. Do not put the phone number in this file.
+Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-aip-production`, which should SMS `HALT_ALERT_SMS_TO`. It is **not working** — `halt alert failed: 502`. With failover, that text fires only when 08, 09, 01, and 02 are all paused. Do not put the phone number in this file.
 
 ### Rami token / residential (2026-08-28) — do not re-derive
 

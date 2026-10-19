@@ -15,18 +15,25 @@ import {
 } from "@scripts/gologin-antiban";
 
 describe("gologin antiban caps", () => {
-  it("moves from fb_buyer_08 to fb_buyer_09 after a lock, one at a time", () => {
-    const first = READY_PROFILES[0]!;
-    const second = READY_PROFILES[1]!;
+  it("walks ready profiles one at a time and stops when every one is paused", () => {
     const state = halt(emptyState(), "checkpoint");
-    const next = switchToNextProfile(state, first.id);
-    expect(next?.key).toBe("09");
-    expect(state.haltedAt).toBeNull();
-    expect(state.activeProfileId).toBe(second.id);
-    halt(state, "login_wall");
-    expect(switchToNextProfile(state, second.id)).toBeNull();
+    const seen: string[] = [];
+    let current = "6a395e9dbd022c01732d2024";
+    for (;;) {
+      const next = switchToNextProfile(state, current);
+      if (!next) break;
+      seen.push(next.key);
+      expect(state.haltedAt).toBeNull();
+      expect(state.activeProfileId).toBe(next.id);
+      current = next.id;
+      halt(state, "checkpoint");
+    }
+    expect(seen).toEqual(["08", "09", "01", "02"]);
     expect(state.haltedAt).not.toBeNull();
-    expect(state.pausedProfileIds).toEqual([first.id, second.id]);
+    expect(state.pausedProfileIds).toEqual([
+      "6a395e9dbd022c01732d2024",
+      ...READY_PROFILES.map((profile) => profile.id),
+    ]);
   });
 
   it("halts until a human clears the latch", () => {
