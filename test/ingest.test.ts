@@ -1162,6 +1162,7 @@ describe("POST /ingest — deadline-aware truncation", () => {
       contactKey: "phone:2145551212",
       vehicleCount: 3,
       otherListingUrls: ["https://www.facebook.com/marketplace/item/older/"],
+      source: "contact_repeat",
     });
     vi.mocked(loadStoredSellersByListingUrls).mockImplementation(async (_db, _source, urls) => {
       const map = new Map<string, { listingId: string; sellerUrl: string | null; sellerName: string | null }>();

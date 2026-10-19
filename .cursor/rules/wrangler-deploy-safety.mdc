@@ -1,58 +1,39 @@
 ---
-description: Secrets are off-limits — never change, list, read or risk Cloudflare / Fly / Supabase / GitHub secrets; the user deploys Workers, not the agent
+description: Wrangler deploys must keep Cloudflare secrets and dashboard vars. Never list, read, or write secrets. Local copies do not exist.
 alwaysApply: true
 ---
 
-# Secrets — do not touch, do not risk
+# Keep secrets on every Wrangler deploy
 
-## Why this rule is strict
+Production already lost Cloudflare secrets once. They are not in `.dev.vars` or git. Do not ask the user to paste them, and do not create a local copy.
 
-Production deploys have already lost about 5 Cloudflare secrets once. The user spent hours finding the right values and putting them back.
+## Deploy command
 
-**Local `.dev.vars` does not hold every production secret.** Several were added by hand in the Cloudflare dashboard and exist nowhere else. A lost secret cannot be rebuilt from this repo.
-
-The user's top concern on any change is: **do not lose secrets.**
-
-## The agent never
-
-- Runs `wrangler secret put`, `delete`, `bulk` or `list`, or `wrangler delete`.
-- Reads, lists or inspects secrets through any MCP or API (Cloudflare, Vercel, Supabase, GitHub, Twilio). Not even names.
-- Runs `gh secret` / `gh variable`.
-- Opens, greps or prints `.dev.vars` / `.env*`. Not even to check which entries are filled in.
-- Runs a script that loads `.dev.vars` or other credentials. Write the script; the user runs it and the agent reads the output file.
-- Runs `wrangler deploy` (any env, any worker) or `wrangler versions deploy` / `rollback`. Give the user the exact command instead.
-- Writes a secret value into `wrangler.toml`, source, tests, docs or chat.
-
-If a task needs any of the above: stop, say exactly what and why, and give the user the command to run.
-
-**Fly is the exception (user, 2026-10-12).** The agent may log in, deploy, restart and manage `tav-seller-enrich` on Fly, including Fly secrets when a task needs it. Still never print or paste a secret value.
-
-## Things that can wipe secrets or vars on a deploy
-
-Check for these in every diff that touches `wrangler.toml`, `fly*.toml`, or a deploy workflow:
-
-- **Removing `keep_vars = true`.** Without it, a deploy deletes every plain-text variable set in the dashboard. Values added by hand as *Text* instead of *Secret* are lost this way.
-- **Adding a `[vars]` entry with the same name as an existing secret.** Never reuse a secret's name for a var.
-- **Changing `name` or an `[env.*]` name.** A new script name is a new Worker with no secrets.
-- **Deploying without `--env`, or with the wrong `--config`.** It lands on a different Worker.
-
-`wrangler deploy` on the same Worker with `keep_vars = true` does not remove secrets. `fly deploy` does not remove Fly secrets.
-
-## How a Worker deploy happens
-
-The user runs it. Hand over this sequence:
+When the user asks for a Worker deploy, this is the whole command:
 
 ```bash
-npx wrangler secret list --env production > before.txt   # names only
-npx wrangler deploy --env production
-npx wrangler secret list --env production > after.txt
-# compare before.txt and after.txt — every name must still be there
+npx wrangler deploy --env production --keep-vars
 ```
 
-Use `--config workers/tav-intelligence-worker/wrangler.toml` or `--config workers/maxbuy-worker/wrangler.toml` for those Workers. GitHub `deploy-staging.yml` deploys only `tav-aip-staging` on push to `main`.
+Use `--env staging` for staging. Pass `--config` only for `workers/tav-intelligence-worker` or `workers/maxbuy-worker`.
 
-Prefer changes that need no Worker deploy at all (Fly, migrations, scripts) when there is a choice.
+`--keep-vars` is required every time. Top-level `keep_vars = true` does not apply to `--env production` or `--env staging`. Wrangler 4.90 ignores `keep_vars` inside an environment, so the flag is the setting that keeps dashboard text vars. Do not put `keep_vars` under `[env.*]`.
 
-## If the user reports lost secrets
+## Never on a deploy
 
-Do not re-enter, guess or copy values. Help find the cause (the list above, wrong env, wrong Worker), and let the user restore values.
+- `wrangler secret list`, `put`, `delete`, or `bulk`
+- `wrangler versions deploy`, `rollback`, or `wrangler delete`
+- Reading secrets through any API or MCP, including secret names
+- Opening, grepping, or printing `.dev.vars` or `.env*`
+- A before/after secret list. That touches secrets. Skip it.
+
+A deploy with `--keep-vars` uploads code and the plain `[vars]` already in `wrangler.toml`. Secrets stay on the Worker.
+
+## Do not
+
+- Remove `keep_vars = true` from the top level or from an environment
+- Add a `[vars]` name that matches a secret
+- Change `name` or `[env.*.name]` (that creates a Worker with no secrets)
+- Deploy without `--env` (that is a different Worker)
+
+Fly deploys of `tav-seller-enrich` are allowed. Still never print a secret value.

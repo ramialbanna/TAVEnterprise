@@ -3,6 +3,7 @@ import { getActiveUserById } from "./users";
 import type { SupabaseClient } from "./supabase";
 import { getOpportunityDetail, type OpportunityDetail } from "./opportunities";
 import { blockSellerFromDealerDismiss } from "./blockedSellers";
+import { rememberBuyerContactKeys } from "./listingContactKeys";
 import { log } from "../logging/logger";
 
 /** Active claim window after POST /app/opportunities/:id/claim. */
@@ -768,11 +769,19 @@ export async function dismissOpportunity(
   if (input.reason === "dealer") {
     try {
       const blocked = await blockSellerFromDealerDismiss(db, normalizedListingId, actor.id);
+      const contactKeys = await rememberBuyerContactKeys(db, normalizedListingId, actor.id);
       if (blocked) {
         log("ingest.dealer_blacklist.added", {
           normalizedListingId,
           sellerKey: blocked.sellerKey,
           inserted: blocked.inserted,
+          contactKeys,
+          kpi: true,
+        });
+      } else if (contactKeys.length > 0) {
+        log("ingest.dealer_blacklist.contact_keys", {
+          normalizedListingId,
+          contactKeys,
           kpi: true,
         });
       } else {

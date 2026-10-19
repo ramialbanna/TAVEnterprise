@@ -486,7 +486,7 @@ export async function runIngestItemLoop(
             "ingest.dealer_listing_blocked",
             {
               seller_type: "dealer",
-              source: "contact_repeat",
+              source: contactHit.source,
               contact_key: contactHit.contactKey,
               listing_count: contactHit.vehicleCount,
               seller_url: listing.sellerUrl ?? null,
@@ -502,7 +502,7 @@ export async function runIngestItemLoop(
             reason_code: "dealer_listing",
             details: {
               seller_type: "dealer",
-              source: "contact_repeat",
+              source: contactHit.source,
               contact_key: contactHit.contactKey,
               listing_count: contactHit.vehicleCount,
               seller_url: listing.sellerUrl ?? null,

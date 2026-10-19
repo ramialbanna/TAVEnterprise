@@ -129,16 +129,21 @@ function makeWorkflowDb(initial: WorkflowState = null) {
   let workflow = initial ? { ...initial } : null;
   const actions: Array<Record<string, unknown>> = [];
   const blockedSellerRows: Array<Record<string, unknown>> = [];
+  const blockedContactRows: Array<Record<string, unknown>> = [];
 
   const db = {
     actions,
     blockedSellerRows,
+    blockedContactRows,
     from(table: string) {
       if (table === "normalized_listings") {
         const listingRow = {
           id: "listing-1",
           source: "facebook",
           region: "dallas_tx",
+          listing_url: "https://www.facebook.com/marketplace/item/listing-1/",
+          title: "2019 Toyota Camry",
+          description: "Call (214) 555-1212",
           seller_url: "https://facebook.com/marketplace/profile/dealer-1",
           seller_name: "Dealer One",
         };
@@ -151,6 +156,15 @@ function makeWorkflowDb(initial: WorkflowState = null) {
                 };
               },
             };
+          },
+        };
+      }
+
+      if (table === "blocked_contact_keys") {
+        return {
+          upsert(rows: Array<Record<string, unknown>>) {
+            blockedContactRows.push(...rows);
+            return Promise.resolve({ error: null });
           },
         };
       }
@@ -525,6 +539,13 @@ describe("dismissOpportunity", () => {
       normalized_listing_id: "listing-1",
       seller_key: "url:https://facebook.com/marketplace/profile/dealer-1",
     });
+    expect(db.blockedContactRows).toEqual([
+      expect.objectContaining({
+        source: "facebook",
+        contact_key: "phone:2145551212",
+        flagged_by_user_id: "closer-1",
+      }),
+    ]);
   });
 });
 

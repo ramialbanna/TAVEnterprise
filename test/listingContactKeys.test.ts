@@ -10,11 +10,30 @@ type Row = {
   last_seen_at: string;
 };
 
-function fakeDb(seed: Row[]) {
+function fakeDb(seed: Row[], blockedKeys: string[] = []) {
   const rows = [...seed];
   return {
     rows,
-    from() {
+    from(table: string) {
+      if (table === "blocked_contact_keys") {
+        return {
+          select() {
+            return {
+              eq() {
+                return this;
+              },
+              in(_column: string, keys: string[]) {
+                return Promise.resolve({
+                  data: blockedKeys
+                    .filter((key) => keys.includes(key))
+                    .map((contact_key) => ({ contact_key })),
+                  error: null,
+                });
+              },
+            };
+          },
+        };
+      }
       return {
         upsert(incoming: Row[]) {
           for (const row of incoming) {
@@ -87,6 +106,7 @@ describe("matchRepeatedListingContact", () => {
       contactKey: phone,
       vehicleCount: 3,
       otherListingUrls: ["https://facebook.com/a", "https://facebook.com/b"],
+      source: "contact_repeat",
     });
   });
 
@@ -145,5 +165,59 @@ describe("matchRepeatedListingContact", () => {
     });
     expect(hit).toBeNull();
     expect(db.rows).toHaveLength(0);
+  });
+
+  it("drops the next car when a buyer already flagged that phone", async () => {
+    const db = fakeDb([], ["phone:2145551212"]);
+    const hit = await matchRepeatedListingContact(db as never, {
+      listingUrl: "https://facebook.com/new",
+      description: "Text 214-555-1212",
+    });
+    expect(hit).toMatchObject({
+      contactKey: "phone:2145551212",
+      source: "buyer_contact",
+      vehicleCount: 1,
+    });
+  });
+
+  it("drops the third car that pastes the same long description", async () => {
+    const description = [
+      "We finance everyone. Bad credit is welcome. Come see the lot on Harry Hines today.",
+      "Ask for the internet manager. Every vehicle is inspected and ready for delivery.",
+    ].join(" ");
+    const seen = fakeDb([]);
+    const first = await matchRepeatedListingContact(seen as never, {
+      listingUrl: "https://facebook.com/a",
+      description,
+    });
+    expect(first).toBeNull();
+    const copyKey = seen.rows.find((row) => row.contact_key.startsWith("copy:"))?.contact_key;
+    expect(copyKey).toBeTruthy();
+
+    const third = fakeDb([
+      {
+        source: "facebook",
+        listing_url: "https://facebook.com/a",
+        contact_key: copyKey!,
+        vehicle_key: "url:https://facebook.com/a",
+        last_seen_at: new Date().toISOString(),
+      },
+      {
+        source: "facebook",
+        listing_url: "https://facebook.com/b",
+        contact_key: copyKey!,
+        vehicle_key: "url:https://facebook.com/b",
+        last_seen_at: new Date().toISOString(),
+      },
+    ]);
+    const hit = await matchRepeatedListingContact(third as never, {
+      listingUrl: "https://facebook.com/c",
+      description,
+    });
+    expect(hit).toMatchObject({
+      contactKey: copyKey,
+      vehicleCount: 3,
+      source: "contact_repeat",
+    });
   });
 });

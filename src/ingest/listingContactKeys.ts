@@ -119,3 +119,46 @@ export function extractListingContactKeys(input: ListingContactText): string[] {
   addPhones(text, keys);
   return [...keys];
 }
+
+/** After stripping year, price, miles, VIN, and phone, a short line is not a template. */
+export const COPY_TEMPLATE_MIN_CHARS = 80;
+
+function fnv1a64(text: string, seed: bigint): bigint {
+  let hash = seed;
+  const prime = 0x100000001b3n;
+  const mask = (1n << 64n) - 1n;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= BigInt(text.charCodeAt(i));
+    hash = (hash * prime) & mask;
+  }
+  return hash;
+}
+
+function hex64(value: bigint): string {
+  return value.toString(16).padStart(16, "0");
+}
+
+/**
+ * Same long description on 3 cars is a dealer template.
+ * "Clean title" stays under the length bar and does not cluster.
+ */
+export function copyTemplateKey(description?: string | null): string | null {
+  if (!description?.trim()) return null;
+  let text = description.toLowerCase();
+  text = text.replace(/\b(?:19|20)\d{2}\b/g, " ");
+  text = text.replace(/\$\s?\d[\d,]*(?:\.\d+)?/g, " ");
+  text = text.replace(/\b\d[\d,]*(?:\.\d+)?\s*(?:k|miles?|mi|mileage)\b/g, " ");
+  text = text.replace(/\b[a-hj-npr-z0-9]{17}\b/g, " ");
+  text = text.replace(phonePattern(), " ");
+  text = text.replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  if (text.length < COPY_TEMPLATE_MIN_CHARS) return null;
+  const hash = `${hex64(fnv1a64(text, 0xcbf29ce484222325n))}${hex64(fnv1a64(text, 0x100000001b3n))}`;
+  return `copy:${hash}`;
+}
+
+/** Phone, website, email, and a long copied description. Buyer flags use the contact keys only. */
+export function listingClusterKeys(input: ListingContactText): string[] {
+  const keys = extractListingContactKeys(input);
+  const copy = copyTemplateKey(input.description);
+  return copy ? [...keys, copy] : keys;
+}
