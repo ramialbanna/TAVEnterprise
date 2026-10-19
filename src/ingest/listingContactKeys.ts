@@ -45,8 +45,10 @@ export function phoneKeyFromDigits(digits: string): string | null {
   let normalized = digits.replace(/\D/g, "");
   if (normalized.length === 11 && normalized.startsWith("1")) normalized = normalized.slice(1);
   if (normalized.length !== 10) return null;
-  if (normalized[0] < "2" || normalized[0] > "9") return null;
-  if (normalized[3] < "2" || normalized[3] > "9") return null;
+  const area = normalized.charAt(0);
+  const exchange = normalized.charAt(3);
+  if (area < "2" || area > "9") return null;
+  if (exchange < "2" || exchange > "9") return null;
   return `phone:${normalized}`;
 }
 
