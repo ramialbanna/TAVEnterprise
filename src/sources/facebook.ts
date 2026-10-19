@@ -1,3 +1,4 @@
+import { readScraperVehicle } from "../apify/scraperVehicle";
 import type { AdapterResult, NormalizedListingInput, RegionKey } from "../types/domain";
 import { resolveListingVin } from "./extractVinFromText";
 import {
@@ -495,7 +496,9 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   "_fetchedAt",
   "marketplace_listing_title",
   "custom_title",
+  "customTitle",
   "custom_sub_titles_with_rendering_flags",
+  "subtitles",
   "marketplace_listing_seller",
   "marketplace_listing_category_id",
   "listing_date",
@@ -504,9 +507,12 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   "max_listing_price",
   "min_listing_price",
   "strikethrough_price",
+  "strikethroughPrice",
   "primary_listing_photo",
   "primaryImage",
+  "primaryPhotoUrl",
   "extraListingMedia",
+  "media",
   "deliveryTypes",
   "categoryId",
   "storyKey",
@@ -517,6 +523,15 @@ const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
   "condition",
   "parent_listing",
   "extraListingData",
+  "details",
+  // Build 0.0.6 top-level fields. Unknown keys used to fill schema_drift_events.
+  "petBreed",
+  "predictedTier",
+  "rankingScore",
+  "priceRange",
+  "isSponsored",
+  "adId",
+  "kind",
   "if_gk_just_listed_tag_on_search_feed",
   "is_hidden",
   "is_live",
@@ -584,12 +599,26 @@ export function parseFacebookItem(item: unknown, ctx: AdapterContext): AdapterRe
     if (year < 2000 || year > 2035) return fail("invalid_year");
 
     const makeResult = extractMake(title, year);
-    if (!makeResult) return fail("missing_ymm");
-    const { make, rest } = makeResult;
-
-    const modelResult = extractModel(rest, make);
-    if (!modelResult) return fail("missing_ymm");
-    const { model, remaining, trimHint } = modelResult;
+    const modelResult = makeResult ? extractModel(makeResult.rest, makeResult.make) : undefined;
+    // §81 — a clean scraper make and model replaces the title parse. Year stays
+    // on the title. A messy model (pasted title, body style) does not.
+    const scrapedIdentity = readScraperVehicle(rec);
+    let make: string;
+    let model: string;
+    let remaining: string;
+    let trimHint: string | undefined;
+    if (scrapedIdentity.cleanYmms && scrapedIdentity.make && scrapedIdentity.model) {
+      make = scrapedIdentity.make.toLowerCase();
+      model = scrapedIdentity.model.toLowerCase();
+      remaining = modelResult?.remaining ?? "";
+      trimHint = modelResult?.trimHint;
+    } else {
+      if (!makeResult || !modelResult) return fail("missing_ymm");
+      make = makeResult.make;
+      model = modelResult.model;
+      remaining = modelResult.remaining;
+      trimHint = modelResult.trimHint;
+    }
 
     const priceRaw =
       rec["price"] ?? rec["Price"] ?? rec["listing_price"] ?? rec["listingPrice"];

@@ -64,6 +64,7 @@ import {
   assertQueueName,
   buildNeedsActionEnrichContext,
   defaultQueue,
+  isScraperDealershipDrop,
   matchesWouldBeNeedsAction,
 } from "./lib/enrich-queues.mjs";
 import { stopCloudProfile } from "./lib/gologin-cloud.mjs";
@@ -286,6 +287,7 @@ async function loadDealerListingQueue(db) {
   for (const row of data ?? []) {
     const details = row.details && typeof row.details === "object" ? row.details : {};
     if (details.seller_url) continue;
+    if (isScraperDealershipDrop(details)) continue;
     if (tooOld(row.created_at)) continue;
     rows.push({
       queue: "dealer_listing",

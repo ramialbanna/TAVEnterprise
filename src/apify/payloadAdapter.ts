@@ -1,4 +1,5 @@
 import { extractListingImageUrls } from "./listingMedia";
+import { isBodyStyleOnly, readScraperVehicle } from "./scraperVehicle";
 
 /**
  * Map a raidr-api/facebook-marketplace-vehicle-scraper dataset item into the
@@ -127,7 +128,7 @@ export function mapRaidrApiItem(item: unknown): unknown {
   // title — fall back through raidr-api aliases when adapter alias missing.
   if (readString(rec.title) === undefined && readString(rec.Title) === undefined) {
     const fromMarketplace = readString(rec.marketplace_listing_title);
-    const fromCustom = readString(rec.custom_title);
+    const fromCustom = readString(rec.custom_title) ?? readString(rec.customTitle);
     const title = fromMarketplace ?? fromCustom;
     if (title) out.title = title;
   }
@@ -148,13 +149,13 @@ export function mapRaidrApiItem(item: unknown): unknown {
   }
 
   // sellerName / sellerUrl — raidr-api emits nested marketplace_listing_seller
-  // { id, name }. Detail-mode sometimes puts the same object on
-  // extraListingData.seller (often {} today — still map it). Numeric `id` is
-  // the Marketplace profile we persist as sellerUrl.
+  // { id, name }. Detail-mode puts the same object on extraListingData.seller
+  // (old) or details.seller (build 0.0.6). Numeric `id` is the Marketplace
+  // profile we persist as sellerUrl. A pfbid token is not a profile URL.
   const sellerCandidates: unknown[] = [rec.marketplace_listing_seller];
-  const eldForSeller = rec.extraListingData;
-  if (eldForSeller && typeof eldForSeller === "object" && !Array.isArray(eldForSeller)) {
-    sellerCandidates.push((eldForSeller as Record<string, unknown>).seller);
+  const detailForSeller = rec.details ?? rec.extraListingData;
+  if (detailForSeller && typeof detailForSeller === "object" && !Array.isArray(detailForSeller)) {
+    sellerCandidates.push((detailForSeller as Record<string, unknown>).seller);
   }
   sellerCandidates.push(rec.seller);
 
@@ -207,87 +208,38 @@ export function mapRaidrApiItem(item: unknown): unknown {
   }
 
   // ── Detail-mode fields (fetchDetailedItems: true) ─────────────────────────
-  // When the Apify task config enables fetchDetailedItems, raidr-api populates
-  // extraListingData with structured per-listing detail (mileage, VIN,
-  // make/model/trim, description, exact location). When the flag is off these
-  // fields are absent / null; the basic-mode mappings above cover what's
-  // available from the search-results-only payload.
-  const eld = rec.extraListingData;
-  if (eld && typeof eld === "object" && !Array.isArray(eld)) {
-    const detail = eld as Record<string, unknown>;
+  // Old actor: extraListingData.vehicle_*_display_name.
+  // Build 0.0.6: details.vehicle.{makeDisplayName, odometer, sellerType, …}.
+  // Both are read by readScraperVehicle. A body-style trim ("Sport Utility 4D")
+  // is not stored — it is not a Cox style. Year still comes from the title.
+  const scraped = readScraperVehicle(rec);
 
-    // mileage — vehicle_odometer_data.{unit, value}. Only MILES unit; KM
-    // ignored so we never silently misreport a 100,000 km listing as 100,000
-    // mi against `tav.buy_box_rules.max_mileage`.
-    if (typeof rec.mileage !== "number") {
-      const odo = detail.vehicle_odometer_data;
-      if (odo && typeof odo === "object" && !Array.isArray(odo)) {
-        const o = odo as { unit?: unknown; value?: unknown };
-        if (o.unit === "MILES" && typeof o.value === "number" && Number.isFinite(o.value) && o.value >= 0) {
-          out.mileage = o.value;
-        }
-      }
-    }
+  if (typeof rec.mileage !== "number" && scraped.mileage !== undefined) {
+    out.mileage = scraped.mileage;
+  }
 
-    // VIN — vehicle_identification_number. Validate against the same 17-char
-    // standard VIN regex the Facebook adapter uses; uppercase it.
-    if (readString(rec.vin) === undefined && readString(rec.VIN) === undefined && readString(rec.Vin) === undefined) {
-      const vinRaw = readString(detail.vehicle_identification_number);
-      if (vinRaw !== undefined) {
-        const upper = vinRaw.toUpperCase();
-        if (VIN_REGEX.test(upper)) out.vin = upper;
-      }
-    }
-
-    // make / model / trim — preserved on the output for downstream tooling.
-    // The Facebook adapter still re-parses these from the title; this PR
-    // does not change adapter rejection semantics. Future work can teach
-    // the adapter (or a normalization layer) to prefer these canonical
-    // FB-supplied strings when present.
-    if (readString(rec.make) === undefined) {
-      const mk = readString(detail.vehicle_make_display_name);
-      if (mk) out.make = mk;
-    }
-    if (readString(rec.model) === undefined) {
-      const md = readString(detail.vehicle_model_display_name);
-      if (md) out.model = md;
-    }
-    if (readString(rec.trim) === undefined) {
-      const raw = readString(detail.vehicle_trim_display_name);
-      if (raw) {
-        const cleaned = cleanTrim(raw);
-        if (cleaned) out.trim = cleaned;
-      }
-    }
-
-    // description — sellers commonly include mileage / condition / VIN in the
-    // free-text description. Preserve it for future title-style fallback work.
-    if (readString(rec.description) === undefined) {
-      const desc = readString(detail.description);
-      if (desc) out.description = desc;
-    }
-
-    if (readString(rec.condition) === undefined) {
-      const cond = readString(detail.condition);
-      if (cond) out.condition = cond;
-    }
-
-    // city / state — extraListingData.location is flat ({city, state, …}).
-    if (readString(rec.city) === undefined || readString(rec.state) === undefined) {
-      const loc = detail.location;
-      if (loc && typeof loc === "object" && !Array.isArray(loc)) {
-        const l = loc as Record<string, unknown>;
-        if (readString(rec.city) === undefined) {
-          const city = readString(l.city);
-          if (city) out.city = city;
-        }
-        if (readString(rec.state) === undefined) {
-          const state = readString(l.state);
-          if (state) out.state = state;
-        }
-      }
+  if (readString(rec.vin) === undefined && readString(rec.VIN) === undefined && readString(rec.Vin) === undefined) {
+    if (scraped.vin) {
+      const upper = scraped.vin.toUpperCase();
+      if (VIN_REGEX.test(upper)) out.vin = upper;
     }
   }
+
+  if (readString(rec.make) === undefined && scraped.make) out.make = scraped.make;
+  if (readString(rec.model) === undefined && scraped.model) out.model = scraped.model;
+  if (readString(rec.trim) === undefined && scraped.trim && !isBodyStyleOnly(scraped.trim)) {
+    const cleaned = cleanTrim(scraped.trim);
+    if (cleaned && !isBodyStyleOnly(cleaned)) out.trim = cleaned;
+  }
+
+  if (readString(rec.description) === undefined && scraped.description) {
+    out.description = scraped.description;
+  }
+  if (readString(rec.condition) === undefined && scraped.condition) {
+    out.condition = scraped.condition;
+  }
+  if (readString(rec.city) === undefined && scraped.city) out.city = scraped.city;
+  if (readString(rec.state) === undefined && scraped.state) out.state = scraped.state;
 
   // Basic-mode city/state fallback — facebook-marketplace-vehicle-scraper emits
   // `location.reverse_geocode`; custom-vehicle-scraper emits flat
@@ -314,17 +266,14 @@ export function mapRaidrApiItem(item: unknown): unknown {
     }
   }
 
-  // ── Subtitle mileage fallback (basic mode only) ───────────────────────────
-  // Basic-mode dataset items frequently carry mileage in the rendered subtitle
-  // (e.g. "64K miles", "129K miles · Dealership"). Used ONLY when extraListing-
-  // Data is absent — detail-mode items have a structured odometer field with
-  // an explicit unit, and trusting the subtitle when detail data is present
-  // risks reporting kilometres as miles.
-  const detailModeOdometerPresent =
-    eld && typeof eld === "object" && !Array.isArray(eld) &&
-    (eld as Record<string, unknown>).vehicle_odometer_data !== undefined;
-  if (typeof out.mileage !== "number" && !detailModeOdometerPresent) {
-    const fromSub = extractMileageFromSubtitles(rec.custom_sub_titles_with_rendering_flags);
+  // ── Subtitle mileage fallback ─────────────────────────────────────────────
+  // "64K miles" on custom_sub_titles_with_rendering_flags (old) or subtitles
+  // (build 0.0.6). Skipped when a structured odometer is present, including a
+  // non-miles unit, so a kilometre listing is not stored as miles.
+  if (typeof out.mileage !== "number" && !scraped.odometerPresent) {
+    const fromSub =
+      extractMileageFromSubtitles(rec.subtitles) ??
+      extractMileageFromSubtitles(rec.custom_sub_titles_with_rendering_flags);
     if (fromSub !== undefined) out.mileage = fromSub;
   }
 
@@ -341,8 +290,8 @@ interface SubtitleEntry {
 
 function extractMileageFromSubtitles(value: unknown): number | undefined {
   if (!Array.isArray(value)) return undefined;
-  for (const entry of value as SubtitleEntry[]) {
-    const text = readString(entry?.subtitle);
+  for (const entry of value as Array<SubtitleEntry | string>) {
+    const text = typeof entry === "string" ? readString(entry) : readString(entry?.subtitle);
     if (!text) continue;
     const parsed = parseSubtitleMileage(text);
     if (parsed !== undefined) return parsed;

@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-09-30 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-10-19 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -8,23 +8,28 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ---
 
-## Fresh chat handoff (2026-09-21)
+## Fresh chat handoff (2026-10-19)
 
 **Read this first.** Detail lives in the item sections below. Do not re-run the §74 48h soak — it is closed.
 
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git HEAD:** disk-prune + §78 catch-up **pushed** (matches Worker `6aeff6a4`). Prior: `6f37651` (§75 RLS), `ca0700d` (Needs action sheet **24h**; GoLogin enrich stays **1h**).
+- **Git:** §81 and §80 are committed on `main` in this catch-up. Worker `2a216392` matches that code. Fly was not redeployed.
 - `.gitignore` excludes `scripts/_tmp-*`.
 
 ### Production
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `8f682640` (`tav-aip-production`) | **§68** close `source_runs` left `running` > 30m. Also the Refresh MMR keep-on-screen commit (`66af8fc`). Secrets not touched. Prior: `6aeff6a4` (§78 + disk prune), `3e3f973c`. |
+| **Worker** | `2a216392` (`tav-aip-production`) | **§81** scraper gallery, seller, mileage, clean make/model. Deployed 2026-10-19 with `--keep-vars`. Secrets not touched. Prior: `8f682640` (§68). |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
-| **Fly enrich** | still last-hour queue (no Fly redeploy 2026-09-21) | Enrich window is **not** the sheet window. Health: https://tav-seller-enrich.fly.dev/ |
+| **Fly enrich** | no redeploy 2026-10-19 | Enrich window is **not** the sheet window. The `scraper_dealership` queue skip is in the repo only. Health: https://tav-seller-enrich.fly.dev/ |
+
+### This session (2026-10-19)
+
+- **§81 — live** Worker `2a216392`. Build 0.0.6 fields are stored. Old field names still work. Secrets not touched. Git catch-up is this commit.
+- **§80 rode along in that same upload** because the contact-key files were already in the working tree. Migration `0078` is applied (2026-10-15). `tav.listing_contact_keys` exists and has **0 rows**, so `contact_repeat` has not dropped a car yet. Migration `0079` (`public.listings` RLS) is applied (2026-10-17).
 
 ### This session (2026-09-21)
 
@@ -63,12 +68,16 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **Disk — prune + VACUUM FULL done 2026-09-21.** `raw_listings` 2034 MB → 752 MB. DB 4962 MB → 3681 MB.
 
+**§81 — live Worker `2a216392` 2026-10-19.** Gallery, numeric seller profile, miles, and a clean make/model are stored. Claude Y/M/M/S is skipped only when that make and model are clean. A dealership name or dealer seller type drops the car. A name, a `pfbid`, or a blank seller still goes to GoLogin. Secrets not touched. Git catch-up is this commit.
+
 ### Do next (priority)
 
-1. **§74 profile failover — not built.** When Facebook locks the current GoLogin profile, stop using it and switch the Fly lookup to the next ready profile in `fb_buyer_01`–`fb_buyer_10`. One profile at a time. Do not run them together. **`fb_buyer_11` has no Facebook account** — skip it. Nick confirmed 2026-09-28 that **1–10 do**. Most of 01–09 have not been opened since June and several have no proxy; a switch only works after that profile is logged in and has its own proxy. `fb_buyer_10` (Marcus) checkpointed again **2026-09-29 00:34 UTC** and is still halted as of 2026-09-30. The sheet stays **Seller unchecked** while it waits.
-2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Then R2 capture + prod vision tier (ambiguous subset only).
+1. **§74 profile failover — not built.** Still needed for the cars Facebook does not identify. When Facebook locks the current GoLogin profile, stop using it and switch the Fly lookup to the next ready profile in `fb_buyer_01`–`fb_buyer_10`. One profile at a time. Do not run them together. **`fb_buyer_11` has no Facebook account** — skip it. Nick confirmed 2026-09-28 that **1–10 do**. Most of 01–09 have not been opened since June and several have no proxy; a switch only works after that profile is logged in and has its own proxy. `fb_buyer_10` (Marcus) checkpointed again **2026-09-29 00:34 UTC** and is still halted as of 2026-09-30. The sheet stays **Seller unchecked** while it waits.
+2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. The gallery to send is §81. Then R2 capture + prod vision tier (ambiguous subset only).
 3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
-4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. Do not soak last-resort again.
+4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` / `llm_ymms.skipped_clean_scraper_identity` in Workers Logs. Do not soak last-resort again.
+5. **§80 contact keys — code is in Worker `2a216392`, migration `0078` is applied.** Same phone, website, WhatsApp number, or email on 3 different cars in 30 days drops the listing (`contact_repeat`). The table has **0 rows**, so nothing has dropped yet. Buyer-flag memory and copied-description matching are not built.
+6. **Redeploy Fly** so the `scraper_dealership` queue skip leaves the repo. Git catch-up is this commit.
 
 ### Key commands
 
@@ -234,28 +243,87 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 
 | # | Item | Priority | Status |
 |---|------|----------|--------|
-| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **Next:** credits → §73 vision |
-| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04** (575 pool / 200 sample); 200-row Claude run **blocked on Anthropic 401** |
-| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. |
+| **81** | **Scraper detail before Claude or GoLogin** — gallery + seller from build 0.0.6 | **High** | [x] **Live** Worker `2a216392` 2026-10-19. Mapper reads `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`, and still accepts the old names. Clean make/model skips Claude. A dealership name or dealer seller type drops the car. GoLogin still runs for a name, a pfbid, or a blank seller. Secrets not touched. |
+| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **§81 live:** a clean scraper make/model skips Claude. A messy model still needs it. |
+| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). 200-row Claude run still **blocked on Anthropic 401**. |
+| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. No-login text keys are **§80** (not started). |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
-| **74** | **Seller identity via GoLogin / logged-in FB** — unblocks §69 | **High** | [~] **48h soak closed 2026-09-07**. **2026-09-30:** `fb_buyer_10` checkpointed again **2026-09-29 00:34 UTC** and is still halted. **Next:** failover across `fb_buyer_01`–`10` (11 has no Facebook account). Text alert deployed 2026-09-28 but Twilio returns **502**, so no SMS arrived. |
-| **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. Admin list RPC Worker `79606324` (2026-09-09). Vendor `extraListingData.seller` still `{}`. |
+| **74** | **Seller identity via GoLogin / logged-in FB** — fallback after §81 | **High** | [~] **48h soak closed 2026-09-07**. GoLogin only when the scraper did not send a profile id or a dealership. `fb_buyer_10` checkpointed **2026-09-29 00:34 UTC**. Failover across `fb_buyer_01`–`10` still not built. |
+| **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. §81 stores a numeric profile id as `seller_url` and drops a named dealership. A name or `pfbid` is not a block key. |
 | **68** | **Ingest throughput + fast validation playbook** | **High** | [x] stale `running` **done 2026-09-22** (88 closed). 30m close **live** Worker `8f682640`. Disk prune + VACUUM FULL **done**. |
 | **59** | **Max buy / YMMS linkage at ingest** — ingest MaxBuy shipped. Listing identity write-back is §78 | **High** | [~] |
-| **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02; **multi-photo closed** — vendor cannot provide gallery (2026-09-04) |
+| **62** | **Listing mirror on detail** — 1536px photo + seller profile link | **Medium** | [~] seller URL + full-res photo in UI 2026-09-02. Gallery is no longer empty (§81); the mirror still shows one photo. |
 | **51** | **Expand workflow statuses** — blocked on buyer checklist | **Medium** | [~] |
 | **67** | **Craigslist scheduled ingest** — deprioritized | **Low** | [~] |
 | **75** | **Supabase RLS** — lock `tav` from Data API anon/authenticated | **High** | [x] **live** migration `0075` 2026-09-21. Git `6f37651` pushed. No FORCE. Service role unchanged. |
 | **77** | **Queue list speed** — cheap counts + hydrate only the page | **High** | [x] **live** Worker `2aef5476` + web `b037386` 2026-09-17. Secrets not touched. |
 | **78** | **Ingest Cox identity write-back** — store the Y/M/M/S ingest priced; do not leave listing as parsed `glc 300` | **High** | [x] **live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest. |
+| **80** | **Dealer detection without GoLogin or Claude** — phone, link, or copied description on 3 different cars | **High** | [~] Action 1 code is in Worker `2a216392`. Migration `0078` is applied. `listing_contact_keys` has **0 rows**, so nothing has dropped yet. Buyer-flag memory and copied description not started. |
 
 Shipped and closed items are archived at the bottom.
 
 ---
 
+## 81 — Use the scraper's photos and seller before Claude or GoLogin
+
+**Opened:** 2026-10-19 · **Status:** [x] **live** Worker `2a216392` 2026-10-19 · **Priority:** High
+
+`raidr-api/custom-vehicle-scraper` build **0.0.6** is live. Deployed with `--keep-vars`. Secrets not touched. Git catch-up is this commit. Fly was not redeployed.
+
+### Shipped
+
+- [x] Read `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`. Old names still work. New top-level keys are in `KNOWN_FACEBOOK_FIELDS`.
+- [x] Store the gallery. Seller-classify Haiku still sends the first photo, and only when the make/model is messy or there is no profile URL.
+- [x] A numeric seller id is saved as `seller_url` and checked against `blocked_sellers`. A `pfbid` stays a name.
+- [x] A dealership name, or a seller type that says dealership, drops the car before Haiku. `PRIVATE_SELLER` does not. GoLogin still runs for a name, a `pfbid`, or a blank seller.
+- [x] A clean scraper make and model skips the Claude Y/M/M/S call. Alias lookup and the offline matcher still run. A messy model does not skip Claude. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
+- [x] Mileage comes from `details.vehicle.odometer` when the unit is miles. The subtitle is not used once that odometer is present. MMR still runs.
+- [ ] Fly queue skip for `source: scraper_dealership` is in the repo only. Fly was not redeployed.
+- [x] Git catch-up.
+
+Checked 30 new Texas listings from 2026-10-19, about 11:55–12:32 UTC:
+
+| What arrived | What we saw |
+|---|---|
+| Photos | A gallery on every car. Typical **8–10**. Range **2–20**. **6** hit 20. Two also had a video. Before this, one thumbnail and an empty gallery. |
+| Seller | A name on every car. About a third have a numeric profile id we can turn into a Marketplace profile link. The rest are a `pfbid` token we cannot match. |
+| Dealership | Rare. **1 of 26** was marked a dealership and named. Obvious lots still arrive as `PRIVATE_SELLER` with a blank dealership name. |
+| Vehicle | Make and model on every car. No separate year. Mileage in miles on every car. Trim is often a body style (`Sport Utility 4D`). VIN empty. Phone field empty. Model is sometimes the messy title (`tundra/d0wn pay`). |
+
+**This is the photo input §73 was waiting on, and the seller input §74 was logging into Facebook to get.** Claude gets the gallery only when we still need a decision. GoLogin runs only when the scraper left the seller blank.
+
+### Read these names
+
+Accept the old names too. `url` did not change, and dedupe stays `(source, listing_url)`.
+
+| Old | New |
+|---|---|
+| `extraListingData` | `details` — description, condition, seller, location, `vehicle` |
+| `primaryImage` | `primaryPhotoUrl` |
+| `extraListingMedia` | `media.photos` and `media.videos` |
+| `custom_title` | `customTitle` |
+| `custom_sub_titles_with_rendering_flags` | `subtitles` |
+| `listingId` | gone. `id` is now the number in the Facebook link |
+
+Add the new top-level keys to `KNOWN_FACEBOOK_FIELDS`. The last time new Facebook flags were unknown, `schema_drift_events` grew to 3.1M rows.
+
+### Run a worker only for the hole — live on `2a216392`
+
+1. **Photos.** Store `media.photos`. §73 and §71 can send those images to Claude. That call runs when make/model is still messy, or the seller is still unknown. A car that already has a clean identity and a seller does not get a Claude photo call. **Live.** The Haiku call still uses the first photo, not the whole gallery.
+2. **Seller.** A numeric profile id is saved as `seller_url` and checked against `blocked_sellers`. A dealership name, or a seller type that says dealership, drops the car with no Haiku call and no GoLogin visit. A name alone, a `pfbid`, or a blank seller still goes to GoLogin / §71. `PRIVATE_SELLER` does not count — lots are still marked private. **Live.**
+3. **Make and model.** A clean make and model skips the Claude Y/M/M/S call. A messy model does not. Year still comes from the title. Facebook trim is a hint, not a reason to skip Cox. **Live.** Logged as `llm_ymms.skipped_clean_scraper_identity`.
+4. **Mileage.** Use `details.vehicle.odometer` when the unit is miles. Do not guess from the subtitle when that number is present. The MMR lookup still runs. **Live.**
+5. **VIN and phone** stay on the description. Those fields were empty in the sample. **Unchanged.**
+
+Do not turn GoLogin off. Do not run it on a listing that already has a profile URL or a positive dealership signal.
+
+Files: `src/apify/payloadAdapter.ts`, `src/apify/listingMedia.ts`, `src/llm/listingTextContext.ts`, `src/sources/facebook.ts`, `src/ingest/runIngestItemLoop.ts`, seller classify, GoLogin enrich queue.
+
+---
+
 ## 72 — Y/M/M/S completeness = MMR hit rate
 
-**Status:** [~] Proven-bookable gate live. Hit **90.0%** post-gate with Claude (2026-08-15); **79.4%** Claude-offline last 7d (2026-09-07). Parser hygiene **soaked**. 2012 tree **in**. Proven-aware last-resort **live** and **soak closed**. **Actions 7–9 shipped** production `6bcd175b` 2026-09-03. **Open:** Anthropic credits, §73 vision.
+**Status:** [~] Proven-bookable gate live. Hit **90.0%** post-gate with Claude (2026-08-15); **79.4%** Claude-offline last 7d (2026-09-07). Parser hygiene **soaked**. 2012 tree **in**. Proven-aware last-resort **live** and **soak closed**. **Actions 7–9 shipped** production `6bcd175b` 2026-09-03. **§81 live** on Worker `2a216392`: a clean scraper make/model skips Claude. **Open:** Anthropic credits, §73 vision.
 
 ### Deploys
 
@@ -579,7 +647,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 - Text-only eval (`scripts/eval-seller-classification.mjs`) was **not** a go: TP=2 FP=5 FN=48 on 100 rows — labelled dealers were mostly empty text, and the "control" set included real dealer ads. Do not treat that eval as a reason to turn the flag off; vision was the missing input.
 - `extraListingData.seller.name` is mapped when the vendor ever fills it.
 
-**Still open:** seller name/URL still empty on Facebook payloads (vendor). `blocked_sellers` is **URL-only** as of 2026-09-07 (**19** rows after deleting 106 name keys). Re-eval §71 with photos when a labelled set is ready.
+**Still open:** seller name/URL still empty on Facebook payloads (vendor). `blocked_sellers` is **URL-only** as of 2026-09-07 (**19** rows after deleting 106 name keys). Re-eval §71 with photos when a labelled set is ready. Catching dealers from the listing text alone, with no GoLogin profile and no Claude, is **§80** — not started.
 
 **Principle:** keep this separate from the item 57 Y/M/M/S prompt. Own prompt, tool schema, eval harness and flag. §73 can still add seller type as a free field on the identity-vision call later.
 
@@ -600,6 +668,32 @@ Do not wire a production vision tier until this file has a real summary (text-on
 Phase 0 heuristics + Phase 1 Haiku as above. Files: `src/ingest/dealerHeuristics.ts`, `src/llm/sellerClassifyPrompt.ts`, `src/llm/sellerClassifyClient.ts`, `src/valuation/classifyListingSeller.ts`, `scripts/eval-seller-classification.mjs`; hook in `runIngestItemLoop.ts`.
 
 Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer-kept private-party controls before tightening the 0.85 gate.
+
+---
+
+## 80 — Dealer detection without GoLogin or Claude
+
+**Opened:** 2026-10-14 · **Status:** [~] Action 1 code uploaded with Worker `2a216392` 2026-10-19. Migration `0078` is applied (2026-10-15). `listing_contact_keys` has **0 rows**, so no car has dropped yet. Buyer-flag memory and copied descriptions are not started.
+
+**Why.** The Worker already drops a dealer when it can see the same seller advertising several different cars. Today that only works with a Facebook profile URL (§71 repeat-seller, §69 blocklist), and most ads never get one. The text rules miss empty dealer ads. Reading the lot photo needs Claude. This item uses the words already on the listing.
+
+**Plan**
+
+1. **Treat a repeated phone number like a seller profile.** **In repo and on the database.** Pull phones out of the title and description and treat `(214) 555-1212`, `214.555.1212`, and `2145551212` as the same number. A WhatsApp `wa.me` link uses that same number. A website host and an email are their own keys. Facebook links are ignored. **3 different live cars in 30 days** sharing that key → drop the new car (`dealer_listing` / `contact_repeat`) and hide the earlier cars that are already on the sheet. Two cars stay. Two posts of the same VIN are one car. Migration `0078` is applied.
+2. **Remember that key when a buyer marks a lead as a dealer.** Write the phone, link, or email even if there is still no profile URL. The next car with that number is blocked at ingest. A dealer flag today only sticks when a profile URL already exists.
+3. **Catch copied listing text.** Lowercase the description, strip year, price, miles, VIN, and phone, and hash what is left. Same long blurb on 3 different cars is a dealer template. Short lines like "clean title" do not count.
+
+**Action 1 can drop for real.** Migration `0078` is applied and the Worker code is in `2a216392`. The table has **0 rows**, so no drop has fired. A wrong hide still removes a private-party car, so watch `ingest.dealer_listing_blocked` with `source: contact_repeat`. Actions 2 and 3 are not built.
+
+**Still missed.** An ad with no text and only a lot photo. That still needs a person or a model to look at the picture (§71 / §73).
+
+**Leave alone.** The 0.85 text gate. A name, a city, a posting burst, or CARFAX by itself. §74 profile URLs stay the blocklist key when we have them.
+
+### Exit criteria
+
+- [~] Phone, website, WhatsApp number, and email keys. 3 different cars in 30 days drops the listing. Code is in Worker `2a216392`. Migration `0078` is applied. **0 rows** so far.
+- [ ] Buyer `dealer` dismiss stores those keys with no `seller_url`.
+- [ ] Long copied descriptions use the same 3-car bar. Short copy does not cluster.
 
 ---
 
@@ -1074,7 +1168,7 @@ Files: `src/valuation/selectCatalogStyle.ts`, `resolveCatalogStyleFromEvidence.t
 
 ## 69 — Dealer seller blacklist (pre-ingest)
 
-**Status:** [~] **URL keys only**. Ingest + default views hide blocked URLs. **§76:** empty-seller Facebook is shown with Seller unchecked. Vendor `extraListingData.seller` object is still often `{}`.
+**Status:** [~] **URL keys only**. Ingest + default views hide blocked URLs. **§76:** empty-seller Facebook is shown with Seller unchecked. **§81:** a numeric `details.seller.id` is stored as `seller_url`. A dealership name or dealer seller type drops the car. A name or `pfbid` is not a block key. Phone, link, and copied-description keys are **§80**.
 
 When a buyer dismisses with reason `dealer` **and** a Facebook profile URL exists, that URL is added to `blocked_sellers`. Auto-blocks need the URL **and** 2+ live cars. Name-only keys are not written or matched. Ingest skips matching URLs before LLM and MMR.
 

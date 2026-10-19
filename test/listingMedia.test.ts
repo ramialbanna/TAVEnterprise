@@ -31,6 +31,20 @@ describe("extractListingImageUrls", () => {
     ]);
   });
 
+  it("collects primaryPhotoUrl and media.photos", () => {
+    const urls = extractListingImageUrls({
+      primaryPhotoUrl: "https://cdn.example/hero.jpg?ctp=s261x260",
+      media: {
+        photos: [
+          { uri: "https://cdn.example/hero.jpg" },
+          { uri: "https://cdn.example/2.jpg", width: 960, height: 720 },
+        ],
+        videos: [{ uri: "https://cdn.example/clip.mp4" }],
+      },
+    });
+    expect(urls).toEqual(["https://cdn.example/hero.jpg", "https://cdn.example/2.jpg"]);
+  });
+
   it("dedupes identical URLs", () => {
     const urls = extractListingImageUrls({
       primaryImage: "https://cdn.example/same.jpg",

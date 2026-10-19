@@ -7,6 +7,7 @@ import {
   defaultQueue,
   isExpiringClaim,
   isWithinNeedsActionAge,
+  isScraperDealershipDrop,
   matchesWouldBeNeedsAction,
 } from "@scripts/enrich-queues";
 
@@ -110,5 +111,11 @@ describe("matchesWouldBeNeedsAction", () => {
       hasMmrHit: false,
     });
     expect(matchesWouldBeNeedsAction(ctx, now)).toBe(true);
+  });
+
+  it("treats a scraper dealership drop as already identified", () => {
+    expect(isScraperDealershipDrop({ source: "scraper_dealership" })).toBe(true);
+    expect(isScraperDealershipDrop({ source: "contact_repeat" })).toBe(false);
+    expect(isScraperDealershipDrop(null)).toBe(false);
   });
 });

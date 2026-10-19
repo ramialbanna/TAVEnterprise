@@ -3,6 +3,7 @@
  * (Apify-mapped or flat) for the Claude Y/M/M/S prompt. Pure, no I/O.
  */
 
+import { readScraperVehicle } from "../apify/scraperVehicle";
 import type { NormalizedListingInput } from "../types/domain";
 
 export const LLM_LISTING_TEXT_MAX_CHARS = 1000;
@@ -29,7 +30,7 @@ function capText(text: string, maxChars: number): string {
 /**
  * Reads description, condition, mileage, and location from fields the Facebook
  * adapter and `mapRaidrApiItem()` already populate (including nested
- * `extraListingData` when detail fetch is on).
+ * `details` or `extraListingData` when detail fetch is on).
  */
 export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTextContext {
   if (item === null || typeof item !== "object" || Array.isArray(item)) {
@@ -44,7 +45,7 @@ export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTe
   let city = readString(rec.city);
   let state = readString(rec.state);
 
-  const extra = rec.extraListingData;
+  const extra = rec.details ?? rec.extraListingData;
   if (extra && typeof extra === "object" && !Array.isArray(extra)) {
     const detail = extra as Record<string, unknown>;
     description ??= readString(detail.description);
@@ -60,6 +61,12 @@ export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTe
     }
   }
 
+  const scraped = readScraperVehicle(rec);
+  description ??= scraped.description;
+  condition ??= scraped.condition;
+  city ??= scraped.city;
+  state ??= scraped.state;
+
   if (description) {
     out.description = capText(description, LLM_LISTING_TEXT_MAX_CHARS);
   }
@@ -69,6 +76,8 @@ export function extractLlmListingTextFromIngestItem(item: unknown): LlmListingTe
 
   if (typeof rec.mileage === "number" && Number.isFinite(rec.mileage) && rec.mileage >= 0) {
     out.listingMileage = rec.mileage;
+  } else if (scraped.mileage !== undefined) {
+    out.listingMileage = scraped.mileage;
   }
 
   if (city && state) out.location = `${city}, ${state}`;

@@ -58,6 +58,7 @@ import {
   upsertBlockedSeller,
   type BlockedSellerLookup,
 } from "../persistence/blockedSellers";
+import { matchRepeatedListingContact } from "../persistence/listingContactKeys";
 import {
   classifyListingSeller,
   shouldAutoRejectDealer,
@@ -65,6 +66,7 @@ import {
 import { SELLER_CLASSIFY_TIMEOUT_MS } from "../llm/sellerClassifyClient";
 import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
+import { readScraperVehicle } from "../apify/scraperVehicle";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
 import type { ValuationMethod, NormalizationConfidence } from "../types/domain";
@@ -439,8 +441,105 @@ export async function runIngestItemLoop(
       continue;
     }
 
+    const scrapedVehicle = source === "facebook" ? readScraperVehicle(item) : null;
+    if (scrapedVehicle?.dealership) {
+      log(
+        "ingest.dealer_listing_blocked",
+        {
+          seller_type: "dealer",
+          source: "scraper_dealership",
+          seller_url: listing.sellerUrl ?? null,
+          seller_name: listing.sellerName ?? scrapedVehicle.dealershipName ?? null,
+          kpi: true,
+        },
+        listingCtx,
+      );
+      await writeFilteredOut(db, env, {
+        source,
+        source_run_id: run_id,
+        listing_url: listing.url,
+        reason_code: "dealer_listing",
+        details: {
+          seller_type: "dealer",
+          source: "scraper_dealership",
+          dealership_name: scrapedVehicle.dealershipName ?? null,
+          scraper_seller_type: scrapedVehicle.sellerType ?? null,
+          seller_url: listing.sellerUrl ?? null,
+          seller_name: listing.sellerName ?? null,
+        },
+        raw_listing_id: rawId,
+      });
+      rejected++;
+      continue;
+    }
+
+    if (source === "facebook") {
+      try {
+        const contactHit = await matchRepeatedListingContact(db, {
+          listingUrl: listing.url,
+          vin: listing.vin,
+          title: listing.title,
+          description: listing.description,
+        });
+        if (contactHit) {
+          log(
+            "ingest.dealer_listing_blocked",
+            {
+              seller_type: "dealer",
+              source: "contact_repeat",
+              contact_key: contactHit.contactKey,
+              listing_count: contactHit.vehicleCount,
+              seller_url: listing.sellerUrl ?? null,
+              seller_name: listing.sellerName ?? null,
+              kpi: true,
+            },
+            listingCtx,
+          );
+          await writeFilteredOut(db, env, {
+            source,
+            source_run_id: run_id,
+            listing_url: listing.url,
+            reason_code: "dealer_listing",
+            details: {
+              seller_type: "dealer",
+              source: "contact_repeat",
+              contact_key: contactHit.contactKey,
+              listing_count: contactHit.vehicleCount,
+              seller_url: listing.sellerUrl ?? null,
+              seller_name: listing.sellerName ?? null,
+            },
+            raw_listing_id: rawId,
+          });
+          const listingIds = new Set<string>();
+          const currentStored = storedSellerForListing(listing, storedSellersByUrl);
+          if (currentStored?.listingId) listingIds.add(currentStored.listingId);
+          if (contactHit.otherListingUrls.length > 0) {
+            try {
+              const others = await loadStoredSellersByListingUrls(db, source, contactHit.otherListingUrls);
+              for (const row of others.values()) listingIds.add(row.listingId);
+            } catch (err) {
+              logError("persistence", "ingest.contact_repeat_lookup_failed", err, listingCtx);
+            }
+          }
+          for (const listingId of listingIds) {
+            try {
+              await suppressOpportunityForBlockedSeller(db, listingId);
+            } catch (err) {
+              logError("persistence", "ingest.contact_repeat_suppress_failed", err, listingCtx);
+            }
+          }
+          rejected++;
+          continue;
+        }
+      } catch (err) {
+        logError("persistence", "ingest.contact_key_match_failed", err, listingCtx);
+      }
+    }
+
     if (env.SELLER_CLASSIFY_ENABLED === "true") {
-      const allowLlm = Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
+      const sellerKnown = Boolean(listing.sellerUrl);
+      const skipPhoto = Boolean(scrapedVehicle?.cleanYmms && sellerKnown);
+      const allowLlm = !skipPhoto && Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
       const classification = await classifyListingSeller(
         {
           title: listing.title,

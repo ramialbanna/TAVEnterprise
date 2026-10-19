@@ -39,6 +39,10 @@ vi.mock("../src/persistence/blockedSellers", async (importOriginal) => {
   };
 });
 
+vi.mock("../src/persistence/listingContactKeys", () => ({
+  matchRepeatedListingContact: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock("../src/persistence/normalizedListings", () => ({
   upsertNormalizedListing: vi.fn(),
   setNormalizedListingEntryMethod: vi.fn().mockResolvedValue(undefined),
@@ -144,6 +148,8 @@ import {
   upsertBlockedSeller,
 } from "../src/persistence/blockedSellers";
 import { suppressOpportunityForBlockedSeller } from "../src/persistence/opportunityWorkflow";
+import { matchRepeatedListingContact } from "../src/persistence/listingContactKeys";
+import { mapRaidrApiItem } from "../src/apify/payloadAdapter";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -181,6 +187,7 @@ beforeEach(() => {
   vi.mocked(upsertBlockedSeller).mockResolvedValue(null);
   vi.mocked(loadBlockedSellerLookup).mockResolvedValue(null);
   vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(1);
+  vi.mocked(matchRepeatedListingContact).mockResolvedValue(null);
   vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(new Map());
   vi.mocked(updateNormalizedListingYmms).mockResolvedValue(undefined);
 });
@@ -1148,6 +1155,142 @@ describe("POST /ingest — deadline-aware truncation", () => {
       }),
     );
     expect(upsertBlockedSeller).toHaveBeenCalled();
+  });
+
+  it("§80: drops a car when its phone is already on 3 different cars", async () => {
+    vi.mocked(matchRepeatedListingContact).mockResolvedValue({
+      contactKey: "phone:2145551212",
+      vehicleCount: 3,
+      otherListingUrls: ["https://www.facebook.com/marketplace/item/older/"],
+    });
+    vi.mocked(loadStoredSellersByListingUrls).mockImplementation(async (_db, _source, urls) => {
+      const map = new Map<string, { listingId: string; sellerUrl: string | null; sellerName: string | null }>();
+      if (urls.includes("https://www.facebook.com/marketplace/item/older/")) {
+        map.set("https://www.facebook.com/marketplace/item/older/", {
+          listingId: "nl-older",
+          sellerUrl: null,
+          sellerName: null,
+        });
+      }
+      return map;
+    });
+
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-contact-repeat-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://www.facebook.com/marketplace/item/new-phone/",
+        title: "2019 Toyota Camry",
+        description: "Call 214-555-1212",
+        price: 9000,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "dealer_listing",
+        details: expect.objectContaining({
+          source: "contact_repeat",
+          contact_key: "phone:2145551212",
+          listing_count: 3,
+        }),
+      }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(upsertBlockedSeller).not.toHaveBeenCalled();
+    expect(suppressOpportunityForBlockedSeller).toHaveBeenCalledWith(expect.anything(), "nl-older");
+  });
+
+  it("§81: drops a scraper dealership without a Haiku call or a normalized row", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-scraper-dealer",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [mapRaidrApiItem({
+        url: "https://www.facebook.com/marketplace/item/1678138844015197",
+        title: "2023 GMC ACADIA",
+        price: { amount: "23990.00", formatted: "$23,990" },
+        details: {
+          description: "One owner.",
+          vehicle: {
+            makeDisplayName: "GMC",
+            modelDisplayName: "Acadia",
+            sellerType: "PRIVATE_SELLER",
+            dealershipName: "Cardawg2 Auto Sales",
+            odometer: { unit: "MILES", value: 115644 },
+          },
+          seller: { id: "pfbid02kA5SJH9388", name: "Cardawg Hemphill" },
+        },
+      })],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "dealer_listing",
+        details: expect.objectContaining({ source: "scraper_dealership" }),
+      }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
+  it("§81: keeps a private seller and stores the numeric profile, miles, and gallery", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-scraper-private",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [mapRaidrApiItem({
+        url: "https://www.facebook.com/marketplace/item/1610411714147660",
+        title: "2016 Nissan Rogue Select",
+        price: { amount: "4000.00" },
+        primaryPhotoUrl: "https://cdn.example/hero.jpg",
+        media: { photos: [{ uri: "https://cdn.example/hero.jpg" }, { uri: "https://cdn.example/side.jpg" }] },
+        details: {
+          description: "Runs great.",
+          vehicle: {
+            makeDisplayName: "Nissan",
+            modelDisplayName: "Rogue Select",
+            odometer: { unit: "MILES", value: 128000 },
+            sellerType: "PRIVATE_SELLER",
+            dealershipName: null,
+          },
+          seller: { id: "100012345", name: "Sawyer J" },
+        },
+      })],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.processed).toBe(1);
+    expect(body.rejected).toBe(0);
+    expect(upsertNormalizedListing).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        make: "nissan",
+        model: "rogue select",
+        mileage: 128000,
+        sellerUrl: "https://www.facebook.com/marketplace/profile/100012345",
+        images: ["https://cdn.example/hero.jpg", "https://cdn.example/side.jpg"],
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("item 71: does not filter dealers when SELLER_CLASSIFY_ENABLED is off", async () => {

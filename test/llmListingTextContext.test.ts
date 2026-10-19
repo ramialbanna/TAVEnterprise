@@ -18,6 +18,22 @@ const adapterCtx: AdapterContext = {
 };
 
 describe("extractLlmListingTextFromIngestItem", () => {
+  it("reads description, city, and miles from details.vehicle", () => {
+    expect(
+      extractLlmListingTextFromIngestItem({
+        details: {
+          description: "Garage kept.",
+          location: { city: "Fort Worth", state: "TX" },
+          vehicle: { odometer: { unit: "MILES", value: 115644 } },
+        },
+      }),
+    ).toEqual({
+      description: "Garage kept.",
+      listingMileage: 115644,
+      location: "Fort Worth, TX",
+    });
+  });
+
   it("reads description and condition from extraListingData on raw Apify items", () => {
     const raw = {
       title: "2016 Ford F-150 · Short Bed",

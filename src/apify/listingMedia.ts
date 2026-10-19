@@ -101,6 +101,7 @@ export function extractListingImageUrls(item: unknown): string[] {
   const urls: string[] = [];
   const seen = new Set<string>();
 
+  pushUrl(urls, seen, readString(rec.primaryPhotoUrl));
   pushUrl(urls, seen, readString(rec.primaryImage));
 
   const primaryPhoto = rec.primary_listing_photo;
@@ -114,11 +115,18 @@ export function extractListingImageUrls(item: unknown): string[] {
   const existing = rec.images;
   if (Array.isArray(existing)) collectFromMediaArray(existing, urls, seen);
 
-  const eld = rec.extraListingData;
-  if (eld && typeof eld === "object" && !Array.isArray(eld)) {
-    const detail = eld as Record<string, unknown>;
+  const detailSource = rec.details ?? rec.extraListingData;
+  if (detailSource && typeof detailSource === "object" && !Array.isArray(detailSource)) {
+    const detail = detailSource as Record<string, unknown>;
+    pushUrl(urls, seen, readString(detail.primaryPhotoUrl));
     pushUrl(urls, seen, readString(detail.primaryImage));
     collectFromMediaArray(detail.images, urls, seen);
+    collectFromMediaArray(detail.photos, urls, seen);
+  }
+
+  const media = rec.media;
+  if (media && typeof media === "object" && !Array.isArray(media)) {
+    collectFromMediaArray((media as { photos?: unknown }).photos, urls, seen);
   }
 
   collectFromMediaArray(rec.extraListingMedia, urls, seen);

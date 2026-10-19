@@ -657,3 +657,137 @@ describe("detectFacebookDrift on raidr-api item", () => {
     expect(events).toEqual([]);
   });
 });
+
+function build006Item(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: "1610411714147660",
+    title: "2016 Nissan Rogue Select · S Sport Utility 4D",
+    customTitle: "2016 Nissan rogue select S Sport Utility 4D",
+    price: { formatted: "$4,000", amount: "4000.00" },
+    primaryPhotoUrl: "https://cdn.example/hero.jpg?stp=keep&ctp=s261x260",
+    location: { city: "Houston", state: "TX", displayName: "Houston, Texas" },
+    categoryId: "807311116002614",
+    subtitles: ["128K miles"],
+    deliveryTypes: ["IN_PERSON"],
+    isLive: true,
+    isSold: false,
+    isPending: false,
+    isHidden: false,
+    petBreed: null,
+    predictedTier: null,
+    rankingScore: null,
+    priceRange: null,
+    isSponsored: false,
+    adId: null,
+    kind: "vehicle",
+    strikethroughPrice: null,
+    _searchLocation: "Houston, Texas",
+    url: "https://www.facebook.com/marketplace/item/1610411714147660",
+    _fetchedAt: "2026-10-19T12:15:24.025Z",
+    listing_date: 1792411909,
+    listing_date_ms: 1792411909000,
+    media: {
+      photos: [
+        { uri: "https://cdn.example/hero.jpg?stp=keep" },
+        { uri: "https://cdn.example/side.jpg" },
+      ],
+      videos: [],
+    },
+    details: {
+      description: "Clean title. No issues.",
+      condition: "USED",
+      location: { city: "Houston", state: "TX" },
+      seller: { id: "100012345", name: "Sawyer J" },
+      vehicle: {
+        makeDisplayName: "Nissan",
+        modelDisplayName: "Rogue Select",
+        trimDisplayName: "S Sport Utility 4D",
+        odometer: { unit: "MILES", value: 128000 },
+        identificationNumber: null,
+        sellerType: "PRIVATE_SELLER",
+        dealershipName: null,
+        sellerPhoneNumber: null,
+      },
+    },
+    ...overrides,
+  };
+}
+
+describe("mapRaidrApiItem — build 0.0.6 details", () => {
+  it("stores miles, clean make and model, a trim hint, the seller profile, and the gallery", () => {
+    const out = mapRaidrApiItem(build006Item()) as Record<string, unknown>;
+    expect(out.mileage).toBe(128000);
+    expect(out.make).toBe("Nissan");
+    expect(out.model).toBe("Rogue Select");
+    expect(out.trim).toBe("S");
+    expect(out.sellerName).toBe("Sawyer J");
+    expect(out.sellerUrl).toBe("https://www.facebook.com/marketplace/profile/100012345");
+    expect(out.description).toBe("Clean title. No issues.");
+    expect(out.images).toEqual(["https://cdn.example/hero.jpg?stp=keep", "https://cdn.example/side.jpg"]);
+
+    const parsed = parseFacebookItem(out, CTX);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.listing.year).toBe(2016);
+    expect(parsed.listing.make).toBe("nissan");
+    expect(parsed.listing.model).toBe("rogue select");
+    expect(parsed.listing.mileage).toBe(128000);
+    expect(parsed.listing.sellerUrl).toBe("https://www.facebook.com/marketplace/profile/100012345");
+    expect(parsed.listing.images).toEqual([
+      "https://cdn.example/hero.jpg?stp=keep",
+      "https://cdn.example/side.jpg",
+    ]);
+  });
+
+  it("does not turn a pfbid into a profile URL and does not guess miles over a present odometer", () => {
+    const out = mapRaidrApiItem(
+      build006Item({
+        subtitles: ["10K miles"],
+        details: {
+          description: "See photos",
+          seller: { id: "pfbid02kA5SJH9388", name: "Cardawg Hemphill" },
+          vehicle: {
+            makeDisplayName: "GMC",
+            modelDisplayName: "tundra/d0wn pay",
+            trimDisplayName: "Sport Utility 4D",
+            odometer: { unit: "KILOMETRES", value: 100000 },
+            sellerType: "PRIVATE_SELLER",
+            dealershipName: null,
+          },
+        },
+      }),
+    ) as Record<string, unknown>;
+    expect(out.sellerUrl).toBeUndefined();
+    expect(out.sellerName).toBe("Cardawg Hemphill");
+    expect(out.mileage).toBeUndefined();
+    expect(out.trim).toBeUndefined();
+    expect(out.model).toBe("tundra/d0wn pay");
+
+    const parsed = parseFacebookItem(out, CTX);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.listing.model).not.toBe("tundra/d0wn pay");
+  });
+
+  it("reads mileage from subtitles when the new payload has no odometer", () => {
+    const item = build006Item();
+    const details = item.details as Record<string, unknown>;
+    const vehicle = { ...(details.vehicle as Record<string, unknown>) };
+    delete vehicle.odometer;
+    item.details = { ...details, vehicle };
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.mileage).toBe(128000);
+  });
+
+  it("falls back to customTitle", () => {
+    const item = build006Item();
+    delete item.title;
+    const out = mapRaidrApiItem(item) as Record<string, unknown>;
+    expect(out.title).toBe("2016 Nissan rogue select S Sport Utility 4D");
+  });
+
+  it("produces no schema drift on the build 0.0.6 keys", () => {
+    const mapped = mapRaidrApiItem(build006Item()) as Record<string, unknown>;
+    expect(detectFacebookDrift(mapped)).toEqual([]);
+  });
+});

@@ -104,6 +104,11 @@ export function isScraperReviewOnlyCandidate({ hasLead, hasManual, hasMmrHit }) 
   return !hasLead && !hasManual && !hasMmrHit;
 }
 
+/** §81 — a scraper dealership drop already has its seller. GoLogin must not open it. */
+export function isScraperDealershipDrop(details) {
+  return Boolean(details && typeof details === "object" && details.source === "scraper_dealership");
+}
+
 export function buildNeedsActionEnrichContext({
   listing,
   lead = null,

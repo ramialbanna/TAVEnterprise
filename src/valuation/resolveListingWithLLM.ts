@@ -61,6 +61,11 @@ export type LlmYmmsResolutionInput = {
    * re-running them would just return it again.
    */
   skipShortcuts?: boolean;
+  /**
+   * §81 — scraper make and model are already clean. Alias and the offline
+   * matcher still run. Claude does not. Facebook trim is not this signal.
+   */
+  skipClaude?: boolean;
 };
 
 export type LlmYmmsFallbackReason =
@@ -70,7 +75,8 @@ export type LlmYmmsFallbackReason =
   | "timeout"
   | "rate_limited"
   | "http_error"
-  | "invalid_response";
+  | "invalid_response"
+  | "structured_identity";
 
 type LlmAnthropicCallMeta = {
   latencyMs: number;
@@ -276,6 +282,15 @@ export async function resolveListingWithLLM(
         catalogRowCount: allRows.length,
       };
     }
+  }
+
+  if (input.skipClaude) {
+    log("llm_ymms.skipped_clean_scraper_identity", {
+      make: makeRaw,
+      model: modelRaw,
+      kpi: true,
+    });
+    return { kind: "fallback", reason: "structured_identity" };
   }
 
   const rows = pruneCatalogSubtreeForLlm(

@@ -23,6 +23,7 @@ export function isScraperReviewOnlyCandidate(opts: {
   hasManual: boolean;
   hasMmrHit: boolean;
 }): boolean;
+export function isScraperDealershipDrop(details: unknown): boolean;
 export function buildNeedsActionEnrichContext(opts: {
   listing: { first_seen_at?: string | null; last_seen_at?: string | null };
   lead?: unknown;
