@@ -119,6 +119,14 @@ vi.mock("../src/ingest/mmrRateLimitRetryPass", () => ({
   MAX_RATE_LIMIT_RETRIES_PER_SLICE: 10,
 }));
 
+vi.mock("../src/llm/sellerClassifyClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/llm/sellerClassifyClient")>();
+  return {
+    ...actual,
+    callAnthropicForSellerClassify: vi.fn().mockResolvedValue({ kind: "not_configured" }),
+  };
+});
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof LeadScoringModule>("../src/scoring/lead");
@@ -150,6 +158,7 @@ import {
 import { suppressOpportunityForBlockedSeller } from "../src/persistence/opportunityWorkflow";
 import { matchRepeatedListingContact } from "../src/persistence/listingContactKeys";
 import { mapRaidrApiItem } from "../src/apify/payloadAdapter";
+import { callAnthropicForSellerClassify } from "../src/llm/sellerClassifyClient";
 
 const RUNNING_RUN = { id: "run-uuid-1", status: "running", processed: 0, rejected: 0, created_leads: 0 };
 const COMPLETED_RUN = { id: "run-uuid-2", status: "completed", processed: 4, rejected: 1, created_leads: 2 };
@@ -1248,6 +1257,56 @@ describe("POST /ingest — deadline-aware truncation", () => {
       }),
     );
     expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
+  it("§71: sends the gallery to Haiku even when make, model, and profile URL are already clean", async () => {
+    vi.mocked(callAnthropicForSellerClassify).mockResolvedValue({
+      kind: "ok",
+      proposal: {
+        seller_type: "private_party",
+        confidence: 0.7,
+        reasoning: "Driveway and one car across the set.",
+        signals: ["personal_seller"],
+      },
+      latencyMs: 40,
+      model: "claude-haiku-4-5",
+    });
+    const photos = Array.from({ length: 8 }, (_, i) => ({ uri: `https://cdn.example/photo-${i}.jpg` }));
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-gallery-classify",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [mapRaidrApiItem({
+        url: "https://www.facebook.com/marketplace/item/1610411714147661",
+        title: "2016 Nissan Rogue Select",
+        price: { amount: "4000.00" },
+        primaryPhotoUrl: "https://cdn.example/photo-0.jpg",
+        media: { photos },
+        details: {
+          description: "Runs great.",
+          vehicle: {
+            makeDisplayName: "Nissan",
+            modelDisplayName: "Rogue Select",
+            odometer: { unit: "MILES", value: 128000 },
+            sellerType: "PRIVATE_SELLER",
+            dealershipName: null,
+          },
+          seller: { id: "100012345", name: "Sawyer J" },
+        },
+      })],
+    });
+    const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(body.processed).toBe(1);
+    expect(callAnthropicForSellerClassify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageUrls: photos.map((photo) => photo.uri),
+      }),
+    );
   });
 
   it("§81: keeps a private seller and stores the numeric profile, miles, and gallery", async () => {

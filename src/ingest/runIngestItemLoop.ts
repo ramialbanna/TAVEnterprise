@@ -537,9 +537,9 @@ export async function runIngestItemLoop(
     }
 
     if (env.SELLER_CLASSIFY_ENABLED === "true") {
-      const sellerKnown = Boolean(listing.sellerUrl);
-      const skipPhoto = Boolean(scrapedVehicle?.cleanYmms && sellerKnown);
-      const allowLlm = !skipPhoto && Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
+      // A clean make/model and a profile URL still need the gallery. Frame one
+      // can be a driveway while a later photo is the lot.
+      const allowLlm = Date.now() + SELLER_CLASSIFY_TIMEOUT_MS < loopDeadline;
       const classification = await classifyListingSeller(
         {
           title: listing.title,

@@ -1,9 +1,10 @@
 /**
  * Item 71 — eval harness for seller classification.
  *
- * Pulls buyer-labelled dealer dismisses plus private-party controls from
- * production, runs the same heuristics (and optionally Haiku) the ingest
- * path uses, and reports precision/recall at the 0.85 auto-reject gate.
+ * Pulls buyer-labelled dealer dismisses plus other dismiss reasons as
+ * private-party controls. Random recent listings are not controls — that
+ * set included real dealers. Photos older than 5 days are expired Facebook
+ * links and are not sent to Haiku.
  *
  * Do NOT set SELLER_CLASSIFY_ENABLED=true in production until private-party
  * false positives at that gate are acceptable.
@@ -118,44 +119,60 @@ async function main() {
     db: { schema: "tav" },
   });
 
-  const { data: dealerRows, error: dealerErr } = await db
+  const { data: actionRows, error: actionErr } = await db
     .from("opportunity_actions")
     .select("normalized_listing_id, metadata, created_at")
     .eq("action", "status_changed")
     .order("created_at", { ascending: false })
-    .limit(500);
-  if (dealerErr) throw dealerErr;
+    .limit(2000);
+  if (actionErr) throw actionErr;
 
-  const dealerIds = [
-    ...new Set(
-      (dealerRows ?? [])
-        .filter((row) => row.metadata && row.metadata.reason === "dealer")
-        .map((row) => row.normalized_listing_id),
-    ),
-  ].slice(0, Math.ceil(args.limit / 2));
-
-  const { data: controlListings, error: controlErr } = await db
-    .from("normalized_listings")
-    .select("id, title, description, seller_name")
-    .not("id", "in", `(${dealerIds.concat(["00000000-0000-0000-0000-000000000000"]).join(",")})`)
-    .order("first_seen_at", { ascending: false })
-    .limit(Math.ceil(args.limit / 2));
-  if (controlErr) throw controlErr;
-
-  let dealerListings = [];
-  if (dealerIds.length > 0) {
-    const { data, error } = await db
-      .from("normalized_listings")
-      .select("id, title, description, seller_name")
-      .in("id", dealerIds);
-    if (error) throw error;
-    dealerListings = data ?? [];
+  const latestByListing = new Map();
+  for (const row of actionRows ?? []) {
+    const reason = row.metadata?.reason;
+    if (!reason || latestByListing.has(row.normalized_listing_id)) continue;
+    latestByListing.set(row.normalized_listing_id, {
+      reason,
+      labelledAt: row.created_at,
+    });
   }
 
+  const dealerIds = [];
+  const controlIds = [];
+  for (const [id, row] of latestByListing) {
+    if (row.reason === "dealer" && dealerIds.length < Math.ceil(args.limit / 2)) dealerIds.push(id);
+    else if (row.reason !== "dealer" && controlIds.length < Math.ceil(args.limit / 2)) controlIds.push(id);
+  }
+
+  async function loadListings(ids) {
+    if (ids.length === 0) return [];
+    const { data, error } = await db
+      .from("normalized_listings")
+      .select("id, title, description, seller_name, images")
+      .in("id", ids);
+    if (error) throw error;
+    return data ?? [];
+  }
+
+  const dealerListings = await loadListings(dealerIds);
+  const controlListings = await loadListings(controlIds);
+  const labelledAt = latestByListing;
+
   const labelled = [
-    ...dealerListings.map((row) => ({ ...row, label: "dealer" })),
-    ...(controlListings ?? []).map((row) => ({ ...row, label: "private_party" })),
+    ...dealerListings.map((row) => ({ ...row, label: "dealer", labelledAt: labelledAt.get(row.id)?.labelledAt })),
+    ...controlListings.map((row) => ({ ...row, label: "private_party", labelledAt: labelledAt.get(row.id)?.labelledAt })),
   ];
+
+  const photoFreshMs = 5 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  let withPhoto = 0;
+  let freshPhoto = 0;
+  for (const row of labelled) {
+    const images = Array.isArray(row.images) ? row.images : [];
+    const labelledMs = row.labelledAt ? new Date(row.labelledAt).getTime() : 0;
+    if (images.length > 0) withPhoto += 1;
+    if (images.length > 0 && now - labelledMs <= photoFreshMs) freshPhoto += 1;
+  }
 
   let tp = 0;
   let fp = 0;
@@ -188,7 +205,8 @@ async function main() {
   const precision = tp + fp === 0 ? 0 : tp / (tp + fp);
   const recall = tp + fn === 0 ? 0 : tp / (tp + fn);
 
-  console.log(`Evaluated ${labelled.length} listings (${dealerListings.length} dealer, ${(controlListings ?? []).length} control).`);
+  console.log(`Evaluated ${labelled.length} listings (${dealerListings.length} dealer, ${controlListings.length} buyer non-dealer).`);
+  console.log(`Photos: ${withPhoto} stored, ${freshPhoto} labelled within 5 days (older Facebook links are expired).`);
   console.log(`Auto-reject gate: seller_type=dealer AND confidence >= 0.85`);
   console.log(`TP=${tp} FP=${fp} FN=${fn} TN=${tn}`);
   console.log(`Precision=${precision.toFixed(3)}  Recall=${recall.toFixed(3)}`);
@@ -198,8 +216,10 @@ async function main() {
       console.log(`  ${row.id}  conf=${row.confidence}  ${row.signals.join(",")}  ${(row.title || "").slice(0, 80)}`);
     }
   }
-  if (args.llm) {
-    console.log("\n--llm is reserved for Haiku scoring; run heuristics first and inspect FP before spending tokens.");
+  if (args.llm && freshPhoto === 0) {
+    console.log("\n--llm skipped: no labelled photo is still inside the 5-day Facebook link window.");
+  } else if (args.llm) {
+    console.log("\n--llm photo scoring is not wired in this script yet. Text gate above is the result.");
   }
 }
 

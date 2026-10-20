@@ -88,13 +88,21 @@ describe("upgradeFacebookListingPhotoUrl", () => {
 });
 
 describe("selectSellerClassifyImageUrls", () => {
-  it("returns at most one upgraded HTTPS image", () => {
+  it("sends the gallery, upgrades crops, and skips insecure URLs", () => {
     expect(
       selectSellerClassifyImageUrls([
         "https://cdn.example/a.jpg?ctp=s261x260",
         "https://cdn.example/b.jpg",
         "http://insecure.example/c.jpg",
       ]),
-    ).toEqual(["https://cdn.example/a.jpg"]);
+    ).toEqual(["https://cdn.example/a.jpg", "https://cdn.example/b.jpg"]);
+  });
+
+  it("caps the gallery at 20 photos", () => {
+    const urls = Array.from({ length: 24 }, (_, i) => `https://cdn.example/${i}.jpg`);
+    const selected = selectSellerClassifyImageUrls(urls);
+    expect(selected).toHaveLength(20);
+    expect(selected[0]).toBe("https://cdn.example/0.jpg");
+    expect(selected[19]).toBe("https://cdn.example/19.jpg");
   });
 });

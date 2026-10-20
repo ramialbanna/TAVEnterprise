@@ -1,7 +1,7 @@
 import { verifyBearer } from "../auth/bearerAuth";
 import { isConfiguredSecret } from "../types/envValidation";
 import type { Env } from "../types/env";
-import { sendSmsTo } from "./alerts";
+import { sendSmsResult } from "./alerts";
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -37,8 +37,23 @@ export async function handleSellerEnrichHalt(request: Request, env: Env): Promis
     // Empty body still sends the checkpoint text.
   }
 
-  const to = env.HALT_ALERT_SMS_TO ?? "";
-  const sent = await sendSmsTo(env, to, sellerHaltSmsBody(reason));
-  if (!sent) return json({ ok: false, error: "sms_failed" }, 502);
+  const haltTo = env.HALT_ALERT_SMS_TO ?? "";
+  const dealTo = env.ALERT_TO_NUMBER ?? "";
+  const to = isConfiguredSecret(haltTo) ? haltTo : dealTo;
+  if (!isConfiguredSecret(to)) {
+    return json({ ok: false, error: "destination_unset" }, 503);
+  }
+
+  const sent = await sendSmsResult(env, to, sellerHaltSmsBody(reason));
+  if (!sent.ok) {
+    return json(
+      {
+        ok: false,
+        error: sent.reason === "not_configured" ? "destination_unset" : "sms_failed",
+        ...(sent.twilioCode !== undefined && { twilio_code: sent.twilioCode }),
+      },
+      sent.reason === "not_configured" ? 503 : 502,
+    );
+  }
   return json({ ok: true }, 200);
 }

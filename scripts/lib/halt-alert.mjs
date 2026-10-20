@@ -27,7 +27,15 @@ export async function notifyHaltOnce(state, env) {
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      console.error(`halt alert failed: ${res.status}`);
+      let detail = "";
+      try {
+        const body = await res.json();
+        if (body && typeof body.error === "string") detail = ` ${body.error}`;
+        if (body && typeof body.twilio_code === "number") detail += ` code=${body.twilio_code}`;
+      } catch {
+        detail = "";
+      }
+      console.error(`halt alert failed: ${res.status}${detail}`);
       return state;
     }
     state.haltNotifiedAt = new Date().toISOString();

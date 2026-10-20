@@ -27,6 +27,8 @@ export const SELLER_CLASSIFY_SYSTEM_PROMPT =
   "windshield price banners, dealer license plates, or a dealership name/watermark. " +
   "A single vehicle in a driveway, apartment lot, suburban street, or a close-up of one car is private-party " +
   "only when the text does not already identify a business seller. " +
+  "When several photos are attached, judge the whole set. A driveway or one car in the first photo " +
+  "is not private-party if a later photo shows a sales lot, rows of cars, pennant flags, or windshield banners. " +
   "A clean professional photo of one car is not enough to call it a dealer. " +
   "Curbstoner: a personal profile selling several unrelated vehicles, or 'I buy cars / I have more'. " +
   "Use confidence >= 0.85 only when the evidence is unambiguous. " +
@@ -70,7 +72,7 @@ export function buildSellerClassifyUserPrompt(input: {
 }): string {
   const imageLine =
     (input.imageCount ?? 0) > 0
-      ? `Photos attached: ${input.imageCount}. Use them. A dealer lot in the photo is dealer evidence even if the text is a bare year/make/model.`
+      ? `Photos attached: ${input.imageCount}. Use every photo, not only the first. A dealer lot in any photo is dealer evidence even if the text is a bare year/make/model. A driveway in the first photo does not override a lot in a later photo.`
       : "Photos attached: none.";
   const lines = [
     "Classify the seller of this listing.",

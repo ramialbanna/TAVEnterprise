@@ -13,19 +13,35 @@ export interface ExcellentLeadSummary {
   listingPrice?: number;
 }
 
-/** SMS to one E.164 number. Returns false (does not throw) on failure. */
-export async function sendSmsTo(
+export type SmsSendResult =
+  | { ok: true }
+  | { ok: false; reason: "not_configured" | "timeout" | "twilio_http"; status?: number; twilioCode?: number };
+
+function twilioCodeFromBody(raw: string): number | undefined {
+  try {
+    const parsed = JSON.parse(raw) as { code?: unknown };
+    return typeof parsed.code === "number" ? parsed.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** SMS to one E.164 number. Never throws. `twilioCode` is Twilio's numeric error, not the destination. */
+export async function sendSmsResult(
   env: Env,
   to: string,
   message: string,
   logCtx?: LogContext,
-): Promise<boolean> {
+): Promise<SmsSendResult> {
   if (
     !env.TWILIO_ACCOUNT_SID || env.TWILIO_ACCOUNT_SID === "replace_me" ||
     !env.TWILIO_AUTH_TOKEN || env.TWILIO_AUTH_TOKEN === "replace_me" ||
     !env.TWILIO_FROM_NUMBER || env.TWILIO_FROM_NUMBER === "replace_me" ||
     !to || to === "replace_me"
-  ) return false;
+  ) {
+    log("alert.sms_failed", { reason_code: "not_configured" }, logCtx);
+    return { ok: false, reason: "not_configured" };
+  }
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const credentials = btoa(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`);
@@ -43,16 +59,34 @@ export async function sendSmsTo(
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: body.toString(),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      log("alert.sms_failed", { status: res.status, reason_code: "twilio_http_error" }, logCtx);
+      let twilioCode: number | undefined;
+      try {
+        twilioCode = twilioCodeFromBody(await res.text());
+      } catch {
+        twilioCode = undefined;
+      }
+      log("alert.sms_failed", { status: res.status, reason_code: "twilio_http_error", twilio_code: twilioCode }, logCtx);
+      return { ok: false, reason: "twilio_http", status: res.status, ...(twilioCode !== undefined && { twilioCode }) };
     }
-    return res.ok;
+    return { ok: true };
   } catch (err) {
     log("alert.sms_failed", { reason_code: "network_timeout", error: err instanceof Error ? err.message : String(err) }, logCtx);
-    return false;
+    return { ok: false, reason: "timeout" };
   }
+}
+
+/** SMS to one E.164 number. Returns false (does not throw) on failure. */
+export async function sendSmsTo(
+  env: Env,
+  to: string,
+  message: string,
+  logCtx?: LogContext,
+): Promise<boolean> {
+  const result = await sendSmsResult(env, to, message, logCtx);
+  return result.ok;
 }
 
 // Sends a Twilio SMS to ALERT_TO_NUMBER. Returns false (does not throw) on failure.

@@ -99,8 +99,9 @@ describe("callAnthropicForSellerClassify", () => {
     return JSON.parse(init.body as string) as { messages: Array<{ content: unknown[] }> };
   }
 
-  it("downloads the upgraded photo and sends it as a base64 image block", async () => {
+  it("downloads the gallery and sends each photo as a base64 image block", async () => {
     const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const image = { type: "image", source: { type: "base64", media_type: "image/jpeg", data: btoa(String.fromCharCode(...jpeg)) } };
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("api.anthropic.com")) return anthropicOk;
       return {
@@ -119,11 +120,20 @@ describe("callAnthropicForSellerClassify", () => {
     });
 
     expect(result.kind).toBe("ok");
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://cdn.example/lot.jpg");
-    expect(anthropicBody(fetchMock).messages[0]?.content).toEqual([
-      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: btoa(String.fromCharCode(...jpeg)) } },
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "https://cdn.example/lot.jpg",
+      "https://cdn.example/second.jpg",
+      expect.stringContaining("api.anthropic.com"),
+    ]);
+    const content = anthropicBody(fetchMock).messages[0]?.content ?? [];
+    expect(content).toEqual([
+      image,
+      image,
       expect.objectContaining({ type: "text" }),
     ]);
+    const text = content.find((block) => (block as { type?: string }).type === "text") as { text?: string };
+    expect(text.text).toContain("Photos attached: 2");
+    expect(text.text).toContain("not only the first");
   });
 
   it("still classifies text-only when the photo cannot be downloaded", async () => {

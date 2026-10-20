@@ -46,8 +46,12 @@ function pushUrl(urls: string[], seen: Set<string>, raw: string | undefined): vo
   urls.push(url);
 }
 
-/** One full-res HTTPS photo for the seller-type vision call. */
-export const SELLER_CLASSIFY_MAX_IMAGES = 1;
+/**
+ * Gallery for the seller-type vision call. A lot often looks like a driveway
+ * in frame one and a row of cars later, so the first photo is not enough.
+ * Typical Facebook galleries are 8–10; 20 is the cap.
+ */
+export const SELLER_CLASSIFY_MAX_IMAGES = 20;
 
 export function selectSellerClassifyImageUrls(images: unknown): string[] {
   if (!Array.isArray(images)) return [];

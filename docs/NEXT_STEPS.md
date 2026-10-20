@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-10-19 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-10-20 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -15,16 +15,22 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 ### Repo
 
 - Path: `TAVEnterprise-main/TAVEnterprise-main/` (workspace root may be `TAV Enterprise/`)
-- **Git:** §81 and §80 are committed on `main` in this catch-up. Worker `2a216392` matches that code. Fly was not redeployed.
+- **Git:** the `afd97231` upload is this commit. Fly was not redeployed.
 - `.gitignore` excludes `scripts/_tmp-*`.
 
 ### Production
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `2a216392` (`tav-aip-production`) | **§81** scraper gallery, seller, mileage, clean make/model. Deployed 2026-10-19 with `--keep-vars`. Secrets not touched. Prior: `8f682640` (§68). |
+| **Worker** | `afd97231` (`tav-aip-production`) | **§71 gallery dealer check** plus the halt-SMS fallback. Deployed 2026-10-19 with `--keep-vars`. Secrets not touched. No local vars file. Prior: `2a216392` (§81). |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | no redeploy 2026-10-19 | Enrich window is **not** the sheet window. The `scraper_dealership` queue skip is in the repo only. Health: https://tav-seller-enrich.fly.dev/ |
+
+### This session (2026-10-19 evening)
+
+- **§71 gallery dealer check — live** Worker `afd97231-b7d8-4c63-8e08-6b6004a37014`. Haiku gets the stored gallery, cap **20**, including when make/model and a profile URL are already clean. Prompt tells it a driveway in frame one does not override a lot later. **0.85 was not tightened.** Deploy was `npx wrangler deploy --env production --keep-vars`. Secrets not touched. Web not deployed. Fly not redeployed. **Git catch-up is this commit.**
+- **Halt SMS worker change rode along** in that same upload. If the halt number is unset, the Worker uses the deal-alert number and returns Twilio's error code on failure. The Fly log line that prints that code is still local only. A text has not been confirmed.
+- **Anthropic credits and GoLogin traffic are funded.** Those are not next steps.
 
 ### This session (2026-10-19)
 
@@ -52,7 +58,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **§74 soak — closed 2026-09-07.** Needs-action enrich + sheet gate work when the GoLogin residential proxy has data. Facebook never checkpointed. Every stop was an empty proxy (Sep 2, T+23h on Sep 4, then Sep 6). Recovery after the 2026-09-07 refill is **confirmed**. Do **not** start action 6 (more Facebook logins); there was no ban. Soak auto-block review on `/admin/blocked-sellers` is **done**.
 
-**§72 / §73 — Claude still dark.** Ingest is alias → matcher ≥80 → last-resort. Deduped hit **79.4%** last 7d (19,893 listings, 2026-09-07) / **77.7%** last 24h. `model_variant_missing` **0**. `llm_unavailable` still #1 miss. 7d decisions: **9,674** `alias_hit` / **267** `offline_hit` / **0** `llm_hit`. Ceiling without credits ~79–80%. Path to ≥85% is credits + §73 vision. Sample-only eval is done; 200-row Claude run still **401**.
+**§72 / §73 — Anthropic credits are in (2026-10-19).** The September reading still stands until a new one is taken: deduped hit **79.4%** last 7d / **77.7%** last 24h, `llm_hit` **0**, `llm_unavailable` the largest miss. That was the no-credit ceiling. Sample-only eval is done. The 200-row Claude run is no longer blocked.
 
 **§68 — stuck `running` closed 2026-09-22.** 88 rows older than 30m marked `completed` (`error_message = stale_running_closed`). Oldest was Sep 7. One `running` row younger than 30m was left (live ingest). Worker `8f682640`: a webhook retry of a `running` row older than 30m closes it instead of reprocessing; daily cron `close_stale_source_runs` is the backstop. Secrets not touched. Also shipped the already-pushed Refresh MMR keep-on-screen commit (`66af8fc`), which was not on the previous Worker.
 
@@ -72,12 +78,9 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 ### Do next (priority)
 
-1. **§74 profile failover — live on Fly 2026-10-19.** On checkpoint or login wall, pause that profile and open the next one, one at a time: **08 → 09 → 01 → 02**. Skip **03–07** (last opened June 2026) and **11** (no Facebook account, no proxy). `fb_buyer_10` stays paused. The running profile on this deploy is **08**. Text only when that list is exhausted. The SMS path still returns **502**.
-2. **§73** — reload Anthropic credits → `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. The gallery to send is §81. Then R2 capture + prod vision tier (ambiguous subset only).
-3. **Keep proxy GB above zero** — `node scripts/gologin-assign-residential.mjs --traffic-only`. Empty proxy = Cloud 503, not a ban. Empty proxy no longer blanks the sheet after §76. Last 24h new Facebook `seller_url` attach was **0** on 2026-09-21.
-4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` / `llm_ymms.skipped_clean_scraper_identity` in Workers Logs. Do not soak last-resort again.
-5. **§80 contact keys — live Worker `53767701`.** Phone, website, WhatsApp number, or email on 3 cars in 30 days drops the listing. A buyer `dealer` dismiss stores those keys with no profile URL, and the next car drops. A long copied description uses the same 3-car bar. Migrations `0078` and `0080` are applied. Almost no ads contain a phone, so drops are still rare.
-6. **Fly redeploy — done 2026-10-19.** `scraper_dealership` queue skip and the profile switch are on `tav-seller-enrich`. Git catch-up is this commit.
+1. **§73** — `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Credits are in. The gallery to send is §81. Then R2 capture + prod vision tier (ambiguous subset only).
+2. **Confirm the halt text.** Worker fallback is on `afd97231`. Fly was not redeployed, so the richer log line is local only. The text fires only when 08, 09, 01, and 02 are all paused.
+3. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` / `llm_ymms.skipped_clean_scraper_identity` in Workers Logs. Do not soak last-resort again. Do not tighten the §71 0.85 gate until the gallery call is scored.
 
 ### Key commands
 
@@ -90,12 +93,12 @@ fly logs -a tav-seller-enrich
 fly status -a tav-seller-enrich
 npm run gologin:enrich:deploy   # after enrich script changes
 
-# §73 vision eval (after Anthropic credits)
+# §73 vision eval (credits are in)
 npm run eval:ymms-vision -- --sample-only
 npm run eval:ymms-vision -- --limit 200 --concurrency 2
 
-# Worker
-npx wrangler deploy --env production
+# Worker — --keep-vars is required. Secrets stay on the Worker.
+npx wrangler deploy --env production --keep-vars
 
 # Verify
 npm test
@@ -123,7 +126,7 @@ cd web && npm run lint && npm run typecheck && npm test
 
 With Claude (2026-08-15, ~21h): hit **90.0%**. Claude-offline soak closed 2026-09-03 at **79.0%**. `cox_proven_bookable` **14,461** rows (2012: **467**).
 
-**Failure classes (unchanged):** (1) abstention gone — `model_variant_missing` 0%. (2) listing-word F-series trims (`XLT`/`Lariat`/`Platinum`) still `not_proven_bookable`. (3) **`llm_unavailable` is the #1 miss** until credits return.
+**Failure classes (September reading):** (1) abstention gone — `model_variant_missing` 0%. (2) listing-word F-series trims (`XLT`/`Lariat`/`Platinum`) still `not_proven_bookable`. (3) `llm_unavailable` was the largest miss while Claude was offline. Credits are back; re-read the hit rate after ingest is using them again.
 
 ---
 
@@ -149,11 +152,11 @@ Recorded so nobody re-derives them. Rows below 2011/BMW updated 2026-08-14.
 | Asset | Size | Why it matters |
 |-------|-----:|----------------|
 | **Proven-bookable combinations** | **14,461** rows in `tav.cox_proven_bookable` (2012: **467**) as of 2026-09-07 | Stronger than `cox_catalog_tree` — the tree says a row exists, this says Cox actually returned money. Last-resort + listing-text are gated on this set. Grew 10,939 → 14,161 → 14,461. |
-| **Full-resolution listing photos** | 1 per listing, 1536×1536 | `upgradeFacebookListingPhotoUrl` strips `&ctp=s261x260`. Used at ingest for §71 vision. §73 eval harness shipped; 200-row Claude run blocked on credits. |
+| **Full-resolution listing photos** | gallery, typically 8–10 | `upgradeFacebookListingPhotoUrl` strips `&ctp=s261x260`. §73 eval harness shipped. Credits are in; the 200-row Claude run has not been started. |
 | ~~**VINs sitting in description text**~~ | ~80/day | **Now read** — §72 action 4. Was 0% populated. |
 | **GoLogin FB session** | 1 profile | `fb_buyer_10_Marcus Vance_MA`. Logged-in Marketplace sees seller profile URLs Apify does not. §74. **No checkpoint** through the soak. |
 | **Fly seller enrich** | 1 machine, `ord` | `tav-seller-enrich` — always-on GoLogin Cloud daemon. `fly.seller-enrich.toml`. Do not run local `--loop` on the same profile. |
-| **GoLogin residential traffic** | **refilled 2026-09-07** (rami) | Floppydata geo on `fb_buyer_10`. Empty proxy → Cloud **503**, not checkpoint. Check daily: `node scripts/gologin-assign-residential.mjs --traffic-only`. |
+| **GoLogin residential traffic** | **funded 2026-10-19** | Floppydata geo. Empty proxy → Cloud **503**, not checkpoint. Not a current task. |
 
 ---
 
@@ -245,8 +248,8 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 |---|------|----------|--------|
 | **81** | **Scraper detail before Claude or GoLogin** — gallery + seller from build 0.0.6 | **High** | [x] **Live** Worker `2a216392` 2026-10-19. Mapper reads `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`, and still accepts the old names. Clean make/model skips Claude. A dealership name or dealer seller type drops the car. GoLogin still runs for a name, a pfbid, or a blank seller. Secrets not touched. |
 | **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **§81 live:** a clean scraper make/model skips Claude. A messy model still needs it. |
-| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). 200-row Claude run still **blocked on Anthropic 401**. |
-| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] live with photos. URL-only persist + 3-car repeat-seller **shipped** `41c65562`. Still open: photo eval / 0.85 gate. No-login text keys are **§80**, live on Worker `53767701`. |
+| **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). Credits are in. 200-row Claude run **not started**. |
+| **71** | **AI dealer detection (pre-ingest)** | **High** | [~] **Gallery live** Worker `afd97231` 2026-10-19. Cap 20, including a clean make/model plus a profile URL. Do not tighten 0.85 until that call is scored. |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
 | **74** | **Seller identity via GoLogin / logged-in FB** — fallback after §81 | **High** | [~] **48h soak closed 2026-09-07**. GoLogin only when the scraper did not send a profile id or a dealership. Failover **live on Fly 2026-10-19**: **08 → 09 → 01 → 02**, one at a time. 03–07 and 11 are not targets. Running profile is **08**. |
 | **69** | **Dealer seller blacklist** | **High** | [~] **URL keys only**. §81 stores a numeric profile id as `seller_url` and drops a named dealership. A name or `pfbid` is not a block key. |
@@ -273,7 +276,7 @@ Shipped and closed items are archived at the bottom.
 ### Shipped
 
 - [x] Read `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`. Old names still work. New top-level keys are in `KNOWN_FACEBOOK_FIELDS`.
-- [x] Store the gallery. Seller-classify Haiku still sends the first photo, and only when the make/model is messy or there is no profile URL.
+- [x] Store the gallery. Seller-classify Haiku sends that gallery (cap 20), including when make/model and a profile URL are already clean. **Live** Worker `afd97231`. See §71.
 - [x] A numeric seller id is saved as `seller_url` and checked against `blocked_sellers`. A `pfbid` stays a name.
 - [x] A dealership name, or a seller type that says dealership, drops the car before Haiku. `PRIVATE_SELLER` does not. GoLogin still runs for a name, a `pfbid`, or a blank seller.
 - [x] A clean scraper make and model skips the Claude Y/M/M/S call. Alias lookup and the offline matcher still run. A messy model does not skip Claude. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
@@ -309,7 +312,7 @@ Add the new top-level keys to `KNOWN_FACEBOOK_FIELDS`. The last time new Faceboo
 
 ### Run a worker only for the hole — live on `2a216392`
 
-1. **Photos.** Store `media.photos`. §73 and §71 can send those images to Claude. That call runs when make/model is still messy, or the seller is still unknown. A car that already has a clean identity and a seller does not get a Claude photo call. **Live.** The Haiku call still uses the first photo, not the whole gallery.
+1. **Photos.** Store `media.photos`. **Live.** The dealer check sends the stored gallery (cap 20), including when make/model is clean and a profile URL exists. **Live** Worker `afd97231`. Do not tighten 0.85 until that call is scored.
 2. **Seller.** A numeric profile id is saved as `seller_url` and checked against `blocked_sellers`. A dealership name, or a seller type that says dealership, drops the car with no Haiku call and no GoLogin visit. A name alone, a `pfbid`, or a blank seller still goes to GoLogin / §71. `PRIVATE_SELLER` does not count — lots are still marked private. **Live.**
 3. **Make and model.** A clean make and model skips the Claude Y/M/M/S call. A messy model does not. Year still comes from the title. Facebook trim is a hint, not a reason to skip Cox. **Live.** Logged as `llm_ymms.skipped_clean_scraper_identity`.
 4. **Mileage.** Use `details.vehicle.odometer` when the unit is miles. Do not guess from the subtitle when that number is present. The MMR lookup still runs. **Live.**
@@ -323,7 +326,7 @@ Files: `src/apify/payloadAdapter.ts`, `src/apify/listingMedia.ts`, `src/llm/list
 
 ## 72 — Y/M/M/S completeness = MMR hit rate
 
-**Status:** [~] Proven-bookable gate live. Hit **90.0%** post-gate with Claude (2026-08-15); **79.4%** Claude-offline last 7d (2026-09-07). Parser hygiene **soaked**. 2012 tree **in**. Proven-aware last-resort **live** and **soak closed**. **Actions 7–9 shipped** production `6bcd175b` 2026-09-03. **§81 live** on Worker `2a216392`: a clean scraper make/model skips Claude. **Open:** Anthropic credits, §73 vision.
+**Status:** [~] Proven-bookable gate live. Hit **90.0%** post-gate with Claude (2026-08-15); **79.4%** Claude-offline last 7d (2026-09-07). Parser hygiene **soaked**. 2012 tree **in**. Proven-aware last-resort **live** and **soak closed**. **Actions 7–9 shipped** production `6bcd175b` 2026-09-03. **§81 live** on Worker `2a216392`: a clean scraper make/model skips Claude. **Open:** §73 vision. Anthropic credits are in as of 2026-10-19.
 
 ### Deploys
 
@@ -529,14 +532,14 @@ Logs: `ingest.mmr_no_data_retry`, `valuation.recovered_after_no_data`, `ingest.c
 - [x] Parser hygiene + ineligible filter (action 6) — production `8f4f468f` / staging `e382e205` (2026-08-19). **Soaked ~24h 2026-08-20:** year-in-model 0, cab-only trim 0, `ineligible_vehicle` 51.
 - [x] Proven-aware last-resort ranking — close-score booked pick; leftover listing words not sent. **Live** production `78f79974` / staging `7136a656` (2026-08-24 19:00Z). `AUTO_LOOKUP_MIN` still 80. **Soaked ~10d 2026-09-03:** npb flat **4.8%**, hit **79.0%** deduped — deploy correct, F-series npb not materially reduced.
 - [x] `llm_ymms_decisions` links to `normalized_listing_id` — callers pass listing id (2026-08-28). Historical rows stay null.
-- [~] MMR hit **≥ 85%** on eligible inventory — **90.0%** post-gate with Claude (2026-08-15). Claude-offline: **79.4%** last 7d (2026-09-07). **`llm_unavailable` is still #1** — credits + §73 vision are the path to exit, not more last-resort soak.
+- [~] MMR hit **≥ 85%** on eligible inventory — **90.0%** post-gate with Claude (2026-08-15). Claude-offline: **79.4%** last 7d (2026-09-07). Credits are in. §73 vision is the path to exit, not more last-resort soak.
 - [x] **§78** — Cox Y/M/M/S from ingest lands on `normalized_listings` so Refresh uses the same identity. **Live** Worker `6aeff6a4` 2026-09-21. Git catch-up **done**. Existing queue rows stay wrong until re-ingest.
 
 ---
 
 ## 73 — Vision identity from listing photos
 
-**Opened:** 2026-08-13 · **Status:** [~] photo URL upgrade shipped with §71; **eval harness shipped** 2026-08-28; **sample-only green 2026-09-04**; 200-row Claude run **still blocked — Anthropic 401**
+**Opened:** 2026-08-13 · **Status:** [~] photo URL upgrade shipped with §71; **eval harness shipped** 2026-08-28; **sample-only green 2026-09-04**; credits are in; 200-row Claude run **not started**
 
 **Why:** some listings genuinely do not state drivetrain, engine or cab configuration. No amount of text engineering extracts information that isn't there. A person looking at the photo can tell. The model should too.
 
@@ -605,7 +608,7 @@ Prompt is elimination-only: year + Cox make + legal styles for that model (namep
 
 **Sample-only 2026-09-04:** **575** hits with photo URLs (last 3d, pool 2,500 snapshots) → **200-row sample** (91 hard / 109 random). Written to `scripts/_eval-results/ymms-vision-sample-2026-09-04T13-03-07-026Z.json`.
 
-**200-row Claude run:** not started. Anthropic **credits still out** — `--limit 1` returns **401** (2026-09-04). Same wall as ingest Claude-offline (`llm_hit` 0, `llm_unavailable` in snapshots). Reload credits on the same account, then:
+**200-row Claude run:** not started. Credits are in as of 2026-10-19. The September **401** no longer applies.
 
 ```bash
 npm run eval:ymms-vision -- --limit 200 --concurrency 2
@@ -622,7 +625,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 ### Exit criteria
 
 - [x] Eval script (`scripts/eval-ymms-vision.mjs`, `npm run eval:ymms-vision`) — sample-only green 2026-08-28 and **2026-09-04**
-- [ ] 200-row result documented (text-only vs photo, overall + hard slice) — **blocked on Anthropic 401**
+- [ ] 200-row result documented (text-only vs photo, overall + hard slice) — credits are in; run not started
 - [x] Photo URL upgrade shipped in the adapter (`upgradeFacebookListingPhotoUrl`, ingest stores 1536px)
 - [ ] Image capture to R2 before expiry
 - [ ] Vision tier wired behind a flag, outside the batch, on the ambiguous subset only
@@ -632,7 +635,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 
 ## 71 — AI dealer listing detection (pre-ingest)
 
-**Status:** [~] **live** 2026-08-14. URL-only persist + 3-car repeat-seller **live** Worker `41c65562` / Fly 2026-09-07. `SELLER_CLASSIFY_ENABLED=true`. Still open: photo-labelled eval before tightening 0.85.
+**Status:** [~] **live**. `SELLER_CLASSIFY_ENABLED=true`. **2026-10-19:** gallery call **live** Worker `afd97231`. Do not tighten 0.85. Text gate on real buyer labels catches 2 of 65 dealers and 0 of 6 non-dealer dismisses. The 24 stored photos are all older than 14 days; Facebook image links expire in about 5 days, so a photo re-score of this set cannot run.
 
 **Goal:** detect dealership listings from listing text and photos **before** Y/M/M/S and MMR run, so first-time dealer inventory is filtered without waiting for a buyer dismiss (§69) or vendor seller fields.
 
@@ -641,13 +644,17 @@ Do not wire a production vision tier until this file has a real summary (text-on
 **What shipped**
 
 - Phase 0 heuristics on title + description + seller name. Auto-reject only `seller_type=dealer` **and** confidence ≥ 0.85. CARFAX alone is weak.
-- Phase 1 Haiku when text is inconclusive **or a listing photo exists**. One upgraded 1536px HTTPS photo (`image` URL source). Slam-dunk text dealers skip Haiku. Fail open on timeout/error.
+- Phase 1 Haiku when text is inconclusive **or a listing photo exists**. The stored gallery, cap **20**, goes as base64. A clean make/model plus a profile URL does not skip the call. Slam-dunk text dealers skip Haiku. Fail open on timeout/error. **Live** Worker `afd97231` 2026-10-19. `--keep-vars`. Secrets not touched. Git catch-up is this commit.
 - Prompt: lot / rows of cars / windshield banners = dealer; driveway / one car on a street = private-party.
 - Ingest hook after `isBlockedSeller`, before normalized upsert: `writeFilteredOut(reason_code: "dealer_listing")`, log `ingest.dealer_listing_blocked`.
 - Text-only eval (`scripts/eval-seller-classification.mjs`) was **not** a go: TP=2 FP=5 FN=48 on 100 rows — labelled dealers were mostly empty text, and the "control" set included real dealer ads. Do not treat that eval as a reason to turn the flag off; vision was the missing input.
 - `extraListingData.seller.name` is mapped when the vendor ever fills it.
 
-**Still open:** seller name/URL still empty on Facebook payloads (vendor). `blocked_sellers` is **URL-only** as of 2026-09-07 (**19** rows after deleting 106 name keys). Re-eval §71 with photos when a labelled set is ready. Catching dealers from the listing text alone, with no GoLogin profile and no Claude, is **§80** — live on Worker `53767701`.
+**2026-10-19 label read.** Latest dismiss reason is the label. Dealers: **65** (22 with a stored photo). Other dismiss reasons, the private-party controls: **6** (2 with a photo). Strong text at the 0.85 gate: **2** dealers, **0** controls. None of those labels are from the last 14 days. Last 14 days of `dealer_listing` drops: heuristic **17,691**, Haiku **7,211**, repeat seller **6,888**, scraper dealership **14**, contact repeat **4**. The gate is already dropping a lot. Tightening 0.85 is not supported.
+
+**2026-10-19 — gallery sent. Live** Worker `afd97231`. `SELLER_CLASSIFY_MAX_IMAGES` is **20**. A clean make/model plus a profile URL no longer skips the call. The prompt judges the whole set: a driveway in frame one does not override a lot in a later frame. Do not tighten 0.85 until that call is scored. Git catch-up is this commit.
+
+**Still open:** a photo re-score once a buyer labels a listing whose photo link is still alive (about 5 days). `blocked_sellers` stays URL-only. No-login text keys are **§80**, live on Worker `53767701`.
 
 **Principle:** keep this separate from the item 57 Y/M/M/S prompt. Own prompt, tool schema, eval harness and flag. §73 can still add seller type as a free field on the identity-vision call later.
 
@@ -667,7 +674,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 
 Phase 0 heuristics + Phase 1 Haiku as above. Files: `src/ingest/dealerHeuristics.ts`, `src/llm/sellerClassifyPrompt.ts`, `src/llm/sellerClassifyClient.ts`, `src/valuation/classifyListingSeller.ts`, `scripts/eval-seller-classification.mjs`; hook in `runIngestItemLoop.ts`.
 
-Text-only eval is insufficient (empty Facebook copy). Re-run with photos + buyer-kept private-party controls before tightening the 0.85 gate.
+Text-only eval on the old random-listing controls was contaminated. The 2026-10-19 read uses buyer dismiss reasons only. Re-run the photo arm only on labels from the last 5 days. Do not tighten 0.85 on this set.
 
 ---
 
@@ -985,7 +992,7 @@ Uncapped on one login still dies if Facebook checkpoints. **The soak did not che
 
 The running profile after the 2026-10-19 deploy is **08**. It warmed up and wrote seller URLs. `--clear-halt` still wipes the paused list and returns to `GOLOGIN_PROFILE_ID`.
 
-Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-aip-production`, which should SMS `HALT_ALERT_SMS_TO`. It is **not working** — `halt alert failed: 502`. With failover, that text fires only when 08, 09, 01, and 02 are all paused. Do not put the phone number in this file.
+Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-aip-production`. It was returning **502**. Worker `afd97231` (2026-10-19) falls back to the deal-alert number when the halt number is unset and returns Twilio's error code. Fly was not redeployed, so the log line that prints that code is local only. A text has not been confirmed. With failover, the text fires only when 08, 09, 01, and 02 are all paused. Do not put the phone number in this file.
 
 ### Rami token / residential (2026-08-28) — do not re-derive
 

@@ -46,6 +46,21 @@ describe("POST /internal/seller-enrich-halt", () => {
     expect(sent.get("Body")).toContain("Facebook locked the lookup account");
   });
 
+  it("uses the deal-alert number when the halt number is unset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await worker.fetch(
+      post("halt-secret", { reason: "checkpoint" }),
+      env({ HALT_ALERT_SMS_TO: "replace_me" }),
+      {} as ExecutionContext,
+    );
+    expect(res.status).toBe(200);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const sent = new URLSearchParams(String(init.body));
+    expect(sent.get("To")).toBe("+12125559999");
+  });
+
   it("stays closed until the secret is configured", async () => {
     const res = await worker.fetch(
       post("halt-secret"),
