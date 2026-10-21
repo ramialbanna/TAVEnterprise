@@ -406,28 +406,6 @@ describe("resolveListingWithLLM", () => {
     expect(result.kind).toBe("llm_invalid_pick");
   });
 
-  it("skips Claude when the scraper make and model are already clean", async () => {
-    const deps = baseDeps();
-    const result = await resolveListingWithLLM({ ...CLAUDE_INPUT, skipClaude: true }, deps);
-    expect(result).toEqual({ kind: "fallback", reason: "structured_identity" });
-    expect(deps.callAnthropic).not.toHaveBeenCalled();
-    expect(deps.lookupStyleAlias).toHaveBeenCalled();
-  });
-
-  it("still uses an alias when skipClaude is set", async () => {
-    const alias: MmrStyleAlias = {
-      alias: "ram|1500|",
-      canonicalMake: "Ram",
-      canonicalModel: "1500",
-      canonicalStyle: "4D Crew Cab Big Horn",
-      source: "ingest_learned",
-    };
-    const deps = baseDeps({ lookupStyleAlias: vi.fn(async () => alias) });
-    const result = await resolveListingWithLLM({ ...CLAUDE_INPUT, skipClaude: true }, deps);
-    expect(result.kind).toBe("alias_hit");
-    expect(deps.callAnthropic).not.toHaveBeenCalled();
-  });
-
   it("maps every non-ok Anthropic call kind to the matching fallback reason", async () => {
     const cases: Array<[AnthropicCallResult["kind"], string]> = [
       ["not_configured", "not_configured"],
@@ -461,7 +439,6 @@ describe("isLlmAttemptFailure", () => {
     expect(isLlmAttemptFailure({ kind: "fallback", reason: "llm_disabled" })).toBe(false);
     expect(isLlmAttemptFailure({ kind: "fallback", reason: "not_configured" })).toBe(false);
     expect(isLlmAttemptFailure({ kind: "fallback", reason: "catalog_not_synced" })).toBe(false);
-    expect(isLlmAttemptFailure({ kind: "fallback", reason: "structured_identity" })).toBe(false);
   });
 
   it("is false for hit/review/invalid kinds", () => {
