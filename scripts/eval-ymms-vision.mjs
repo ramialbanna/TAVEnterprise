@@ -5,7 +5,13 @@
  * Pulls recent confirmed MMR hits (ground truth = stored lookup_make/model/trim),
  * stratified ~half random / half hard cohort (F-150, Silverado, Sierra, Ram,
  * Tacoma, Yukon). Each listing is scored twice with the same prompt: text-only
- * (control) vs photo (1536px, ctp stripped). No production writes, no Cox calls.
+ * (control) vs photo (up to --max-photos gallery images, 1536px, ctp stripped).
+ * No production writes, no Cox calls.
+ *
+ * Gold bias: a Y/M/M hit's lookup_* is the pipeline's own text pick, which
+ * favours the text arm. VIN hits whose Cox decode returned exactly one style
+ * are real ground truth and are scored as their own slice (`vin_slice`).
+ * VINs are stripped from the evidence so neither arm can read them.
  *
  * Per docs/NEXT_STEPS.md §73: do not ask "what car is this" — eliminate among
  * legal Cox styles for that (year, make, model). When the gold model has only
@@ -17,8 +23,8 @@
  *   npm run eval:ymms-vision -- --limit 200
  *   npm run eval:ymms-vision -- --resume scripts/_eval-results/ymms-vision-eval-….json
  *
- * Requires `.dev.vars` (or env) with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
- * ANTHROPIC_API_KEY.
+ * Requires env (or `.dev.vars`) with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+ * ANTHROPIC_API_KEY. Env wins, so keys can be set for one shell session only.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -33,6 +39,9 @@ const DEFAULT_DAYS = 3;
 const DEFAULT_HARD_FRACTION = 0.5;
 const DEFAULT_CONCURRENCY = 2;
 const SNAPSHOT_POOL = 2500;
+const DEFAULT_MAX_PHOTOS = 4;
+/** Cap on the VIN-gold slice: half of a default run, the rest hard/random. */
+const DEFAULT_VIN_LIMIT = 100;
 const PHOTO_FETCH_TIMEOUT_MS = 12_000;
 const ANTHROPIC_TIMEOUT_MS = 45_000;
 const MAX_RETRIES = 6;
@@ -122,6 +131,8 @@ function parseArgs(argv) {
     resume: null,
     seed: 73,
     model: null,
+    maxPhotos: DEFAULT_MAX_PHOTOS,
+    vinLimit: DEFAULT_VIN_LIMIT,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
@@ -133,7 +144,11 @@ function parseArgs(argv) {
     else if (token === "--resume") args.resume = argv[++i];
     else if (token === "--seed") args.seed = Number(argv[++i]);
     else if (token === "--model") args.model = argv[++i];
+    else if (token === "--max-photos") args.maxPhotos = Number(argv[++i]);
+    else if (token === "--vin-limit") args.vinLimit = Number(argv[++i]);
   }
+  if (!Number.isFinite(args.maxPhotos) || args.maxPhotos < 1) throw new Error("--max-photos must be >= 1");
+  if (!Number.isFinite(args.vinLimit) || args.vinLimit < 0) throw new Error("--vin-limit must be >= 0");
   if (!Number.isFinite(args.limit) || args.limit < 1) throw new Error("--limit must be >= 1");
   if (!Number.isFinite(args.days) || args.days < 1) throw new Error("--days must be >= 1");
   if (!Number.isFinite(args.concurrency) || args.concurrency < 1) throw new Error("--concurrency must be >= 1");
@@ -288,6 +303,11 @@ function buildCatalogText(input, rows) {
   ].join("\n");
 }
 
+/** Neither arm may read a VIN: the VIN slice's gold came from decoding it. */
+function stripVins(text) {
+  return String(text ?? "").replace(/(?<![A-Za-z0-9])[A-HJ-NPR-Za-hj-npr-z0-9]{17}(?![A-Za-z0-9])/g, "[VIN removed]");
+}
+
 function buildEvidenceText(input, { hasPhoto }) {
   const lines = [
     "Parser year/make/model/trim below are automated guesses (hypothesis only) —",
@@ -298,14 +318,14 @@ function buildEvidenceText(input, { hasPhoto }) {
   if (typeof input.price === "number") lines.push(`Listing price: $${input.price}`);
   lines.push("");
   lines.push("Listing title (evidence):");
-  lines.push(input.title?.trim() || "(none)");
+  lines.push(stripVins(input.title).trim() || "(none)");
   lines.push("");
   lines.push("Listing description (evidence):");
-  lines.push((input.description?.trim() || "(none)").slice(0, 1000));
+  lines.push((stripVins(input.description).trim() || "(none)").slice(0, 1000));
   lines.push("");
   lines.push(
     hasPhoto
-      ? "A photo of the listed vehicle is attached. Use it to eliminate among the legal styles."
+      ? "Photos of the listed vehicle are attached. Use them to eliminate among the legal styles."
       : "No photo is attached. Use only the listing text.",
   );
   return lines.join("\n");
@@ -328,15 +348,19 @@ function selectCatalogRows(treeRows, gold) {
   return { rows: exact.length > 0 ? exact : familyRows, scope: exact.length > 0 ? "exact_model" : "nameplate_family" };
 }
 
-function firstHttpsImage(images) {
-  if (!Array.isArray(images)) return null;
+/** First `max` gallery photos (§81), upgraded to 1536px, duplicates dropped. */
+function galleryHttpsImages(images, max) {
+  if (!Array.isArray(images)) return [];
+  const out = [];
   for (const raw of images) {
     if (typeof raw !== "string") continue;
     const trimmed = raw.trim();
     if (!trimmed.startsWith("https://")) continue;
-    return upgradeFacebookListingPhotoUrl(trimmed);
+    const url = upgradeFacebookListingPhotoUrl(trimmed);
+    if (!out.includes(url)) out.push(url);
+    if (out.length >= max) break;
   }
-  return null;
+  return out;
 }
 
 function mediaTypeFrom(contentType, url) {
@@ -379,13 +403,21 @@ async function downloadPhoto(url) {
   }
 }
 
+async function downloadPhotos(urls) {
+  const results = await Promise.all(urls.map((url) => downloadPhoto(url)));
+  return {
+    photos: results.filter((r) => r.kind === "ok"),
+    errors: results.filter((r) => r.kind !== "ok"),
+  };
+}
+
 async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function callAnthropic({ apiKey, model, catalogText, evidenceText, photo }) {
+async function callAnthropic({ apiKey, model, catalogText, evidenceText, photos }) {
   const content = [];
-  if (photo) {
+  for (const photo of photos ?? []) {
     content.push({
       type: "image",
       source: { type: "base64", media_type: photo.mediaType, data: photo.base64 },
@@ -499,6 +531,44 @@ async function fetchHitSnapshots(db, days) {
   });
 }
 
+/**
+ * VIN hits whose Cox decode named exactly one style. That style is ground
+ * truth, not a pipeline guess. Multi-style decodes (F-150 trims under one VIN
+ * pattern) are dropped: the VIN does not say which one it is.
+ */
+async function fetchVinGoldSnapshots(db, days) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db
+    .schema("tav")
+    .from("valuation_snapshots")
+    .select("id, normalized_listing_id, year, make, model, fetched_at, items:raw_response->items")
+    .eq("valuation_method", "vin")
+    .is("missing_reason", null)
+    .not("normalized_listing_id", "is", null)
+    .gte("fetched_at", since)
+    .order("fetched_at", { ascending: false })
+    .limit(SNAPSHOT_POOL);
+  if (error) throw error;
+  const out = [];
+  for (const row of data ?? []) {
+    if (!Array.isArray(row.items) || row.items.length !== 1) continue;
+    const desc = row.items[0]?.description ?? {};
+    if (!desc.make || !desc.model || !desc.trim) continue;
+    out.push({
+      id: row.id,
+      normalized_listing_id: row.normalized_listing_id,
+      year: desc.year ?? row.year,
+      make: row.make,
+      model: row.model,
+      lookup_make: desc.make,
+      lookup_model: desc.model,
+      lookup_trim: desc.trim,
+      fetched_at: row.fetched_at,
+    });
+  }
+  return out;
+}
+
 async function fetchListingsById(db, ids) {
   const byId = new Map();
   const CHUNK = 200;
@@ -548,6 +618,7 @@ function emptyCounts() {
     total: 0,
     hard: 0,
     random: 0,
+    vin: 0,
     skipped_no_photo: 0,
     skipped_photo_dead: 0,
     skipped_catalog: 0,
@@ -605,6 +676,7 @@ function summarize(results) {
   const failAxes = { engine: 0, drivetrain: 0, cab: 0, trim: 0 };
   const hard = { n: 0, text_exact: 0, photo_exact: 0 };
   const random = { n: 0, text_exact: 0, photo_exact: 0 };
+  const vin = { n: 0, text_exact: 0, photo_exact: 0 };
 
   for (const row of results) {
     if (row.skipped) {
@@ -614,8 +686,9 @@ function summarize(results) {
       continue;
     }
     counts.total += 1;
-    const slice = row.hard ? hard : random;
-    if (row.hard) counts.hard += 1;
+    const slice = row.goldSource === "vin" ? vin : row.hard ? hard : random;
+    if (row.goldSource === "vin") counts.vin += 1;
+    else if (row.hard) counts.hard += 1;
     else counts.random += 1;
     slice.n += 1;
 
@@ -653,6 +726,7 @@ function summarize(results) {
     listings_scored: counts.total,
     hard: counts.hard,
     random: counts.random,
+    vin: counts.vin,
     skipped: {
       no_photo: counts.skipped_no_photo,
       photo_dead: counts.skipped_photo_dead,
@@ -676,6 +750,12 @@ function summarize(results) {
       n: random.n,
       text_only: rate(random.text_exact, random.n),
       photo: rate(random.photo_exact, random.n),
+    },
+    vin_slice: {
+      n: vin.n,
+      text_only: rate(vin.text_exact, vin.n),
+      photo: rate(vin.photo_exact, vin.n),
+      note: "Gold is a single-style Cox VIN decode — the only slice not graded against the pipeline's own pick.",
     },
     invalid_picks: { text: counts.invalid_text, photo: counts.invalid_photo },
     llm_errors: { text: counts.llm_error_text, photo: counts.llm_error_photo },
@@ -709,14 +789,21 @@ async function mapPool(items, concurrency, fn) {
 
 async function main() {
   const vars = loadDevVars(DEV_VARS);
-  const supabaseUrl = vars.SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const supabaseKey = vars.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anthropicKey = vars.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  // Env first: a `.dev.vars` placeholder must not shadow a key set for this shell.
+  const pick = (name) => {
+    const fromEnv = process.env[name];
+    if (fromEnv && fromEnv !== "replace_me") return fromEnv;
+    const fromFile = vars[name];
+    return fromFile && fromFile !== "replace_me" ? fromFile : undefined;
+  };
+  const supabaseUrl = pick("SUPABASE_URL");
+  const supabaseKey = pick("SUPABASE_SERVICE_ROLE_KEY");
+  const anthropicKey = pick("ANTHROPIC_API_KEY");
   const args = parseArgs(process.argv.slice(2));
-  const model = args.model ?? vars.LLM_YMMS_MODEL ?? process.env.LLM_YMMS_MODEL ?? "claude-sonnet-5";
+  const model = args.model ?? pick("LLM_YMMS_MODEL") ?? "claude-sonnet-5";
 
   if (!supabaseUrl || !supabaseKey) throw new Error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
-  if (!args.sampleOnly && (!anthropicKey || anthropicKey === "replace_me")) {
+  if (!args.sampleOnly && !anthropicKey) {
     throw new Error("Missing ANTHROPIC_API_KEY");
   }
 
@@ -728,46 +815,57 @@ async function main() {
     console.log(`Resuming ${args.resume} (${(prior.results ?? []).filter((r) => !r.skipped && r.text && r.photo).length} scored)`);
   }
 
-  console.log(`Pulling up to ${SNAPSHOT_POOL} MMR hits from the last ${args.days} days...`);
+  console.log(`Pulling up to ${SNAPSHOT_POOL} MMR hits + VIN-decoded hits from the last ${args.days} days...`);
   const snapshots = await fetchHitSnapshots(db, args.days);
-  const listingIds = [...new Set(snapshots.map((r) => r.normalized_listing_id))];
+  const vinSnapshots = args.vinLimit > 0 ? await fetchVinGoldSnapshots(db, args.days) : [];
+  const listingIds = [
+    ...new Set([...snapshots, ...vinSnapshots].map((r) => r.normalized_listing_id)),
+  ];
   const listingsById = await fetchListingsById(db, listingIds);
 
-  const candidates = [];
   const seenListing = new Set();
-  for (const snap of snapshots) {
-    if (seenListing.has(snap.normalized_listing_id)) continue;
-    const listing = listingsById.get(snap.normalized_listing_id);
-    if (!listing) continue;
-    const photoUrl = firstHttpsImage(listing.images);
-    if (!photoUrl) continue;
-    seenListing.add(snap.normalized_listing_id);
-    candidates.push({
-      snapshotId: snap.id,
-      listingId: snap.normalized_listing_id,
-      year: snap.year ?? listing.year,
-      listingMake: listing.make ?? snap.make,
-      listingModel: listing.model ?? snap.model,
-      listingTrim: listing.trim,
-      title: listing.title,
-      description: listing.description,
-      price: listing.price,
-      photoUrl,
-      gold: {
-        lookup_make: snap.lookup_make,
-        lookup_model: snap.lookup_model,
-        lookup_trim: snap.lookup_trim,
-      },
-      hard: isHardCohort({
-        make: snap.lookup_make,
-        model: listing.model,
-        lookupModel: snap.lookup_model,
-      }),
-      fetched_at: snap.fetched_at,
-    });
-  }
+  const toCandidates = (snaps, goldSource) => {
+    const out = [];
+    for (const snap of snaps) {
+      if (seenListing.has(snap.normalized_listing_id)) continue;
+      const listing = listingsById.get(snap.normalized_listing_id);
+      if (!listing) continue;
+      const photoUrls = galleryHttpsImages(listing.images, args.maxPhotos);
+      if (photoUrls.length === 0) continue;
+      seenListing.add(snap.normalized_listing_id);
+      out.push({
+        snapshotId: snap.id,
+        listingId: snap.normalized_listing_id,
+        goldSource,
+        year: snap.year ?? listing.year,
+        listingMake: listing.make ?? snap.make,
+        listingModel: listing.model ?? snap.model,
+        listingTrim: listing.trim,
+        title: listing.title,
+        description: listing.description,
+        price: listing.price,
+        photoUrls,
+        gold: {
+          lookup_make: snap.lookup_make,
+          lookup_model: snap.lookup_model,
+          lookup_trim: snap.lookup_trim,
+        },
+        hard: isHardCohort({
+          make: snap.lookup_make,
+          model: listing.model,
+          lookupModel: snap.lookup_model,
+        }),
+        fetched_at: snap.fetched_at,
+      });
+    }
+    return out;
+  };
+  // VIN gold first so a listing that has both is graded against its VIN.
+  const vinCandidates = toCandidates(vinSnapshots, "vin");
+  const candidates = toCandidates(snapshots, "pipeline");
 
   const rand = mulberry32(args.seed);
+  const vinPool = shuffle(vinCandidates, rand);
   const hardPool = shuffle(
     candidates.filter((c) => c.hard),
     rand,
@@ -776,13 +874,16 @@ async function main() {
     candidates.filter((c) => !c.hard),
     rand,
   );
-  const hardN = Math.min(hardPool.length, Math.round(args.limit * args.hardFraction));
-  const randomN = Math.min(randomPool.length, args.limit - hardN);
-  const sample = [...hardPool.slice(0, hardN), ...randomPool.slice(0, randomN)];
+  const vinN = Math.min(vinPool.length, args.vinLimit, args.limit);
+  const pipelineLimit = args.limit - vinN;
+  const hardN = Math.min(hardPool.length, Math.round(pipelineLimit * args.hardFraction));
+  const randomN = Math.min(randomPool.length, pipelineLimit - hardN);
+  const sample = [...vinPool.slice(0, vinN), ...hardPool.slice(0, hardN), ...randomPool.slice(0, randomN)];
 
   console.log(
-    `Pool with live-looking photo URLs: ${candidates.length} (${hardPool.length} hard, ${randomPool.length} other). ` +
-      `Sample ${sample.length}: ${hardN} hard / ${randomN} random.`,
+    `Pool with live-looking photo URLs: ${candidates.length} pipeline (${hardPool.length} hard, ${randomPool.length} other), ` +
+      `${vinPool.length} VIN gold. Sample ${sample.length}: ${vinN} VIN / ${hardN} hard / ${randomN} random. ` +
+      `Up to ${args.maxPhotos} photos per listing.`,
   );
 
   if (args.sampleOnly) {
@@ -790,7 +891,9 @@ async function main() {
       listingId: c.listingId,
       year: c.year,
       gold: `${c.gold.lookup_make} / ${c.gold.lookup_model} / ${c.gold.lookup_trim}`,
+      source: c.goldSource,
       hard: c.hard,
+      photos: c.photoUrls.length,
       title: (c.title || "").slice(0, 80),
     }));
     console.table(preview.slice(0, 15));
@@ -842,10 +945,16 @@ async function main() {
       return;
     }
 
-    const photo = await downloadPhoto(candidate.photoUrl);
-    if (photo.kind !== "ok") {
-      results.push({ ...candidate, skipped: "photo_dead", photoError: photo, catalogRowCount: rows.length, scope });
-      console.log(`${label} -> skip photo (${photo.kind})`);
+    const { photos, errors: photoErrors } = await downloadPhotos(candidate.photoUrls);
+    if (photos.length === 0) {
+      results.push({
+        ...candidate,
+        skipped: "photo_dead",
+        photoError: photoErrors[0] ?? null,
+        catalogRowCount: rows.length,
+        scope,
+      });
+      console.log(`${label} -> skip photo (${photoErrors[0]?.kind ?? "none"})`);
       await persist();
       return;
     }
@@ -866,7 +975,7 @@ async function main() {
       model,
       catalogText,
       evidenceText: buildEvidenceText(promptInput, { hasPhoto: false }),
-      photo: null,
+      photos: [],
     });
     if (textCall.kind === "http_error" && (textCall.status === 401 || textCall.status === 403)) {
       throw new Error(
@@ -878,7 +987,7 @@ async function main() {
       model,
       catalogText,
       evidenceText: buildEvidenceText(promptInput, { hasPhoto: true }),
-      photo,
+      photos,
     });
 
     const pack = (call) => {
@@ -898,11 +1007,13 @@ async function main() {
     results.push({
       listingId: candidate.listingId,
       snapshotId: candidate.snapshotId,
+      goldSource: candidate.goldSource,
       year: candidate.year,
       hard: candidate.hard,
       title: candidate.title,
       gold: candidate.gold,
-      photoBytes: photo.bytes,
+      photoCount: photos.length,
+      photoBytes: photos.reduce((sum, p) => sum + p.bytes, 0),
       catalogRowCount: rows.length,
       scope,
       text,
@@ -912,7 +1023,10 @@ async function main() {
     const n = await persist();
     const t = text.exact ? "hit" : text.outcome;
     const p = photoArm.exact ? "hit" : photoArm.outcome;
-    console.log(`${label} (${candidate.hard ? "hard" : "rand"}, ${scope}, ${rows.length} styles) text=${t} photo=${p}  scored=${n}`);
+    const slice = candidate.goldSource === "vin" ? "vin" : candidate.hard ? "hard" : "rand";
+    console.log(
+      `${label} (${slice}, ${scope}, ${rows.length} styles, ${photos.length} photos) text=${t} photo=${p}  scored=${n}`,
+    );
   });
 
   const summary = summarize(results);
