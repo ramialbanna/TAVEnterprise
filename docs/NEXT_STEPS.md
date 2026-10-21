@@ -22,13 +22,13 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `afd97231` (`tav-aip-production`) | **§71 gallery dealer check** plus the halt-SMS fallback. Deployed 2026-10-19 with `--keep-vars`. Secrets not touched. No local vars file. Prior: `2a216392` (§81). |
+| **Worker** | `9c0a15bf` (`tav-aip-production`) | **§72 fix**: a clean scraper make/model goes to Claude again. Deployed 2026-10-21 14:13Z with `--keep-vars` from `a5c8acf`. Secrets not touched. Prior: `afd97231` (§71 gallery dealer check + halt-SMS fallback). |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | no redeploy 2026-10-19 | Enrich window is **not** the sheet window. The `scraper_dealership` queue skip is in the repo only. Health: https://tav-seller-enrich.fly.dev/ |
 
 ### This session (2026-10-21)
 
-- **§81 hit-rate regression found and fixed in git. Not deployed.** Deduped hit was **90–91%** Oct 11–14 and **77–79%** Oct 19–21. `model_variant_missing` went **~1% → ~9%**. Cause: §81 skipped Claude when the scraper make/model was clean. A clean model is not a Cox style. Since Oct 19, listings with no Claude call hit **75.2%** (mvm **11.4%**); listings Claude saw hit **84.8%** (mvm **0.7%**). Claude calls fell from ~5k/day to ~1k/day. Fix `80a59d6` on branch `fix/72-restore-claude-style-pick`: the skip is removed. The scraper make/model is still stored and still fed to Claude. Expect Claude spend to return to the ~5k calls/day level.
+- **§81 hit-rate regression found and fixed. Live** Worker `9c0a15bf` 2026-10-21 14:13Z (`--keep-vars`, secrets not touched; Claude `llm_hit` rows confirmed after deploy). Rollback: `npx wrangler rollback --env production afd97231-b7d8-4c63-8e08-6b6004a37014`. Deduped hit was **90–91%** Oct 11–14 and **77–79%** Oct 19–21. `model_variant_missing` went **~1% → ~9%**. Cause: §81 skipped Claude when the scraper make/model was clean. A clean model is not a Cox style. Since Oct 19, listings with no Claude call hit **75.2%** (mvm **11.4%**); listings Claude saw hit **84.8%** (mvm **0.7%**). Claude calls fell from ~5k/day to ~1k/day. Fix `80a59d6` on branch `fix/72-restore-claude-style-pick`: the skip is removed. The scraper make/model is still stored and still fed to Claude. Expect Claude spend to return to the ~5k calls/day level.
 - **No ingest snapshots Oct 16–18.** Not investigated.
 - **§73 eval upgraded** `dc4c945`: gallery (up to 4 photos), a VIN-decoded truth slice (221 single-style VIN decodes in the last 3 days), keys from env first. Not run yet.
 
@@ -80,11 +80,11 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **Disk — prune + VACUUM FULL done 2026-09-21.** `raw_listings` 2034 MB → 752 MB. DB 4962 MB → 3681 MB.
 
-**§81 — live Worker `2a216392` 2026-10-19.** Gallery, numeric seller profile, miles, and a clean make/model are stored. The Claude skip on a clean make/model is **reverted in git** (`80a59d6`, 2026-10-21) because it cost ~13 points of hit rate. A dealership name or dealer seller type drops the car. A name, a `pfbid`, or a blank seller still goes to GoLogin. Secrets not touched. Git catch-up is this commit.
+**§81 — live Worker `2a216392` 2026-10-19.** Gallery, numeric seller profile, miles, and a clean make/model are stored. The Claude skip on a clean make/model is **reverted** (`80a59d6`, live Worker `9c0a15bf` 2026-10-21) because it cost ~13 points of hit rate. A dealership name or dealer seller type drops the car. A name, a `pfbid`, or a blank seller still goes to GoLogin. Secrets not touched. Git catch-up is this commit.
 
 ### Do next (priority)
 
-1. **Deploy the §72 fix** `80a59d6` (`npx wrangler deploy --env production --keep-vars`, user runs it). Then re-read the deduped hit rate after 24h; target is back at ~90%.
+1. **Re-read the deduped hit rate after 24h** (from 2026-10-21 14:13Z). The §72 fix is live on `9c0a15bf`; target is back at ~90%.
 2. **§73** — run the eval within ~3 days of sampling (photo links expire in ~5). Keys go in the shell session only, never a file. See §73. Then R2 capture + prod vision tier (ambiguous subset only).
 3. **Confirm the halt text.** Worker fallback is on `afd97231`. Fly was not redeployed, so the richer log line is local only. The text fires only when 08, 09, 01, and 02 are all paused.
 4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. `llm_ymms.skipped_clean_scraper_identity` is gone after the fix deploys. Do not soak last-resort again. Do not tighten the §71 0.85 gate until the gallery call is scored.
@@ -254,7 +254,7 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **81** | **Scraper detail before Claude or GoLogin** — gallery + seller from build 0.0.6 | **High** | [x] **Live** Worker `2a216392` 2026-10-19. Mapper reads `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`, and still accepts the old names. Clean make/model skips Claude. A dealership name or dealer seller type drops the car. GoLogin still runs for a name, a pfbid, or a blank seller. Secrets not touched. |
-| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] **90–91%** Oct 11–14 with Claude; **77–79%** Oct 19–21 after §81 skipped Claude on clean make/model. Fix `80a59d6` **not deployed**. Actions 7–9 **shipped** `6bcd175b`. |
+| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] **90–91%** Oct 11–14 with Claude; **77–79%** Oct 19–21 after §81 skipped Claude on clean make/model. Fix `80a59d6` **live** Worker `9c0a15bf` 2026-10-21. Actions 7–9 **shipped** `6bcd175b`. |
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). Credits are in. 200-row Claude run **not started**. |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] **Gallery live** Worker `afd97231` 2026-10-19. Cap 20, including a clean make/model plus a profile URL. Do not tighten 0.85 until that call is scored. |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
@@ -286,7 +286,7 @@ Shipped and closed items are archived at the bottom.
 - [x] Store the gallery. Seller-classify Haiku sends that gallery (cap 20), including when make/model and a profile URL are already clean. **Live** Worker `afd97231`. See §71.
 - [x] A numeric seller id is saved as `seller_url` and checked against `blocked_sellers`. A `pfbid` stays a name.
 - [x] A dealership name, or a seller type that says dealership, drops the car before Haiku. `PRIVATE_SELLER` does not. GoLogin still runs for a name, a `pfbid`, or a blank seller.
-- [x] ~~A clean scraper make and model skips the Claude Y/M/M/S call.~~ **Reverted 2026-10-21** (`80a59d6`, not deployed yet): it dropped hit from ~90% to ~77%. A clean model is not a Cox style, and Claude picks the style. The clean make/model is still stored and still Claude's input. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
+- [x] ~~A clean scraper make and model skips the Claude Y/M/M/S call.~~ **Reverted 2026-10-21** (`80a59d6`, live Worker `9c0a15bf`): it dropped hit from ~90% to ~77%. A clean model is not a Cox style, and Claude picks the style. The clean make/model is still stored and still Claude's input. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
 - [x] Mileage comes from `details.vehicle.odometer` when the unit is miles. The subtitle is not used once that odometer is present. MMR still runs.
 - [ ] Fly queue skip for `source: scraper_dealership` is in the repo only. Fly was not redeployed.
 - [x] Git catch-up.
