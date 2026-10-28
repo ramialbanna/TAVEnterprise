@@ -181,6 +181,17 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     expect(map.size).toBe(0);
   });
 
+  it("skips a Spanish listing for LLM prefetch", () => {
+    const item = {
+      title: "2019 Ford F-250",
+      price: 18500,
+      url: "https://www.facebook.com/marketplace/item/spanish-skip/",
+      description: "Título limpio. Vendo.",
+    };
+    const map = buildLlmYmmsPrefetchInputs([item], "facebook", adapterCtx);
+    expect(map.size).toBe(0);
+  });
+
   it("skips heuristic dealer listings for LLM prefetch when skipHeuristicDealers is set (item 71)", () => {
     const item = {
       title: "2018 Ford F-150 XLT",

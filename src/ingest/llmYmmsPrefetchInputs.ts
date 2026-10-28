@@ -22,6 +22,7 @@ import {
 } from "./dealerHeuristics";
 import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
+import { matchSpanishListing } from "./spanishListing";
 import { readScraperVehicle } from "../apify/scraperVehicle";
 
 /**
@@ -87,6 +88,9 @@ export function buildLlmYmmsPrefetchInputs(
         description: listing.description,
       })
     ) {
+      return;
+    }
+    if (matchSpanishListing({ title: listing.title, description: listing.description })) {
       return;
     }
     if (
