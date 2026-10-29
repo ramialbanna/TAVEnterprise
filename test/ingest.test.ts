@@ -1402,6 +1402,34 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(upsertNormalizedListing).not.toHaveBeenCalled();
   });
 
+  it("filters a Spanish listing before valuation", async () => {
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-spanish-001",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/spanish-1",
+        title: "2019 Ford F-250",
+        description: "Título limpio. Vendo.",
+        price: 18500,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({ reason_code: "spanish_listing" }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
   it("filters motorcycles and commercial chassis before valuation", async () => {
     const payload = JSON.stringify({
       source: "facebook",

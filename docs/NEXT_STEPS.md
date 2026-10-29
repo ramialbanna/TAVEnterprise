@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-10-20 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-10-21 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -22,9 +22,15 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `afd97231` (`tav-aip-production`) | **§71 gallery dealer check** plus the halt-SMS fallback. Deployed 2026-10-19 with `--keep-vars`. Secrets not touched. No local vars file. Prior: `2a216392` (§81). |
+| **Worker** | `9c0a15bf` (`tav-aip-production`) | **§72 fix**: a clean scraper make/model goes to Claude again. Deployed 2026-10-21 14:13Z with `--keep-vars` from `a5c8acf`. Secrets not touched. Prior: `afd97231` (§71 gallery dealer check + halt-SMS fallback). |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | no redeploy 2026-10-19 | Enrich window is **not** the sheet window. The `scraper_dealership` queue skip is in the repo only. Health: https://tav-seller-enrich.fly.dev/ |
+
+### This session (2026-10-21)
+
+- **§81 hit-rate regression found and fixed. Live** Worker `9c0a15bf` 2026-10-21 14:13Z (`--keep-vars`, secrets not touched; Claude `llm_hit` rows confirmed after deploy). Rollback: `npx wrangler rollback --env production afd97231-b7d8-4c63-8e08-6b6004a37014`. Deduped hit was **90–91%** Oct 11–14 and **77–79%** Oct 19–21. `model_variant_missing` went **~1% → ~9%**. Cause: §81 skipped Claude when the scraper make/model was clean. A clean model is not a Cox style. Since Oct 19, listings with no Claude call hit **75.2%** (mvm **11.4%**); listings Claude saw hit **84.8%** (mvm **0.7%**). Claude calls fell from ~5k/day to ~1k/day. Fix `80a59d6` on branch `fix/72-restore-claude-style-pick`: the skip is removed. The scraper make/model is still stored and still fed to Claude. Expect Claude spend to return to the ~5k calls/day level.
+- **No ingest snapshots Oct 16–18.** Not investigated.
+- **§73 eval upgraded** `dc4c945`: gallery (up to 4 photos), a VIN-decoded truth slice (221 single-style VIN decodes in the last 3 days), keys from env first. Not run yet.
 
 ### This session (2026-10-19 evening)
 
@@ -74,13 +80,14 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 **Disk — prune + VACUUM FULL done 2026-09-21.** `raw_listings` 2034 MB → 752 MB. DB 4962 MB → 3681 MB.
 
-**§81 — live Worker `2a216392` 2026-10-19.** Gallery, numeric seller profile, miles, and a clean make/model are stored. Claude Y/M/M/S is skipped only when that make and model are clean. A dealership name or dealer seller type drops the car. A name, a `pfbid`, or a blank seller still goes to GoLogin. Secrets not touched. Git catch-up is this commit.
+**§81 — live Worker `2a216392` 2026-10-19.** Gallery, numeric seller profile, miles, and a clean make/model are stored. The Claude skip on a clean make/model is **reverted** (`80a59d6`, live Worker `9c0a15bf` 2026-10-21) because it cost ~13 points of hit rate. A dealership name or dealer seller type drops the car. A name, a `pfbid`, or a blank seller still goes to GoLogin. Secrets not touched. Git catch-up is this commit.
 
 ### Do next (priority)
 
-1. **§73** — `npm run eval:ymms-vision -- --limit 200 --concurrency 2`. Credits are in. The gallery to send is §81. Then R2 capture + prod vision tier (ambiguous subset only).
-2. **Confirm the halt text.** Worker fallback is on `afd97231`. Fly was not redeployed, so the richer log line is local only. The text fires only when 08, 09, 01, and 02 are all paused.
-3. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` / `llm_ymms.skipped_clean_scraper_identity` in Workers Logs. Do not soak last-resort again. Do not tighten the §71 0.85 gate until the gallery call is scored.
+1. **Re-read the deduped hit rate after 24h** (from 2026-10-21 14:13Z). The §72 fix is live on `9c0a15bf`; target is back at ~90%.
+2. **§73** — run the eval within ~3 days of sampling (photo links expire in ~5). Keys go in the shell session only, never a file. See §73. Then R2 capture + prod vision tier (ambiguous subset only).
+3. **Confirm the halt text.** Worker fallback is on `afd97231`. Fly was not redeployed, so the richer log line is local only. The text fires only when 08, 09, 01, and 02 are all paused.
+4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. `llm_ymms.skipped_clean_scraper_identity` is gone after the fix deploys. Do not soak last-resort again. Do not tighten the §71 0.85 gate until the gallery call is scored.
 
 ### Key commands
 
@@ -247,7 +254,7 @@ Suite is **1537+ tests** (1 known fail in `opportunityWorkflow.test.ts` as of 20
 | # | Item | Priority | Status |
 |---|------|----------|--------|
 | **81** | **Scraper detail before Claude or GoLogin** — gallery + seller from build 0.0.6 | **High** | [x] **Live** Worker `2a216392` 2026-10-19. Mapper reads `details`, `primaryPhotoUrl`, `media.photos`, `customTitle`, and `subtitles`, and still accepts the old names. Clean make/model skips Claude. A dealership name or dealer seller type drops the car. GoLogin still runs for a name, a pfbid, or a blank seller. Secrets not touched. |
-| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] Claude-offline **79.4%** last 7d (2026-09-07). Actions 7–9 **shipped** `6bcd175b`. **§81 live:** a clean scraper make/model skips Claude. A messy model still needs it. |
+| **72** | **Y/M/M/S completeness = MMR hit rate** — the main goal | **Critical** | [~] **90–91%** Oct 11–14 with Claude; **77–79%** Oct 19–21 after §81 skipped Claude on clean make/model. Fix `80a59d6` **live** Worker `9c0a15bf` 2026-10-21. Actions 7–9 **shipped** `6bcd175b`. |
 | **73** | **Vision identity (photos)** — eval first | **Critical** | [~] sample-only **green 2026-09-04**. The gallery now arrives (§81). Credits are in. 200-row Claude run **not started**. |
 | **71** | **AI dealer detection (pre-ingest)** | **High** | [~] **Gallery live** Worker `afd97231` 2026-10-19. Cap 20, including a clean make/model plus a profile URL. Do not tighten 0.85 until that call is scored. |
 | **76** | **Fail-open Facebook + Seller unchecked chip** — empty proxy must not blank the sheet | **High** | [x] **live** Worker `0543ff2e` + web `80fff9f`. Sheet 24h `ca0700d` / `b9cad046`. Enrich stays 1h. |
@@ -279,7 +286,7 @@ Shipped and closed items are archived at the bottom.
 - [x] Store the gallery. Seller-classify Haiku sends that gallery (cap 20), including when make/model and a profile URL are already clean. **Live** Worker `afd97231`. See §71.
 - [x] A numeric seller id is saved as `seller_url` and checked against `blocked_sellers`. A `pfbid` stays a name.
 - [x] A dealership name, or a seller type that says dealership, drops the car before Haiku. `PRIVATE_SELLER` does not. GoLogin still runs for a name, a `pfbid`, or a blank seller.
-- [x] A clean scraper make and model skips the Claude Y/M/M/S call. Alias lookup and the offline matcher still run. A messy model does not skip Claude. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
+- [x] ~~A clean scraper make and model skips the Claude Y/M/M/S call.~~ **Reverted 2026-10-21** (`80a59d6`, live Worker `9c0a15bf`): it dropped hit from ~90% to ~77%. A clean model is not a Cox style, and Claude picks the style. The clean make/model is still stored and still Claude's input. Year still comes from the title. A body style such as `Sport Utility 4D` is not stored as the Cox trim.
 - [x] Mileage comes from `details.vehicle.odometer` when the unit is miles. The subtitle is not used once that odometer is present. MMR still runs.
 - [ ] Fly queue skip for `source: scraper_dealership` is in the repo only. Fly was not redeployed.
 - [x] Git catch-up.
@@ -608,11 +615,21 @@ Prompt is elimination-only: year + Cox make + legal styles for that model (namep
 
 **Sample-only 2026-09-04:** **575** hits with photo URLs (last 3d, pool 2,500 snapshots) → **200-row sample** (91 hard / 109 random). Written to `scripts/_eval-results/ymms-vision-sample-2026-09-04T13-03-07-026Z.json`.
 
-**200-row Claude run:** not started. Credits are in as of 2026-10-19. The September **401** no longer applies.
+**200-row Claude run:** not started. Credits are in as of 2026-10-19. The September **401** no longer applies. The Sept 4 sample is useless now: its photo links expired.
 
-```bash
+**Upgraded 2026-10-21** (`dc4c945`):
+
+- Photo arm sends up to `--max-photos` (default **4**) gallery images. The gallery averages ~12 photos per listing since §81.
+- **VIN slice** (`--vin-limit`, default **100**): VIN hits whose Cox decode named exactly one style. That is real ground truth. The Y/M/M slices are graded against the pipeline's own text pick, which favours the text arm. Read `vin_slice` first. VINs are stripped from the evidence for both arms. On 2026-10-21 there were 221 such listings in 3 days; 216 are in the catalog tree, and 201 have sibling styles to choose between.
+- A default run is 100 VIN / 50 hard / 50 random.
+- Keys come from env before `.dev.vars`. Set them for the shell session only; do not write them to a file:
+
+```powershell
+$env:SUPABASE_URL = "<project url>"; $env:SUPABASE_SERVICE_ROLE_KEY = "<service role key>"; $env:ANTHROPIC_API_KEY = "<workspace key>"
 npm run eval:ymms-vision -- --limit 200 --concurrency 2
 ```
+
+Rough cost: 400 Sonnet calls, about 1.5M input tokens with 4 photos each, roughly $5.
 
 Do not wire a production vision tier until this file has a real summary (text-only vs photo, overall + hard slice).
 

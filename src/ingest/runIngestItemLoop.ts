@@ -66,6 +66,7 @@ import {
 import { SELLER_CLASSIFY_TIMEOUT_MS } from "../llm/sellerClassifyClient";
 import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
+import { matchSpanishListing } from "./spanishListing";
 import { readScraperVehicle } from "../apify/scraperVehicle";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
@@ -335,6 +336,28 @@ export async function runIngestItemLoop(
         listing_url: listing.url,
         reason_code: "ineligible_vehicle",
         details: { kind: ineligible.kind, matched: ineligible.matched },
+        raw_listing_id: rawId,
+      });
+      rejected++;
+      continue;
+    }
+
+    const spanish = matchSpanishListing({
+      title: listing.title,
+      description: listing.description,
+    });
+    if (spanish) {
+      log(
+        "ingest.spanish_listing_blocked",
+        { matched: spanish.matched, kpi: true },
+        listingCtx,
+      );
+      await writeFilteredOut(db, env, {
+        source,
+        source_run_id: run_id,
+        listing_url: listing.url,
+        reason_code: "spanish_listing",
+        details: { matched: spanish.matched },
         raw_listing_id: rawId,
       });
       rejected++;

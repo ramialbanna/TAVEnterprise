@@ -22,9 +22,16 @@ import {
 } from "./dealerHeuristics";
 import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
+import { matchSpanishListing } from "./spanishListing";
 import { readScraperVehicle } from "../apify/scraperVehicle";
 
-/** Item 60 — build Claude Y/M/M/S input from raw ingest item + parsed listing. */
+/**
+ * Item 60 — build Claude Y/M/M/S input from raw ingest item + parsed listing.
+ *
+ * A clean scraper make/model (§81) still goes to Claude. It names the model,
+ * not the Cox style, and skipping Claude on it took the hit rate from ~90% to
+ * ~77% (§72, 2026-10-21).
+ */
 export function buildLlmYmmsResolutionInput(
   item: unknown,
   listing: NormalizedListingInput,
@@ -42,7 +49,6 @@ export function buildLlmYmmsResolutionInput(
     title: listing.title,
     price: listing.price,
     ...textContext,
-    ...(readScraperVehicle(item).cleanYmms && { skipClaude: true }),
   };
 }
 
@@ -82,6 +88,9 @@ export function buildLlmYmmsPrefetchInputs(
         description: listing.description,
       })
     ) {
+      return;
+    }
+    if (matchSpanishListing({ title: listing.title, description: listing.description })) {
       return;
     }
     if (
