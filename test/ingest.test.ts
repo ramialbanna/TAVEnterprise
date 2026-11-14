@@ -150,6 +150,7 @@ import { writeVehicleEnrichment } from "../src/persistence/vehicleEnrichments";
 import { runCoxNoDataRetryPass } from "../src/ingest/coxNoDataRetryPass";
 import { runMmrRateLimitRetryPass } from "../src/ingest/mmrRateLimitRetryPass";
 import { writeFilteredOut } from "../src/persistence/filteredOut";
+import { writeDeadLetter } from "../src/persistence/deadLetter";
 import {
   countLiveFacebookListingsForSellerUrl,
   loadBlockedSellerLookup,
@@ -689,6 +690,66 @@ describe("POST /ingest — MANHEIM_LOOKUP_MODE=worker", () => {
       expect.anything(),
       expect.objectContaining({ missingReason: "cox_no_data", method: "vin" }),
     );
+  });
+
+  it("valuation.fetched logs has_value, never the licensed scalar", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+        kind: "hit",
+        result: { ...WORKER_MMR_RESULT, mmrValue: 12_345 },
+      });
+      const sig = await sign(VALID_PAYLOAD, SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+      expect(res.status).toBe(200);
+
+      const events = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+      const fetched = events.find((e) => e.event === "valuation.fetched");
+      expect(fetched).toBeDefined();
+      expect(fetched?.has_value).toBe(true);
+      expect(fetched).not.toHaveProperty("mmr_value");
+      expect(JSON.stringify(fetched)).not.toContain("12345");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("snapshot failure: dead letter and log omit mmrValue and DB message/details", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+        kind: "hit",
+        result: { ...WORKER_MMR_RESULT, mmrValue: 12_345 },
+      });
+      // Synthetic PostgREST-shaped error echoing the failed row (non-retryable code).
+      vi.mocked(writeValuationSnapshot).mockRejectedValueOnce({
+        code: "23514",
+        message: 'new row violates check constraint, value 12345',
+        details: "Failing row contains (norm-uuid, 12345, 12345, high).",
+        hint: "check mmr_value 12345",
+      });
+      const sig = await sign(VALID_PAYLOAD, SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), workerEnv, ctx);
+      expect(res.status).toBe(200);
+
+      const dlCall = vi.mocked(writeDeadLetter).mock.calls.find(
+        (c) => c[2].reason_code === "valuation_snapshot_failed",
+      );
+      expect(dlCall).toBeDefined();
+      const params = dlCall![2];
+      expect(params.payload).toEqual({ normalizedListingId: "norm-uuid" });
+      expect(params.error_message).toBe("error code=23514");
+      expect(JSON.stringify(params)).not.toContain("12345");
+
+      const events = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+      const failed = events.find((e) => e.event === "ingest.snapshot_failed");
+      expect(failed).toBeDefined();
+      expect(failed?.error).toEqual({ code: "23514" });
+      expect(JSON.stringify(failed)).not.toContain("12345");
+      expect(events.some((e) => e.event === "valuation.fetched")).toBe(false);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   it("item 72: skips the lookup entirely for a no-VIN listing below the year floor", async () => {

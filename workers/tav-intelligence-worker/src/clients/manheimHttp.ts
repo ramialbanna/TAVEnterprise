@@ -529,7 +529,7 @@ export class ManheimHttpClient implements ManheimClient {
     if (response.status === 404) {
       log("manheim.http.complete", {
         requestId: args.requestId,
-        mmr_value: null,
+        has_value: false,
         latency_ms: latencyMs,
         attempts,
         kpi: true,
@@ -587,7 +587,8 @@ export class ManheimHttpClient implements ManheimClient {
 
     log("manheim.http.complete", {
       requestId: args.requestId,
-      mmr_value: mmrValue,
+      // Never log the licensed scalar — presence only.
+      has_value: mmrValue !== null,
       latency_ms: latencyMs,
       attempts,
       kpi: true,
