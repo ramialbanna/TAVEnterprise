@@ -36,6 +36,21 @@ function sellerProfileHref(raw: string | null | undefined): string | null {
   }
 }
 
+/** Profile when the scrape stored one. Otherwise a Facebook people search for the name. */
+function sellerCheckHref(
+  rawUrl: string | null | undefined,
+  sellerName: string | null,
+): { href: string; kind: "profile" | "search" } | null {
+  const profile = sellerProfileHref(rawUrl);
+  if (profile) return { href: profile, kind: "profile" };
+  const name = sellerName?.trim();
+  if (!name) return null;
+  return {
+    href: `https://www.facebook.com/search/people/?q=${encodeURIComponent(name)}`,
+    kind: "search",
+  };
+}
+
 /**
  * Item 62 — Facebook-style listing mirror (photos + seller text) on detail.
  */
@@ -48,7 +63,7 @@ export function OpportunityListingMirrorBlock({
   const description = opportunity.listingDescription?.trim();
   const location = formatListingLocation(opportunity);
   const sellerName = opportunity.listingSellerName?.trim() || null;
-  const sellerHref = sellerProfileHref(opportunity.listingSellerUrl);
+  const sellerCheck = sellerCheckHref(opportunity.listingSellerUrl, sellerName);
   const photoAlt = opportunity.title?.trim()
     ? `Listing photo of ${opportunity.title.trim()}`
     : "Marketplace listing photo";
@@ -58,7 +73,7 @@ export function OpportunityListingMirrorBlock({
     images.length > 0 ||
     Boolean(description) ||
     Boolean(sellerName) ||
-    Boolean(sellerHref) ||
+    Boolean(sellerCheck) ||
     hasCityState;
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -110,25 +125,10 @@ export function OpportunityListingMirrorBlock({
       ) : null}
 
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        {sellerName || sellerHref ? (
+        {sellerName ? (
           <div>
             <dt className="text-xs text-muted-foreground">Seller</dt>
-            <dd className="text-sm font-medium">
-              {sellerHref ? (
-                <a
-                  href={sellerHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-foreground underline-offset-4 hover:underline"
-                >
-                  {sellerName || "Marketplace profile"}
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  <span className="sr-only">(opens in a new tab)</span>
-                </a>
-              ) : (
-                sellerName
-              )}
-            </dd>
+            <dd className="text-sm font-medium">{sellerName}</dd>
           </div>
         ) : null}
         {location ? (
@@ -154,13 +154,34 @@ export function OpportunityListingMirrorBlock({
         </div>
       ) : null}
 
-      {opportunity.listingUrl ? (
-        <Button variant="outline" size="sm" asChild>
-          <a href={opportunity.listingUrl} target="_blank" rel="noopener noreferrer">
-            View listing on Facebook
-            <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
-          </a>
-        </Button>
+      {sellerCheck || opportunity.listingUrl ? (
+        <div className="flex flex-wrap gap-2">
+          {sellerCheck ? (
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={sellerCheck.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={
+                  sellerCheck.kind === "profile"
+                    ? "Opens this seller's Facebook profile"
+                    : "We don't have their profile link yet. Opens a Facebook search for this name."
+                }
+              >
+                Check seller on Facebook
+                <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
+              </a>
+            </Button>
+          ) : null}
+          {opportunity.listingUrl ? (
+            <Button variant="outline" size="sm" asChild>
+              <a href={opportunity.listingUrl} target="_blank" rel="noopener noreferrer">
+                View listing on Facebook
+                <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
+              </a>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       <Dialog open={lightboxIndex !== null} onOpenChange={(open) => !open && closeLightbox()}>
