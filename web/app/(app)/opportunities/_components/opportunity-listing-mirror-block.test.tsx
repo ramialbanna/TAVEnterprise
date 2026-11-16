@@ -72,11 +72,11 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
     expect(screen.getByText(/One owner/)).toBeInTheDocument();
     expect(screen.getByText("Jane Seller")).toBeInTheDocument();
     expect(screen.getByText("Dallas, TX")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /View listing on Facebook/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
-      "href",
-      "https://www.facebook.com/search/people/?q=Jane%20Seller",
-    );
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "View listing on Facebook",
+    ]);
+    expect(screen.getByRole("button", { name: "No seller id" })).toBeDisabled();
   });
 
   it("opens the marketplace profile from Check seller on Facebook", () => {
@@ -89,13 +89,16 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
       />,
     );
     expect(screen.getByText("Dakota Herrel").closest("a")).toBeNull();
-    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
+    const links = screen.getAllByRole("link");
+    expect(links[0]).toHaveAccessibleName(/View listing on Facebook/i);
+    expect(links[1]).toHaveAttribute(
       "href",
       "https://www.facebook.com/marketplace/profile/100008618685090",
     );
+    expect(links[1]).toHaveAccessibleName(/Check seller on Facebook/i);
   });
 
-  it("searches Facebook by name when the scrape has no profile link", () => {
+  it("disables seller check when the scrape has no profile id", () => {
     render(
       <OpportunityListingMirrorBlock
         opportunity={baseDetail({
@@ -104,10 +107,8 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
         })}
       />,
     );
-    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
-      "href",
-      "https://www.facebook.com/search/people/?q=Mario%20G%20Hdz",
-    );
+    expect(screen.queryByRole("link", { name: /Check seller on Facebook/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "No seller id" })).toBeDisabled();
   });
 
   it("shows a profile button when a URL was stored without a name", () => {

@@ -36,21 +36,6 @@ function sellerProfileHref(raw: string | null | undefined): string | null {
   }
 }
 
-/** Profile when the scrape stored one. Otherwise a Facebook people search for the name. */
-function sellerCheckHref(
-  rawUrl: string | null | undefined,
-  sellerName: string | null,
-): { href: string; kind: "profile" | "search" } | null {
-  const profile = sellerProfileHref(rawUrl);
-  if (profile) return { href: profile, kind: "profile" };
-  const name = sellerName?.trim();
-  if (!name) return null;
-  return {
-    href: `https://www.facebook.com/search/people/?q=${encodeURIComponent(name)}`,
-    kind: "search",
-  };
-}
-
 /**
  * Item 62 — Facebook-style listing mirror (photos + seller text) on detail.
  */
@@ -63,7 +48,8 @@ export function OpportunityListingMirrorBlock({
   const description = opportunity.listingDescription?.trim();
   const location = formatListingLocation(opportunity);
   const sellerName = opportunity.listingSellerName?.trim() || null;
-  const sellerCheck = sellerCheckHref(opportunity.listingSellerUrl, sellerName);
+  const sellerProfileUrl = sellerProfileHref(opportunity.listingSellerUrl);
+  const showSellerCheck = Boolean(sellerName) || Boolean(sellerProfileUrl);
   const photoAlt = opportunity.title?.trim()
     ? `Listing photo of ${opportunity.title.trim()}`
     : "Marketplace listing photo";
@@ -73,7 +59,7 @@ export function OpportunityListingMirrorBlock({
     images.length > 0 ||
     Boolean(description) ||
     Boolean(sellerName) ||
-    Boolean(sellerCheck) ||
+    Boolean(sellerProfileUrl) ||
     hasCityState;
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -154,31 +140,26 @@ export function OpportunityListingMirrorBlock({
         </div>
       ) : null}
 
-      {sellerCheck || opportunity.listingUrl ? (
+      {showSellerCheck || opportunity.listingUrl ? (
         <div className="flex flex-wrap gap-2">
-          {sellerCheck ? (
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={sellerCheck.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={
-                  sellerCheck.kind === "profile"
-                    ? "Opens this seller's Facebook profile"
-                    : "We don't have their profile link yet. Opens a Facebook search for this name."
-                }
-              >
-                Check seller on Facebook
-                <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
-              </a>
-            </Button>
-          ) : null}
           {opportunity.listingUrl ? (
             <Button variant="outline" size="sm" asChild>
               <a href={opportunity.listingUrl} target="_blank" rel="noopener noreferrer">
                 View listing on Facebook
                 <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
               </a>
+            </Button>
+          ) : null}
+          {sellerProfileUrl ? (
+            <Button variant="outline" size="sm" asChild>
+              <a href={sellerProfileUrl} target="_blank" rel="noopener noreferrer">
+                Check seller on Facebook
+                <ExternalLink className="ml-2 h-3.5 w-3.5" aria-hidden />
+              </a>
+            </Button>
+          ) : showSellerCheck ? (
+            <Button variant="outline" size="sm" disabled>
+              No seller id
             </Button>
           ) : null}
         </div>
