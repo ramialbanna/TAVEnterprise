@@ -73,9 +73,13 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
     expect(screen.getByText("Jane Seller")).toBeInTheDocument();
     expect(screen.getByText("Dallas, TX")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View listing on Facebook/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
+      "href",
+      "https://www.facebook.com/search/people/?q=Jane%20Seller",
+    );
   });
 
-  it("links the seller name to the marketplace profile URL", () => {
+  it("opens the marketplace profile from Check seller on Facebook", () => {
     render(
       <OpportunityListingMirrorBlock
         opportunity={baseDetail({
@@ -84,14 +88,29 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
         })}
       />,
     );
-    const seller = screen.getByRole("link", { name: /Dakota Herrel/i });
-    expect(seller).toHaveAttribute(
+    expect(screen.getByText("Dakota Herrel").closest("a")).toBeNull();
+    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
       "href",
       "https://www.facebook.com/marketplace/profile/100008618685090",
     );
   });
 
-  it("shows a profile link when Fly attached a URL without a name", () => {
+  it("searches Facebook by name when the scrape has no profile link", () => {
+    render(
+      <OpportunityListingMirrorBlock
+        opportunity={baseDetail({
+          listingSellerName: "Mario G Hdz",
+          listingSellerUrl: null,
+        })}
+      />,
+    );
+    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
+      "href",
+      "https://www.facebook.com/search/people/?q=Mario%20G%20Hdz",
+    );
+  });
+
+  it("shows a profile button when a URL was stored without a name", () => {
     render(
       <OpportunityListingMirrorBlock
         opportunity={baseDetail({
@@ -100,7 +119,7 @@ describe("OpportunityListingMirrorBlock (item 62)", () => {
         })}
       />,
     );
-    expect(screen.getByRole("link", { name: /Marketplace profile/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Check seller on Facebook/i })).toHaveAttribute(
       "href",
       "https://www.facebook.com/marketplace/profile/1000526149",
     );
