@@ -215,10 +215,11 @@ The following must **never** appear in any log line, structured field, or error 
 - `password` value (legacy)
 - `access_token` value
 - Any other bearer/basic credential material
+- Any licensed Cox/Manheim valuation figure (`mmr_value`, wholesale/retail amounts, adjusted pricing), including DB error `message`/`details`/`hint` that can echo a failed valuation row
 
-Existing redaction tests in `manheimHttp.test.ts` enforce this. New tests extend the assertion to cover the Basic header.
+Existing redaction tests in `manheimHttp.test.ts` enforce this. New tests extend the assertion to cover the Basic header and the absence of `mmr_value` on `manheim.http.complete`.
 
-Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`, `error_code`, `attempts`, `latency_ms`, `expires_in`, `vendor`, `kpi`, `mmr_value`.
+Allowed structured fields: `requestId`, `grant_type`, `status`, `error_category`, `error_code`, `attempts`, `latency_ms`, `expires_in`, `vendor`, `kpi`, `has_value` (boolean presence only — never the amount).
 
 ---
 

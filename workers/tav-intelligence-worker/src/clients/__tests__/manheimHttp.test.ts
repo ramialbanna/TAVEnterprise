@@ -319,6 +319,45 @@ describe("ManheimHttpClient", () => {
     expect(result.payload).toEqual(VIN_BODY);
   });
 
+  it("manheim.http.complete logs has_value, never the licensed scalar", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(jsonResponse(VIN_BODY));
+
+    const client = new ManheimHttpClient(ENV, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "req-vin-log",
+    }));
+
+    const complete = logEvents().find((e) => e.event === "manheim.http.complete");
+    expect(complete).toBeDefined();
+    expect(complete?.has_value).toBe(true);
+    expect(complete).not.toHaveProperty("mmr_value");
+    const raw = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(raw).not.toContain("18500");
+  });
+
+  it("manheim.http.complete on 404 logs has_value=false without mmr_value", async () => {
+    const { kv } = makeFakeKv();
+    const fetchFn = vi.fn();
+    fetchFn.mockResolvedValueOnce(jsonResponse(TOKEN_BODY));
+    fetchFn.mockResolvedValueOnce(statusResponse(404));
+
+    const client = new ManheimHttpClient(ENV, kv, fetchFn);
+    await flush(client.lookupByVin({
+      vin: "1HGCM82633A123456",
+      mileage: 45_000,
+      requestId: "req-404-log",
+    }));
+
+    const complete = logEvents().find((e) => e.event === "manheim.http.complete");
+    expect(complete?.has_value).toBe(false);
+    expect(complete).not.toHaveProperty("mmr_value");
+  });
+
   // ── 7. YMM uses path segments (regression) ─────────────────────────────────
 
   it("YMM lookup builds a path-segment URL (NOT query params)", async () => {
