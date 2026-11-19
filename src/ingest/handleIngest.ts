@@ -1,5 +1,6 @@
 import type { Env } from "../types/env";
 import { verifyHmac } from "../auth/hmac";
+import { mapRaidrApiItem } from "../apify/payloadAdapter";
 import { IngestRequestSchema, type IngestRequest } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
 import { withRetry } from "../persistence/retry";
@@ -60,7 +61,15 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
     return json({ ok: false, error: "invalid_payload", details: parsed.error.flatten() }, 400);
   }
 
-  return ingestCore(parsed.data, env, execCtx);
+  // Facebook items may arrive in the scraper's nested shape (details.seller,
+  // details.vehicle), the same shape the Apify bridge maps. mapRaidrApiItem is
+  // idempotent, so already-flat items pass through unchanged.
+  const payload =
+    parsed.data.source === "facebook"
+      ? { ...parsed.data, items: parsed.data.items.map(mapRaidrApiItem) }
+      : parsed.data;
+
+  return ingestCore(payload, env, execCtx);
 }
 
 /**

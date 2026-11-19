@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "id": "9042989651917041",
+  "url": "https://www.facebook.com/marketplace/item/9042989651917041/",
+  "title": "2019 Chrysler 300",
+  "price": {
+    "amount": "15995.00",
+    "currency": "USD",
+    "formatted": "$15,995"
+  },
+  "location": {
+    "city": "Garland",
+    "state": "TX",
+    "displayName": "Garland, Texas"
+  },
+  "listing_date_ms": 1795042059000,
+  "subtitles": [
+    "52K miles · Dealership"
+  ],
+  "is_sold": false,
+  "is_pending": false,
+  "marketplace_listing_seller": {
+    "id": "9515613272291880",
+    "name": "Seller ee08a95b"
+  },
+  "images": [
+    "https://example.invalid/img/837b1f79f7fa6548.jpg"
+  ],
+  "details": {
+    "description": "[scrubbed text f4956385]",
+    "condition": "USED",
+    "location": {
+      "city": "Garland",
+      "state": "TX"
+    },
+    "seller": {
+      "id": "9515613272291880",
+      "name": "Seller ee08a95b",
+      "profile_url": "https://www.facebook.com/marketplace/profile/9515613272291880/",
+      "marketplaceProfileId": "9643682030645054"
+    },
+    "vehicle": {
+      "makeDisplayName": "Chrysler",
+      "odometer": {
+        "value": 52321,
+        "unit": "MILES"
+      },
+      "sellerType": "DIRECT_DEALERSHIP",
+      "dealershipName": "Forest Auto Sales"
+    }
+  },
+  "_tav": {
+    "scrapedAt": "2026-11-19T15:04:05.000Z",
+    "searchId": "dallas-cars",
+    "detailFetched": true,
+    "warnings": []
+  }
+}

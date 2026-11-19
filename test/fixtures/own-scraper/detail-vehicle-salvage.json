@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.0",
+  "id": "9055076845096829",
+  "url": "https://www.facebook.com/marketplace/item/9055076845096829/",
+  "title": "2011 Chevrolet Malibu",
+  "price": {
+    "amount": "4770.00",
+    "currency": "USD",
+    "formatted": "$4,770"
+  },
+  "location": {
+    "city": "Arlington",
+    "state": "TX",
+    "displayName": "Arlington, Texas"
+  },
+  "listing_date_ms": 1795103253000,
+  "subtitles": [
+    "147K miles"
+  ],
+  "is_sold": false,
+  "is_pending": false,
+  "marketplace_listing_seller": {
+    "id": "pfbidFAKEd043c38a8613d3e56e2f6c31",
+    "name": "Seller 408b5939"
+  },
+  "images": [
+    "https://example.invalid/img/da4bef48e9121177607746439d.jpg"
+  ],
+  "details": {
+    "description": "[scrubbed text 555a2ade]",
+    "condition": "USED",
+    "location": {
+      "city": "Arlington",
+      "state": "TX"
+    },
+    "seller": {
+      "id": "pfbidFAKEd043c38a8613d3e56e2f6c31",
+      "name": "Seller 408b5939",
+      "marketplaceProfileId": "9537632600933292"
+    },
+    "vehicle": {
+      "makeDisplayName": "Chevrolet",
+      "modelDisplayName": "Malibu",
+      "odometer": {
+        "value": 147698,
+        "unit": "MILES"
+      },
+      "sellerType": "PRIVATE_SELLER",
+      "titleStatus": "SALVAGE"
+    }
+  },
+  "_tav": {
+    "scrapedAt": "2026-11-19T15:04:05.000Z",
+    "searchId": "dallas-cars",
+    "detailFetched": true,
+    "warnings": []
+  }
+}

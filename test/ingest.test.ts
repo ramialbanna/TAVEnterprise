@@ -1596,3 +1596,44 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(body).not.toHaveProperty("items_skipped");
   });
 });
+
+describe("POST /ingest — TAV-owned Facebook scraper items", () => {
+  async function postOwn(fixture: string) {
+    const { readFileSync } = await import("node:fs");
+    const item = JSON.parse(readFileSync(`test/fixtures/own-scraper/${fixture}.json`, "utf8"));
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: `fbm-own-${fixture}-c01`,
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [item],
+    });
+    const res = await worker.fetch(makeRequest(payload, await sign(payload, SECRET)), env, ctx);
+    expect(res.status).toBe(200);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  it("/ingest maps facebook items like the webhook bridge", async () => {
+    const body = await postOwn("detail-vehicle-private");
+    expect(body.processed).toBe(1);
+    expect(body.rejected).toBe(0);
+    // details.description / details.vehicle.odometer are lifted only by mapRaidrApiItem.
+    expect(vi.mocked(upsertNormalizedListing)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ description: expect.any(String), mileage: 147698, make: "chevrolet", model: "malibu" }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("dealer item from the scraper is filtered with a reason code", async () => {
+    const body = await postOwn("detail-vehicle-dealer");
+    expect(body.processed).toBe(0);
+    expect(body.rejected).toBe(1);
+    expect(vi.mocked(writeFilteredOut)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ reason_code: "dealer_listing" }),
+    );
+  });
+});
