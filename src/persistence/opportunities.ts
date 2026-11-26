@@ -57,6 +57,8 @@ export interface OpportunityRow {
   source: string;
   region: string | null;
   sourceRunId: string | null;
+  /** True once the TAV-owned Facebook scraper has sent this listing (migration 0084). Sticky. */
+  fromTavScraper: boolean;
   normalizedListingId: string;
   vehicleCandidateId: string | null;
   leadId: string | null;
@@ -233,11 +235,11 @@ export interface ScraperReviewMapOptions {
 }
 
 const LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, images, description, seller_name, seller_url, city, state";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, images, description, seller_name, seller_url, city, state, tav_scraper_seen_at";
 
 /** Queue list/count — skip listing images + description (detail-only, huge over 1,500 rows). */
 const QUEUE_LISTING_COLUMNS =
-  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, seller_name, seller_url, city, state";
+  "id, source, source_run_id, region, title, year, make, model, trim, vin, price, mileage, listing_url, entry_method, first_seen_at, last_seen_at, posted_at, scrape_count, price_changed, mileage_changed, freshness_status, body_type, engine, transmission, exterior_color, contact_first_name, contact_last_name, contact_home_phone, contact_email, contact_address, contact_postal_code, salesperson, appraiser, title_owner, title_state_region, lien_holder, lien_account_number, lien_payoff, tag_or_plate, tag_state_region, tag_expiration, certified, extended_warranty, seller_name, seller_url, city, state, tav_scraper_seen_at";
 
 /** Freshness values that must not appear in the buyer queue (OQ-002). */
 const SUPPRESSED_FRESHNESS = new Set(["stale_confirmed", "removed"]);
@@ -541,6 +543,7 @@ function mapToOpportunityRow(
     source: listing.source as string,
     region: asString(listing.region),
     sourceRunId: asString(listing.source_run_id),
+    fromTavScraper: asString(listing.tav_scraper_seen_at) !== null,
     normalizedListingId: listing.id as string,
     vehicleCandidateId: diagnostic.vehicle_candidate_id,
     leadId: lead ? (lead.id as string) : null,

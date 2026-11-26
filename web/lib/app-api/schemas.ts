@@ -352,6 +352,8 @@ export const OpportunityRowSchema = z.object({
   source: z.string(),
   region: z.string().nullable(),
   sourceRunId: z.string().nullable(),
+  /** True once the TAV-owned Facebook scraper has sent this listing. Older Workers omit it. */
+  fromTavScraper: z.boolean().optional(),
   normalizedListingId: z.string(),
   vehicleCandidateId: z.string().nullable(),
   leadId: z.string().nullable(),

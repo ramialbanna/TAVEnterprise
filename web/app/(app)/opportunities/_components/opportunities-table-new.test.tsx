@@ -70,6 +70,35 @@ describe("OpportunitiesTableNew", () => {
     expect(screen.getByLabelText("Flag bad lead")).toBeInTheDocument();
   });
 
+  it("marks rows from the TAV scraper with a tint, left edge, and label", () => {
+    const tavRow: OpportunityRow = { ...baseRow, id: "listing-tav", normalizedListingId: "listing-tav", title: "2020 Ford F-150", year: 2020, make: "Ford", model: "F-150", fromTavScraper: true };
+    render(
+      <OpportunitiesTableNew
+        rows={[baseRow, tavRow]}
+        total={2}
+        offset={0}
+        limit={25}
+        sort="spread_desc"
+        claimActor={{ id: "u1", displayName: "Alex", role: "closer" }}
+        onSelect={vi.fn()}
+        onOpenDetail={vi.fn()}
+        onPaginationChange={vi.fn()}
+        onSortChange={vi.fn()}
+        onClaim={vi.fn()}
+        onDismiss={vi.fn()}
+        queueView="needs_action"
+      />,
+    );
+
+    const tavTr = screen.getByText("2020 Ford F-150").closest("tr");
+    const otherTr = screen.getByText("2019 Honda Accord").closest("tr");
+    expect(tavTr).toHaveAttribute("data-tav-scraper", "true");
+    expect(tavTr?.className).toContain("bg-indigo-50/70");
+    expect(tavTr?.querySelector("td")?.className).toContain("inset_4px");
+    expect(otherTr).not.toHaveAttribute("data-tav-scraper");
+    expect(screen.getAllByText("TAV scraper")).toHaveLength(1);
+  });
+
   it("highlights the selected row", () => {
     render(
       <OpportunitiesTableNew
