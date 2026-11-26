@@ -134,7 +134,7 @@ function buildCatalogSubtreeText(rows) {
     .join("\n");
 }
 
-const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral" };
+const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral", ttl: "1h" };
 
 function buildYmmsCatalogCacheText(input, rows) {
   const lines = [];

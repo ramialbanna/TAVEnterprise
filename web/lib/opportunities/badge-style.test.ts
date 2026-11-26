@@ -8,7 +8,7 @@ import {
 } from "./badge-style";
 
 describe("killed opportunity badges (§76)", () => {
-  it("strips Estimated YMMS, Estimated MMR, and Possible duplicate", () => {
+  it("strips Estimated YMMS, Estimated MMR, Possible duplicate, and Seller unchecked", () => {
     expect(
       visibleOpportunityBadges([
         "First seen",
@@ -18,7 +18,7 @@ describe("killed opportunity badges (§76)", () => {
         "Seller unchecked",
         "Mileage unknown",
       ]),
-    ).toEqual(["First seen", "Seller unchecked", "Mileage unknown"]);
+    ).toEqual(["First seen", "Mileage unknown"]);
   });
 
   it("keeps Estimated miles", () => {

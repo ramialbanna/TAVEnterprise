@@ -1,6 +1,6 @@
 ﻿# Next Steps — MMR Lab
 
-**Last updated:** 2026-10-21 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
+**Last updated:** 2026-10-30 · **Goal:** **near-100% MMR hit rate on eligible inventory.** Everything else is secondary.
 
 Cox will not return a price without a style (`bodyname` is a required path segment — `manheimHttp.ts` short-circuits trimless calls with `cox_ymm_requires_trim`). So **"raise the MMR hit rate" and "resolve a complete Year + Make + Model + Style" are the same task.** There is no partial-credit valuation.
 
@@ -22,9 +22,27 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 
 | Surface | ID / version | What shipped |
 |---------|----------------|--------------|
-| **Worker** | `9c0a15bf` (`tav-aip-production`) | **§72 fix**: a clean scraper make/model goes to Claude again. Deployed 2026-10-21 14:13Z with `--keep-vars` from `a5c8acf`. Secrets not touched. Prior: `afd97231` (§71 gallery dealer check + halt-SMS fallback). |
+| **Worker** | `7bce148f` (`tav-aip-production`) | Block list auto-save needs **3** live cars. Prior same day: `f6f5e0f7` (Haiku 5.5 style calls, seller-photo cap, decision reuse). Deployed 2026-10-30 with `--keep-vars`. Secrets not touched. Before that: `252c2d38` (financing offers, 2026-10-27). |
 | **Web** | `6f37651` on Vercel (auto from `main`; app still `ca0700d` behavior) | Docs + SQL only in `6f37651`. Needs action client filter **24h**. Secrets not touched. |
 | **Fly enrich** | no redeploy 2026-10-19 | Enrich window is **not** the sheet window. The `scraper_dealership` queue skip is in the repo only. Health: https://tav-seller-enrich.fly.dev/ |
+
+### This session (2026-10-30)
+
+Spend check, then two production deploys. Secrets were not touched. A Cursor rule now says secret changes are done by hand in the Cloudflare dashboard (`.cursor/rules/cloudflare-worker-secrets.mdc`).
+
+- **Style calls are Haiku 5.5.** `LLM_YMMS_MODEL` is `claude-haiku-5-5` on production. Sonnet was still the Year/Make/Model/Style model. Seller classification was already Haiku. Logged Sonnet from Oct 24–29 was about **$188**. The same listing was being asked again every scrape.
+- **Do not pay twice for a style.** A paid decision from the last 24 hours is reused. A `needs_review` is reused until the listing is gone, because those never become aliases. A Cox "no price" retry does not fire on a reused decision. Two copies of the same URL in one scrape share one call. Lookup is `tav.latest_paid_llm_ymms_decisions` (migration `0081`).
+- **Seller photos are smaller and remembered.** Cap is **4**, and Facebook thumbnail size is sent (`ctp=s261x260` stays or is put back). The verdict is stored in `tav.seller_classify_cache` by listing URL, including ads that are rejected before a listing row exists. Live on Worker `f6f5e0f7`.
+- **Block list saves at 3 live cars, not 2.** The ad still drops. A buyer flag can still save one profile. Profiles already on the list were left there. Since the gallery check went live on Oct 19, **1,253** profiles were auto-added, almost all under personal names. Live on Worker `7bce148f`.
+- **Financing auto-reject was left on.** "Easy financing" / "financing available" / "financiado" still drop the car. That was the newest wide net (73 unique ads overnight) and was paused on purpose.
+- **Overnight from 11pm Oct 29:** 1,699 scrape rows, 201 new stored cars, **11 leads** (6 good, 5 fair). Most rejects were the same dealer ads seen again. Of the 201 that got through, the rest scored a pass and never reached Needs action.
+
+### This session (2026-10-27)
+
+- **Financing offers drop the car.** Live Worker `252c2d38`. "Easy financing", "financing options", "financiamento", and "financiado" auto-reject. "No financing" does not. 165 stored offers were marked `bad_lead`. They were **not** added to `blocked_sellers`.
+- **Seller unchecked is off.** The chip is no longer sent. The web strip is in the repo and not deployed.
+- **Scraper `details` is null** since 2026-10-26. New Facebook rows have no description and no seller, so the financing rule cannot see the Facebook copy. Example items `1845619419779730` and `1629210865369899`.
+- **§82 is not started.** Second financing offer from the same profile URL should blacklist that URL. Write it up below. Do not build it in this chat.
 
 ### This session (2026-10-21)
 
@@ -57,7 +75,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 - **Nobody in `tav.users` was admin** — every row was `closer`, so the page redirected to Opportunities. Promoted **`rami@texasautovalue.com`** and **`automation@texasautovalue.com`** to `admin`. `twillio1@texasautovalue.com` is still `closer`.
 - **Table cleanup** (`763e0e7`): sort (newest default, or click Seller / Listings / Blocked), filters for origin / one-vs-many listings / has-URL vs name-only, search also matches listing titles.
 - **Soak auto-block review — done 2026-09-07** (human pass on `/admin/blocked-sellers`).
-- **Block list is URL-only — shipped + deployed 2026-09-07.** Stopped writing `name:` keys. Auto persist needs 2+ live cars. Buyer flag may persist one URL. Same profile with 3+ live cars is a dealer even if the copy is empty. Deleted **106** name-only rows; **19** URL rows remain. Worker `41c65562` + Fly redeployed. CI typecheck fix `574b6c4`. Secrets not touched.
+- **Block list is URL-only — shipped + deployed 2026-09-07.** Stopped writing `name:` keys. Auto persist was 2+ live cars, raised to **3+** on 2026-10-30 (Worker `7bce148f`). Buyer flag may persist one URL. Same profile with 3+ live cars is a dealer even if the copy is empty. Deleted **106** name-only rows; **19** URL rows remain. Worker `41c65562` + Fly redeployed. CI typecheck fix `574b6c4`. Secrets not touched.
 - **§68 Worker deploy — `0453cc02` 2026-09-07.** `upsertSourceRun` treats `truncated` / `failed` as terminal. 17 stale rows marked `completed` so retries cannot reopen them. Secrets not touched.
 
 ### Where things stand
@@ -88,6 +106,7 @@ Cox will not return a price without a style (`bodyname` is a required path segme
 2. **§73** — run the eval within ~3 days of sampling (photo links expire in ~5). Keys go in the shell session only, never a file. See §73. Then R2 capture + prod vision tier (ambiguous subset only).
 3. **Confirm the halt text.** Worker fallback is on `afd97231`. Fly was not redeployed, so the richer log line is local only. The text fires only when 08, 09, 01, and 02 are all paused.
 4. **Watch §72** — `ingest.mmr_rate_limit_retry_pass` / `llm_ymms.f_series_trim_axis_alias` in Workers Logs. `llm_ymms.skipped_clean_scraper_identity` is gone after the fix deploys. Do not soak last-resort again. Do not tighten the §71 0.85 gate until the gallery call is scored.
+5. **§82 — second financing offer blacklists the profile URL.** Not started. Spec below. It does nothing until the scraper sends `details` again.
 
 ### Key commands
 
@@ -650,6 +669,24 @@ Do not wire a production vision tier until this file has a real summary (text-on
 
 ---
 
+## 82 — Second financing offer blacklists the seller
+
+**Opened:** 2026-10-27 · **Status:** [ ] not started · **Priority:** High · **Do not start until `details` is populated again.**
+
+A financing offer already drops that one car (§71, Worker `252c2d38`). It does not flag the seller. The next car from the same person still lands.
+
+**Rule.** Drop the first financing offer and remember the Facebook profile URL. When a second listing from that same URL also offers financing, write the URL to `blocked_sellers`. Later cars from that URL drop even if the copy is empty.
+
+**Key.** Profile URL only (`/marketplace/profile/{id}`). Do not write a `name:` key. A display name is not the seller.
+
+**Counts as financing.** The strong phrases already in `dealerHeuristics.ts`: "we finance", "financing available", "easy financing", "financing options", "financiamento", "financiado", "financiamos". **Does not count:** the bare word "financing", or "no financing" / "no financiamos".
+
+**Not this.** Do not blacklist on the first hit. Do not treat two ordinary live cars as this signal. The existing 2-car auto-block stays as it is. This counter is financing offers only.
+
+**Blocked now.** Since 2026-10-26 `details` is null on new Facebook payloads, so there is no description and no profile URL to attach the flag to.
+
+---
+
 ## 71 — AI dealer listing detection (pre-ingest)
 
 **Status:** [~] **live**. `SELLER_CLASSIFY_ENABLED=true`. **2026-10-19:** gallery call **live** Worker `afd97231`. Do not tighten 0.85. Text gate on real buyer labels catches 2 of 65 dealers and 0 of 6 non-dealer dismisses. The 24 stored photos are all older than 14 days; Facebook image links expire in about 5 days, so a photo re-score of this set cannot run.
@@ -682,7 +719,7 @@ Do not wire a production vision tier until this file has a real summary (text-on
 | Filter point | After adapter, before Y/M/M/S — same hook as `isBlockedSeller` in `runIngestItemLoop.ts` |
 | Auto-reject gate | `seller_type=dealer` **and** `confidence >= 0.85`, tuned on the eval |
 | Lower confidence | Ingest continues unchanged (no private-party regressions) |
-| On reject | `writeFilteredOut(reason_code: "dealer_listing")` + log `ingest.dealer_listing_blocked`. Persist `blocked_sellers` **URL only**, and only if **2+ live cars** or a buyer flag. |
+| On reject | `writeFilteredOut(reason_code: "dealer_listing")` + log `ingest.dealer_listing_blocked`. Persist `blocked_sellers` **URL only**, and only if **3+ live cars** (raised from 2 on 2026-10-30) or a buyer flag. |
 | Repeat seller | Same Marketplace profile with **3+** live listings (last 30d) is a dealer even if the copy is empty (`repeat_seller`) |
 | Flag | `SELLER_CLASSIFY_ENABLED="true"` production + staging as of 2026-08-14 |
 | Model tier | Haiku or cheapest sufficient |
@@ -791,7 +828,7 @@ Buyer: when listings come in, **identify the seller, check `blocked_sellers`, an
 
 1. Resolve seller **payload name/url → stored identity on that listing URL** (payload fills gaps per field; a name-only payload keeps a stored profile URL).
 2. `isBlockedSeller` matches **URL keys only**. Name-only keys are not written or matched (2026-09-07).
-3. `upsertBlockedSeller` writes the **URL key only**. Auto persist needs **2+ live cars**. Buyer dismiss may persist a single URL. **3+ live cars** on one profile is a dealer even if the copy is empty.
+3. `upsertBlockedSeller` writes the **URL key only**. Auto persist needs **3+ live cars** (2026-10-30; was 2+). Buyer dismiss may persist a single URL. **3+ live cars** on one profile is a dealer even if the copy is empty.
 4. Ingest `writeFilteredOut(blocked_dealer)` **before** `upsertNormalizedListing` / MMR / lead. If that listing URL already exists, stamp seller + suppress workflow to `bad_lead`.
 5. Default Opportunities views (`needs_action`, `mine`, `worth_a_look`, `all`, scraper review) **hide** Facebook rows whose seller **URL is in the table**. `flagged_leads` keeps them for audit. **§76:** Facebook with **no seller URL** is shown, with **Seller unchecked**. Name-only is not enough to drop the chip.
 6. Numeric `marketplace_listing_seller.id` maps to `sellerUrl` when the vendor sends it (still usually hollow).
@@ -1072,7 +1109,7 @@ Text alert (2026-09-28): Fly calls `POST /internal/seller-enrich-halt` on `tav-a
 - [x] **Needs action waits on seller URL + blocked check** — view filter live production `2b262630` (2026-09-03)
 - [x] Host `--loop --cloud` on Fly (`tav-seller-enrich`, `fly.seller-enrich.toml`, machine `2870647c500408`, 2026-08-31). Worker is the wrong runtime. Do not also run the local daemon on the same profile. Trial 5-minute stop cleared after a card was added.
 - [x] **48h soak closed 2026-09-07.** Account alive (no checkpoint). `seller_url` climbed on needs-action rows whenever proxy GB remained (~38% of new Facebook on Sep 3–5; **5,441** with URL, **5,506** after refill confirm). Always-on failed only when the proxy hit zero. Admin page + sort/filter **shipped**. Soak auto-block review **done 2026-09-07**.
-- [x] **URL-only block list (2026-09-07):** no `name:` keys. Auto persist after 2+ live cars. Buyer flag may persist one URL. 3+ live cars on one profile = dealer. Worker `41c65562` + Fly redeployed. 106 name rows deleted.
+- [x] **URL-only block list (2026-09-07):** no `name:` keys. Auto persist after 2+ live cars, raised to **3+** on 2026-10-30. Buyer flag may persist one URL. 3+ live cars on one profile = dealer. Worker `41c65562` + Fly redeployed. 106 name rows deleted.
 - [x] Mirror on detail shows seller name/URL when enriched (UI 2026-09-02, commit `75d69f3`)
 - [ ] **Create Facebook accounts via GoLogin** — not next. Soak did not checkpoint. Build signup only after this login is banned.
 
@@ -1194,7 +1231,7 @@ Files: `src/valuation/selectCatalogStyle.ts`, `resolveCatalogStyleFromEvidence.t
 
 **Status:** [~] **URL keys only**. Ingest + default views hide blocked URLs. **§76:** empty-seller Facebook is shown with Seller unchecked. **§81:** a numeric `details.seller.id` is stored as `seller_url`. A dealership name or dealer seller type drops the car. A name or `pfbid` is not a block key. Phone, link, and copied-description keys are **§80**.
 
-When a buyer dismisses with reason `dealer` **and** a Facebook profile URL exists, that URL is added to `blocked_sellers`. Auto-blocks need the URL **and** 2+ live cars. Name-only keys are not written or matched. Ingest skips matching URLs before LLM and MMR.
+When a buyer dismisses with reason `dealer` **and** a Facebook profile URL exists, that URL is added to `blocked_sellers`. Auto-blocks need the URL **and** 3+ live cars (2026-10-30). Name-only keys are not written or matched. Ingest skips matching URLs before LLM and MMR.
 
 **The seller slot is often hollow on the Apify payload** (`extraListingData.seller` `{}`). Detailed Fetch *is* enabled — we get `description`, `condition`, `location`, `creation_time` from the same object. Escalate alongside the §73 gallery finding. §71 still filters first-time dealer *listings* without a seller key. **§74** fills `seller_url` so this table can match. **Buyer 2026-08-31:** matching is not enough if the card already showed — block before Opportunities.
 

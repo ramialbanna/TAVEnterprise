@@ -12,7 +12,6 @@ import { computeDealScore } from "../scoring/deal";
 import type { AppUser } from "./users";
 import {
   isBlockedSellerOpportunity,
-  isPendingFacebookSellerIdentity,
   loadBlockedSellerLookup,
   type BlockedSellerLookup,
 } from "./blockedSellers";
@@ -227,9 +226,6 @@ export const SCRAPER_REVIEW_BADGE = "Scraper review";
 
 export const NO_MMR_BADGE = "No MMR";
 
-/** Facebook with no profile URL — sheet still shows the card (§76). */
-export const SELLER_UNCHECKED_BADGE = "Seller unchecked";
-
 export interface ScraperReviewMapOptions {
   enabled: boolean;
   windowMs?: number;
@@ -385,13 +381,11 @@ export function buildOpportunityBadges(input: {
   candidateListingCount: number | null;
   scraperReview?: boolean;
   noMmr?: boolean;
-  sellerUnchecked?: boolean;
 }): string[] {
   const badges: string[] = [];
   if (input.isManualSubmission) badges.push("Manual submission");
   if (input.scraperReview) badges.push(SCRAPER_REVIEW_BADGE);
   if (input.noMmr) badges.push(NO_MMR_BADGE);
-  if (input.sellerUnchecked) badges.push(SELLER_UNCHECKED_BADGE);
   if (input.scrapeCount <= 1) badges.push("First seen");
   else badges.push(`Seen again #${input.scrapeCount - 1}`);
   if (input.priceChanged) badges.push("Price changed");
@@ -512,10 +506,6 @@ function mapToOpportunityRow(
     candidateListingCount,
     scraperReview,
     noMmr,
-    sellerUnchecked: isPendingFacebookSellerIdentity(
-      asString(listing.source),
-      asString(listing.seller_url),
-    ),
   });
 
   const assignedTo =
@@ -651,10 +641,7 @@ function applyListFilter(rows: OpportunityRow[], filter: OpportunityListFilter):
   return out;
 }
 
-/**
- * Default queue views hide Facebook whose profile URL is in `blocked_sellers`.
- * Empty seller URL is shown with Seller unchecked (§76). Flagged leads keep blocked rows.
- */
+/** Default queue views hide Facebook whose profile URL is in `blocked_sellers`. */
 export function isHiddenBlockedSellerOpportunity(
   row: Pick<OpportunityRow, "source"> & {
     listingSellerUrl?: string | null;

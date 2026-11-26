@@ -116,6 +116,29 @@ describe("classifyListingSeller", () => {
     expect(result.confidence).toBeLessThan(0.85);
   });
 
+  it("reuses a stored classification and does not send the gallery again", async () => {
+    const result = await classifyListingSeller(
+      {
+        title: "2016 Honda CR-V",
+        description: "Great daily driver.",
+        sellerName: "Maria",
+        images: ["https://cdn.example/lot.jpg", "https://cdn.example/two.jpg"],
+      },
+      ENV,
+      {
+        cached: {
+          sellerType: "private_party",
+          confidence: 0.7,
+          reasoning: "Stored from the previous scrape.",
+          signals: ["personal_seller"],
+          source: "cache",
+        },
+      },
+    );
+    expect(callAnthropicForSellerClassify).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ sellerType: "private_party", source: "cache", confidence: 0.7 });
+  });
+
   it("skips Haiku when allowLlm is false", async () => {
     await classifyListingSeller(
       { title: "2018 F-150", description: "Clean CARFAX, financing possible.", sellerName: "James" },

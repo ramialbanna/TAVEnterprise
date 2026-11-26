@@ -63,12 +63,37 @@ describe("computeRegionScore", () => {
     expect(computeRegionScore("oklahoma_city_ok")).toBe(75);
   });
 
+  it("phoenix, kansas city, and minneapolis are secondary markets", () => {
+    expect(computeRegionScore("phoenix_az")).toBe(75);
+    expect(computeRegionScore("kansas_city_mo")).toBe(75);
+    expect(computeRegionScore("minneapolis_mn")).toBe(75);
+  });
+
+  it("the November 18 state tasks are secondary markets", () => {
+    for (const region of [
+      "lincoln_ne",
+      "denver_co",
+      "salt_lake_city_ut",
+      "chicago_il",
+      "louisville_ky",
+      "nashville_tn",
+      "birmingham_al",
+      "jackson_ms",
+      "atlanta_ga",
+      "miami_fl",
+      "indianapolis_in",
+      "des_moines_ia",
+    ]) {
+      expect(computeRegionScore(region)).toBe(75);
+    }
+  });
+
   it("undefined (out-of-region) → 50", () => {
     expect(computeRegionScore(undefined)).toBe(50);
   });
 
   it("unknown region string → 50", () => {
-    expect(computeRegionScore("miami_fl")).toBe(50);
+    expect(computeRegionScore("seattle_wa")).toBe(50);
   });
 });
 

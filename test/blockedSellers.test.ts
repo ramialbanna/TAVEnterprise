@@ -96,18 +96,21 @@ describe("shouldPersistBlockedSeller / repeat seller", () => {
     expect(shouldPersistBlockedSeller({ sellerUrl: null, listingCount: 1, buyerFlagged: true })).toBe(false);
   });
 
-  it("persists an auto dealer only after a second listing", () => {
+  it("persists an auto dealer only after more than three listing links", () => {
     expect(
       shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 1, dealerEvidence: true }),
     ).toBe(false);
     expect(
-      shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 2, dealerEvidence: true }),
+      shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 3, dealerEvidence: true }),
+    ).toBe(false);
+    expect(
+      shouldPersistBlockedSeller({ sellerUrl: url, listingCount: 4, dealerEvidence: true }),
     ).toBe(true);
   });
 
-  it("treats 3+ live cars as a dealer", () => {
-    expect(isRepeatSellerDealer(2)).toBe(false);
-    expect(isRepeatSellerDealer(3)).toBe(true);
+  it("treats more than 3 live listing links as a dealer", () => {
+    expect(isRepeatSellerDealer(3)).toBe(false);
+    expect(isRepeatSellerDealer(4)).toBe(true);
   });
 
   it("extracts the Marketplace profile id", () => {
@@ -207,7 +210,7 @@ describe("item 74 blocked seller scope", () => {
       sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
       sellerName: "Lot Seller",
       reason: "dealer",
-      listingCount: 2,
+      listingCount: 4,
     });
 
     expect(result).toEqual({

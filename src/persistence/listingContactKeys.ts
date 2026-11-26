@@ -1,4 +1,7 @@
-import { LIVE_SELLER_LISTING_DAYS, REPEAT_SELLER_DEALER_MIN_LISTINGS } from "./blockedSellers";
+import { LIVE_SELLER_LISTING_DAYS } from "./blockedSellers";
+
+/** Same phone, site, or email on this many different cars. Listing-link repeats are a separate rule. */
+const CONTACT_REPEAT_MIN_VEHICLES = 3;
 import type { SupabaseClient } from "./supabase";
 import {
   contactVehicleKey,
@@ -92,7 +95,7 @@ export async function matchRepeatedListingContact(
     const matches = rows.filter((row) => row.contact_key === contactKey);
     const vehicles = new Set(matches.map((row) => row.vehicle_key));
     if (!vehicles.has(vehicleKey)) vehicles.add(vehicleKey);
-    if (vehicles.size < REPEAT_SELLER_DEALER_MIN_LISTINGS) continue;
+    if (vehicles.size < CONTACT_REPEAT_MIN_VEHICLES) continue;
     const otherListingUrls = [
       ...new Set(
         matches.map((row) => row.listing_url).filter((url) => url && url !== listingUrl),

@@ -196,7 +196,22 @@ export type ManualSubmissionRequest = {
     | "austin_tx"
     | "san_antonio_tx"
     | "lubbock_tx"
-    | "oklahoma_city_ok";
+    | "oklahoma_city_ok"
+    | "phoenix_az"
+    | "kansas_city_mo"
+    | "minneapolis_mn"
+    | "lincoln_ne"
+    | "denver_co"
+    | "salt_lake_city_ut"
+    | "chicago_il"
+    | "louisville_ky"
+    | "nashville_tn"
+    | "birmingham_al"
+    | "jackson_ms"
+    | "atlanta_ga"
+    | "miami_fl"
+    | "indianapolis_in"
+    | "des_moines_ia";
   year: number;
   make: string;
   model: string;
@@ -270,7 +285,22 @@ export type MaxbuyRegion =
   | "austin_tx"
   | "san_antonio_tx"
   | "lubbock_tx"
-  | "oklahoma_city_ok";
+  | "oklahoma_city_ok"
+  | "phoenix_az"
+  | "kansas_city_mo"
+  | "minneapolis_mn"
+  | "lincoln_ne"
+  | "denver_co"
+  | "salt_lake_city_ut"
+  | "chicago_il"
+  | "louisville_ky"
+  | "nashville_tn"
+  | "birmingham_al"
+  | "jackson_ms"
+  | "atlanta_ga"
+  | "miami_fl"
+  | "indianapolis_in"
+  | "des_moines_ia";
 
 /**
  * Request body for `POST /app/maxbuy/evaluate` (contract v1.0.0, OPEN-5).

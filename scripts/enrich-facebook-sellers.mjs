@@ -760,7 +760,7 @@ async function processJobs({ page, jobs, args, db, writeEnabled, runState, profi
       const alreadyBlocked = await sellerKeyIsBlocked(db, sellerKey);
       const listingCount = await countLiveFacebookListingsForSellerUrl(db, sellerUrl, row.listing_url);
       const buyerFlagged = row.queue === "dealer_dismiss";
-      const dealerEvidence = row.dealerSignal || listingCount >= 3;
+      const dealerEvidence = row.dealerSignal || listingCount >= 4;
       const persist =
         alreadyBlocked ||
         Boolean(sellerUrl) &&

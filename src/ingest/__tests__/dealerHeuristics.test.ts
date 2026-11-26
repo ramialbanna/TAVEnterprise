@@ -80,6 +80,52 @@ describe("classifyListingSellerHeuristic", () => {
     expect(shouldAutoRejectDealer(result)).toBe(true);
   });
 
+  it("ignores financing available, financiado, and the bare word financing", () => {
+    const available = classifyListingSellerHeuristic({
+      description: "Financing available. Clean title, one owner.",
+    });
+    expect(available.signals).toEqual([]);
+    expect(shouldAutoRejectDealer(available)).toBe(false);
+
+    const easy = classifyListingSellerHeuristic({
+      description: "Easy financing options available. Fill out an application.",
+    });
+    expect(easy.signals).toEqual([]);
+    expect(shouldAutoRejectDealer(easy)).toBe(false);
+
+    const offer = classifyListingSellerHeuristic({
+      description: "Message me. We’re located in Round Rock and offer financing options as well.",
+    });
+    expect(shouldAutoRejectDealer(offer)).toBe(false);
+
+    const spanish = classifyListingSellerHeuristic({
+      description: "Financiamento Facil!! Título limpio.",
+    });
+    expect(shouldAutoRejectDealer(spanish)).toBe(false);
+
+    const cashOrFinance = classifyListingSellerHeuristic({
+      description: "Título limpio, cash o financiado.",
+    });
+    expect(cashOrFinance.signals).toEqual([]);
+    expect(shouldAutoRejectDealer(cashOrFinance)).toBe(false);
+  });
+
+  it("does not auto-reject a private seller who says no financing", () => {
+    const result = classifyListingSellerHeuristic({
+      title: "2017 Nissan Rogue",
+      description: "Clean title, no financing no trades.",
+      sellerName: "Luis Beltran",
+    });
+    expect(result.signals).toEqual([]);
+    expect(shouldAutoRejectDealer(result)).toBe(false);
+
+    const spanish = classifyListingSellerHeuristic({
+      description: "No Financiamos. Recibimos cash.",
+    });
+    expect(spanish.signals).toEqual([]);
+    expect(shouldAutoRejectDealer(spanish)).toBe(false);
+  });
+
   it("does not treat for-sale-by-owner as a dealer", () => {
     const result = classifyListingSellerHeuristic({
       title: "2018 F-150 XLT",

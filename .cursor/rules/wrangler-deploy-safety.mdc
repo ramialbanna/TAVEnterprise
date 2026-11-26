@@ -27,6 +27,8 @@ Use `--env staging` for staging. Pass `--config` only for `workers/tav-intellige
 - Opening, grepping, or printing `.dev.vars` or `.env*`
 - A before/after secret list. That touches secrets. Skip it.
 
+If the deploy cannot succeed until a secret exists or changes, stop. Name the Worker, environment, and secret. The user sets it in the Cloudflare dashboard. Do not run the secret command. See `cloudflare-worker-secrets.mdc`.
+
 A deploy with `--keep-vars` uploads code and the plain `[vars]` already in `wrangler.toml`. Secrets stay on the Worker.
 
 ## Do not

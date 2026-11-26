@@ -309,7 +309,7 @@ describe("buildOpportunityBadges", () => {
     expect(badges).not.toContain("Near miss");
   });
 
-  it("marks Seller unchecked for Facebook with no profile URL", () => {
+  it("does not mark Seller unchecked", () => {
     const badges = buildOpportunityBadges({
       scrapeCount: 1,
       priceChanged: false,
@@ -320,30 +320,10 @@ describe("buildOpportunityBadges", () => {
       isManualSubmission: false,
       estimateFlags: { mileage: false, style: true, mmr: true },
       candidateListingCount: 2,
-      sellerUnchecked: true,
-    });
-    expect(badges).toContain("Seller unchecked");
-    expect(badges).toContain("First seen");
-    expect(badges).toContain("Mileage unknown");
-    expect(badges).not.toContain("Estimated YMMS");
-    expect(badges).not.toContain("Estimated MMR");
-    expect(badges).not.toContain("Possible duplicate");
-  });
-
-  it("does not mark Seller unchecked when the profile URL exists", () => {
-    const badges = buildOpportunityBadges({
-      scrapeCount: 1,
-      priceChanged: false,
-      mileageChanged: false,
-      mileageUnknown: false,
-      hasLead: true,
-      hasMmr: true,
-      isManualSubmission: false,
-      estimateFlags: { mileage: false, style: false, mmr: false },
-      candidateListingCount: 1,
-      sellerUnchecked: false,
     });
     expect(badges).not.toContain("Seller unchecked");
+    expect(badges).toContain("First seen");
+    expect(badges).toContain("Mileage unknown");
   });
 
   it("marks manual submissions", () => {

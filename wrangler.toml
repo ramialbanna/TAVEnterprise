@@ -51,7 +51,7 @@ MAXBUY_WORKER_URL = ""
 # matcher. When "false" (or ANTHROPIC_API_KEY unset), ingest behavior is
 # unchanged — no Anthropic calls are made.
 LLM_YMMS_ENABLED = "false"
-LLM_YMMS_MODEL = "claude-sonnet-5"
+LLM_YMMS_MODEL = "claude-haiku-5-5"
 # Item 71 — dealer listing filter. Off until eval says private-party FP is acceptable.
 SELLER_CLASSIFY_ENABLED = "true"
 SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
@@ -84,7 +84,7 @@ SCRAPER_REVIEW_MODE = "false"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-staging.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
-LLM_YMMS_MODEL = "claude-sonnet-5"
+LLM_YMMS_MODEL = "claude-haiku-5-5"
 SELLER_CLASSIFY_ENABLED = "true"
 SELLER_CLASSIFY_MODEL = "claude-haiku-4-5"
 [[env.staging.kv_namespaces]]
@@ -124,7 +124,7 @@ SCRAPER_REVIEW_MODE = "true"
 MAXBUY_WORKER_URL = "https://maxbuy-worker-production.rami-1a9.workers.dev"
 # Item 57 — Claude Y/M/M/S resolver on ingest (confident llm_hit only; else offline matcher).
 LLM_YMMS_ENABLED = "true"
-LLM_YMMS_MODEL = "claude-sonnet-5"
+LLM_YMMS_MODEL = "claude-haiku-5-5"
 SELLER_CLASSIFY_ENABLED = "true"
 # Matches Cloudflare production (set in the dashboard 2026-10-10).
 SELLER_CLASSIFY_MODEL = "claude-haiku-5-5"

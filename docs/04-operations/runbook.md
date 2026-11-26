@@ -94,6 +94,7 @@ Main Worker:
 - `APP_API_SECRET`
 - `ADMIN_API_SECRET`
 - `WEBHOOK_HMAC_SECRET`
+- `TAV_INGEST_SECRET` (optional; the TAV-owned Facebook scraper's own `/ingest` key, accepted for `source: "facebook"` only)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `INTEL_WORKER_SECRET`

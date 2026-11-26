@@ -102,12 +102,12 @@ describe("callAnthropicForYmms", () => {
     const body = JSON.parse(init.body);
     expect(body.tool_choice).toEqual({ type: "tool", name: YMMS_TOOL_NAME });
     expect(body.tools[0].name).toBe(YMMS_TOOL_NAME);
-    expect(body.tools[0].cache_control).toEqual({ type: "ephemeral" });
-    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.tools[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     const userContent = body.messages[0].content;
     expect(userContent).toHaveLength(2);
     expect(userContent[0].text).toBe(SAMPLE_PROMPT.catalogCacheText);
-    expect(userContent[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(userContent[0].cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
     expect(userContent[1].text).toBe(SAMPLE_PROMPT.listingEvidenceText);
     expect(userContent[1].cache_control).toBeUndefined();
   });

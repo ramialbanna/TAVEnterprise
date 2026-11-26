@@ -31,6 +31,36 @@ describe("Apify task → TAV region mapping", () => {
     expect(mapApifyTaskToRegion("UfFehLMz5zylHOxCS")).toBe("oklahoma_city_ok");
   });
 
+  it("maps arizona, missouri, and minnesota custom tasks", () => {
+    expect(mapApifyTaskConfig("Kced5aPs3hywm0ZTc")).toEqual({
+      region: "phoenix_az",
+      source: "facebook",
+    });
+    expect(mapApifyTaskConfig("gDNXUvm9UzjDSx9BJ")).toEqual({
+      region: "kansas_city_mo",
+      source: "facebook",
+    });
+    expect(mapApifyTaskConfig("emjfc12sHwqLFM3Aj")).toEqual({
+      region: "minneapolis_mn",
+      source: "facebook",
+    });
+  });
+
+  it("maps the November 18 state tasks", () => {
+    expect(mapApifyTaskConfig("d3cNGNGbW4D6wS57U")?.region).toBe("lincoln_ne");
+    expect(mapApifyTaskConfig("uq2AtQs1BaHoCZlPt")?.region).toBe("denver_co");
+    expect(mapApifyTaskConfig("9NaLFkeRAYdH8wiNd")?.region).toBe("salt_lake_city_ut");
+    expect(mapApifyTaskConfig("dELGPpFDhebSJOzKM")?.region).toBe("chicago_il");
+    expect(mapApifyTaskConfig("hJvDbRQjhevopk98o")?.region).toBe("louisville_ky");
+    expect(mapApifyTaskConfig("gWbwoWm5SJGzxd6WS")?.region).toBe("nashville_tn");
+    expect(mapApifyTaskConfig("aslBuJHHof3nltlSd")?.region).toBe("birmingham_al");
+    expect(mapApifyTaskConfig("KzLJGSjYaQfmyCecE")?.region).toBe("jackson_ms");
+    expect(mapApifyTaskConfig("zJI3kpcnesT7CdnBn")?.region).toBe("atlanta_ga");
+    expect(mapApifyTaskConfig("mYOppAstlB03MMtmO")?.region).toBe("miami_fl");
+    expect(mapApifyTaskConfig("odIEVqzsdDz49Ei5P")?.region).toBe("indianapolis_in");
+    expect(mapApifyTaskConfig("QIaEAwAabwAtpEz1f")?.region).toBe("des_moines_ia");
+  });
+
   it("maps cl-dallas-automotive (NMTFTt1C0aEnhEuY9) to dallas_tx / craigslist", () => {
     expect(mapApifyTaskToRegion("NMTFTt1C0aEnhEuY9")).toBe("dallas_tx");
     expect(mapApifyTaskConfig("NMTFTt1C0aEnhEuY9")).toEqual({
@@ -47,13 +77,28 @@ describe("Apify task → TAV region mapping", () => {
   it("maps all wired Apify tasks (FB four + custom dallas/oklahoma + CL dallas)", () => {
     expect(Object.keys(APIFY_TASK_REGION_MAP).sort()).toEqual(
       [
+        "9NaLFkeRAYdH8wiNd",
+        "Kced5aPs3hywm0ZTc",
+        "KzLJGSjYaQfmyCecE",
         "MWtcjZFWqJrnYChgp",
         "NMTFTt1C0aEnhEuY9",
+        "QIaEAwAabwAtpEz1f",
         "UfFehLMz5zylHOxCS",
         "Xpq656NgueqfXDHvU",
         "ZQEsd3nHcLAs5kLwL",
+        "aslBuJHHof3nltlSd",
+        "d3cNGNGbW4D6wS57U",
+        "dELGPpFDhebSJOzKM",
+        "emjfc12sHwqLFM3Aj",
+        "gDNXUvm9UzjDSx9BJ",
+        "gWbwoWm5SJGzxd6WS",
+        "hJvDbRQjhevopk98o",
+        "mYOppAstlB03MMtmO",
         "nccVufFs2grLH4Qsj",
+        "odIEVqzsdDz49Ei5P",
+        "uq2AtQs1BaHoCZlPt",
         "vk7OijnAOOo8V1ekc",
+        "zJI3kpcnesT7CdnBn",
       ],
     );
     expect(Object.keys(APIFY_TASK_CONFIG).sort()).toEqual(

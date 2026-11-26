@@ -415,7 +415,7 @@ async function writeLlmYmmsAudit(
   llmResolution: LlmYmmsResolution,
   normalizedListingId?: string | null,
 ): Promise<void> {
-  if (llmResolution.kind === "fallback") return;
+  if (llmResolution.kind === "fallback" || llmResolution.reusedPriorDecision) return;
   if (params.year === undefined || !params.make) return;
   try {
     await insertLlmYmmsDecision(db, {
@@ -1226,14 +1226,22 @@ export function createLlmYmmsPrefetch(
   });
   let nextToStart = 0;
   const inFlight = new Map<number, Promise<LlmYmmsResolution>>();
+  const sharedByListingUrl = new Map<string, Promise<LlmYmmsResolution>>();
 
   function start(index: number): Promise<LlmYmmsResolution> {
     const input = inputsByIndex.get(index);
     if (!input) throw new Error(`createLlmYmmsPrefetch: no input registered for index ${index}`);
-    return resolveListingWithLLM(input, deps).catch((err) => {
+    const listingUrl = input.listingUrl?.trim();
+    if (listingUrl) {
+      const shared = sharedByListingUrl.get(listingUrl);
+      if (shared) return shared;
+    }
+    const promise = resolveListingWithLLM(input, deps).catch((err) => {
       logError("valuation", "ingest.llm_ymms_prefetch_failed", err);
       return { kind: "fallback", reason: "http_error" } as LlmYmmsResolution;
     });
+    if (listingUrl) sharedByListingUrl.set(listingUrl, promise);
+    return promise;
   }
 
   function fillWindow(): void {

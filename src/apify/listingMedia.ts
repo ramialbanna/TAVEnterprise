@@ -47,11 +47,20 @@ function pushUrl(urls: string[], seen: Set<string>, raw: string | undefined): vo
 }
 
 /**
- * Gallery for the seller-type vision call. A lot often looks like a driveway
- * in frame one and a row of cars later, so the first photo is not enough.
- * Typical Facebook galleries are 8–10; 20 is the cap.
+ * Gallery for the seller-type vision call.
+ * Four frames is enough to see past a driveway. Facebook's `ctp` thumbnail
+ * stays on: stripping it downloads 1536px and the model is billed for it.
  */
-export const SELLER_CLASSIFY_MAX_IMAGES = 20;
+export const SELLER_CLASSIFY_MAX_IMAGES = 4;
+
+const FACEBOOK_THUMBNAIL_CROP = "ctp=s261x260";
+
+/** Put the thumbnail crop back on a Facebook CDN URL that was stored full-size. */
+export function facebookListingThumbnailUrl(url: string): string {
+  if (!/fbcdn\.net|facebook\.com/i.test(url)) return url;
+  if (/[?&]ctp=/i.test(url)) return url;
+  return url.includes("?") ? `${url}&${FACEBOOK_THUMBNAIL_CROP}` : `${url}?${FACEBOOK_THUMBNAIL_CROP}`;
+}
 
 export function selectSellerClassifyImageUrls(images: unknown): string[] {
   if (!Array.isArray(images)) return [];
@@ -61,7 +70,7 @@ export function selectSellerClassifyImageUrls(images: unknown): string[] {
     if (typeof raw !== "string") continue;
     const trimmed = raw.trim();
     if (!trimmed.startsWith("https://")) continue;
-    const url = upgradeFacebookListingPhotoUrl(trimmed);
+    const url = facebookListingThumbnailUrl(trimmed);
     if (seen.has(url)) continue;
     seen.add(url);
     urls.push(url);

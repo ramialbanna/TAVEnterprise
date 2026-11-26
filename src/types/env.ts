@@ -11,6 +11,15 @@ export interface Env {
 
   // ── Ingest authentication ──────────────────────────────────────────────────
   WEBHOOK_HMAC_SECRET: string;
+  /**
+   * Second /ingest HMAC key, held only by the TAV-owned Facebook Marketplace
+   * scraper (tav-lead-scraper). Valid for source "facebook" only, so it can be
+   * rotated or revoked without touching WEBHOOK_HMAC_SECRET. Optional: unset
+   * means only WEBHOOK_HMAC_SECRET is accepted. NEVER log this.
+   * Set via: Cloudflare dashboard → tav-aip-production → Settings → Variables
+   * and Secrets (type Secret), or wrangler secret put TAV_INGEST_SECRET.
+   */
+  TAV_INGEST_SECRET?: string;
   NORMALIZER_SECRET: string; // reserved for Phase 6 replay endpoint auth
 
   // ── Manheim MMR API ────────────────────────────────────────────────────────
@@ -167,7 +176,7 @@ export interface Env {
   LLM_YMMS_ENABLED: string;
 
   /**
-   * Anthropic model id used for Y/M/M/S proposals, e.g. "claude-sonnet-5".
+   * Anthropic model id used for Y/M/M/S proposals, e.g. "claude-haiku-5-5".
    * Non-secret — set in wrangler.toml [vars] so it can change without a
    * secrets rotation.
    */

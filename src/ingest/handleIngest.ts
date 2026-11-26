@@ -1,5 +1,6 @@
 import type { Env } from "../types/env";
 import { verifyHmac } from "../auth/hmac";
+import { mapRaidrApiItem } from "../apify/payloadAdapter";
 import { IngestRequestSchema, type IngestRequest } from "../validate";
 import { getSupabaseClient } from "../persistence/supabase";
 import { withRetry } from "../persistence/retry";
@@ -22,8 +23,24 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+type IngestSigner = "webhook" | "fb_scraper";
+
+/**
+ * Which /ingest key signed the body: the shared WEBHOOK_HMAC_SECRET, or the
+ * TAV-owned Facebook scraper's own TAV_INGEST_SECRET. Null when neither.
+ */
+async function ingestSigner(body: ArrayBuffer, signature: string, env: Env): Promise<IngestSigner | null> {
+  if (isConfiguredSecret(env.WEBHOOK_HMAC_SECRET) && (await verifyHmac(body, signature, env.WEBHOOK_HMAC_SECRET))) {
+    return "webhook";
+  }
+  if (isConfiguredSecret(env.TAV_INGEST_SECRET) && (await verifyHmac(body, signature, env.TAV_INGEST_SECRET))) {
+    return "fb_scraper";
+  }
+  return null;
+}
+
 export async function handleIngest(request: Request, env: Env, execCtx: ExecutionContext): Promise<Response> {
-  if (!isConfiguredSecret(env.WEBHOOK_HMAC_SECRET)) {
+  if (!isConfiguredSecret(env.WEBHOOK_HMAC_SECRET) && !isConfiguredSecret(env.TAV_INGEST_SECRET)) {
     log("ingest.rejected", { reason: "hmac_secret_not_configured" });
     return json({ ok: false, error: "ingest_auth_not_configured" }, 503);
   }
@@ -42,8 +59,8 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
   }
 
   const signature = request.headers.get("x-tav-signature") ?? "";
-  const authorized = await verifyHmac(bodyBytes, signature, env.WEBHOOK_HMAC_SECRET);
-  if (!authorized) {
+  const signer = await ingestSigner(bodyBytes, signature, env);
+  if (!signer) {
     log("ingest.rejected", { reason: "unauthorized" });
     return json({ ok: false, error: "unauthorized" }, 401);
   }
@@ -60,7 +77,22 @@ export async function handleIngest(request: Request, env: Env, execCtx: Executio
     return json({ ok: false, error: "invalid_payload", details: parsed.error.flatten() }, 400);
   }
 
-  return ingestCore(parsed.data, env, execCtx);
+  // The Facebook scraper's key is good for Facebook batches only.
+  if (signer === "fb_scraper" && parsed.data.source !== "facebook") {
+    log("ingest.rejected", { reason: "signer_source_mismatch", signer, source: parsed.data.source });
+    return json({ ok: false, error: "unauthorized" }, 401);
+  }
+  log("ingest.authorized", { signer }, { runId: parsed.data.run_id, source: parsed.data.source, region: parsed.data.region });
+
+  // Facebook items may arrive in the scraper's nested shape (details.seller,
+  // details.vehicle), the same shape the Apify bridge maps. mapRaidrApiItem is
+  // idempotent, so already-flat items pass through unchanged.
+  const payload =
+    parsed.data.source === "facebook"
+      ? { ...parsed.data, items: parsed.data.items.map(mapRaidrApiItem) }
+      : parsed.data;
+
+  return ingestCore(payload, env, execCtx);
 }
 
 /**

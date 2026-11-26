@@ -1,6 +1,7 @@
 /**
- * Drop listings written in Spanish before Claude or MMR.
- * "el" and "la" never count. One Spanish word does not drop the car.
+ * Spanish private-party copy. A match drops the ad.
+ * Claude may keep an English ad the list nominated, such as "troca" in Del Rio.
+ * "el" and "la" never count. One Spanish word is not enough to nominate.
  */
 
 export type SpanishListingMatch = {

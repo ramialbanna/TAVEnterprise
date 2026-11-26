@@ -121,7 +121,7 @@ describe("callAnthropicForSellerClassify", () => {
 
     expect(result.kind).toBe("ok");
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      "https://cdn.example/lot.jpg",
+      "https://cdn.example/lot.jpg?ctp=s261x260",
       "https://cdn.example/second.jpg",
       expect.stringContaining("api.anthropic.com"),
     ]);

@@ -462,6 +462,8 @@ function extractStateCode(raw: string): string {
 // Any top-level key NOT in this set is reported as an unexpected_field drift event.
 
 const KNOWN_FACEBOOK_FIELDS: ReadonlySet<string> = new Set([
+  // TAV-owned scraper envelope fields (facebook-marketplace-scraper contract 1.0)
+  "schemaVersion", "_tav", "_raw",
   // URL aliases
   "url", "listingUrl", "listing_url", "marketplaceUrl", "link",
   // ID aliases
