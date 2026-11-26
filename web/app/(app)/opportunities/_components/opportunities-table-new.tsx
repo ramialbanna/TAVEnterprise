@@ -48,8 +48,7 @@ import { OpportunitiesEmptyStateNew } from "./opportunities-empty-state-new";
 import { OpportunityVehicleCellNew } from "./opportunity-vehicle-cell-new";
 import { OpportunityRowActionsNew, SpreadSignalCell } from "./opportunity-row-actions-new";
 
-/** Rows the TAV-owned Facebook scraper sent: light indigo tint plus a 4px left edge. */
-const TAV_SCRAPER_ROW_CLASS = "bg-indigo-50/70 hover:bg-indigo-100/70 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50";
+/** Rows the TAV-owned Facebook scraper sent: a 4px indigo left edge. The row background stays as-is. */
 const TAV_SCRAPER_EDGE_CLASS = "shadow-[inset_4px_0_0_var(--color-indigo-500)]";
 
 const ROW_PADDING: Record<TableDensity, string> = {
@@ -400,7 +399,6 @@ export function OpportunitiesTableNew({
                     data-tav-scraper={row.fromTavScraper ? "true" : undefined}
                     className={cn(
                       "cursor-pointer border-b border-border last:border-0 hover:bg-muted/40 focus:outline-none focus-visible:bg-muted/60",
-                      row.fromTavScraper && TAV_SCRAPER_ROW_CLASS,
                       selected && "bg-muted/60",
                     )}
                   >
