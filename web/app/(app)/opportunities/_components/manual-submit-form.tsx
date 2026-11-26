@@ -33,6 +33,21 @@ const REGIONS = [
   { value: "san_antonio_tx", label: "San Antonio TX" },
   { value: "lubbock_tx", label: "Lubbock TX" },
   { value: "oklahoma_city_ok", label: "Oklahoma City OK" },
+  { value: "phoenix_az", label: "Phoenix AZ" },
+  { value: "kansas_city_mo", label: "Kansas City MO" },
+  { value: "minneapolis_mn", label: "Minneapolis MN" },
+  { value: "lincoln_ne", label: "Lincoln NE" },
+  { value: "denver_co", label: "Denver CO" },
+  { value: "salt_lake_city_ut", label: "Salt Lake City UT" },
+  { value: "chicago_il", label: "Chicago IL" },
+  { value: "louisville_ky", label: "Louisville KY" },
+  { value: "nashville_tn", label: "Nashville TN" },
+  { value: "birmingham_al", label: "Birmingham AL" },
+  { value: "jackson_ms", label: "Jackson MS" },
+  { value: "atlanta_ga", label: "Atlanta GA" },
+  { value: "miami_fl", label: "Miami FL" },
+  { value: "indianapolis_in", label: "Indianapolis IN" },
+  { value: "des_moines_ia", label: "Des Moines IA" },
 ] as const;
 
 const SOURCES = [

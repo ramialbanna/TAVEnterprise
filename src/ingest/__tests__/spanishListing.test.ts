@@ -52,6 +52,15 @@ describe("matchSpanishListing", () => {
     ).toEqual(expect.arrayContaining(["nuevo", "como", "esta"]));
   });
 
+  it("drops titulo limpio and todo perfecto", () => {
+    const match = matchSpanishListing({
+      title: "2024 Ford F-150",
+      description: "Motor 2.7 turbo\nV6\n4x4\nTitulo limpio\nTodo perfecto",
+    });
+    expect(match).not.toBeNull();
+    expect(match?.matched).toEqual(expect.arrayContaining(["titulo", "limpio"]));
+  });
+
   it("drops titulo limpio plus vendo", () => {
     const match = matchSpanishListing({
       title: "2019 Ford F-250",

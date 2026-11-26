@@ -5,6 +5,7 @@ const KILLED_OPPORTUNITY_BADGES = new Set([
   "Estimated YMMS",
   "Estimated MMR",
   "Possible duplicate",
+  "Seller unchecked",
 ]);
 
 export function isKilledOpportunityBadge(badge: string): boolean {

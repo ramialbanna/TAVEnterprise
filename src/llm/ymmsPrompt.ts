@@ -109,8 +109,13 @@ export function buildCatalogSubtreeText(rows: readonly CoxCatalogTreeRow[]): str
     .join("\n");
 }
 
-/** Item 66 — Anthropic `cache_control` for the stable (year, make) catalog prefix. */
-export const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral" as const };
+/**
+ * Item 66 — Anthropic `cache_control` for the stable prefix.
+ * One hour, not the default 5 minutes: the same year+make often comes back
+ * in a later ingest batch. Tools, system, and the catalog block all use this
+ * TTL. A 1-hour breakpoint cannot follow a 5-minute one.
+ */
+export const YMMS_PROMPT_CACHE_CONTROL = { type: "ephemeral" as const, ttl: "1h" as const };
 
 /** Split prompt for item 66 prompt caching — catalog first, listing evidence second. */
 export type YmmsAnthropicPrompt = {

@@ -8,6 +8,21 @@ export const REGION_LABELS: Record<string, string> = {
   san_antonio_tx: "San Antonio",
   lubbock_tx: "Lubbock",
   oklahoma_city_ok: "Oklahoma City",
+  phoenix_az: "Phoenix",
+  kansas_city_mo: "Kansas City",
+  minneapolis_mn: "Minneapolis",
+  lincoln_ne: "Lincoln",
+  denver_co: "Denver",
+  salt_lake_city_ut: "Salt Lake City",
+  chicago_il: "Chicago",
+  louisville_ky: "Louisville",
+  nashville_tn: "Nashville",
+  birmingham_al: "Birmingham",
+  jackson_ms: "Jackson",
+  atlanta_ga: "Atlanta",
+  miami_fl: "Miami",
+  indianapolis_in: "Indianapolis",
+  des_moines_ia: "Des Moines",
 };
 
 /** Human-readable listing source names (facebook, craigslist, etc.). */

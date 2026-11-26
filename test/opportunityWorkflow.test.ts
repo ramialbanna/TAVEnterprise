@@ -61,6 +61,7 @@ const baseOpportunity = {
   source: "facebook",
   region: "dallas_tx",
   sourceRunId: null,
+  fromTavScraper: false,
   normalizedListingId: "listing-1",
   vehicleCandidateId: null,
   leadId: null,

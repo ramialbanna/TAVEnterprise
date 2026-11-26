@@ -181,7 +181,7 @@ describe("buildLlmYmmsPrefetchInputs", () => {
     expect(map.size).toBe(0);
   });
 
-  it("skips a Spanish listing for LLM prefetch", () => {
+  it("does not prefetch a wordlist nomination; the language call happens in the item loop", () => {
     const item = {
       title: "2019 Ford F-250",
       price: 18500,

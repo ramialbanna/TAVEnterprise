@@ -26,6 +26,8 @@ export type { SellerClassification, SellerClassifyInput, SellerType } from "../i
 export type ClassifyListingSellerOpts = {
   /** Skip Haiku when the ingest slice is already against the wall. */
   allowLlm?: boolean;
+  /** Stored result for this listing URL. Skips the photo call. */
+  cached?: SellerClassification | null;
 };
 
 function llmToClassification(
@@ -53,6 +55,15 @@ export async function classifyListingSeller(
   const heuristic = classifyListingSellerHeuristic(input);
   if (shouldAutoRejectDealer(heuristic)) {
     return heuristic;
+  }
+
+  if (opts.cached) {
+    log("ingest.seller_classify_cache_hit", {
+      seller_type: opts.cached.sellerType,
+      confidence: opts.cached.confidence,
+      kpi: true,
+    });
+    return opts.cached;
   }
 
   const imageUrls = selectSellerClassifyImageUrls(input.images);

@@ -83,6 +83,14 @@ export function OpportunityVehicleCellNew({
       </div>
       <div className="flex flex-wrap items-center gap-1">
         <OpportunityTypeBadgeNew row={row} compact />
+        {row.fromTavScraper ? (
+          <Badge
+            variant="outline"
+            className="border-indigo-300 bg-indigo-100 px-1 py-0 text-[10px] leading-4 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200"
+          >
+            TAV scraper
+          </Badge>
+        ) : null}
         <OpportunityBadgesNew badges={row.badges} compact />
         {row.maxbuySummary ? (
           <MaxBuyBadge summary={row.maxbuySummary} />

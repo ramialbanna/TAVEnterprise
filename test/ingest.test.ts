@@ -127,6 +127,14 @@ vi.mock("../src/llm/sellerClassifyClient", async (importOriginal) => {
   };
 });
 
+vi.mock("../src/llm/spanishListingClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/llm/spanishListingClient")>();
+  return {
+    ...actual,
+    callAnthropicForSpanishListing: vi.fn().mockResolvedValue({ kind: "not_configured" }),
+  };
+});
+
 // Wrap computeFinalScore so individual tests can override it via mockReturnValueOnce.
 vi.mock("../src/scoring/lead", async () => {
   const actual = await vi.importActual<typeof LeadScoringModule>("../src/scoring/lead");
@@ -157,6 +165,7 @@ import {
 } from "../src/persistence/blockedSellers";
 import { suppressOpportunityForBlockedSeller } from "../src/persistence/opportunityWorkflow";
 import { matchRepeatedListingContact } from "../src/persistence/listingContactKeys";
+import { callAnthropicForSpanishListing } from "../src/llm/spanishListingClient";
 import { mapRaidrApiItem } from "../src/apify/payloadAdapter";
 import { callAnthropicForSellerClassify } from "../src/llm/sellerClassifyClient";
 
@@ -364,6 +373,43 @@ describe("POST /ingest", () => {
     const sig = await sign(VALID_PAYLOAD, "wrong-secret");
     const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
     expect(res.status).toBe(401);
+  });
+
+  describe("TAV_INGEST_SECRET (the Facebook scraper's own key)", () => {
+    const FB_SECRET = "test-fb-scraper-secret";
+    const fbEnv = { ...env, TAV_INGEST_SECRET: FB_SECRET } as Env;
+
+    it("accepts a facebook batch signed with the scraper key", async () => {
+      const sig = await sign(VALID_PAYLOAD, FB_SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), fbEnv, ctx);
+      expect(res.status).toBe(200);
+    });
+
+    it("still accepts the shared key when the scraper key is set", async () => {
+      const sig = await sign(VALID_PAYLOAD, SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), fbEnv, ctx);
+      expect(res.status).toBe(200);
+    });
+
+    it("rejects a non-facebook batch signed with the scraper key", async () => {
+      const sig = await sign(CRAIGSLIST_PAYLOAD, FB_SECRET);
+      const res = await worker.fetch(makeRequest(CRAIGSLIST_PAYLOAD, sig), fbEnv, ctx);
+      expect(res.status).toBe(401);
+      expect((await res.json() as Record<string, unknown>).error).toBe("unauthorized");
+    });
+
+    it("rejects the scraper key when it is not configured", async () => {
+      const sig = await sign(VALID_PAYLOAD, FB_SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), env, ctx);
+      expect(res.status).toBe(401);
+    });
+
+    it("works with only the scraper key configured", async () => {
+      const onlyFb = { ...env, WEBHOOK_HMAC_SECRET: "", TAV_INGEST_SECRET: FB_SECRET } as Env;
+      const sig = await sign(VALID_PAYLOAD, FB_SECRET);
+      const res = await worker.fetch(makeRequest(VALID_PAYLOAD, sig), onlyFb, ctx);
+      expect(res.status).toBe(200);
+    });
   });
 
   it("returns 400 for invalid JSON body", async () => {
@@ -1107,7 +1153,7 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(upsertBlockedSeller).not.toHaveBeenCalled();
   });
 
-  it("item 71: persists a dealer URL after a second live listing", async () => {
+  it("item 71: drops a two-listing dealer ad without saving the profile", async () => {
     vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(2);
     const payload = JSON.stringify({
       source: "facebook",
@@ -1124,20 +1170,48 @@ describe("POST /ingest — deadline-aware truncation", () => {
     });
     const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
     const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      dealerEnv,
+      expect.objectContaining({ reason_code: "dealer_listing" }),
+    );
+    expect(upsertBlockedSeller).not.toHaveBeenCalled();
+  });
+
+  it("item 71: persists a dealer URL after more than three live listings", async () => {
+    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(4);
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-dealer-url-3",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/dealer-url-3",
+        title: "2018 Ford F-150 XLT",
+        description: "We finance! Bad credit OK. Visit our lot. Stock #A99",
+        sellerName: "Metro Auto Group",
+        sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
+      }],
+    });
+    const dealerEnv = { ...env, SELLER_CLASSIFY_ENABLED: "true" } as unknown as Env;
+    const sig = await sign(payload, SECRET);
     await worker.fetch(makeRequest(payload, sig), dealerEnv, ctx);
     expect(upsertBlockedSeller).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         source: "facebook",
         sellerUrl: "https://www.facebook.com/marketplace/profile/1000526149",
-        listingCount: 2,
+        listingCount: 4,
         reason: "dealer",
       }),
     );
   });
 
-  it("item 71: 3+ live cars on one profile is a dealer even with empty copy", async () => {
-    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(3);
+  it("item 71: more than 3 live listing links on one profile is a dealer even with empty copy", async () => {
+    vi.mocked(countLiveFacebookListingsForSellerUrl).mockResolvedValue(4);
     const payload = JSON.stringify({
       source: "facebook",
       run_id: "run-repeat-seller-001",
@@ -1160,7 +1234,7 @@ describe("POST /ingest — deadline-aware truncation", () => {
       env,
       expect.objectContaining({
         reason_code: "dealer_listing",
-        details: expect.objectContaining({ source: "repeat_seller", listing_count: 3 }),
+        details: expect.objectContaining({ source: "repeat_seller", listing_count: 4 }),
       }),
     );
     expect(upsertBlockedSeller).toHaveBeenCalled();
@@ -1304,7 +1378,7 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(body.processed).toBe(1);
     expect(callAnthropicForSellerClassify).toHaveBeenCalledWith(
       expect.objectContaining({
-        imageUrls: photos.map((photo) => photo.uri),
+        imageUrls: photos.slice(0, 4).map((photo) => photo.uri),
       }),
     );
   });
@@ -1402,7 +1476,81 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(upsertNormalizedListing).not.toHaveBeenCalled();
   });
 
-  it("filters a Spanish listing before valuation", async () => {
+  it("keeps a nominated ad when Claude says it is English", async () => {
+    vi.mocked(callAnthropicForSpanishListing).mockResolvedValueOnce({
+      kind: "ok",
+      proposal: {
+        language: "english",
+        confidence: 0.93,
+        reasoning: "The ad is English. Troca and Del Rio are not a Spanish listing.",
+      },
+      latencyMs: 40,
+      model: "claude-haiku-4-5",
+    });
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-spanish-english",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/spanish-english",
+        title: "2018 Ford F-150",
+        description: "Troca for sale in Del Rio. Clean title, 80k miles.",
+        price: 18500,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(0);
+    expect(body.processed).toBe(1);
+    expect(upsertNormalizedListing).toHaveBeenCalled();
+  });
+
+  it("refuses a listing Claude says is written in Spanish", async () => {
+    vi.mocked(callAnthropicForSpanishListing).mockResolvedValueOnce({
+      kind: "ok",
+      proposal: {
+        language: "spanish",
+        confidence: 0.96,
+        reasoning: "The description is Spanish: título limpio, vendo.",
+      },
+      latencyMs: 40,
+      model: "claude-haiku-4-5",
+    });
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-spanish-refuse",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: "https://fb.com/item/spanish-refuse",
+        title: "2019 Ford F-250",
+        description: "Título limpio. Vendo.",
+        price: 18500,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(body.processed).toBe(0);
+    expect(writeFilteredOut).toHaveBeenCalledWith(
+      expect.anything(),
+      env,
+      expect.objectContaining({
+        reason_code: "spanish_listing",
+        details: expect.objectContaining({ source: "llm", language: "spanish" }),
+      }),
+    );
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+  });
+
+  it("drops a Spanish listing when Claude is unavailable", async () => {
     const payload = JSON.stringify({
       source: "facebook",
       run_id: "run-spanish-001",
@@ -1425,9 +1573,40 @@ describe("POST /ingest — deadline-aware truncation", () => {
     expect(writeFilteredOut).toHaveBeenCalledWith(
       expect.anything(),
       env,
-      expect.objectContaining({ reason_code: "spanish_listing" }),
+      expect.objectContaining({
+        reason_code: "spanish_listing",
+        details: expect.objectContaining({ source: "wordlist" }),
+      }),
     );
     expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(suppressOpportunityForBlockedSeller).not.toHaveBeenCalled();
+  });
+
+  it("hides a Spanish listing that is already on the sheet", async () => {
+    const listingUrl = "https://fb.com/item/spanish-existing";
+    vi.mocked(loadStoredSellersByListingUrls).mockResolvedValue(
+      new Map([[listingUrl, { listingId: "nl-spanish", sellerUrl: null, sellerName: "Ronald" }]]),
+    );
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: "run-spanish-existing",
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [{
+        url: listingUrl,
+        title: "2024 Ford F-150",
+        description: "Motor 2.7 turbo\nV6\n4x4\nTitulo limpio\nTodo perfecto",
+        price: 28000,
+      }],
+    });
+    const sig = await sign(payload, SECRET);
+    const res = await worker.fetch(makeRequest(payload, sig), env, ctx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.rejected).toBe(1);
+    expect(upsertNormalizedListing).not.toHaveBeenCalled();
+    expect(suppressOpportunityForBlockedSeller).toHaveBeenCalledWith(expect.anything(), "nl-spanish");
   });
 
   it("filters motorcycles and commercial chassis before valuation", async () => {
@@ -1594,5 +1773,46 @@ describe("POST /ingest — deadline-aware truncation", () => {
     const body = await res.json() as Record<string, unknown>;
     expect(body).not.toHaveProperty("truncated");
     expect(body).not.toHaveProperty("items_skipped");
+  });
+});
+
+describe("POST /ingest — TAV-owned Facebook scraper items", () => {
+  async function postOwn(fixture: string) {
+    const { readFileSync } = await import("node:fs");
+    const item = JSON.parse(readFileSync(`test/fixtures/own-scraper/${fixture}.json`, "utf8"));
+    const payload = JSON.stringify({
+      source: "facebook",
+      run_id: `fbm-own-${fixture}-c01`,
+      region: "dallas_tx",
+      scraped_at: new Date().toISOString(),
+      items: [item],
+    });
+    const res = await worker.fetch(makeRequest(payload, await sign(payload, SECRET)), env, ctx);
+    expect(res.status).toBe(200);
+    return (await res.json()) as Record<string, unknown>;
+  }
+
+  it("/ingest maps facebook items like the webhook bridge", async () => {
+    const body = await postOwn("detail-vehicle-private");
+    expect(body.processed).toBe(1);
+    expect(body.rejected).toBe(0);
+    // details.description / details.vehicle.odometer are lifted only by mapRaidrApiItem.
+    expect(vi.mocked(upsertNormalizedListing)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ description: expect.any(String), mileage: 147698, make: "chevrolet", model: "malibu" }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("dealer item from the scraper is filtered with a reason code", async () => {
+    const body = await postOwn("detail-vehicle-dealer");
+    expect(body.processed).toBe(0);
+    expect(body.rejected).toBe(1);
+    expect(vi.mocked(writeFilteredOut)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ reason_code: "dealer_listing" }),
+    );
   });
 });

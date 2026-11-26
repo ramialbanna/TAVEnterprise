@@ -48,7 +48,15 @@ import { insertBuyBoxScoreAttribution } from "../persistence/buyBoxScoreAttribut
 import { getMmrValue } from "../valuation/mmr";
 import { getMmrLookupOutcome, createLlmYmmsPrefetch } from "../valuation/workerClient";
 import type { MmrMissReason, LlmYmmsPrefetch } from "../valuation/workerClient";
-import { buildLlmYmmsPrefetchInputs, buildLlmYmmsResolutionInput } from "./llmYmmsPrefetchInputs";
+import {
+  attachPriorYmmsDecisions,
+  buildLlmYmmsPrefetchInputs,
+  buildLlmYmmsResolutionInput,
+} from "./llmYmmsPrefetchInputs";
+import {
+  loadSellerClassifyCache,
+  saveSellerClassifyCache,
+} from "../persistence/sellerClassifyCache";
 import {
   countLiveFacebookListingsForSellerUrl,
   isBlockedSeller,
@@ -62,11 +70,13 @@ import { matchRepeatedListingContact } from "../persistence/listingContactKeys";
 import {
   classifyListingSeller,
   shouldAutoRejectDealer,
+  type SellerClassification,
 } from "../valuation/classifyListingSeller";
 import { SELLER_CLASSIFY_TIMEOUT_MS } from "../llm/sellerClassifyClient";
 import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
-import { matchSpanishListing } from "./spanishListing";
+import { confirmSpanishListing } from "./confirmSpanishListing";
+import { SPANISH_LISTING_TIMEOUT_MS } from "../llm/spanishListingClient";
 import { readScraperVehicle } from "../apify/scraperVehicle";
 import type { CatalogMatchSuggestion } from "../valuation/resolveListingToCatalog";
 import { upsertCatalogMatchSuggestions } from "../persistence/catalogMatchSuggestions";
@@ -177,16 +187,32 @@ export async function runIngestItemLoop(
     }
   }
 
-  const llmPrefetch: LlmYmmsPrefetch | null =
+  const llmInputs =
     getValuationLookupMode(env) === "worker"
-      ? createLlmYmmsPrefetch(
-          buildLlmYmmsPrefetchInputs(items, source, adapterCtx, blockedSellerLookup, {
-            skipHeuristicDealers: env.SELLER_CLASSIFY_ENABLED === "true",
-            storedSellersByUrl,
-          }),
-          env,
-        )
+      ? buildLlmYmmsPrefetchInputs(items, source, adapterCtx, blockedSellerLookup, {
+          skipHeuristicDealers: env.SELLER_CLASSIFY_ENABLED === "true",
+          storedSellersByUrl,
+        })
       : null;
+  if (llmInputs) {
+    await attachPriorYmmsDecisions(db, source, llmInputs);
+  }
+  const llmPrefetch: LlmYmmsPrefetch | null = llmInputs
+    ? createLlmYmmsPrefetch(llmInputs, env)
+    : null;
+
+  let sellerCacheByUrl = new Map<string, SellerClassification>();
+  if (env.SELLER_CLASSIFY_ENABLED === "true" && source === "facebook") {
+    try {
+      sellerCacheByUrl = await loadSellerClassifyCache(
+        db,
+        source,
+        collectFacebookListingUrls(items, adapterCtx),
+      );
+    } catch (err) {
+      logError("persistence", "ingest.seller_classify_cache_load_failed", err, ctx);
+    }
+  }
 
   let cachedRules = initialCachedRules;
 
@@ -342,14 +368,20 @@ export async function runIngestItemLoop(
       continue;
     }
 
-    const spanish = matchSpanishListing({
-      title: listing.title,
-      description: listing.description,
-    });
-    if (spanish) {
+    const spanish = await confirmSpanishListing(
+      { title: listing.title, description: listing.description },
+      env,
+      { allowLlm: Date.now() + SPANISH_LISTING_TIMEOUT_MS < loopDeadline },
+    );
+    if (spanish.refuse) {
       log(
         "ingest.spanish_listing_blocked",
-        { matched: spanish.matched, kpi: true },
+        {
+          matched: spanish.nominated?.matched ?? [],
+          language: spanish.language ?? null,
+          confidence: spanish.confidence ?? null,
+          kpi: true,
+        },
         listingCtx,
       );
       await writeFilteredOut(db, env, {
@@ -357,9 +389,23 @@ export async function runIngestItemLoop(
         source_run_id: run_id,
         listing_url: listing.url,
         reason_code: "spanish_listing",
-        details: { matched: spanish.matched },
+        details: {
+          source: spanish.source ?? "wordlist",
+          matched: spanish.nominated?.matched ?? [],
+          language: spanish.language ?? null,
+          confidence: spanish.confidence ?? null,
+          reasoning: spanish.reasoning ?? null,
+        },
         raw_listing_id: rawId,
       });
+      const existingListingId = storedSellerForListing(listing, storedSellersByUrl)?.listingId;
+      if (existingListingId) {
+        try {
+          await suppressOpportunityForBlockedSeller(db, existingListingId);
+        } catch (err) {
+          logError("persistence", "ingest.spanish_listing_suppress_failed", err, listingCtx);
+        }
+      }
       rejected++;
       continue;
     }
@@ -571,8 +617,19 @@ export async function runIngestItemLoop(
           images: listing.images,
         },
         env,
-        { allowLlm },
+        { allowLlm, cached: sellerCacheByUrl.get(listing.url) ?? null },
       );
+      if (classification.source === "llm" && listing.url) {
+        try {
+          await saveSellerClassifyCache(db, {
+            source,
+            listingUrl: listing.url,
+            classification,
+          });
+        } catch (err) {
+          logError("persistence", "ingest.seller_classify_cache_write_failed", err, listingCtx);
+        }
+      }
       if (shouldAutoRejectDealer(classification)) {
         log(
           "ingest.dealer_listing_blocked",
@@ -799,7 +856,8 @@ export async function runIngestItemLoop(
           workerMiss.reason === "cox_no_data" &&
           !listing.vin &&
           workerMiss.lookupModel &&
-          workerMiss.lookupTrim
+          workerMiss.lookupTrim &&
+          !llmResolutionForRetry?.reusedPriorDecision
         ) {
           retryCandidates.push({
             normalizedListingId: normResult.id,

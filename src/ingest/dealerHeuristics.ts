@@ -2,8 +2,10 @@
  * Item 71 Phase 0 — zero-token dealer detection from listing text + seller name.
  *
  * High precision over recall: a private-party false positive hides a real car
- * from buyers. Weak signals (CARFAX, "financing") never auto-reject on their
- * own. Strong signals (dealership, auto group, stock #, "we finance") do.
+ * from buyers. Weak signals (CARFAX, warranty) never auto-reject on their own.
+ * "Financing available", "financiado", and the bare word "financing" do not
+ * count. Strong signals (dealership, auto group, stock #, "we finance",
+ * bad credit, in-house financing) do.
  */
 
 export type SellerType = "dealer" | "private_party" | "curbstoner_suspected" | "unknown";
@@ -13,7 +15,7 @@ export type SellerClassification = {
   confidence: number;
   reasoning: string;
   signals: string[];
-  source: "heuristic" | "llm";
+  source: "heuristic" | "llm" | "cache";
 };
 
 export type SellerClassifyInput = {
@@ -46,7 +48,6 @@ const STRONG_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "this_vehicle_for_sale_by", re: /\bthis vehicle is for sale by\b/i },
   { id: "for_sale_by_business", re: /\bfor sale by\b(?!\s+owner).{0,80}\b(?:llc|l\.l\.c\.|inc\.?|incorporated|motors|cars|auto)\b/i },
   { id: "cars_llc", re: /\b(?:cars|auto|motors|automotive)\s+llc\b/i },
-  { id: "financing_available", re: /\bfinanc(?:ing|e)\s+available\b|\bfinanciamiento\b/i },
   { id: "all_credit", re: /\ball credit\b|\bno social\b|\bitin\b/i },
 ];
 
@@ -61,7 +62,6 @@ const MEDIUM_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
 
 const WEAK_PATTERNS: ReadonlyArray<{ id: string; re: RegExp }> = [
   { id: "carfax", re: /\bcarfax\b/i },
-  { id: "financing", re: /\bfinanc(?:e|ing|ial)\b/i },
   { id: "warranty", re: /\bwarrant(?:y|ies)\b/i },
   { id: "inventory", re: /\binventory\b/i },
   { id: "multiple_vehicles", re: /\b(?:other\s+(?:cars|vehicles|trucks)|more\s+vehicles|we\s+have\s+more)\b/i },

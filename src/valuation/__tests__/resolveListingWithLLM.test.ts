@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   resolveListingWithLLM,
+  reusePriorYmmsDecision,
   llmResolutionToAuditFields,
   isLlmAttemptFailure,
+  PRIOR_YMMS_DECISION_REUSE_MS,
   type LlmYmmsDeps,
   type LlmYmmsResolution,
 } from "../resolveListingWithLLM";
@@ -56,7 +58,73 @@ const OFFLINE_INPUT = {
   description: "4D Crew Cab Big Horn package with 4WD",
 };
 
+describe("reusePriorYmmsDecision", () => {
+  const now = Date.parse("2026-10-29T18:00:00Z");
+  const hit = {
+    outcome: "llm_hit" as const,
+    createdAt: new Date(now - 60 * 60 * 1000).toISOString(),
+    proposedMake: "Ram",
+    proposedModel: "1500",
+    proposedStyle: "4D Crew Cab Big Horn",
+    confidence: 0.8,
+    reasoning: "crew cab",
+  };
+
+  it("reuses a hit from the last 24 hours", () => {
+    expect(reusePriorYmmsDecision(hit, now)).toMatchObject({
+      kind: "llm_hit",
+      style: "4D Crew Cab Big Horn",
+      reusedPriorDecision: true,
+    });
+  });
+
+  it("does not reuse a hit older than 24 hours", () => {
+    const stale = { ...hit, createdAt: new Date(now - PRIOR_YMMS_DECISION_REUSE_MS - 1000).toISOString() };
+    expect(reusePriorYmmsDecision(stale, now)).toBeNull();
+  });
+
+  it("keeps a needs_review no matter how old it is", () => {
+    const review = {
+      ...hit,
+      outcome: "llm_needs_review" as const,
+      createdAt: "2026-08-01T00:00:00Z",
+      confidence: 0.3,
+    };
+    expect(reusePriorYmmsDecision(review, now)).toMatchObject({
+      kind: "llm_needs_review",
+      reusedPriorDecision: true,
+      canonical: { style: "4D Crew Cab Big Horn" },
+    });
+  });
+});
+
 describe("resolveListingWithLLM", () => {
+  it("does not call Claude when this listing already has a needs_review", async () => {
+    const deps = baseDeps({
+      callAnthropic: vi.fn(async () => {
+        throw new Error("should not call");
+      }),
+    });
+    const result = await resolveListingWithLLM(
+      {
+        ...CLAUDE_INPUT,
+        priorDecision: {
+          outcome: "llm_needs_review",
+          createdAt: "2026-08-01T00:00:00Z",
+          proposedMake: "Ram",
+          proposedModel: "1500",
+          proposedStyle: "4D Crew Cab Big Horn",
+          confidence: 0.3,
+          reasoning: "thin title",
+        },
+      },
+      deps,
+    );
+    expect(result.kind).toBe("llm_needs_review");
+    expect(result.reusedPriorDecision).toBe(true);
+    expect(deps.callAnthropic).not.toHaveBeenCalled();
+  });
+
   it("short-circuits with fallback llm_disabled when the flag is off, without touching any dep", async () => {
     const deps = baseDeps({ enabled: false });
     const result = await resolveListingWithLLM(INPUT, deps);

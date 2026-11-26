@@ -24,6 +24,12 @@ import { listingHasSalvageOrRebuiltTitle } from "./listingTitleStatus";
 import { listingIsIneligibleVehicle } from "./listingVehicleEligibility";
 import { matchSpanishListing } from "./spanishListing";
 import { readScraperVehicle } from "../apify/scraperVehicle";
+import {
+  loadLatestPaidLlmDecisions,
+  loadListingIdsByUrls,
+} from "../persistence/llmYmmsDecisions";
+import type { SupabaseClient } from "../persistence/supabase";
+import { logError } from "../logging/logger";
 
 /**
  * Item 60 — build Claude Y/M/M/S input from raw ingest item + parsed listing.
@@ -48,8 +54,33 @@ export function buildLlmYmmsResolutionInput(
     trim: listing.trim,
     title: listing.title,
     price: listing.price,
+    listingUrl: listing.url,
     ...textContext,
   };
+}
+
+/**
+ * Stamp the latest paid decision onto each prefetch input. A failure leaves
+ * the inputs alone, so ingest still calls Claude instead of dropping the car.
+ */
+export async function attachPriorYmmsDecisions(
+  db: SupabaseClient,
+  source: string,
+  inputs: Map<number, LlmYmmsResolutionInput>,
+): Promise<void> {
+  const urls = [...inputs.values()].map((input) => input.listingUrl?.trim() || "").filter(Boolean);
+  if (urls.length === 0) return;
+  try {
+    const idsByUrl = await loadListingIdsByUrls(db, source, urls);
+    const decisions = await loadLatestPaidLlmDecisions(db, [...idsByUrl.values()]);
+    for (const input of inputs.values()) {
+      const listingId = input.listingUrl ? idsByUrl.get(input.listingUrl) : undefined;
+      const prior = listingId ? decisions.get(listingId) : undefined;
+      if (prior) input.priorDecision = prior;
+    }
+  } catch (err) {
+    logError("persistence", "ingest.prior_ymms_decision_load_failed", err);
+  }
 }
 
 /**
@@ -90,6 +121,9 @@ export function buildLlmYmmsPrefetchInputs(
     ) {
       return;
     }
+    // Nominated ads wait for the language call in the item loop. A Spanish ad
+    // should not pay for a style lookup first. An English confirmation still
+    // gets that lookup when the item is processed.
     if (matchSpanishListing({ title: listing.title, description: listing.description })) {
       return;
     }

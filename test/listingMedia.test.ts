@@ -88,21 +88,26 @@ describe("upgradeFacebookListingPhotoUrl", () => {
 });
 
 describe("selectSellerClassifyImageUrls", () => {
-  it("sends the gallery, upgrades crops, and skips insecure URLs", () => {
+  it("keeps thumbnail crops and skips insecure URLs", () => {
     expect(
       selectSellerClassifyImageUrls([
         "https://cdn.example/a.jpg?ctp=s261x260",
         "https://cdn.example/b.jpg",
         "http://insecure.example/c.jpg",
       ]),
-    ).toEqual(["https://cdn.example/a.jpg", "https://cdn.example/b.jpg"]);
+    ).toEqual(["https://cdn.example/a.jpg?ctp=s261x260", "https://cdn.example/b.jpg"]);
   });
 
-  it("caps the gallery at 20 photos", () => {
-    const urls = Array.from({ length: 24 }, (_, i) => `https://cdn.example/${i}.jpg`);
+  it("puts the Facebook thumbnail crop back on a full-size CDN url", () => {
+    const full = "https://scontent.xx.fbcdn.net/v/t.jpg?stp=keep_me&oe=SIG";
+    expect(selectSellerClassifyImageUrls([full])).toEqual([`${full}&ctp=s261x260`]);
+  });
+
+  it("caps the gallery at 4 photos", () => {
+    const urls = Array.from({ length: 8 }, (_, i) => `https://cdn.example/${i}.jpg`);
     const selected = selectSellerClassifyImageUrls(urls);
-    expect(selected).toHaveLength(20);
+    expect(selected).toHaveLength(4);
     expect(selected[0]).toBe("https://cdn.example/0.jpg");
-    expect(selected[19]).toBe("https://cdn.example/19.jpg");
+    expect(selected[3]).toBe("https://cdn.example/3.jpg");
   });
 });

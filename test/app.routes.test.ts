@@ -1438,6 +1438,7 @@ const OPPORTUNITY_ROW = {
   source: "facebook",
   region: "dallas_tx",
   sourceRunId: "11111111-1111-1111-1111-111111111111",
+  fromTavScraper: false,
   normalizedListingId: "22222222-2222-2222-2222-222222222222",
   vehicleCandidateId: null,
   leadId: "33333333-3333-3333-3333-333333333333",

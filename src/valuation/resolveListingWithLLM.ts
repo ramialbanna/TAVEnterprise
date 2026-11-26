@@ -28,6 +28,7 @@ import { callAnthropicForYmms, type AnthropicCallResult } from "../llm/anthropic
 import { pruneCatalogSubtreeForLlm } from "../llm/pruneCatalogSubtree";
 import type { LlmYmmsTokenUsage } from "../llm/tokenUsage";
 import { log } from "../logging/logger";
+import type { PriorPaidYmmsDecision } from "../persistence/llmYmmsDecisions";
 import {
   buildYmmsAnthropicPrompt,
   classifyYmmsProposalIngestOutcome,
@@ -35,6 +36,9 @@ import {
   type YmmsAnthropicPrompt,
   type YmmsProposal,
 } from "../llm/ymmsPrompt";
+
+/** Same listing, already paid for. Hits expire after a day. A needs_review sticks. */
+export const PRIOR_YMMS_DECISION_REUSE_MS = 24 * 60 * 60 * 1000;
 
 export type LlmYmmsResolutionInput = {
   year: number;
@@ -58,9 +62,13 @@ export type LlmYmmsResolutionInput = {
   /**
    * Item 72 — skip the alias and offline fast-paths and go straight to Claude.
    * Set on a retry: those shortcuts are what produced the rejected pick, so
-   * re-running them would just return it again.
+   * re-running them would just return it again. Also skips the stored decision.
    */
   skipShortcuts?: boolean;
+  /** Stable listing URL. Duplicate rows in one scrape share one Claude call. */
+  listingUrl?: string | null;
+  /** Latest paid decision for this listing, when the row already exists. */
+  priorDecision?: PriorPaidYmmsDecision | null;
 };
 
 export type LlmYmmsFallbackReason =
@@ -78,7 +86,7 @@ type LlmAnthropicCallMeta = {
   tokenUsage?: LlmYmmsTokenUsage;
 };
 
-export type LlmYmmsResolution =
+export type LlmYmmsResolution = (
   | { kind: "alias_hit"; make: string; model: string; style: string }
   | {
       kind: "offline_hit";
@@ -110,7 +118,8 @@ export type LlmYmmsResolution =
       canonical?: { make: string; model: string; style: string };
     } & LlmAnthropicCallMeta)
   | ({ kind: "llm_invalid_pick"; proposal: YmmsProposal; catalogRowCount: number } & LlmAnthropicCallMeta)
-  | { kind: "fallback"; reason: LlmYmmsFallbackReason };
+  | { kind: "fallback"; reason: LlmYmmsFallbackReason }
+) & { reusedPriorDecision?: boolean };
 
 export type LlmYmmsDeps = {
   enabled: boolean;
@@ -156,6 +165,67 @@ function anthropicMeta(callResult: Extract<AnthropicCallResult, { kind: "ok" }>)
     latencyMs: callResult.latencyMs,
     anthropicModel: callResult.model,
     tokenUsage: callResult.cacheUsage,
+  };
+}
+
+const REUSED_DECISION_META = {
+  latencyMs: 0,
+  anthropicModel: "prior_decision",
+  reusedPriorDecision: true as const,
+};
+
+function proposalFromPrior(prior: PriorPaidYmmsDecision): YmmsProposal {
+  return {
+    make: prior.proposedMake?.trim() || "",
+    model: prior.proposedModel?.trim() || "",
+    style: prior.proposedStyle?.trim() || "",
+    confidence: prior.confidence ?? 0,
+    reasoning: prior.reasoning?.trim() || "Reused the previous decision for this listing.",
+    needsReview: prior.outcome !== "llm_hit",
+  };
+}
+
+/**
+ * Skip a new Claude call when this listing was already paid for.
+ * Any paid outcome covers the next 24 hours. `llm_needs_review` never becomes
+ * an alias, so it is reused until the listing row is gone.
+ */
+export function reusePriorYmmsDecision(
+  prior: PriorPaidYmmsDecision | null | undefined,
+  nowMs: number,
+): LlmYmmsResolution | null {
+  if (!prior) return null;
+  const ageMs = nowMs - Date.parse(prior.createdAt);
+  const fresh = Number.isFinite(ageMs) && ageMs >= 0 && ageMs < PRIOR_YMMS_DECISION_REUSE_MS;
+  if (prior.outcome !== "llm_needs_review" && !fresh) return null;
+
+  const proposal = proposalFromPrior(prior);
+  if (prior.outcome === "llm_hit") {
+    if (!proposal.make || !proposal.model || !proposal.style) return null;
+    return {
+      kind: "llm_hit",
+      make: proposal.make,
+      model: proposal.model,
+      style: proposal.style,
+      confidence: proposal.confidence,
+      reasoning: proposal.reasoning,
+      catalogRowCount: 0,
+      ...REUSED_DECISION_META,
+    };
+  }
+  if (prior.outcome === "llm_invalid_pick") {
+    return { kind: "llm_invalid_pick", proposal, catalogRowCount: 0, ...REUSED_DECISION_META };
+  }
+  const canonical =
+    proposal.make && proposal.model && proposal.style
+      ? { make: proposal.make, model: proposal.model, style: proposal.style }
+      : undefined;
+  return {
+    kind: "llm_needs_review",
+    proposal,
+    catalogRowCount: 0,
+    ...(canonical && { canonical }),
+    ...REUSED_DECISION_META,
   };
 }
 
@@ -275,6 +345,18 @@ export async function resolveListingWithLLM(
         score: offlineMatch.score,
         catalogRowCount: allRows.length,
       };
+    }
+  }
+
+  if (!input.skipShortcuts && input.priorDecision) {
+    const reused = reusePriorYmmsDecision(input.priorDecision, Date.now());
+    if (reused) {
+      log("llm_ymms.reused_prior_decision", {
+        outcome: reused.kind,
+        listing_url: input.listingUrl ?? null,
+        kpi: true,
+      });
+      return reused;
     }
   }
 

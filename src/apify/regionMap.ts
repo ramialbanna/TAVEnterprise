@@ -30,6 +30,21 @@ export const APIFY_TASK_CONFIG: Record<string, ApifyTaskConfig> = {
   // raidr-api/custom-vehicle-scraper (streamlined, locationSearches-based)
   ZQEsd3nHcLAs5kLwL: { region: "dallas_tx", source: "facebook" }, // dallas-nick-task
   UfFehLMz5zylHOxCS: { region: "oklahoma_city_ok", source: "facebook" }, // oklahoma
+  Kced5aPs3hywm0ZTc: { region: "phoenix_az", source: "facebook" }, // arizona
+  gDNXUvm9UzjDSx9BJ: { region: "kansas_city_mo", source: "facebook" }, // missouri
+  emjfc12sHwqLFM3Aj: { region: "minneapolis_mn", source: "facebook" }, // minnesota
+  d3cNGNGbW4D6wS57U: { region: "lincoln_ne", source: "facebook" }, // nebraska
+  uq2AtQs1BaHoCZlPt: { region: "denver_co", source: "facebook" }, // colorado
+  "9NaLFkeRAYdH8wiNd": { region: "salt_lake_city_ut", source: "facebook" }, // utah
+  dELGPpFDhebSJOzKM: { region: "chicago_il", source: "facebook" }, // illinois
+  hJvDbRQjhevopk98o: { region: "louisville_ky", source: "facebook" }, // kentucky
+  gWbwoWm5SJGzxd6WS: { region: "nashville_tn", source: "facebook" }, // tennessee
+  aslBuJHHof3nltlSd: { region: "birmingham_al", source: "facebook" }, // alabama
+  KzLJGSjYaQfmyCecE: { region: "jackson_ms", source: "facebook" }, // mississippi
+  zJI3kpcnesT7CdnBn: { region: "atlanta_ga", source: "facebook" }, // georgia
+  mYOppAstlB03MMtmO: { region: "miami_fl", source: "facebook" }, // florida
+  odIEVqzsdDz49Ei5P: { region: "indianapolis_in", source: "facebook" }, // indiana
+  QIaEAwAabwAtpEz1f: { region: "des_moines_ia", source: "facebook" }, // iowa
 
   // e-commerce/automotive-scraper — Craigslist (item 67)
   // Schedule remains disabled until staging soak; webhook may already target prod.

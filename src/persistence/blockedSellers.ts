@@ -31,10 +31,10 @@ export interface UpsertBlockedSellerInput {
   listingCount?: number;
 }
 
-/** Auto-blocks need more than one car. Buyer flags may persist a single URL. */
-export const BLOCKED_SELLER_AUTO_MIN_LISTINGS = 2;
-/** Same profile with this many live cars is a dealer even if the copy is empty. */
-export const REPEAT_SELLER_DEALER_MIN_LISTINGS = 3;
+/** Auto-blocks need a profile URL and more than 3 live listing links. A second post of the same car is normal. Buyer flags may persist a single URL. */
+export const BLOCKED_SELLER_AUTO_MIN_LISTINGS = 4;
+/** Same profile with more than 3 live listing links is a dealer even if the copy is empty. */
+export const REPEAT_SELLER_DEALER_MIN_LISTINGS = 4;
 export const LIVE_SELLER_LISTING_DAYS = 30;
 
 /** Strip query/hash, trailing slash, lowercase — stable dedupe for FB profile URLs. */
