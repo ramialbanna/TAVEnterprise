@@ -113,3 +113,9 @@ If not → don't prioritize it.
 - `@docs/05-process/plan-prompts/` — plan-mode prompt library (TAV-tuned)
 - `@docs/04-operations/verification.md` — verification protocol
 - `@docs/05-process/followups.md` — scope-creep capture log
+
+## Rule changes (TAV harness ledger)
+Before adding, changing or removing any rule in this file, read the vault rule
+`~/vaults/ObsidianVault/AI-README.md` §1b "Harness changes" and the ledger
+`~/vaults/ObsidianVault/Memory/Harness/_index.md`, then log the change there.
+If you can't reach the vault, tell Rami what you want to change and why. Never remove a rule silently.
