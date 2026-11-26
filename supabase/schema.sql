@@ -36,7 +36,7 @@ CREATE TABLE tav.source_runs (
     CHECK (source IN ('facebook','craigslist','autotrader','cars_com','offerup')),
   run_id        text        NOT NULL,
   region        text        NOT NULL
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia','los_angeles_ca','philadelphia_pa','new_york_ny','columbus_oh','detroit_mi','seattle_wa','boston_ma','charlotte_nc','richmond_va','little_rock_ar','columbia_sc','new_orleans_la','milwaukee_wi','portland_or','boise_id','las_vegas_nv','wichita_ks','cheyenne_wy','billings_mt','fargo_nd','albuquerque_nm','sioux_falls_sd','charleston_wv','baltimore_md')),
   scraped_at    timestamptz NOT NULL,
   item_count    integer,
   processed     integer,
@@ -84,7 +84,7 @@ CREATE TABLE tav.normalized_listings (
   city                text,
   state               char(2),
   region              text        NOT NULL
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia','los_angeles_ca','philadelphia_pa','new_york_ny','columbus_oh','detroit_mi','seattle_wa','boston_ma','charlotte_nc','richmond_va','little_rock_ar','columbia_sc','new_orleans_la','milwaukee_wi','portland_or','boise_id','las_vegas_nv','wichita_ks','cheyenne_wy','billings_mt','fargo_nd','albuquerque_nm','sioux_falls_sd','charleston_wv','baltimore_md')),
   entry_method        text
     CHECK (entry_method IN ('manual','scraper','import')),
   seller_name         text,
@@ -124,7 +124,7 @@ CREATE TABLE tav.vehicle_candidates (
   model         text,
   trim          text,
   region        text
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia','los_angeles_ca','philadelphia_pa','new_york_ny','columbus_oh','detroit_mi','seattle_wa','boston_ma','charlotte_nc','richmond_va','little_rock_ar','columbia_sc','new_orleans_la','milwaukee_wi','portland_or','boise_id','las_vegas_nv','wichita_ks','cheyenne_wy','billings_mt','fargo_nd','albuquerque_nm','sioux_falls_sd','charleston_wv','baltimore_md')),
   listing_count integer     NOT NULL DEFAULT 0,
   first_seen_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at  timestamptz NOT NULL DEFAULT now(),
@@ -228,7 +228,7 @@ CREATE TABLE tav.leads (
   source                  text        NOT NULL
     CHECK (source IN ('facebook','craigslist','autotrader','cars_com','offerup')),
   region                  text
-    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia')),
+    CHECK (region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia','los_angeles_ca','philadelphia_pa','new_york_ny','columbus_oh','detroit_mi','seattle_wa','boston_ma','charlotte_nc','richmond_va','little_rock_ar','columbia_sc','new_orleans_la','milwaukee_wi','portland_or','boise_id','las_vegas_nv','wichita_ks','cheyenne_wy','billings_mt','fargo_nd','albuquerque_nm','sioux_falls_sd','charleston_wv','baltimore_md')),
   year                    smallint,
   make                    text,
   model                   text,
@@ -574,7 +574,7 @@ CREATE TABLE tav.market_velocities (
   model                    text          NOT NULL,
   trim                     text,
   region                   text
-    CHECK (region IS NULL OR region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia')),
+    CHECK (region IS NULL OR region IN ('dallas_tx','houston_tx','austin_tx','san_antonio_tx','lubbock_tx','oklahoma_city_ok','phoenix_az','kansas_city_mo','minneapolis_mn','lincoln_ne','denver_co','salt_lake_city_ut','chicago_il','louisville_ky','nashville_tn','birmingham_al','jackson_ms','atlanta_ga','miami_fl','indianapolis_in','des_moines_ia','los_angeles_ca','philadelphia_pa','new_york_ny','columbus_oh','detroit_mi','seattle_wa','boston_ma','charlotte_nc','richmond_va','little_rock_ar','columbia_sc','new_orleans_la','milwaukee_wi','portland_or','boise_id','las_vegas_nv','wichita_ks','cheyenne_wy','billings_mt','fargo_nd','albuquerque_nm','sioux_falls_sd','charleston_wv','baltimore_md')),
   sales_count_7d           integer       NOT NULL DEFAULT 0,
   sales_count_30d          integer       NOT NULL DEFAULT 0,
   sales_count_90d          integer       NOT NULL DEFAULT 0,
