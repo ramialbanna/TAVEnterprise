@@ -86,7 +86,12 @@ import { VALUATION_MIN_YEAR, isYearBelowValuationFloor } from "../valuation/valu
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { writeVehicleEnrichment } from "../persistence/vehicleEnrichments";
-import { log, logError } from "../logging/logger";
+import {
+  errorMessageWithoutValues,
+  log,
+  logError,
+  summarizeErrorWithoutValues,
+} from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import type { ExcellentLeadSummary } from "../alerts/alerts";
 import {
@@ -911,12 +916,20 @@ export async function runIngestItemLoop(
         );
         log(
           "valuation.fetched",
-          { mmr_value: mmrResult.mmrValue, confidence: mmrResult.confidence, kpi: true },
+          // Licensed scalar is never logged — presence only.
+          { has_value: mmrResult.mmrValue > 0, confidence: mmrResult.confidence, kpi: true },
           listingCtx,
         );
         await applyCoxIdentityFromMmr(db, normResult.id, mmrResult, listingCtx);
       } catch (err) {
-        logError("valuation", "ingest.snapshot_failed", err, listingCtx);
+        // The failed insert row carries licensed figures; DB message/details/hint
+        // can echo it ("Failing row contains ..."), so only value-free fields go
+        // to logs and the dead letter.
+        log(
+          "ingest.snapshot_failed",
+          { error_category: "valuation", error: summarizeErrorWithoutValues(err) },
+          listingCtx,
+        );
         try {
           await writeDeadLetter(db, env, {
             source,
@@ -924,8 +937,8 @@ export async function runIngestItemLoop(
             run_id,
             item_index: i,
             reason_code: "valuation_snapshot_failed",
-            payload: { normalizedListingId: normResult.id, mmrValue: mmrResult.mmrValue },
-            error_message: err instanceof Error ? err.message : String(err),
+            payload: { normalizedListingId: normResult.id },
+            error_message: errorMessageWithoutValues(err),
           });
         } catch {
           /* never throws */

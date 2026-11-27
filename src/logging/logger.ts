@@ -49,6 +49,37 @@ export function serializeError(err: unknown): Record<string, unknown> {
   try { return { raw: JSON.stringify(err) }; } catch { return { raw: String(err) }; }
 }
 
+/**
+ * Value-free error summary for paths whose failed row carries licensed
+ * valuation figures. Postgres/PostgREST `message`, `details` ("Failing row
+ * contains (...)") and `hint` can echo row values, so only the error name,
+ * code, status and retry attempts are kept. Unwraps RetryExhaustedError.
+ */
+export function summarizeErrorWithoutValues(err: unknown): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (err === null || typeof err !== "object") return { name: typeof err };
+  const e = err as Record<string, unknown>;
+  if (err instanceof Error) out["name"] = err.name;
+  if (typeof e["code"] === "string" || typeof e["code"] === "number") out["code"] = e["code"];
+  if (typeof e["status"] === "number") out["status"] = e["status"];
+  if (typeof e["attempts"] === "number") out["attempts"] = e["attempts"];
+  if (e["lastError"] !== undefined) out["lastError"] = summarizeErrorWithoutValues(e["lastError"]);
+  return out;
+}
+
+/** Value-free one-line message built from {@link summarizeErrorWithoutValues}. */
+export function errorMessageWithoutValues(err: unknown): string {
+  const s = summarizeErrorWithoutValues(err);
+  const last = s["lastError"] as Record<string, unknown> | undefined;
+  const parts = [
+    s["name"] !== undefined ? String(s["name"]) : "error",
+    s["code"] !== undefined ? `code=${String(s["code"])}` : null,
+    s["attempts"] !== undefined ? `attempts=${String(s["attempts"])}` : null,
+    last?.["code"] !== undefined ? `last_code=${String(last["code"])}` : null,
+  ];
+  return parts.filter((p): p is string => p !== null).join(" ");
+}
+
 export function log(
   event: string,
   data?: Record<string, unknown>,

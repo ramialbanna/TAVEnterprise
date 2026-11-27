@@ -132,6 +132,73 @@ describe("runMmrRateLimitRetryPass", () => {
     expect(getMmrLookupOutcome).toHaveBeenCalledTimes(2);
   });
 
+  it("recovery log carries has_value, never the licensed scalar", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+        ...HIT,
+        result: { ...HIT.result, mmrValue: 12_345 },
+      });
+      await runMmrRateLimitRetryPass({
+        db: DB,
+        env: ENV,
+        execCtx: CTX,
+        candidates: [
+          {
+            normalizedListingId: "norm-1",
+            listing: LISTING,
+            llmResolution: { kind: "fallback", reason: "llm_disabled" },
+            llmText: {},
+          },
+        ],
+        ctx: LOG_CTX,
+      });
+      const events = logSpy.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+      const recovered = events.find((e) => e.event === "valuation.recovered_after_rate_limit");
+      expect(recovered?.has_value).toBe(true);
+      expect(recovered).not.toHaveProperty("mmr_value");
+      expect(JSON.stringify(recovered)).not.toContain("12345");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("snapshot failure log omits DB message/details that echo the row", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      vi.mocked(getMmrLookupOutcome).mockResolvedValueOnce({
+        ...HIT,
+        result: { ...HIT.result, mmrValue: 12_345 },
+      });
+      vi.mocked(writeValuationSnapshot).mockRejectedValueOnce({
+        code: "23514",
+        message: "violates check constraint, value 12345",
+        details: "Failing row contains (norm-1, 12345).",
+      });
+      const result = await runMmrRateLimitRetryPass({
+        db: DB,
+        env: ENV,
+        execCtx: CTX,
+        candidates: [
+          {
+            normalizedListingId: "norm-1",
+            listing: LISTING,
+            llmResolution: { kind: "fallback", reason: "llm_disabled" },
+            llmText: {},
+          },
+        ],
+        ctx: LOG_CTX,
+      });
+      expect(result).toEqual({ attempted: 1, recovered: 0 });
+      const raw = logSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(raw).toContain("ingest.mmr_rate_limit_retry_failed");
+      expect(raw).toContain("23514");
+      expect(raw).not.toContain("12345");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
   it("caps retries per slice", () => {
     expect(MAX_RATE_LIMIT_RETRIES_PER_SLICE).toBe(10);
   });

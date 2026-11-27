@@ -14,7 +14,7 @@ import { getMmrLookupOutcome } from "../valuation/workerClient";
 import { fromMmrResult } from "../valuation/valuationResult";
 import { writeValuationSnapshot } from "../persistence/valuationSnapshots";
 import { applyCoxIdentityFromMmr } from "./applyCoxIdentityFromMmr";
-import { log, logError } from "../logging/logger";
+import { log, summarizeErrorWithoutValues } from "../logging/logger";
 import type { LogContext } from "../logging/logger";
 import {
   buildIngestMaxbuyEvaluateBody,
@@ -114,7 +114,8 @@ export async function runMmrRateLimitRetryPass(params: {
       log(
         "valuation.recovered_after_rate_limit",
         {
-          mmr_value: outcome.result.mmrValue,
+          // Licensed scalar is never logged — presence only.
+          has_value: outcome.result.mmrValue > 0,
           lookup_model: outcome.result.lookupModel,
           lookup_trim: outcome.result.lookupTrim,
           kpi: true,
@@ -129,7 +130,12 @@ export async function runMmrRateLimitRetryPass(params: {
       });
       if (maxbuyBody) scheduleIngestMaxbuyEvaluate(execCtx, env, maxbuyBody);
     } catch (err) {
-      logError("valuation", "ingest.mmr_rate_limit_retry_failed", err, listingCtx);
+      // Snapshot insert errors can echo the licensed row — value-free summary only.
+      log(
+        "ingest.mmr_rate_limit_retry_failed",
+        { error_category: "valuation", error: summarizeErrorWithoutValues(err) },
+        listingCtx,
+      );
     }
   }
 
